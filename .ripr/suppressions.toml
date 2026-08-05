@@ -17930,6 +17930,438 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_text.rs:call_deletion:dae10c59"
 owner = "ub-review/core"
 reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:8fdbaeb3"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:6734198f"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:side_effect:deb911ca"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:fceedd6f"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:bfd6c42a"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:f24a2b71"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:b31593d4"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:c958bb4d"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:402e9361"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:71c2a8ed"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:293d1ad4"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:595be1af"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:cceddf7b"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:f667c461"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:25d9f18e"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:78796327"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:744c0b7b"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:ffebae07"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:dedd456e"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:ad899229"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:ec36f2c7"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:4994bd32"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:d09cd4dc"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:e8ce37de"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:cfbfa287"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:c42a5b4a"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:3dd4430f.2"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:ffebae07.2"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:687c9e1f.2"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:a4841735"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:3dd4430f.3"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:ffebae07.3"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:687c9e1f.3"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:c9d16a05"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:e2109213"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:14071fc0"
+owner = "ub-review/m1"
+reason = "PR #801 test-only fake delivery server hardening: the bounded accept timeout and response constructor are fixture infrastructure; delivery tests and the integrated replay assert exact request sequences, terminal receipts, and timeout-safe completion. RIPR 0.10.0 does not trace cfg(test) helper plumbing; retain this exact receipt and re-verify after editing github_delivery.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:7fe80e66"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:48120c3c.7"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:5a456679"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:return_value:b242970d"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:6d53f017"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:return_value:5c703c13"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:48120c3c"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:5a456679.2"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:return_value:b242970d.2"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:6d53f017.2"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:return_value:5c703c13.2"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:48120c3c.2"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:5a456679.3"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:return_value:b242970d.3"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:6d53f017.3"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:return_value:5c703c13.3"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:48120c3c.3"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:5a456679.4"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:return_value:b242970d.4"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:6d53f017.4"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:return_value:5c703c13.4"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:48120c3c.4"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:5a456679.5"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:return_value:b242970d.5"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:6d53f017.5"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:return_value:5c703c13.5"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:48120c3c.5"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:5a456679.6"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:return_value:b242970d.6"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:6d53f017.6"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:return_value:5c703c13.6"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:48120c3c.6"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:5a456679.7"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:return_value:b242970d.7"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:6d53f017.7"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:return_value:5c703c13.7"
+owner = "ub-review/m1"
+reason = "PR #801 test-only integrated replay plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, comment safety, and fixed-head silence. RIPR 0.10.0 does not trace cfg(test) fixture adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
 # PR #801: integrated Perl replay fixture plumbing. Exact cfg(test) helper
 # probes are receipted because the production-path assertions above are the
 # meaningful oracle; no production behavior or threshold is suppressed.

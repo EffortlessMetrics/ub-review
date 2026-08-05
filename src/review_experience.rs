@@ -763,6 +763,8 @@ mod tests {
 
     #[test]
     fn perl_lsp_3627_runs_production_compiler_and_delivery_replay() -> Result<(), String> {
+        let _lock = crate::github_delivery::lock_fake_delivery_tests()
+            .map_err(|error| error.to_string())?;
         let fixture = fixture()?;
         let temp = tempfile::tempdir().map_err(|error| error.to_string())?;
         let out = temp.path().join("review");
@@ -940,6 +942,15 @@ mod tests {
                     .contains(&forbidden.to_ascii_lowercase()),
                 format!("forbidden internal text reached compiled body: {forbidden}"),
             )?;
+            for comment in &surface.github_review.comments {
+                require(
+                    !comment
+                        .body
+                        .to_ascii_lowercase()
+                        .contains(&forbidden.to_ascii_lowercase()),
+                    format!("forbidden internal text reached compiled comment: {forbidden}"),
+                )?;
+            }
         }
         let reply_index = surface
             .github_review
