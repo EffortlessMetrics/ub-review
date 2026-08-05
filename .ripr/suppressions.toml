@@ -20014,3 +20014,8 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_intent.rs:error_path:e15df766"
 owner = "ub-review/m2"
 reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports this exact helper-path finding as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:c4dea8b7"
+owner = "ub-review/m2"
+reason = "PR #803 legacy request identity: the colocated legacy mismatch test proves a different requiredness does not deduplicate, while the existing equivalent-request test proves matching timeout and requiredness does deduplicate. RIPR 0.10.0 still maps the multiline request_key argument boundary to a weak helper-path finding; this exact receipt covers only that content-addressed ID and must be re-verified after edits to src/proof/intent.rs or a RIPR upgrade."
