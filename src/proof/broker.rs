@@ -246,21 +246,14 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
         let exact_receipts = input
             .proof_receipts
             .iter()
-            .filter(|receipt| {
-                receipt.id == task_id && receipt.head.eq_ignore_ascii_case(input.head)
-            })
+            .filter(|receipt| receipt_matches_task_on_head(receipt, &task_id, input.head))
             .collect::<Vec<_>>();
         let shared_receipts = if exact_receipts.is_empty() {
             input
                 .proof_receipts
                 .iter()
                 .filter(|receipt| {
-                    receipt.head.eq_ignore_ascii_case(input.head)
-                        && receipt_can_answer_shared_request(receipt)
-                        && receipt
-                            .request_ids
-                            .iter()
-                            .any(|id| request_ids.contains(id))
+                    receipt_matches_shared_request_on_head(receipt, &request_ids, input.head)
                 })
                 .collect::<Vec<_>>()
         } else {
@@ -971,12 +964,8 @@ pub(crate) fn attach_request_metadata_to_focused_receipts(
 
 pub(crate) fn unreceipted_focused_test_tasks(
     tasks: Vec<FocusedTestTask>,
-    existing_receipts: &[ProofReceipt],
+    existing_ids: &BTreeSet<String>,
 ) -> Vec<FocusedTestTask> {
-    let existing_ids = existing_receipts
-        .iter()
-        .map(|receipt| receipt.id.clone())
-        .collect::<BTreeSet<_>>();
     tasks
         .into_iter()
         .filter(|task| !existing_ids.contains(&task.id))
@@ -985,12 +974,8 @@ pub(crate) fn unreceipted_focused_test_tasks(
 
 pub(crate) fn unreceipted_focused_build_tasks(
     tasks: Vec<FocusedBuildTask>,
-    existing_receipts: &[ProofReceipt],
+    existing_ids: &BTreeSet<String>,
 ) -> Vec<FocusedBuildTask> {
-    let existing_ids = existing_receipts
-        .iter()
-        .map(|receipt| receipt.id.clone())
-        .collect::<BTreeSet<_>>();
     tasks
         .into_iter()
         .filter(|task| !existing_ids.contains(&task.id))
@@ -1002,24 +987,42 @@ pub(crate) fn has_unreceipted_proof_request_tasks(
     existing_receipts: &[ProofReceipt],
     head: &str,
 ) -> bool {
+    let current_receipt_ids = current_head_receipt_ids(existing_receipts, head);
     !unreceipted_focused_test_tasks(
         focused_test_candidates_from_requests(proof_requests),
-        &current_head_receipts(existing_receipts, head),
+        &current_receipt_ids,
     )
     .is_empty()
         || !unreceipted_focused_build_tasks(
             focused_build_candidates_from_requests(proof_requests),
-            &current_head_receipts(existing_receipts, head),
+            &current_receipt_ids,
         )
         .is_empty()
 }
 
-fn current_head_receipts(receipts: &[ProofReceipt], head: &str) -> Vec<ProofReceipt> {
+fn current_head_receipt_ids(receipts: &[ProofReceipt], head: &str) -> BTreeSet<String> {
     receipts
         .iter()
         .filter(|receipt| receipt.head.eq_ignore_ascii_case(head))
-        .cloned()
+        .map(|receipt| receipt.id.clone())
         .collect()
+}
+
+fn receipt_matches_task_on_head(receipt: &ProofReceipt, task_id: &str, head: &str) -> bool {
+    receipt.id == task_id && receipt.head.eq_ignore_ascii_case(head)
+}
+
+fn receipt_matches_shared_request_on_head(
+    receipt: &ProofReceipt,
+    request_ids: &[String],
+    head: &str,
+) -> bool {
+    receipt.head.eq_ignore_ascii_case(head)
+        && receipt_can_answer_shared_request(receipt)
+        && receipt
+            .request_ids
+            .iter()
+            .any(|id| request_ids.contains(id))
 }
 
 pub(crate) fn focused_test_resource_lease(
@@ -1495,6 +1498,21 @@ mod tests {
         current_receipt.head = "CURRENT-HEAD".to_owned();
         assert!(current_receipt.head.eq_ignore_ascii_case("current-head"));
         assert!(!stale_receipt.head.eq_ignore_ascii_case("current-head"));
+        assert!(receipt_matches_task_on_head(
+            &current_receipt,
+            &test.id,
+            "current-head",
+        ));
+        assert!(!receipt_matches_task_on_head(
+            &stale_receipt,
+            &test.id,
+            "current-head",
+        ));
+        assert!(receipt_matches_shared_request_on_head(
+            &current_receipt,
+            std::slice::from_ref(&request.id),
+            "current-head",
+        ));
 
         let selection = select_proof_portfolio(ProofPortfolioInput {
             test_tasks: std::slice::from_ref(&test),
@@ -1550,10 +1568,9 @@ mod tests {
         assert!(current.head.eq_ignore_ascii_case("HEAD"));
         assert!(!stale.head.eq_ignore_ascii_case("HEAD"));
 
-        let filtered = current_head_receipts(&[stale, current.clone()], "HEAD");
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].id, current.id);
-        assert_eq!(filtered[0].head, "head");
+        let receipts = [stale, current.clone()];
+        let filtered = current_head_receipt_ids(&receipts, "HEAD");
+        assert_eq!(filtered, BTreeSet::from([current.id]));
         Ok(())
     }
 

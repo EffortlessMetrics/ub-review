@@ -653,10 +653,7 @@ pub(crate) fn terminalize_proof_requests(
             }
             let matching = receipts
                 .iter()
-                .filter(|receipt| {
-                    receipt.head.eq_ignore_ascii_case(head)
-                        && receipt.request_ids.iter().any(|id| id == &request.id)
-                })
+                .filter(|receipt| receipt_matches_request_on_head(receipt, &request.id, head))
                 .collect::<Vec<_>>();
             let mut terminal = request.clone();
             if matching.is_empty() {
@@ -686,6 +683,10 @@ pub(crate) fn terminalize_proof_requests(
             terminal
         })
         .collect()
+}
+
+fn receipt_matches_request_on_head(receipt: &ProofReceipt, request_id: &str, head: &str) -> bool {
+    receipt.head.eq_ignore_ascii_case(head) && receipt.request_ids.iter().any(|id| id == request_id)
 }
 
 fn proof_request_terminal_status(result: &str) -> &'static str {
@@ -849,6 +850,7 @@ pub(crate) fn proof_request_allowed_v0(command: &str, cost: &str) -> bool {
 mod tests {
     use anyhow::{Result, ensure};
 
+    use super::receipt_matches_request_on_head;
     use crate::test_parse::extract_focused_test_name;
     use crate::tests::test_diff;
     use crate::*;
@@ -1720,6 +1722,16 @@ index 1111111..2222222 100644
         current_receipt.head = "CURRENT-HEAD".to_owned();
         assert!(current_receipt.head.eq_ignore_ascii_case("current-head"));
         assert!(!receipt.head.eq_ignore_ascii_case("current-head"));
+        assert!(receipt_matches_request_on_head(
+            &current_receipt,
+            "request-current-head",
+            "current-head",
+        ));
+        assert!(!receipt_matches_request_on_head(
+            &receipt,
+            "request-current-head",
+            "current-head",
+        ));
         let terminal =
             terminalize_proof_requests("current-head", &[request], &[receipt, current_receipt]);
         assert_eq!(terminal[0].status, "satisfied");
