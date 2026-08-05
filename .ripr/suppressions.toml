@@ -12165,6 +12165,12 @@ reason = "Covered by unexecuted_proof_homework_is_artifact_only, including exact
 
 [[suppressions]]
 kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:8d7022d9"
+owner = "ub-review/core"
+reason = "Covered by unexecuted_proof_homework_is_artifact_only, including exact Some(true) and None context assertions; RIPR 0.10.0 weakly exposes the homework-context boolean return. Re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
 finding_id = "probe:src_noise.rs:return_value:7ef388b1"
 owner = "ub-review/core"
 reason = "Covered by unexecuted_proof_homework_is_artifact_only, including exact pure-homework and substantive-clause classifications; RIPR 0.10.0 weakly exposes the clause admission boolean. Re-verify after edits or RIPR upgrades."
