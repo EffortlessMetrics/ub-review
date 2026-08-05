@@ -149,8 +149,8 @@ pub(crate) fn compile_review_surface(
         .inline_comments
         .iter()
         .filter(|comment| {
-            let text = format!("{} {}", comment.body, comment.evidence);
-            !is_internal_review_machinery_text(&text) && !is_unexecuted_proof_homework_text(&text)
+            !is_internal_review_machinery_text(&comment.body)
+                && !is_unexecuted_proof_homework_text(&comment.body)
         })
         .cloned()
         .collect::<Vec<_>>();
@@ -352,12 +352,10 @@ fn admit_reporter_distillation(
     }
 
     let mut admitted = Vec::new();
-    for fragment in text
-        .split(['.', '!', '?', '\n'])
-        .map(str::trim)
-        .filter(|fragment| !fragment.is_empty())
-    {
-        let lower = fragment.to_ascii_lowercase();
+    for fragment in reporter_fragments(text) {
+        let lower = fragment
+            .trim_end_matches(['.', '!', '?'])
+            .to_ascii_lowercase();
         let generic = matches!(
             lower.as_str(),
             "safe to merge"
@@ -387,6 +385,29 @@ fn admit_reporter_distillation(
     }
 
     (!admitted.is_empty()).then(|| admitted.join(" "))
+}
+
+fn reporter_fragments(text: &str) -> Vec<&str> {
+    let mut fragments = Vec::new();
+    let mut start = 0;
+    for (index, character) in text.char_indices() {
+        let next = text[index + character.len_utf8()..].chars().next();
+        let boundary = matches!(character, '.' | '!' | '?' | '\n')
+            && (character == '\n' || next.is_none() || next.is_some_and(char::is_whitespace));
+        if boundary {
+            let end = index + character.len_utf8();
+            let fragment = text[start..end].trim();
+            if !fragment.is_empty() {
+                fragments.push(fragment);
+            }
+            start = end;
+        }
+    }
+    let tail = text[start..].trim();
+    if !tail.is_empty() {
+        fragments.push(tail);
+    }
+    fragments
 }
 
 fn reporter_claim_is_duplicate(reporter_text: &str, existing_text: &str) -> bool {
@@ -890,5 +911,19 @@ mod tests {
             "Parser drops postfix subscripts from later variables and changes recovery.",
             "Parser drops postfix subscripts."
         ));
+    }
+
+    #[test]
+    fn reporter_admission_preserves_dotted_paths() {
+        let admitted = admit_reporter_distillation(
+            Some("The regression is anchored at src/main.rs:42."),
+            &[],
+            &[],
+            &[],
+        );
+        assert_eq!(
+            admitted.as_deref(),
+            Some("The regression is anchored at src/main.rs:42.")
+        );
     }
 }

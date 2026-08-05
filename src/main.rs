@@ -21871,6 +21871,76 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn compiler_surface_keeps_substantive_inline_when_only_evidence_mentions_skipped_proof()
+    -> Result<()> {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let inline = [ReviewInlineComment {
+            lane: "tests-oracle".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/main.rs".to_owned(),
+            line: 100,
+            side: "RIGHT".to_owned(),
+            body: "The parser drops postfix subscripts from later variables.".to_owned(),
+            evidence: "The optional focused proof was skipped by budget.".to_owned(),
+            suggestion: None,
+        }];
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &ReviewBodyPolicy::default(),
+            run_pass: super::RunPass::Manual,
+            post_review_on: &[],
+            args: &args,
+            plan: &test_plan(Vec::new()),
+            diff: &test_diff(),
+            model_lanes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &inline,
+            summary_only_findings: &[],
+            observations: &[],
+            proof_receipts: &[],
+            final_follow_up_tasks: 0,
+            suggested_issues: &[],
+            reporter_distillation: None,
+        })?;
+
+        assert_eq!(surface.github_review.comments.len(), 1);
+        assert!(surface.github_review.body.contains("postfix subscripts"));
+        assert!(surface.should_prepare_github_review);
+        Ok(())
+    }
+
+    #[test]
+    fn pr_review_body_drops_unexecuted_verification_homework() {
+        let finding = SummaryOnlyFinding {
+            lane: "tests-oracle".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "high".to_owned(),
+            reason: "Verification question: please run `cargo test --locked --test parser` before merging.".to_owned(),
+            evidence: "The proof was skipped by budget.".to_owned(),
+        };
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[finding],
+            &[] as &[Observation],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.is_empty());
+        assert!(!body.contains("Verification questions"));
+        assert!(!body.contains("Please run"));
+    }
+
+    #[test]
     fn pr_review_body_omits_lane_output_shape_artifacts() {
         let observations = vec![test_observation(
             "ub-worker-handoff",

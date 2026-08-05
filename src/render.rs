@@ -205,11 +205,7 @@ pub(crate) fn render_pull_request_review_body(
                     .sources
                     .iter()
                     .any(|source| source == CROSS_LANE_CONFLICT_SOURCE)
-                && !is_unexecuted_proof_homework_text(&format!(
-                    "{} {}",
-                    observation.claim,
-                    observation.evidence.join(" ")
-                ))
+                && !is_unexecuted_proof_homework_text(&observation.claim)
                 && !is_pr_body_stale_for_current_diff_observation(observation, diff)
                 && !proof_receipts_answer_observation_test_witness_question(
                     proof_receipts,
@@ -267,6 +263,7 @@ pub(crate) fn render_pull_request_review_body(
     let verification_questions =
         unique_summary_review_findings(summary_only_findings.iter().filter(|finding| {
             !is_pr_body_artifact_only_finding(finding)
+                && !is_unexecuted_proof_homework_text(&finding.reason)
                 && !is_pr_body_stale_for_current_diff(finding, diff)
                 && !summary_finding_has_cross_lane_conflict(finding, &observation_items)
                 && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
@@ -278,10 +275,7 @@ pub(crate) fn render_pull_request_review_body(
     let summary_concerns =
         unique_summary_review_findings(summary_only_findings.iter().filter(|finding| {
             !is_pr_body_artifact_only_finding(finding)
-                && !is_unexecuted_proof_homework_text(&format!(
-                    "{} {}",
-                    finding.reason, finding.evidence
-                ))
+                && !is_unexecuted_proof_homework_text(&finding.reason)
                 && !is_pr_body_stale_for_current_diff(finding, diff)
                 && !summary_finding_has_cross_lane_conflict(finding, &observation_items)
                 && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
