@@ -561,15 +561,26 @@ fn fetch_pull_review_comments(
     pull_number: u64,
     token: &str,
 ) -> Result<serde_json::Value> {
-    let value = transport.fetch_json(
-        &format!("{api}/repos/{repo}/pulls/{pull_number}/comments?per_page=100"),
-        token,
-    )?;
-    ensure!(
-        value.is_array(),
-        "GitHub pull review comments response must be an array"
-    );
-    Ok(value)
+    let mut page: usize = 1;
+    let mut comments = Vec::new();
+    loop {
+        let value = transport.fetch_json(
+            &format!("{api}/repos/{repo}/pulls/{pull_number}/comments?per_page=100&page={page}"),
+            token,
+        )?;
+        let page_comments = value.as_array().ok_or_else(|| {
+            anyhow::anyhow!("GitHub pull review comments response must be an array")
+        })?;
+        let page_len = page_comments.len();
+        comments.extend(page_comments.iter().cloned());
+        if page_len < 100 {
+            break;
+        }
+        page = page
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("GitHub pull review comments page overflowed"))?;
+    }
+    Ok(serde_json::Value::Array(comments))
 }
 
 fn prior_confirmed_deliveries(
@@ -768,6 +779,17 @@ fn execute_reply_deliveries(
             "review comment reply {} was returned for another head",
             comment_id
         );
+        let response_source_thread = response.get("in_reply_to_id").and_then(|value| {
+            value
+                .as_u64()
+                .map(|id| id.to_string())
+                .or_else(|| value.as_str().map(str::to_owned))
+        });
+        ensure!(
+            response_source_thread.as_deref() == Some(source_thread_id),
+            "review comment reply {} was returned for another source thread",
+            comment_id
+        );
         ensure!(
             response.get("body").and_then(serde_json::Value::as_str)
                 .is_some_and(|value| sha256_hex(value.as_bytes()) == planned.expected_body_digest()),
@@ -822,6 +844,38 @@ fn write_retry_decisions(
     )
 }
 
+fn remove_one_confirmed_body_surface(body: &str, comment: &str) -> String {
+    let comment_lines = comment.lines().collect::<Vec<_>>();
+    if comment_lines.is_empty() {
+        return body.to_owned();
+    }
+    let body_lines = body.lines().collect::<Vec<_>>();
+    let Some(start) = body_lines.windows(comment_lines.len()).position(|window| {
+        window
+            .first()
+            .map(|line| {
+                let first = line.trim().strip_prefix("- ").unwrap_or(line.trim());
+                first == comment_lines[0]
+            })
+            .unwrap_or(false)
+            && window
+                .iter()
+                .skip(1)
+                .zip(comment_lines.iter().skip(1))
+                .all(|(actual, expected)| actual == expected)
+    }) else {
+        return body.to_owned();
+    };
+    body_lines
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, line)| {
+            ((index < start) || (index >= start + comment_lines.len())).then_some(line)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn body_after_confirmed_delivery(
     review: &GitHubReview,
     body: &str,
@@ -838,26 +892,10 @@ fn body_after_confirmed_delivery(
     if confirmed_comments.is_empty() {
         return Ok(body.to_owned());
     }
-    let mut removable = vec![true; confirmed_comments.len()];
-    let filtered = body
-        .lines()
-        .filter(|line| {
-            let matching = confirmed_comments
-                .iter()
-                .enumerate()
-                .find(|(index, comment)| {
-                    removable[*index] && !comment.is_empty() && line.contains(comment.as_str())
-                })
-                .map(|(index, _)| index);
-            if let Some(index) = matching {
-                removable[index] = false;
-                false
-            } else {
-                true
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
+    let mut filtered = body.to_owned();
+    for comment in confirmed_comments {
+        filtered = remove_one_confirmed_body_surface(&filtered, &comment);
+    }
     Ok(filtered)
 }
 
@@ -1761,6 +1799,64 @@ mod tests {
     }
 
     #[test]
+    fn reply_delivery_rejects_wrong_response_source_thread_without_receipt() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let graph = serde_json::json!({
+            "schema": "ub-review.claim_graph.v1",
+            "head_sha": HEAD,
+            "topics": [{
+                "claim_id": "claim-1",
+                "planned_action": "reply",
+                "planned_thread_id": "123",
+                "head_sha": HEAD,
+                "path": "src/lib.rs",
+                "anchor": 12
+            }]
+        });
+        fs::write(
+            temp.path().join("claim_graph.json"),
+            serde_json::to_vec(&graph)?,
+        )?;
+        let (review, payload) = delivery_review();
+        let mut transport = ScriptedTransport {
+            gets: VecDeque::from([
+                serde_json::json!({"head": {"sha": HEAD}}),
+                serde_json::json!([{
+                    "id": 123,
+                    "path": "src/lib.rs",
+                    "line": 12,
+                    "side": "RIGHT",
+                    "commit_id": HEAD,
+                    "body": "prior finding"
+                }]),
+            ]),
+            sends: VecDeque::from([scripted_output(
+                &format!(
+                    r#"{{"id":456,"commit_id":"{HEAD}","body":"[tests] exact body","in_reply_to_id":999}}"#
+                ),
+                true,
+            )?]),
+        };
+        let error = match execute_pending_review_delivery_with_transport(
+            &delivery_args(temp.path(), "http://scripted"),
+            &review,
+            &payload,
+            &mut transport,
+        ) {
+            Ok(_) => return Err(anyhow::anyhow!("wrong-source reply response was accepted")),
+            Err(error) => error,
+        };
+        ensure!(format!("{error:#}").contains("another source thread"));
+        ensure!(
+            !temp
+                .path()
+                .join("review/delivery-reply-receipts.json")
+                .exists()
+        );
+        Ok(())
+    }
+
+    #[test]
     fn reply_identity_requires_exact_head_source_and_body() -> Result<()> {
         let body = "[tests] exact body";
         let planned = PlannedDelivery::new(
@@ -1809,6 +1905,54 @@ mod tests {
         let filtered = body_after_confirmed_delivery(&review, body, &planned, &planned)?;
         ensure!(filtered.matches("exact body").count() == 1);
         ensure!(filtered.contains("unrelated finding"));
+        Ok(())
+    }
+
+    #[test]
+    fn confirmed_delivery_removes_a_multiline_suggestion_surface_once() -> Result<()> {
+        let comment = GitHubReviewComment {
+            path: "src/lib.rs".to_owned(),
+            line: 12,
+            side: "RIGHT".to_owned(),
+            body: "[unsafe-review] Guard evidence is missing.".to_owned(),
+            suggestion: Some("let header = guarded_header_read(ptr)?;".to_owned()),
+        };
+        let review = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: String::new(),
+            comments: vec![comment],
+        };
+        let graph = graph_for("src/lib.rs", 12, "inline", HEAD);
+        let planned = build_planned_deliveries(&review, HEAD, Some(&graph))?;
+        let body = "- [unsafe-review] Guard evidence is missing.\n\n```suggestion\nlet header = guarded_header_read(ptr)?;\n```\n- retain this finding";
+        let filtered = body_after_confirmed_delivery(&review, body, &planned, &planned)?;
+        ensure!(!filtered.contains("Guard evidence is missing"));
+        ensure!(!filtered.contains("guarded_header_read"));
+        ensure!(filtered.contains("retain this finding"));
+        Ok(())
+    }
+
+    #[test]
+    fn pull_review_comments_fetches_all_pages() -> Result<()> {
+        let first_page = (0..100)
+            .map(|id| serde_json::json!({"id": id}))
+            .collect::<Vec<_>>();
+        let mut transport = ScriptedTransport {
+            gets: VecDeque::from([
+                serde_json::Value::Array(first_page),
+                serde_json::json!([{"id": 100}]),
+            ]),
+            sends: VecDeque::new(),
+        };
+        let comments = fetch_pull_review_comments(
+            &mut transport,
+            "http://scripted",
+            "owner/repo",
+            42,
+            "token",
+        )?;
+        ensure!(comments.as_array().is_some_and(|items| items.len() == 101));
+        ensure!(transport.gets.is_empty());
         Ok(())
     }
 

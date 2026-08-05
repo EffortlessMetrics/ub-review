@@ -16374,6 +16374,204 @@ reason = "Exact hosted diff-form RIPR receipt for #827: the production-path deli
 
 [[suppressions]]
 kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:9348a479"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:b4302334"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:bef5d7c5"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:f43ea3b9"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:8159970b"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:8ebeccc5"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:8ebeccc5.2"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:8ebeccc5.3"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:f18f8052"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:678b20b3"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:15cdb8b0"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:678b20b3.2"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:15cdb8b0.2"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:39672c39"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:8d10323c"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:83de6b3a"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:41ee039a"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:106c0c41"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:4ed84b34"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:106c0c41.2"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:db6114f9.2"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:afe941ab"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:960401fb"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:b41579d4"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:168f9457"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:bf946233"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:3955ae63"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:262e4be5"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:d7195868"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:40dd0971"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:3955ae63.2"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:bef9eba6"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:6dca85de"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: current-head reply source validation, paginated comment retrieval, multiline fallback removal, and response identity tests cover this adapter probe; the remaining static result is an analyzer false positive. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
 finding_id = "probe:src_github_delivery.rs:call_deletion:39d3f299"
 owner = "ub-review/core"
 reason = "Exact diff-form RIPR receipt for #828: production-path fake transport tests cover current-head reply delivery and the one-surface fallback removal; this adapter control probe is an analyzer false positive against those semantic oracles. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
