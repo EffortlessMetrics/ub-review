@@ -133,22 +133,26 @@ pub(crate) fn focused_proof_candidate_plans_from_diff(
         .into_iter()
         .map(|task| task.id)
         .collect::<BTreeSet<_>>();
-    focused_test_candidates_from_diff(diff, proof_requests)
-        .into_iter()
-        .map(|task| {
-            let status = if planned_ids.contains(&task.id) {
-                "planned"
-            } else {
-                "deferred_by_budget"
-            };
-            focused_proof_plan_for_task(
-                task,
-                budget,
-                status,
-                "candidate recorded for portfolio accounting; execution is budget-gated".to_owned(),
-            )
-        })
-        .collect()
+    let candidate_tasks = focused_test_candidates_from_diff(diff, proof_requests);
+    let mut plans = Vec::with_capacity(candidate_tasks.len());
+    for task in candidate_tasks {
+        let status = candidate_plan_status(planned_ids.contains(&task.id));
+        plans.push(focused_proof_plan_for_task(
+            task,
+            budget,
+            status,
+            "candidate recorded for portfolio accounting; execution is budget-gated".to_owned(),
+        ));
+    }
+    plans
+}
+
+fn candidate_plan_status(planned: bool) -> &'static str {
+    if planned {
+        "planned"
+    } else {
+        "deferred_by_budget"
+    }
 }
 
 fn focused_proof_plan_for_task(
@@ -370,27 +374,24 @@ pub(crate) fn focused_build_candidate_plans_from_requests(
     proof_requests: &[ProofRequest],
     budget: ProofBudget,
 ) -> Vec<FocusedBuildPlan> {
-    focused_build_candidates_from_requests(proof_requests)
-        .into_iter()
-        .enumerate()
-        .map(|(index, task)| {
-            let timeout_sec = focused_build_task_command_timeout(&task, budget);
-            FocusedBuildPlan {
-                id: task.id,
-                command: command_display(&task.argv),
-                timeout_sec,
-                requested_by: task.requested_by,
-                request_ids: task.request_ids,
-                status: if index < budget.max_focused_tests {
-                    "planned".to_owned()
-                } else {
-                    "deferred_by_budget".to_owned()
-                },
-                reason: "candidate recorded for portfolio accounting; execution is budget-gated"
-                    .to_owned(),
-            }
-        })
-        .collect()
+    let candidate_tasks = focused_build_candidates_from_requests(proof_requests);
+    let mut plans = Vec::with_capacity(candidate_tasks.len());
+    let mut planned_count = 0;
+    for task in candidate_tasks {
+        let timeout_sec = focused_build_task_command_timeout(&task, budget);
+        plans.push(FocusedBuildPlan {
+            id: task.id,
+            command: command_display(&task.argv),
+            timeout_sec,
+            requested_by: task.requested_by,
+            request_ids: task.request_ids,
+            status: candidate_plan_status(planned_count < budget.max_focused_tests).to_owned(),
+            reason: "candidate recorded for portfolio accounting; execution is budget-gated"
+                .to_owned(),
+        });
+        planned_count += 1;
+    }
+    plans
 }
 
 pub(crate) fn focused_build_candidates_from_requests(
@@ -800,6 +801,16 @@ mod tests {
 
     #[test]
     fn candidate_plan_artifacts_preserve_identity_and_budget_status() -> Result<()> {
+        assert_eq!(
+            candidate_plan_status(true),
+            "planned",
+            "candidate_plan_status must mark budget-fitting work planned"
+        );
+        assert_eq!(
+            candidate_plan_status(false),
+            "deferred_by_budget",
+            "candidate_plan_status must mark overflow work deferred"
+        );
         let budget = ProofBudget {
             max_focused_test_files: 1,
             max_focused_tests: 1,
