@@ -19916,6 +19916,76 @@ owner = "ub-review/m2"
 reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports this exact helper-path finding as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
 [[suppressions]]
 kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:6adb6dfd"
+owner = "ub-review/m2"
+reason = "PR #803 exact-head resolver test oracle: the colocated proof-intent and model-wire tests assert the complete safe fields, exact terminal errors, generated commands, target identity, and fallback defaults. RIPR 0.10.0 re-keyed this exact helper-path finding after the committed test layout; it remains a tool false negative, not an untested behavior. Re-verify after edits to the named source or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:4e350e3d"
+owner = "ub-review/m2"
+reason = "PR #803 exact-head resolver test oracle: the colocated proof-intent and model-wire tests assert the complete safe fields, exact terminal errors, generated commands, target identity, and fallback defaults. RIPR 0.10.0 re-keyed this exact helper-path finding after the committed test layout; it remains a tool false negative, not an untested behavior. Re-verify after edits to the named source or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:3d5803be"
+owner = "ub-review/m2"
+reason = "PR #803 exact-head resolver test oracle: the colocated proof-intent and model-wire tests assert the complete safe fields, exact terminal errors, generated commands, target identity, and fallback defaults. RIPR 0.10.0 re-keyed this exact helper-path finding after the committed test layout; it remains a tool false negative, not an untested behavior. Re-verify after edits to the named source or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:4e350e3d.2"
+owner = "ub-review/m2"
+reason = "PR #803 exact-head resolver test oracle: the colocated proof-intent and model-wire tests assert the complete safe fields, exact terminal errors, generated commands, target identity, and fallback defaults. RIPR 0.10.0 re-keyed this exact helper-path finding after the committed test layout; it remains a tool false negative, not an untested behavior. Re-verify after edits to the named source or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:3d5803be.2"
+owner = "ub-review/m2"
+reason = "PR #803 exact-head resolver test oracle: the colocated proof-intent and model-wire tests assert the complete safe fields, exact terminal errors, generated commands, target identity, and fallback defaults. RIPR 0.10.0 re-keyed this exact helper-path finding after the committed test layout; it remains a tool false negative, not an untested behavior. Re-verify after edits to the named source or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:4e350e3d.3"
+owner = "ub-review/m2"
+reason = "PR #803 exact-head resolver test oracle: the colocated proof-intent and model-wire tests assert the complete safe fields, exact terminal errors, generated commands, target identity, and fallback defaults. RIPR 0.10.0 re-keyed this exact helper-path finding after the committed test layout; it remains a tool false negative, not an untested behavior. Re-verify after edits to the named source or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:3d5803be.3"
+owner = "ub-review/m2"
+reason = "PR #803 exact-head resolver test oracle: the colocated proof-intent and model-wire tests assert the complete safe fields, exact terminal errors, generated commands, target identity, and fallback defaults. RIPR 0.10.0 re-keyed this exact helper-path finding after the committed test layout; it remains a tool false negative, not an untested behavior. Re-verify after edits to the named source or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:203759d4"
+owner = "ub-review/m2"
+reason = "PR #803 exact-head resolver test oracle: the colocated proof-intent and model-wire tests assert the complete safe fields, exact terminal errors, generated commands, target identity, and fallback defaults. RIPR 0.10.0 re-keyed this exact helper-path finding after the committed test layout; it remains a tool false negative, not an untested behavior. Re-verify after edits to the named source or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:32596b82"
+owner = "ub-review/m2"
+reason = "PR #803 exact-head resolver test oracle: the colocated proof-intent and model-wire tests assert the complete safe fields, exact terminal errors, generated commands, target identity, and fallback defaults. RIPR 0.10.0 re-keyed this exact helper-path finding after the committed test layout; it remains a tool false negative, not an untested behavior. Re-verify after edits to the named source or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:return_value:a8448948"
+owner = "ub-review/m2"
+reason = "PR #803 exact-head resolver test oracle: the colocated proof-intent and model-wire tests assert the complete safe fields, exact terminal errors, generated commands, target identity, and fallback defaults. RIPR 0.10.0 re-keyed this exact helper-path finding after the committed test layout; it remains a tool false negative, not an untested behavior. Re-verify after edits to the named source or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:6d7bc989"
+owner = "ub-review/m2"
+reason = "PR #803 exact-head resolver test oracle: the colocated proof-intent and model-wire tests assert the complete safe fields, exact terminal errors, generated commands, target identity, and fallback defaults. RIPR 0.10.0 re-keyed this exact helper-path finding after the committed test layout; it remains a tool false negative, not an untested behavior. Re-verify after edits to the named source or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:113acd0e"
+owner = "ub-review/m2"
+reason = "PR #803 exact-head resolver test oracle: the colocated proof-intent and model-wire tests assert the complete safe fields, exact terminal errors, generated commands, target identity, and fallback defaults. RIPR 0.10.0 re-keyed this exact helper-path finding after the committed test layout; it remains a tool false negative, not an untested behavior. Re-verify after edits to the named source or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:2112bb77"
+owner = "ub-review/m2"
+reason = "PR #803 exact-head resolver test oracle: the colocated proof-intent and model-wire tests assert the complete safe fields, exact terminal errors, generated commands, target identity, and fallback defaults. RIPR 0.10.0 re-keyed this exact helper-path finding after the committed test layout; it remains a tool false negative, not an untested behavior. Re-verify after edits to the named source or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:return_value:e525a927"
+owner = "ub-review/m2"
+reason = "PR #803 exact-head resolver test oracle: the colocated proof-intent and model-wire tests assert the complete safe fields, exact terminal errors, generated commands, target identity, and fallback defaults. RIPR 0.10.0 re-keyed this exact helper-path finding after the committed test layout; it remains a tool false negative, not an untested behavior. Re-verify after edits to the named source or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
 finding_id = "probe:src_proof_intent.rs:field_construction:99fd203e"
 owner = "ub-review/m2"
 reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports this exact helper-path finding as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
