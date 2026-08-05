@@ -791,6 +791,120 @@ mod tests {
         );
     }
 
+    #[test]
+    fn candidate_plan_artifacts_preserve_identity_and_budget_status() -> Result<()> {
+        let budget = ProofBudget {
+            max_focused_test_files: 1,
+            max_focused_tests: 1,
+            per_command_timeout_sec: 120,
+            max_total_seconds: 240,
+        };
+        let task = FocusedTestTask {
+            id: "proof-red-green-direct".to_owned(),
+            file: "cargo-package:ub-review".to_owned(),
+            test_name: Some("head_binding".to_owned()),
+            mode: FocusedProofMode::RedGreen,
+            command_specs: None,
+            timeout_sec: Some(30),
+            requested_by: vec!["tests-oracle".to_owned()],
+            request_ids: vec!["request-1".to_owned()],
+        };
+        let direct = focused_proof_plan_for_task(
+            task,
+            budget,
+            "deferred_by_budget",
+            "candidate recorded for portfolio accounting; execution is budget-gated".to_owned(),
+        );
+        assert_eq!(direct.id, "proof-red-green-direct");
+        assert_eq!(direct.test_file, "cargo-package:ub-review");
+        assert_eq!(direct.test_name.as_deref(), Some("head_binding"));
+        assert_eq!(direct.mode, FocusedProofMode::RedGreen);
+        assert_eq!(direct.timeout_sec, 30);
+        assert_eq!(direct.status, "deferred_by_budget");
+        assert!(direct.head_command.contains("head"));
+        assert!(direct.base_plus_tests_command.contains("base-plus-tests"));
+        assert_eq!(direct.requested_by, vec!["tests-oracle"]);
+        assert_eq!(direct.request_ids, vec!["request-1"]);
+        assert!(direct.reason.contains("portfolio accounting"));
+
+        let diff = DiffContext {
+            base: "base".to_owned(),
+            head: "head".to_owned(),
+            changed_files: vec!["test/js/bun/proof.test.ts".to_owned()],
+            patch: "diff --git a/test/js/bun/proof.test.ts b/test/js/bun/proof.test.ts\nindex 1111111..2222222 100644\n@@ -1,2 +1,4 @@\n import { test } from 'bun:test';\n+test(\"first proof\", () => {});\n+test(\"second proof\", () => {});\n".to_owned(),
+            flags: DiffFlags::default(),
+            diff_class: DiffClass::TestsOnly,
+        };
+        let candidate_plans = focused_proof_candidate_plans_from_diff(&diff, &[], budget);
+        assert_eq!(candidate_plans.len(), 1);
+        assert_eq!(
+            candidate_plans
+                .iter()
+                .filter(|plan| plan.status == "planned")
+                .count(),
+            1
+        );
+        let zero_test_budget = ProofBudget {
+            max_focused_tests: 0,
+            ..budget
+        };
+        let deferred_candidates =
+            focused_proof_candidate_plans_from_diff(&diff, &[], zero_test_budget);
+        assert_eq!(deferred_candidates.len(), 1);
+        assert_eq!(
+            deferred_candidates
+                .iter()
+                .filter(|plan| plan.status == "deferred_by_budget")
+                .count(),
+            1
+        );
+
+        let build_requests = [
+            ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "build-1".to_owned(),
+                lane: "architecture".to_owned(),
+                requested_by: vec!["architecture".to_owned()],
+                command: "cargo check --workspace --all-targets --locked".to_owned(),
+                reason: "check".to_owned(),
+                cost: "focused-build".to_owned(),
+                timeout_sec: 60,
+                required: false,
+                status: "requested".to_owned(),
+            },
+            ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "build-2".to_owned(),
+                lane: "architecture".to_owned(),
+                requested_by: vec!["architecture".to_owned()],
+                command: "cargo doc --workspace --no-deps --locked".to_owned(),
+                reason: "docs".to_owned(),
+                cost: "focused-build".to_owned(),
+                timeout_sec: 60,
+                required: false,
+                status: "requested".to_owned(),
+            },
+        ];
+        let build_plans = focused_build_candidate_plans_from_requests(&build_requests, budget);
+        assert_eq!(build_plans.len(), 2);
+        assert_eq!(
+            build_plans
+                .iter()
+                .filter(|plan| plan.status == "planned")
+                .count(),
+            1
+        );
+        assert_eq!(
+            build_plans
+                .iter()
+                .filter(|plan| plan.status == "deferred_by_budget")
+                .count(),
+            1
+        );
+        assert!(build_plans.iter().all(|plan| plan.timeout_sec == 60));
+        Ok(())
+    }
+
     /// v2 build candidates match v1 for the same command.
     #[test]
     fn v2_focused_build_candidates_match_v1() {
