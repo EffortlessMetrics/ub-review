@@ -846,6 +846,26 @@ mod tests {
             flags: DiffFlags::default(),
             diff_class: DiffClass::TestsOnly,
         };
+        let planner_plans = focused_proof_plans_from_diff(&diff, &[], budget);
+        let planner_plan = planner_plans
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("missing focused planner plan"))?;
+        assert_eq!(planner_plans.len(), 1);
+        assert_eq!(planner_plan.test_file, "test/js/bun/proof.test.ts");
+        assert_eq!(planner_plan.test_name, None);
+        assert_eq!(planner_plan.mode, FocusedProofMode::RedGreen);
+        assert_eq!(planner_plan.timeout_sec, 120);
+        assert!(planner_plan.head_command.contains("bun bd test"));
+        assert!(planner_plan.base_plus_tests_command.contains("bun test"));
+        assert_eq!(planner_plan.requested_by, vec!["proof-broker"]);
+        assert!(planner_plan.request_ids.is_empty());
+        assert_eq!(planner_plan.status, "planned");
+        assert!(
+            planner_plan
+                .reason
+                .contains("planner-only focused test target")
+        );
+
         let candidate_plans = focused_proof_candidate_plans_from_diff(&diff, &[], budget);
         assert_eq!(
             focused_proof_candidate_plans_from_diff(&diff, &[], budget).len(),
@@ -859,6 +879,34 @@ mod tests {
                 .filter(|plan| plan.status == "planned")
                 .count(),
             1
+        );
+        assert_eq!(
+            candidate_plans
+                .iter()
+                .map(|plan| {
+                    (
+                        plan.test_file.as_str(),
+                        plan.test_name.as_deref(),
+                        plan.mode.key(),
+                        plan.status.as_str(),
+                        plan.timeout_sec,
+                        plan.requested_by.as_slice(),
+                        plan.request_ids.as_slice(),
+                        plan.reason.as_str(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            vec![(
+                "test/js/bun/proof.test.ts",
+                None,
+                "red-green",
+                "planned",
+                120,
+                ["proof-broker".to_owned()].as_slice(),
+                [].as_slice(),
+                "candidate recorded for portfolio accounting; execution is budget-gated",
+            )],
+            "focused_proof_candidate_plans_from_diff must preserve the complete candidate"
         );
         let zero_test_budget = ProofBudget {
             max_focused_tests: 0,
@@ -923,6 +971,43 @@ mod tests {
             1
         );
         assert!(build_plans.iter().all(|plan| plan.timeout_sec == 60));
+        let first_build = build_plans
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("missing first build candidate"))?;
+        let second_build = build_plans
+            .get(1)
+            .ok_or_else(|| anyhow::anyhow!("missing second build candidate"))?;
+        assert_eq!(
+            first_build.command, "cargo check --workspace --all-targets --locked",
+            "focused_build_candidate_plans_from_requests must preserve the first command"
+        );
+        assert_eq!(
+            first_build.status, "planned",
+            "focused_build_candidate_plans_from_requests must preserve planned status"
+        );
+        assert_eq!(
+            first_build.requested_by,
+            vec!["architecture"],
+            "focused_build_candidate_plans_from_requests must preserve the first lane"
+        );
+        assert_eq!(
+            first_build.request_ids,
+            vec!["build-1"],
+            "focused_build_candidate_plans_from_requests must preserve the first request"
+        );
+        assert_eq!(
+            second_build.command, "cargo doc --workspace --no-deps --locked",
+            "focused_build_candidate_plans_from_requests must preserve the second command"
+        );
+        assert_eq!(
+            second_build.status, "deferred_by_budget",
+            "focused_build_candidate_plans_from_requests must defer overflow"
+        );
+        assert_eq!(
+            second_build.request_ids,
+            vec!["build-2"],
+            "focused_build_candidate_plans_from_requests must preserve the second request"
+        );
         Ok(())
     }
 
