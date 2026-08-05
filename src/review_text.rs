@@ -912,6 +912,10 @@ mod output_degradation_tests {
         assert_eq!(receipt.original_item_count, 1);
         assert_eq!(receipt.final_item_count, 1);
         assert_eq!(receipt.original_bytes, receipt.final_bytes);
+        assert_eq!(receipt.original_bytes, input.len());
+        assert_eq!(receipt.final_bytes, body.len());
+        assert_eq!(receipt.max_bytes, 500);
+        assert_eq!(receipt.max_bullets, 12);
         assert_eq!(receipt.retained_topic_ids.len(), 1);
         assert!(receipt.dropped_topics.is_empty());
     }
@@ -922,22 +926,25 @@ mod output_degradation_tests {
             "## Summary-only findings\n\n",
             "- Parser concern remains.\n",
             "\n## Confirmed findings\n\n",
-            "- Executed receipt confirms the parser concern remains.\n",
-            "- Executed receipt confirms the parser concern remains.\n",
+            "- Parser concern remains.\n",
+            "- Parser concern remains.\n",
+            "- Separate concern remains.\n",
         );
         let (body, receipt) = degrade_review_body(input.to_owned(), 500, 2, "head-fold");
 
-        assert!(body.contains("Executed receipt confirms"));
+        assert!(body.contains("Parser concern remains"));
+        assert!(body.contains("Separate concern remains"));
         assert_eq!(receipt.final_item_count, 2);
         assert_eq!(receipt.retained_topic_ids.len(), 2);
-        assert_eq!(
-            receipt
-                .dropped_topics
-                .iter()
-                .filter(|topic| topic.reason.contains("duplicate_evidence"))
-                .count(),
-            1
-        );
+        assert_eq!(receipt.max_bytes, 500);
+        assert_eq!(receipt.max_bullets, 2);
+        assert_eq!(receipt.dropped_topics.len(), 2);
+        assert!(receipt.dropped_topics.iter().any(|topic| {
+            topic.reason == "duplicate_evidence_folded_into_stronger_topic"
+        }));
+        assert!(receipt.dropped_topics.iter().any(|topic| {
+            topic.reason == "duplicate_evidence_folded_into_existing_topic"
+        }));
     }
 
     #[test]
@@ -956,6 +963,8 @@ mod output_degradation_tests {
         assert!(!body.contains("Revisit documentation"));
         assert_eq!(receipt.selected_mode, "concise_summary");
         assert_eq!(receipt.final_item_count, 2);
+        assert_eq!(receipt.max_bytes, 500);
+        assert_eq!(receipt.max_bullets, 2);
         assert!(receipt.dropped_topics.iter().any(|topic| {
             topic.topic_id.starts_with("topic-")
                 && topic.reason == "lower_evidence_value_or_bullet_budget"
@@ -977,6 +986,8 @@ mod output_degradation_tests {
         assert!(body.contains("## Custom evidence"));
         assert_eq!(receipt.selected_mode, "full");
         assert_eq!(receipt.final_item_count, 2);
+        assert_eq!(receipt.max_bytes, 500);
+        assert_eq!(receipt.max_bullets, 12);
     }
 
     #[test]
@@ -993,6 +1004,8 @@ mod output_degradation_tests {
         assert_eq!(receipt.original_item_count, 0);
         assert_eq!(receipt.final_item_count, 0);
         assert_eq!(receipt.final_bytes, 0);
+        assert_eq!(receipt.max_bytes, 8);
+        assert_eq!(receipt.max_bullets, 0);
         assert!(receipt.retained_topic_ids.is_empty());
     }
 
@@ -1005,6 +1018,8 @@ mod output_degradation_tests {
         assert!(body.is_char_boundary(body.len()));
         assert_eq!(receipt.final_bytes, body.len());
         assert!(receipt.final_bytes <= receipt.max_bytes);
+        assert_eq!(receipt.max_bytes, 32);
+        assert_eq!(receipt.max_bullets, 12);
     }
 
     #[test]
@@ -1046,6 +1061,9 @@ mod output_degradation_tests {
                 .any(|topic| topic.section == "## Reporter summary")
         );
         assert!(topics.iter().all(|topic| topic.id.starts_with("topic-")));
+        assert_eq!(topics[0].section, "## Confirmed findings");
+        assert_eq!(topics[0].text, "Parser, concern!");
+        assert_eq!(topics[0].rank, 5);
     }
 
     #[test]
@@ -1059,5 +1077,22 @@ mod output_degradation_tests {
         );
         assert_eq!(receipt.selected_mode, "recompressed");
         assert_eq!(receipt.original_item_count, receipt.final_item_count);
+        assert_eq!(receipt.max_bytes, 60);
+        assert_eq!(receipt.max_bullets, 12);
+    }
+
+    #[test]
+    fn output_renderer_handles_empty_and_custom_sections_deterministically() {
+        assert_eq!(render_output_topics(&[]), "");
+        let topics = vec![OutputTopic {
+            id: "topic-custom".to_owned(),
+            section: "## Custom evidence".to_owned(),
+            text: "A retained custom topic.".to_owned(),
+            rank: 1,
+        }];
+        assert_eq!(
+            render_output_topics(&topics),
+            "## Custom evidence\n\n- A retained custom topic.\n"
+        );
     }
 }
