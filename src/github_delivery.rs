@@ -241,7 +241,7 @@ fn execute_pending_review_delivery_with_transport(
             planned.action() == DeliveryAction::Inline
                 && remaining_inline.iter().any(|item| item == *planned)
         })
-        .map(|(_, comment)| comment)
+        .map(|(comment, _)| comment)
         .collect::<Vec<_>>();
 
     let pending_payload = serde_json::json!({
