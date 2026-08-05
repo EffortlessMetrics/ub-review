@@ -1109,6 +1109,9 @@ fn failure_stage(
 }
 
 #[cfg(test)]
+pub(crate) use tests::{FakeHttpResponse, spawn_fake_delivery_api};
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use anyhow::ensure;
@@ -2330,6 +2333,3 @@ mod tests {
         Ok(())
     }
 }
-
-#[cfg(test)]
-pub(crate) use tests::{FakeHttpResponse, spawn_fake_delivery_api};

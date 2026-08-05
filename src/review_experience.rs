@@ -368,6 +368,8 @@ mod tests {
         }
     }
 
+    type FixtureApiHandle = std::thread::JoinHandle<anyhow::Result<Vec<(String, String)>>>;
+
     fn spawn_fixture_delivery_api(
         exact_head: &str,
         source_thread_id: &str,
@@ -375,10 +377,7 @@ mod tests {
         source_line: u32,
         inline_comment: &GitHubReviewComment,
         reply_body: &str,
-    ) -> AnyResult<(
-        String,
-        std::thread::JoinHandle<anyhow::Result<Vec<(String, String)>>>,
-    )> {
+    ) -> AnyResult<(String, FixtureApiHandle)> {
         crate::github_delivery::spawn_fake_delivery_api(vec![
             crate::github_delivery::FakeHttpResponse {
                 status: 200,
