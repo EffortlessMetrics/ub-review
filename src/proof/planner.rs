@@ -1718,6 +1718,8 @@ index 1111111..2222222 100644
         let mut current_receipt = receipt.clone();
         current_receipt.id = "receipt-current-head".to_owned();
         current_receipt.head = "CURRENT-HEAD".to_owned();
+        assert!(current_receipt.head.eq_ignore_ascii_case("current-head"));
+        assert!(!receipt.head.eq_ignore_ascii_case("current-head"));
         let terminal =
             terminalize_proof_requests("current-head", &[request], &[receipt, current_receipt]);
         assert_eq!(terminal[0].status, "satisfied");

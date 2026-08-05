@@ -1493,6 +1493,8 @@ mod tests {
         stale_receipt.head = "previous-head".to_owned();
         let mut current_receipt = test_receipt(&test.id, vec![request.id.clone()], "head_passed");
         current_receipt.head = "CURRENT-HEAD".to_owned();
+        assert!(current_receipt.head.eq_ignore_ascii_case("current-head"));
+        assert!(!stale_receipt.head.eq_ignore_ascii_case("current-head"));
 
         let selection = select_proof_portfolio(ProofPortfolioInput {
             test_tasks: std::slice::from_ref(&test),
@@ -1524,11 +1526,13 @@ mod tests {
             .ok_or_else(|| anyhow::anyhow!("focused request should produce a task"))?;
         let mut stale_receipt = test_receipt(&task.id, task.request_ids.clone(), "head_passed");
         stale_receipt.head = "previous-head".to_owned();
+        let current_head = "current-head";
+        assert!(!stale_receipt.head.eq_ignore_ascii_case(current_head));
 
         assert!(has_unreceipted_proof_request_tasks(
             std::slice::from_ref(&request),
             std::slice::from_ref(&stale_receipt),
-            "current-head",
+            current_head,
         ));
         assert!(!has_unreceipted_proof_request_tasks(
             std::slice::from_ref(&request),
@@ -1543,6 +1547,8 @@ mod tests {
         let current = test_receipt("current", Vec::new(), "head_passed");
         let mut stale = test_receipt("stale", Vec::new(), "head_passed");
         stale.head = "previous-head".to_owned();
+        assert!(current.head.eq_ignore_ascii_case("HEAD"));
+        assert!(!stale.head.eq_ignore_ascii_case("HEAD"));
 
         let filtered = current_head_receipts(&[stale, current.clone()], "HEAD");
         assert_eq!(filtered.len(), 1);
