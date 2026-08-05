@@ -784,6 +784,36 @@ mod tests {
             "no approved focused build target matches `cargo-target:ub-review/no-such-target`"
         );
         assert_eq!(
+            expected_error(resolve_test_target(
+                &workspace,
+                &diff(&[]),
+                "no-such-test-target"
+            ))?,
+            "no approved focused test target matches `no-such-test-target`"
+        );
+        assert!(
+            expected_error(resolve_test_target(
+                &workspace,
+                &diff(&[]),
+                "cargo-package:ub-review"
+            ))?
+            .contains("ambiguous focused test target")
+        );
+        let direct_test_error = resolve_test_target(&workspace, &diff(&[]), "no-such-test-target")
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("missing focused-test rejection"))?;
+        assert_eq!(
+            direct_test_error,
+            "no approved focused test target matches `no-such-test-target`"
+        );
+        let direct_build_error = resolve_build_target(&workspace, &diff(&[]), "no-such-package")
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("missing focused-build rejection"))?;
+        assert_eq!(
+            direct_build_error,
+            "no approved focused build target matches `no-such-package`"
+        );
+        assert_eq!(
             request_key(
                 "cargo test --locked --package ub-review --test cli",
                 "focused-test",

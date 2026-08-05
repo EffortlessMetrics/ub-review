@@ -1822,6 +1822,51 @@ mod tests {
     }
 
     #[test]
+    fn empty_follow_up_broker_preserves_existing_portfolio_artifact() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let review_dir = out.join("review");
+        fs::create_dir_all(&review_dir)?;
+        let portfolio_path = review_dir.join("proof_portfolio.json");
+        let original = br#"{"phase":"primary","selected_task_ids":["task-1"]}"#;
+        fs::write(&portfolio_path, original)?;
+
+        let mut profile = Profile::default();
+        profile.limits.tests = 1;
+        profile.limits.builds = 1;
+        profile.budgets.proof_max_focused_test_files = 1;
+        profile.budgets.proof_max_focused_tests = 1;
+        profile.budgets.proof_command_timeout_sec = 60;
+        profile.budgets.proof_total_timeout_sec = 120;
+        let args = test_run_args(out.clone());
+        let box_state = BoxState {
+            cpus: 4,
+            free_mem_mb: Some(8_192),
+            free_disk_mb: Some(20_000),
+            load_1m: Some(0.25),
+            github_actions: false,
+        };
+        let diff = test_diff();
+        let result = run_follow_up_proof_broker_v0(
+            temp.path(),
+            &out,
+            &diff,
+            &profile,
+            &[],
+            &[],
+            &[],
+            &args,
+            &box_state,
+            &Instant::now(),
+        )?;
+
+        assert_eq!(result.proof_receipts.len(), 0);
+        assert_eq!(result.resource_leases.len(), 0);
+        assert_eq!(fs::read(&portfolio_path)?, original);
+        Ok(())
+    }
+
+    #[test]
     fn portfolio_declines_work_that_does_not_fit_the_current_box() -> Result<()> {
         let test = focused_test_task("parser", Vec::new(), 30);
         let selection = select_proof_portfolio(ProofPortfolioInput {

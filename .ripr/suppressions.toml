@@ -20019,3 +20019,33 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_intent.rs:call_deletion:c4dea8b7"
 owner = "ub-review/m2"
 reason = "PR #803 legacy request identity: the colocated legacy mismatch test proves a different requiredness does not deduplicate, while the existing equivalent-request test proves matching timeout and requiredness does deduplicate. RIPR 0.10.0 still maps the multiline request_key argument boundary to a weak helper-path finding; this exact receipt covers only that content-addressed ID and must be re-verified after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:error_path:49e7faaf.2"
+owner = "ub-review/m2"
+reason = "PR #803 portfolio artifact repair: the follow-up broker preserves the primary portfolio when no new proof request exists; the colocated regression pins both preserve and rewrite decisions. RIPR 0.10.0 reports the generic serde/filesystem `?` error path rather than the tested portfolio decision; this exact receipt covers only the content-addressed path and must be re-verified after edits to src/proof/broker.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:f04128a8"
+owner = "ub-review/m2"
+reason = "PR #803 portfolio artifact repair: empty follow-up execution now has a production-path regression that asserts no receipts or leases are produced and the existing primary proof_portfolio.json bytes remain unchanged. RIPR 0.10.0 still classifies the exact conditional write path as weakly exposed; this content-addressed receipt is narrow and must be re-verified after edits to src/proof/broker.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:96b9a964"
+owner = "ub-review/m2"
+reason = "PR #803 portfolio artifact repair: the production-path empty follow-up regression proves the preserved primary portfolio remains authoritative when no new request exists. RIPR 0.10.0 still classifies the exact final-budget branch as weakly exposed; this content-addressed receipt is narrow and must be re-verified after edits to src/proof/broker.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:c5366693"
+owner = "ub-review/m2"
+reason = "PR #803 portfolio artifact repair: the production-path empty follow-up regression proves the final portfolio selection is not rewritten when the primary portfolio already exists and no new request is present. RIPR 0.10.0 still classifies the exact selection branch as weakly exposed; this content-addressed receipt is narrow and must be re-verified after edits to src/proof/broker.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:efdad5db"
+owner = "ub-review/m2"
+reason = "PR #803 execution identity contract: the colocated execution_requirements_are_part_of_request_identity test asserts the complete timeout/requiredness vector and resolved status, while equivalent request tests cover deduplication. RIPR 0.10.0 still classifies the exact multiline expected-vector path as weakly exposed; this content-addressed receipt is narrow and must be re-verified after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:error_path:49e7faaf"
+owner = "ub-review/m2"
+reason = "PR #803 portfolio artifact repair: the follow-up broker preserves the primary portfolio when no new proof request exists; the colocated regression pins both preserve and rewrite decisions. RIPR 0.10.0 reports the generic serde/filesystem `?` error path rather than the tested portfolio decision; this exact receipt covers only the content-addressed path and must be re-verified after edits to src/proof/broker.rs or a RIPR upgrade."
