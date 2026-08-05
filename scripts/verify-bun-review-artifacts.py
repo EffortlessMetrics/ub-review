@@ -5664,7 +5664,7 @@ def candidate_matches_summary_finding(candidate: dict, finding: dict) -> bool:
     )
 
 
-def compiler_canonical_tokens(value: str) -> list[str]:
+def compiler_canonical_tokens(value: str, limit: int | None = 24) -> list[str]:
     tokens = []
     for raw_token in value.split():
         start = 0
@@ -5681,7 +5681,7 @@ def compiler_canonical_tokens(value: str) -> list[str]:
                 else character
                 for character in token
             ))
-    return tokens[:24]
+    return tokens if limit is None else tokens[:limit]
 
 
 def compiler_canonical_text(value: str) -> str:
@@ -5708,18 +5708,27 @@ def compiler_structural_claim_id(
 
 
 def compiler_subject_tokens_overlap(left: str, right: str) -> bool:
+    # Mirror Rust's subject_tokens_overlap exactly: Rust counts every
+    # distinctive matching token, while the verifier must not collapse those
+    # matches into a set before applying the two-token threshold.  Keeping
+    # this as a list also preserves duplicate-token semantics for compiler
+    # claim identity.
     low_information = {
         "finding", "issue", "problem", "review", "change", "changed",
         "code", "line", "path", "check", "needs", "should",
     }
-    left_tokens = compiler_canonical_tokens(left)
-    right_tokens = compiler_canonical_tokens(right)
-    distinctive = {
+    # Rust's subject_tokens_overlap uses the complete token streams, while
+    # structural claim IDs intentionally cap canonical subject text at 24
+    # tokens.  The verifier must preserve that distinction.
+    left_tokens = compiler_canonical_tokens(left, limit=None)
+    right_tokens = compiler_canonical_tokens(right, limit=None)
+    matching_distinctive = [
         token for token in left_tokens
         if token not in low_information
         and (len(token) >= 6 or token in {"ub", "ffi", "leak", "lock", "null", "race"})
-    }
-    return len(distinctive.intersection(right_tokens)) >= 2
+        and any(candidate == token for candidate in right_tokens)
+    ]
+    return len(matching_distinctive) >= 2
 
 
 def compiler_surface_id(
@@ -11620,6 +11629,19 @@ def self_test_leaked_refuted_surface_fails_final_compiler_input() -> None:
 def self_test_compiler_reconciliation_contract() -> None:
     """The final compiler must account for the hosted 18-to-12 reduction."""
     import copy
+
+    # Two repeated distinctive tokens must count as two matches, as they do
+    # in Rust's subject_tokens_overlap.  This guards the producer/verifier
+    # identity mirror that is exercised by real review packets.
+    if not compiler_subject_tokens_overlap(
+        "claim parser parser", "finding parser parser"
+    ):
+        fail("compiler subject overlap collapsed duplicate Rust matches")
+    long_claim = " ".join(
+        [f"filler{index}" for index in range(24)] + ["decisive", "evidence"]
+    )
+    if not compiler_subject_tokens_overlap(long_claim, "decisive evidence"):
+        fail("compiler subject overlap applied the claim-text truncation to matching")
 
     inline_surface = {
         "lane": "correctness",
