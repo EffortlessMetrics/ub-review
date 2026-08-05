@@ -808,14 +808,25 @@ pub(crate) fn run_follow_up_proof_broker_v0(
         budget: final_budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
-    write_proof_portfolio_selection_artifact(
-        out,
-        diff,
-        final_budget,
-        test_candidates.len() + build_candidates.len(),
-        final_selection,
-    )?;
+    // A follow-up pass with no newly requested proof must not replace the
+    // primary broker's authoritative portfolio with an empty/zero-budget
+    // snapshot. The primary portfolio contains the request-to-task decisions
+    // that the proof-intent artifact points at; preserving it keeps those
+    // identities verifiable even when follow-up produced no work.
+    if should_write_follow_up_portfolio(out, proof_requests) {
+        write_proof_portfolio_selection_artifact(
+            out,
+            diff,
+            final_budget,
+            test_candidates.len() + build_candidates.len(),
+            final_selection,
+        )?;
+    }
     Ok(result)
+}
+
+fn should_write_follow_up_portfolio(out: &Path, proof_requests: &[ProofRequest]) -> bool {
+    !proof_requests.is_empty() || !out.join("review/proof_portfolio.json").exists()
 }
 
 fn write_proof_portfolio_selection_artifact(
@@ -1788,6 +1799,25 @@ mod tests {
             .first()
             .ok_or_else(|| anyhow::anyhow!("missing wind-down decision"))?;
         ensure!(decision.status == "deferred_by_safe_wind_down");
+        Ok(())
+    }
+
+    #[test]
+    fn empty_follow_up_proof_preserves_primary_portfolio() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        fs::create_dir_all(&review_dir)?;
+        let portfolio_path = review_dir.join("proof_portfolio.json");
+
+        ensure!(should_write_follow_up_portfolio(temp.path(), &[]));
+        fs::write(&portfolio_path, br#"{"phase":"broker-final"}"#)?;
+        ensure!(!should_write_follow_up_portfolio(temp.path(), &[]));
+
+        let request = proof_request("new-follow-up", false);
+        ensure!(should_write_follow_up_portfolio(
+            temp.path(),
+            std::slice::from_ref(&request)
+        ));
         Ok(())
     }
 
