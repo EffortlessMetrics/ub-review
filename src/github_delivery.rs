@@ -1552,6 +1552,93 @@ mod tests {
     }
 
     #[test]
+    fn reply_delivery_reuses_exact_current_comment_without_duplicate_post() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let graph = serde_json::json!({
+            "schema": "ub-review.claim_graph.v1",
+            "head_sha": HEAD,
+            "topics": [{
+                "claim_id": "claim-1",
+                "planned_action": "reply",
+                "planned_thread_id": "123",
+                "head_sha": HEAD,
+                "path": "src/lib.rs",
+                "anchor": 12
+            }]
+        });
+        fs::write(
+            temp.path().join("claim_graph.json"),
+            serde_json::to_vec(&graph)?,
+        )?;
+        let (review, payload) = delivery_review();
+        let first_reply = format!(
+            r#"{{"id":456,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":"{HEAD}","body":"[tests] exact body","in_reply_to_id":123}}"#
+        );
+        let mut first_transport = ScriptedTransport {
+            gets: VecDeque::from([
+                serde_json::json!({"head": {"sha": HEAD}}),
+                serde_json::json!([{
+                    "id": 123,
+                    "path": "src/lib.rs",
+                    "line": 12,
+                    "side": "RIGHT",
+                    "commit_id": HEAD,
+                    "body": "prior finding"
+                }]),
+                serde_json::json!({"head": {"sha": HEAD}}),
+            ]),
+            sends: VecDeque::from([scripted_output(&first_reply, true)?]),
+        };
+        execute_pending_review_delivery_with_transport(
+            &delivery_args(temp.path(), "http://scripted"),
+            &review,
+            &payload,
+            &mut first_transport,
+        )?;
+        ensure!(first_transport.gets.is_empty() && first_transport.sends.is_empty());
+
+        let mut retry_transport = ScriptedTransport {
+            gets: VecDeque::from([
+                serde_json::json!({"head": {"sha": HEAD}}),
+                serde_json::json!([
+                    {
+                        "id": 123,
+                        "path": "src/lib.rs",
+                        "line": 12,
+                        "side": "RIGHT",
+                        "commit_id": HEAD,
+                        "body": "prior finding"
+                    },
+                    {
+                        "id": 456,
+                        "path": "src/lib.rs",
+                        "line": 12,
+                        "side": "RIGHT",
+                        "commit_id": HEAD,
+                        "body": "[tests] exact body",
+                        "in_reply_to_id": 123
+                    }
+                ]),
+                serde_json::json!({"head": {"sha": HEAD}}),
+            ]),
+            sends: VecDeque::new(),
+        };
+        let outcome = execute_pending_review_delivery_with_transport(
+            &delivery_args(temp.path(), "http://scripted"),
+            &review,
+            &payload,
+            &mut retry_transport,
+        )?;
+        ensure!(outcome.response["state"] == "already_delivered");
+        ensure!(retry_transport.gets.is_empty() && retry_transport.sends.is_empty());
+        let decisions: serde_json::Value = serde_json::from_slice(&fs::read(
+            temp.path().join("review/delivery-retry-decisions.json"),
+        )?)?;
+        ensure!(decisions[0]["status"] == "confirmed_current_head");
+        Ok(())
+    }
+
+    #[test]
     fn reply_delivery_rejects_stale_source_without_posting() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let graph = serde_json::json!({
@@ -1599,6 +1686,245 @@ mod tests {
             "stale source diagnostic lost its actionable classification: {error:#}"
         );
         ensure!(transport.sends.is_empty(), "stale source triggered a POST");
+        Ok(())
+    }
+
+    #[test]
+    fn reply_delivery_rejects_wrong_response_identity_without_receipt() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let graph = serde_json::json!({
+            "schema": "ub-review.claim_graph.v1",
+            "head_sha": HEAD,
+            "topics": [{
+                "claim_id": "claim-1",
+                "planned_action": "reply",
+                "planned_thread_id": "123",
+                "head_sha": HEAD,
+                "path": "src/lib.rs",
+                "anchor": 12
+            }]
+        });
+        fs::write(
+            temp.path().join("claim_graph.json"),
+            serde_json::to_vec(&graph)?,
+        )?;
+        let (review, payload) = delivery_review();
+        let mut transport = ScriptedTransport {
+            gets: VecDeque::from([
+                serde_json::json!({"head": {"sha": HEAD}}),
+                serde_json::json!([{
+                    "id": 123,
+                    "path": "src/lib.rs",
+                    "line": 12,
+                    "side": "RIGHT",
+                    "commit_id": HEAD,
+                    "body": "prior finding"
+                }]),
+            ]),
+            sends: VecDeque::from([scripted_output(
+                r#"{"id":456,"commit_id":"wrong-head","body":"[tests] exact body"}"#,
+                true,
+            )?]),
+        };
+        let error = match execute_pending_review_delivery_with_transport(
+            &delivery_args(temp.path(), "http://scripted"),
+            &review,
+            &payload,
+            &mut transport,
+        ) {
+            Ok(_) => return Err(anyhow::anyhow!("wrong-head reply response was accepted")),
+            Err(error) => error,
+        };
+        ensure!(
+            format!("{error:#}").contains("returned for another head"),
+            "wrong-head response lost its exact identity diagnostic: {error:#}"
+        );
+        ensure!(
+            !temp
+                .path()
+                .join("review/delivery-reply-receipts.json")
+                .exists(),
+            "invalid reply response produced a receipt"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn reply_identity_requires_exact_head_source_and_body() -> Result<()> {
+        let body = "[tests] exact body";
+        let planned = PlannedDelivery::new(
+            HEAD,
+            "claim-1",
+            DeliveryAction::Reply,
+            DeliveryLocation::new("src/lib.rs", 12, "RIGHT"),
+            Some("123".to_owned()),
+            sha256_hex(body.as_bytes()),
+        )?;
+        let valid = serde_json::json!({
+            "id": 456,
+            "path": "src/lib.rs",
+            "line": 12,
+            "side": "RIGHT",
+            "commit_id": HEAD,
+            "body": body,
+            "in_reply_to_id": 123
+        });
+        ensure!(comment_matches_delivery(&valid, &planned, HEAD)?);
+        for (label, mut invalid) in [
+            ("wrong head", valid.clone()),
+            ("wrong source", valid.clone()),
+            ("wrong body", valid.clone()),
+        ] {
+            match label {
+                "wrong head" => invalid["commit_id"] = serde_json::json!("other-head"),
+                "wrong source" => invalid["in_reply_to_id"] = serde_json::json!(999),
+                "wrong body" => invalid["body"] = serde_json::json!("different body"),
+                _ => {}
+            }
+            ensure!(
+                !comment_matches_delivery(&invalid, &planned, HEAD)?,
+                "{label} was accepted"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn confirmed_delivery_removes_only_the_matching_body_surface() -> Result<()> {
+        let (review, _) = delivery_review();
+        let graph = graph_for("src/lib.rs", 12, "inline", HEAD);
+        let planned = build_planned_deliveries(&review, HEAD, Some(&graph))?;
+        let body = "## Confirmed findings\n\n- [tests] exact body\n- [tests] unrelated finding\n";
+        let filtered = body_after_confirmed_delivery(&review, body, &planned, &planned)?;
+        ensure!(!filtered.contains("exact body"));
+        ensure!(filtered.contains("unrelated finding"));
+        Ok(())
+    }
+
+    #[test]
+    fn unconfirmed_delivery_keeps_a_concise_body_fallback() -> Result<()> {
+        let first = GitHubReviewComment {
+            path: "src/lib.rs".to_owned(),
+            line: 12,
+            side: "RIGHT".to_owned(),
+            body: "[tests] first body".to_owned(),
+            suggestion: None,
+        };
+        let second = GitHubReviewComment {
+            path: "src/lib.rs".to_owned(),
+            line: 24,
+            side: "RIGHT".to_owned(),
+            body: "[tests] second body".to_owned(),
+            suggestion: None,
+        };
+        let review = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: "review body".to_owned(),
+            comments: vec![first, second],
+        };
+        let graph = serde_json::json!({
+            "schema": "ub-review.claim_graph.v1",
+            "head_sha": HEAD,
+            "topics": [
+                {"claim_id": "claim-1", "planned_action": "inline", "head_sha": HEAD, "path": "src/lib.rs", "anchor": 12},
+                {"claim_id": "claim-2", "planned_action": "inline", "head_sha": HEAD, "path": "src/lib.rs", "anchor": 24}
+            ]
+        });
+        let planned = build_planned_deliveries(&review, HEAD, Some(&graph))?;
+        ensure!(planned.len() == 2);
+        let body = "- [tests] first body\n- [tests] second body";
+        let filtered = body_after_confirmed_delivery(&review, body, &planned[..1], &planned)?;
+        ensure!(!filtered.contains("first body"));
+        ensure!(filtered.contains("second body"));
+        Ok(())
+    }
+
+    #[test]
+    fn prior_inline_receipt_requires_exact_current_comment_and_head() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let args = delivery_args(temp.path(), "http://scripted");
+        let review = review_with_comment("src/lib.rs", 12, "[tests] exact body");
+        let graph = graph_for("src/lib.rs", 12, "inline", HEAD);
+        let planned = build_planned_deliveries(&review, HEAD, Some(&graph))?;
+        let identity = serde_json::to_value(&planned[0])?;
+        let receipt = serde_json::json!({
+            "schema": "ub-review.delivery_receipt.v1",
+            "exact_head_sha": HEAD,
+            "claim_id": identity["claim_id"],
+            "action": "inline",
+            "path": "src/lib.rs",
+            "line": 12,
+            "side": "RIGHT",
+            "source_thread_id": null,
+            "expected_body_digest": identity["expected_body_digest"],
+            "review_id": "987",
+            "comment_id": "456",
+            "confirmed_head_sha": HEAD
+        });
+        fs::create_dir_all(&args.out)?;
+        fs::write(
+            args.out.join("delivery-reconciliation.json"),
+            serde_json::to_vec(&serde_json::json!({"receipts": [receipt]}))?,
+        )?;
+        let current = serde_json::json!([{
+            "id": 456,
+            "path": "src/lib.rs",
+            "line": 12,
+            "side": "RIGHT",
+            "commit_id": HEAD,
+            "body": "[tests] exact body"
+        }]);
+        ensure!(
+            prior_confirmed_deliveries(&args, &planned, Some(&current), HEAD)?.len() == 1,
+            "exact current receipt was not reused"
+        );
+        let stale_current = serde_json::json!([{
+            "id": 456,
+            "path": "src/lib.rs",
+            "line": 12,
+            "side": "RIGHT",
+            "commit_id": "old-head",
+            "body": "[tests] exact body"
+        }]);
+        ensure!(
+            prior_confirmed_deliveries(&args, &planned, Some(&stale_current), HEAD)?.is_empty(),
+            "stale current comment was reused"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn planned_reply_requires_a_current_source_thread() -> Result<()> {
+        let review = review_with_comment("src/lib.rs", 12, "[tests] exact body");
+        let mut graph = graph_for("src/lib.rs", 12, "reply", HEAD);
+        if let Some(topic) = graph["topics"][0].as_object_mut() {
+            topic.remove("planned_thread_id");
+        }
+        let error = build_planned_deliveries(&review, HEAD, Some(&graph))
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("reply without source thread was accepted"))?;
+        ensure!(
+            format!("{error:#}").contains("no current source thread"),
+            "missing source-thread diagnostic lost: {error:#}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn retry_decisions_record_exact_identity_and_unconfirmed_status() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let args = delivery_args(temp.path(), "http://scripted");
+        let review = review_with_comment("src/lib.rs", 12, "[tests] exact body");
+        let graph = graph_for("src/lib.rs", 12, "inline", HEAD);
+        let planned = build_planned_deliveries(&review, HEAD, Some(&graph))?;
+        write_retry_decisions(&args, &planned, &[])?;
+        let decisions: serde_json::Value =
+            serde_json::from_slice(&fs::read(args.out.join("delivery-retry-decisions.json"))?)?;
+        ensure!(decisions.as_array().is_some_and(|items| items.len() == 1));
+        ensure!(decisions[0]["status"] == "unconfirmed");
+        ensure!(decisions[0]["identity"]["claim_id"] == "claim-1");
+        ensure!(decisions[0]["identity"]["exact_head_sha"] == HEAD);
+        ensure!(decisions[0]["identity"]["action"] == "inline");
         Ok(())
     }
 
