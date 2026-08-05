@@ -511,16 +511,32 @@ fn normalize_output_topic(text: &str) -> String {
 
 fn output_topic_rank(section: &str, text: &str) -> u8 {
     let lower = text.to_ascii_lowercase();
-    let mut rank: u8 = match section {
-        "## Confirmed findings" | "## Test proof" | "## Proof results" => 5,
-        "## Verification questions"
-        | "## Evidence gaps"
-        | "## Missing evidence"
-        | "## Missing or failed evidence" => 4,
-        "## Refuted" | "## Summary-only findings" => 3,
-        "## Parked follow-ups" | "## Suggested follow-up" => 2,
-        _ => 1,
-    };
+    let rank_by_section: &[(&[&str], u8)] = &[
+        (
+            &["## Confirmed findings", "## Test proof", "## Proof results"],
+            5,
+        ),
+        (
+            &[
+                "## Verification questions",
+                "## Evidence gaps",
+                "## Missing evidence",
+                "## Missing or failed evidence",
+            ],
+            4,
+        ),
+        (&["## Refuted", "## Summary-only findings"], 3),
+        (&["## Parked follow-ups", "## Suggested follow-up"], 2),
+    ];
+    let mut rank = rank_by_section
+        .iter()
+        .find_map(|(sections, value)| {
+            sections
+                .iter()
+                .find(|candidate| **candidate == section)
+                .map(|_| *value)
+        })
+        .unwrap_or(1);
     if ["executed", "receipt", "confirmed", "reproduced"]
         .iter()
         .any(|marker| lower.contains(marker))
