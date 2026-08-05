@@ -4329,6 +4329,25 @@ def require_proof_planner_artifacts(root: pathlib.Path) -> None:
             fail(
                 f"review/proof_intents.json entry {index} requested_by is not a string array"
             )
+        resolved_request_ids = intent.get("resolved_request_ids", [])
+        if not isinstance(resolved_request_ids, list) or not all(
+            isinstance(request_id, str) and request_id for request_id in resolved_request_ids
+        ):
+            fail(
+                f"review/proof_intents.json entry {index} resolved_request_ids is not a string array"
+            )
+        resolution_reason = intent.get("resolution_reason", "")
+        if not isinstance(resolution_reason, str):
+            fail(
+                f"review/proof_intents.json entry {index} resolution_reason is not a string"
+            )
+        timeout_sec = intent.get("timeout_sec")
+        if timeout_sec is not None and (
+            not isinstance(timeout_sec, int) or isinstance(timeout_sec, bool) or timeout_sec < 0
+        ):
+            fail(
+                f"review/proof_intents.json entry {index} timeout_sec is not a non-negative integer"
+            )
     if not isinstance(proof_portfolio, dict):
         fail("review/proof_portfolio.json is not an object")
     if proof_portfolio.get("schema") != "ub-review.proof_portfolio.v1":

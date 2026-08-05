@@ -2529,6 +2529,8 @@ struct ModelProofIntent {
     target: String,
     #[serde(default)]
     estimated_value: Option<String>,
+    #[serde(default)]
+    timeout_sec: Option<u64>,
 }
 
 const LANE_MODEL_ARRAY_FIELDS: &[&str] = &[
@@ -4453,6 +4455,15 @@ fn write_review_artifacts(
     // are available for routing to lanes in the multi-turn continuation.
     // Previously this ran after the reporter, meaning continuation prompts
     // never saw proof evidence. (Order 9c fix of #678.)
+    let intent_resolution = resolve_model_proof_intents(
+        root,
+        diff,
+        &proof_intents,
+        &proof_requests,
+        proof_budget(profile)?,
+    )?;
+    proof_intents = intent_resolution.intents;
+    proof_requests.extend(intent_resolution.proof_requests);
     attach_request_metadata_to_focused_receipts(
         diff,
         &proof_requests,

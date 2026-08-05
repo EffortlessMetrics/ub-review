@@ -146,6 +146,9 @@ pub(crate) fn proof_intent_from_request(request: &ProofRequest) -> ProofIntent {
         estimated_value: estimated_value.to_owned(),
         requested_by: request.requested_by.clone(),
         status: request.status.clone(),
+        timeout_sec: Some(request.timeout_sec),
+        resolved_request_ids: vec![request.id.clone()],
+        resolution_reason: "legacy request already has an approved request identity".to_owned(),
     }
 }
 

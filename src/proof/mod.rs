@@ -33,6 +33,8 @@ pub(crate) use red_green::*;
 
 pub(crate) mod worktree;
 pub(crate) use worktree::*;
+pub(crate) mod intent;
+pub(crate) use intent::*;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct ProofRequest {
@@ -62,6 +64,19 @@ pub(crate) struct ProofIntent {
     pub(crate) estimated_value: String,
     pub(crate) requested_by: Vec<String>,
     pub(crate) status: String,
+    /// Optional model-requested timeout. The resolver clamps the absent case
+    /// to the profile budget and rejects values outside that budget.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) timeout_sec: Option<u64>,
+    /// Request IDs produced by deterministic target resolution. These are
+    /// internal execution identities, never model-controlled commands.
+    #[serde(default)]
+    pub(crate) resolved_request_ids: Vec<String>,
+    /// Stable explanation for the resolution disposition. A valid intent is
+    /// `resolved` before execution; unsafe, unsupported, and ambiguous intents
+    /// are terminal before entering the runnable queue.
+    #[serde(default)]
+    pub(crate) resolution_reason: String,
 }
 
 /// The deterministic broker's answer for one executable proof candidate.

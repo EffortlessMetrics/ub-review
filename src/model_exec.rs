@@ -1208,7 +1208,8 @@ Return only one strict JSON object:
       "expected_answer_shape": "the observable result that confirms or refutes it",
       "proof_kind": "focused-test|focused-build|base-plus-tests|sanitizer-witness|mutation-witness|miri-witness|source-route-probe|external-check",
       "target": "safe repository test, package, symbol, or route target",
-      "estimated_value": "high|medium-high|medium|low"
+      "estimated_value": "high|medium-high|medium|low",
+      "timeout_sec": 300
     }}
   ]
 }}
@@ -1536,7 +1537,8 @@ Use the cached shared context. Return only one strict JSON object:
       "expected_answer_shape": "the observable result that confirms or refutes it",
       "proof_kind": "focused-test|focused-build|base-plus-tests|sanitizer-witness|mutation-witness|miri-witness|source-route-probe|external-check",
       "target": "safe repository test, package, symbol, or route target",
-      "estimated_value": "high|medium-high|medium|low"
+      "estimated_value": "high|medium-high|medium|low",
+      "timeout_sec": 300
     }}
   ]
 }}
@@ -1809,6 +1811,9 @@ fn validate_proof_intent(
         estimated_value,
         requested_by: vec![lane.id.clone()],
         status: "requested".to_owned(),
+        timeout_sec: intent.timeout_sec,
+        resolved_request_ids: Vec::new(),
+        resolution_reason: String::new(),
     })
 }
 

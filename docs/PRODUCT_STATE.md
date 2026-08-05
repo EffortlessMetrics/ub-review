@@ -82,7 +82,11 @@ templates, and receipt-backed broker execution.
 
 The planner emits `review/proof_intents.json` with an answer-shaped question,
 expected-result, proof-kind, value, and stable claim identity for each legacy
-request. The deterministic broker now ranks executable candidates by required
+request and model-native proof intent. Model intents are resolved against
+Cargo workspace metadata to one approved focused-test, base-plus-tests, or
+focused-build template before they enter the existing broker; zero, multiple,
+unsafe, unsupported, and over-budget targets terminalize artifact-only. The
+deterministic broker now ranks executable candidates by required
 floor, discriminating-test value, shared request coverage, and estimated cost;
 it reruns that selection after test receipts before considering builds. The
 final `review/proof_portfolio.json` records selected, receipt-satisfied,
