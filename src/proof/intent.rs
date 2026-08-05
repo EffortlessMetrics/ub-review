@@ -352,6 +352,67 @@ impl ApprovedTarget {
 mod tests {
     use super::*;
 
+    fn graph() -> CargoWorkspaceGraph {
+        CargoWorkspaceGraph {
+            workspace_root: ".".to_owned(),
+            packages: vec![CargoPackageInfo {
+                name: "ub-review".to_owned(),
+                manifest_path: "Cargo.toml".to_owned(),
+                directory: ".".to_owned(),
+                targets: vec![
+                    CargoTargetInfo {
+                        name: "ub-review".to_owned(),
+                        kind: "bin".to_owned(),
+                        src_path: "src/main.rs".to_owned(),
+                    },
+                    CargoTargetInfo {
+                        name: "cli".to_owned(),
+                        kind: "test".to_owned(),
+                        src_path: "tests/cli.rs".to_owned(),
+                    },
+                    CargoTargetInfo {
+                        name: "cli_contract".to_owned(),
+                        kind: "test".to_owned(),
+                        src_path: "tests/cli_contract.rs".to_owned(),
+                    },
+                ],
+                dependencies: Vec::new(),
+            }],
+        }
+    }
+
+    fn diff(changed_files: &[&str]) -> DiffContext {
+        DiffContext {
+            base: "base".to_owned(),
+            head: "head".to_owned(),
+            patch: String::new(),
+            changed_files: changed_files
+                .iter()
+                .map(|file| (*file).to_owned())
+                .collect(),
+            diff_class: DiffClass::SourceGeneral,
+            flags: DiffFlags::default(),
+        }
+    }
+
+    fn budget() -> ProofBudget {
+        ProofBudget {
+            max_focused_test_files: 3,
+            max_focused_tests: 3,
+            per_command_timeout_sec: 300,
+            max_total_seconds: 600,
+        }
+    }
+
+    fn expected_error<T: std::fmt::Debug>(
+        result: std::result::Result<T, String>,
+    ) -> Result<String> {
+        match result {
+            Ok(value) => anyhow::bail!("expected resolver error, got {value:?}"),
+            Err(error) => Ok(error),
+        }
+    }
+
     fn intent(kind: ProofKind, target: &str) -> ProofIntent {
         ProofIntent {
             id: format!("intent-{target}"),
@@ -372,25 +433,12 @@ mod tests {
     #[test]
     fn resolves_one_cargo_test_label_to_one_approved_request() -> Result<()> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let diff = DiffContext {
-            base: "base".to_owned(),
-            head: "head".to_owned(),
-            patch: String::new(),
-            changed_files: vec!["src/main.rs".to_owned()],
-            diff_class: DiffClass::SourceGeneral,
-            flags: DiffFlags::default(),
-        };
         let result = resolve_model_proof_intents(
             root,
-            &diff,
+            &diff(&["src/main.rs"]),
             &[intent(ProofKind::FocusedTest, "cli")],
             &[],
-            ProofBudget {
-                max_focused_test_files: 3,
-                max_focused_tests: 3,
-                per_command_timeout_sec: 300,
-                max_total_seconds: 600,
-            },
+            budget(),
         )?;
         assert_eq!(result.proof_requests.len(), 1);
         assert_eq!(
@@ -399,55 +447,41 @@ mod tests {
         );
         assert_eq!(result.intents[0].status, "resolved");
         assert_eq!(result.intents[0].resolved_request_ids.len(), 1);
+        assert_eq!(
+            result.intents[0].resolved_request_ids[0],
+            result.proof_requests[0].id
+        );
+        assert_eq!(result.proof_requests[0].timeout_sec, 300);
+        assert!(
+            result.intents[0]
+                .resolution_reason
+                .contains("approved `focused-test` target")
+        );
         Ok(())
     }
 
     #[test]
     fn build_and_base_plus_tests_use_only_approved_templates() -> Result<()> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let diff = DiffContext {
-            base: "base".to_owned(),
-            head: "head".to_owned(),
-            patch: String::new(),
-            changed_files: vec!["src/main.rs".to_owned()],
-            diff_class: DiffClass::SourceGeneral,
-            flags: DiffFlags::default(),
-        };
         let intents = [
             intent(ProofKind::BasePlusTests, "ub-review::cli"),
             intent(ProofKind::FocusedBuild, "ub-review"),
         ];
-        let result = resolve_model_proof_intents(
-            root,
-            &diff,
-            &intents,
-            &[],
-            ProofBudget {
-                max_focused_test_files: 3,
-                max_focused_tests: 3,
-                per_command_timeout_sec: 300,
-                max_total_seconds: 600,
-            },
-        )?;
+        let result =
+            resolve_model_proof_intents(root, &diff(&["src/main.rs"]), &intents, &[], budget())?;
         assert_eq!(result.proof_requests.len(), 2);
-        assert!(
-            result
-                .proof_requests
-                .iter()
-                .any(|request| request.cost == "focused-test")
+        assert_eq!(result.proof_requests[0].cost, "focused-test");
+        assert_eq!(
+            result.proof_requests[0].command,
+            "cargo test --locked --package ub-review --test cli"
         );
-        assert!(
-            result
-                .proof_requests
-                .iter()
-                .any(|request| request.cost == "focused-build")
+        assert_eq!(result.proof_requests[1].cost, "focused-build");
+        assert_eq!(
+            result.proof_requests[1].command,
+            "cargo check --locked --package ub-review"
         );
-        assert!(
-            result
-                .proof_requests
-                .iter()
-                .all(|request| request.command.starts_with("cargo "))
-        );
+        assert_eq!(result.intents[0].status, "resolved");
+        assert_eq!(result.intents[1].status, "resolved");
         let test_tasks = focused_test_candidates_from_requests(&result.proof_requests);
         let build_tasks = focused_build_candidates_from_requests(&result.proof_requests);
         assert_eq!(test_tasks.len(), 1);
@@ -459,47 +493,43 @@ mod tests {
     #[test]
     fn terminalizes_ambiguous_unsupported_and_malicious_intents() -> Result<()> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let diff = DiffContext {
-            base: "base".to_owned(),
-            head: "head".to_owned(),
-            patch: String::new(),
-            changed_files: vec![],
-            diff_class: DiffClass::SourceGeneral,
-            flags: DiffFlags::default(),
-        };
         let mut oversized = intent(ProofKind::FocusedTest, "cli");
         oversized.timeout_sec = Some(301);
         let malicious_targets = [
-            "../../bin",
-            "--package",
-            "cargo;rm",
-            "cargo|rm",
-            "cargo>out",
-            "$(cargo)",
-            "cargo-target:ub-review",
+            ("../../bin", "rejected_target"),
+            ("--package", "rejected_target"),
+            ("cargo;rm", "rejected_target"),
+            ("cargo|rm", "rejected_target"),
+            ("cargo>out", "rejected_target"),
+            ("$(cargo)", "rejected_target"),
+            ("cargo-target:ub-review", "unsupported_target"),
         ];
-        for target in malicious_targets {
+        for (target, expected_status) in malicious_targets {
             let result = resolve_model_proof_intents(
                 root,
-                &diff,
+                &diff(&[]),
                 &[intent(ProofKind::FocusedTest, target)],
                 &[],
-                ProofBudget {
-                    max_focused_test_files: 3,
-                    max_focused_tests: 3,
-                    per_command_timeout_sec: 300,
-                    max_total_seconds: 600,
-                },
+                budget(),
             )?;
             assert!(result.proof_requests.is_empty(), "target {target} ran");
-            assert!(!matches!(
-                result.intents[0].status.as_str(),
-                "resolved" | "deduplicated"
-            ));
+            assert_eq!(result.intents[0].status, expected_status);
+            if expected_status == "rejected_target" {
+                assert_eq!(
+                    result.intents[0].resolution_reason,
+                    "target is not a repository-owned semantic label"
+                );
+            } else {
+                assert!(
+                    result.intents[0]
+                        .resolution_reason
+                        .contains("no approved focused test target")
+                );
+            }
         }
         let result = resolve_model_proof_intents(
             root,
-            &diff,
+            &diff(&[]),
             &[
                 intent(ProofKind::FocusedTest, "cargo-package:ub-review"),
                 intent(ProofKind::MutationWitness, "cli"),
@@ -507,32 +537,33 @@ mod tests {
                 oversized,
             ],
             &[],
-            ProofBudget {
-                max_focused_test_files: 3,
-                max_focused_tests: 3,
-                per_command_timeout_sec: 300,
-                max_total_seconds: 600,
-            },
+            budget(),
         )?;
         assert_eq!(result.proof_requests.len(), 0);
         assert_eq!(result.intents[0].status, "ambiguous_target");
+        assert!(
+            result.intents[0]
+                .resolution_reason
+                .contains("ambiguous focused test target")
+        );
         assert_eq!(result.intents[1].status, "unsupported_kind");
+        assert_eq!(
+            result.intents[1].resolution_reason,
+            "unsupported proof kind"
+        );
         assert_eq!(result.intents[2].status, "rejected_target");
         assert_eq!(result.intents[3].status, "invalid_timeout");
+        assert!(
+            result.intents[3]
+                .resolution_reason
+                .contains("outside the approved per-command budget")
+        );
         Ok(())
     }
 
     #[test]
     fn equivalent_intents_and_existing_requests_share_one_request_identity() -> Result<()> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let diff = DiffContext {
-            base: "base".to_owned(),
-            head: "head".to_owned(),
-            patch: String::new(),
-            changed_files: vec![],
-            diff_class: DiffClass::SourceGeneral,
-            flags: DiffFlags::default(),
-        };
         let existing = ProofRequest {
             schema: crate::artifacts::PROOF_REQUEST_SCHEMA.to_owned(),
             id: "legacy-request".to_owned(),
@@ -549,15 +580,10 @@ mod tests {
         second.id = "intent-second".to_owned();
         let result = resolve_model_proof_intents(
             root,
-            &diff,
+            &diff(&[]),
             &[intent(ProofKind::FocusedTest, "cli"), second],
             &[existing],
-            ProofBudget {
-                max_focused_test_files: 3,
-                max_focused_tests: 3,
-                per_command_timeout_sec: 300,
-                max_total_seconds: 600,
-            },
+            budget(),
         )?;
         assert!(result.proof_requests.is_empty());
         assert!(
@@ -570,6 +596,227 @@ mod tests {
             result.intents[0].resolved_request_ids,
             vec!["legacy-request"]
         );
+        assert_eq!(
+            result.intents[1].resolved_request_ids,
+            vec!["legacy-request"]
+        );
+        assert!(result.intents.iter().all(|item| {
+            item.resolution_reason
+                .contains("equivalent approved request")
+        }));
+        Ok(())
+    }
+
+    #[test]
+    fn semantic_target_grammar_and_target_selectors_are_exact() -> Result<()> {
+        assert!(safe_semantic_target("cli"));
+        assert!(safe_semantic_target("cargo-test:cli"));
+        assert!(safe_semantic_target("ub-review::cli"));
+        assert!(!safe_semantic_target(""));
+        assert!(!safe_semantic_target("/absolute"));
+        assert!(!safe_semantic_target("--package"));
+        assert!(!safe_semantic_target("../cli"));
+        assert!(!safe_semantic_target("C:/repo"));
+        assert!(!safe_semantic_target("cargo|test"));
+        assert!(!safe_semantic_target("cargo test"));
+        assert_eq!(
+            split_target_label("ub-review::cli"),
+            Some(("ub-review", "cli"))
+        );
+        assert_eq!(
+            split_target_label("ub-review/cli"),
+            Some(("ub-review", "cli"))
+        );
+        assert_eq!(split_target_label("cli"), None);
+
+        let workspace = graph();
+        let test_cases = [
+            ("cli", "cargo test --locked --package ub-review --test cli"),
+            (
+                "cargo-test:cli",
+                "cargo test --locked --package ub-review --test cli",
+            ),
+            (
+                "test:cli",
+                "cargo test --locked --package ub-review --test cli",
+            ),
+            (
+                "ub-review::cli",
+                "cargo test --locked --package ub-review --test cli",
+            ),
+            (
+                "ub-review/cli",
+                "cargo test --locked --package ub-review --test cli",
+            ),
+        ];
+        for (label, command) in test_cases {
+            let target =
+                resolve_test_target(&workspace, &diff(&[]), label).map_err(anyhow::Error::msg)?;
+            assert_eq!(target.command, command);
+            assert_eq!(target.package, "ub-review");
+            assert_eq!(target.target_name(), "cli");
+        }
+        let source_path = resolve_test_target(&workspace, &diff(&[]), "tests/cli.rs")
+            .map_err(anyhow::Error::msg)?;
+        assert_eq!(source_path.target_name(), "cli");
+        assert_eq!(source_path.command, test_cases[0].1);
+        assert_eq!(
+            expected_error(resolve_test_target(
+                &workspace,
+                &diff(&[]),
+                "no-such-target"
+            ))?,
+            "no approved focused test target matches `no-such-target`"
+        );
+        assert_eq!(
+            expected_error(resolve_test_target(
+                &workspace,
+                &diff(&[]),
+                "cargo-package:ub-review"
+            ))?,
+            "ambiguous focused test target `cargo-package:ub-review` matched 2 approved targets"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn build_resolution_and_command_templates_are_exact() -> Result<()> {
+        let workspace = graph();
+        let workspace_target = resolve_build_target(&workspace, &diff(&[]), "workspace")
+            .map_err(anyhow::Error::msg)?;
+        assert_eq!(workspace_target.command, "cargo check --locked --workspace");
+        assert!(workspace_target.target.is_none());
+
+        let package_target = resolve_build_target(&workspace, &diff(&[]), "package:ub-review")
+            .map_err(anyhow::Error::msg)?;
+        assert_eq!(
+            package_target.command,
+            "cargo check --locked --package ub-review"
+        );
+        assert!(package_target.target.is_none());
+
+        let bin_target =
+            resolve_build_target(&workspace, &diff(&[]), "cargo-target:ub-review/ub-review")
+                .map_err(anyhow::Error::msg)?;
+        assert_eq!(
+            bin_target.command,
+            "cargo check --locked --package ub-review --bin ub-review"
+        );
+        assert_eq!(bin_target.target_name(), "ub-review");
+
+        let package = &workspace.packages[0];
+        let lib = CargoTargetInfo {
+            name: "library".to_owned(),
+            kind: "lib".to_owned(),
+            src_path: "src/lib.rs".to_owned(),
+        };
+        assert_eq!(
+            build_command(package, Some(&lib)),
+            "cargo check --locked --package ub-review --lib library"
+        );
+        let example = CargoTargetInfo {
+            name: "demo".to_owned(),
+            kind: "example".to_owned(),
+            src_path: "examples/demo.rs".to_owned(),
+        };
+        assert_eq!(
+            build_command(package, Some(&example)),
+            "cargo check --locked --package ub-review --example demo"
+        );
+        let unknown = CargoTargetInfo {
+            name: "custom".to_owned(),
+            kind: "custom-build".to_owned(),
+            src_path: "build.rs".to_owned(),
+        };
+        assert_eq!(
+            build_command(package, Some(&unknown)),
+            "cargo check --locked --package ub-review"
+        );
+        assert_eq!(
+            expected_error(resolve_build_target(
+                &workspace,
+                &diff(&[]),
+                "no-such-package"
+            ))?,
+            "no approved focused build target matches `no-such-package`"
+        );
+        assert_eq!(
+            expected_error(resolve_build_target(
+                &workspace,
+                &diff(&[]),
+                "cargo-target:ub-review/no-such-target"
+            ))?,
+            "no approved focused build target matches `cargo-target:ub-review/no-such-target`"
+        );
+        assert_eq!(
+            request_key(
+                "cargo test --locked --package ub-review --test cli",
+                "focused-test"
+            ),
+            "focused-test:cargo test --locked --package ub-review --test cli"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn resolver_rejects_each_terminal_condition_with_exact_reason() -> Result<()> {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let cases = [
+            (
+                ProofKind::FocusedTest,
+                "no-such-target",
+                "unsupported_target",
+            ),
+            (
+                ProofKind::FocusedTest,
+                "cargo-package:ub-review",
+                "ambiguous_target",
+            ),
+            (ProofKind::MutationWitness, "cli", "unsupported_kind"),
+        ];
+        for (kind, target, status) in cases {
+            let result = resolve_model_proof_intents(
+                root,
+                &diff(&[]),
+                &[intent(kind, target)],
+                &[],
+                budget(),
+            )?;
+            assert_eq!(result.proof_requests.len(), 0);
+            assert_eq!(result.intents[0].status, status);
+            assert!(!result.intents[0].resolution_reason.is_empty());
+            assert!(result.intents[0].resolved_request_ids.is_empty());
+        }
+
+        let mut zero = intent(ProofKind::FocusedTest, "cli");
+        zero.timeout_sec = Some(0);
+        let result = resolve_model_proof_intents(root, &diff(&[]), &[zero], &[], budget())?;
+        assert_eq!(result.intents[0].status, "invalid_timeout");
+        assert_eq!(result.intents[0].resolved_request_ids, Vec::<String>::new());
+
+        let unavailable = resolve_model_proof_intents(
+            Path::new("C:\\path\\that\\does\\not\\exist"),
+            &diff(&[]),
+            &[intent(ProofKind::FocusedTest, "cli")],
+            &[],
+            budget(),
+        )?;
+        assert_eq!(unavailable.proof_requests.len(), 0);
+        assert_eq!(unavailable.intents[0].status, "unavailable_metadata");
+        assert_eq!(
+            unavailable.intents[0].resolution_reason,
+            "Cargo metadata was unavailable, so no executable target was approved"
+        );
+
+        let mut defaulted = intent(ProofKind::FocusedBuild, "workspace");
+        defaulted.requested_by.clear();
+        defaulted.timeout_sec = None;
+        let defaulted_result =
+            resolve_model_proof_intents(root, &diff(&[]), &[defaulted], &[], budget())?;
+        assert_eq!(defaulted_result.proof_requests.len(), 1);
+        assert_eq!(defaulted_result.proof_requests[0].lane, "proof-planner");
+        assert_eq!(defaulted_result.proof_requests[0].timeout_sec, 300);
+        assert_eq!(defaulted_result.intents[0].status, "resolved");
         Ok(())
     }
 }

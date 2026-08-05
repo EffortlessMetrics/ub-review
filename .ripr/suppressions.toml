@@ -19489,3 +19489,458 @@ kind = "exposure_gap"
 finding_id = "probe:src_github_delivery.rs:call_deletion:a5f9a46c"
 owner = "ub-review/m1"
 reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: FakeHttpResponse is a test-only response value exercised by the integrated replay's exact request sequence and terminal receipts. RIPR 0.10.0 cannot connect this helper type to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helper or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:73a88cb3"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:7055c4e3"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:e8c6c9a7"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:bdb34738"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:2dcd7852"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:19cce11b"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:96b91389"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:cc2b4c35"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:8f460544"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:db458611"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:df3d2e79"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:9355be8c"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:8c24b5cc"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:f88ce469"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:dd8011d6"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:ba4a38d8"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:17b746ef"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:79670770"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:b72295b2"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:b8805ac9"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:dd522c49"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:return_value:6f9fc13f"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:1a54df93"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:return_value:be9f05bd"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:41a18e00"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:f469b844"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:6aa6ec3c"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:2964e99e"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:639cce4d"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:639cce4d.2"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:639cce4d.3"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:639cce4d.4"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:6aa6ec3c.2"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:ec701083"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:4cd173c4"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:6aa6ec3c.3"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:f5020b56"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:48ca1067"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:8c265e14"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:a42a30e0"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:8431200f"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:4e1404da"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:error_path:c0aea15c"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:b660137a"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:return_value:b770f650"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:7f23d460"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:716ad981"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:65cf4e64"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:b660137a.2"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:return_value:b770f650.2"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:716ad981.2"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:66177db2"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:return_value:572f8f1d"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:65cf4e64.2"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:return_value:e9050e1a"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:65cf4e64.3"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:b660137a.3"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:68cf07fb"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:6ecf0793"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:34fc0c3a"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:424713ba"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:error_path:371f56c1"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:c2a7d6d8"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:424713ba.2"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:error_path:371f56c1.2"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:537f6606"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:ec6e8b4a"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:0af7022e"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:345b5644"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:9fd20c05"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:323a0e3a"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:24de3f17"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:b124bf30"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:return_value:52ef784d"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:eeb1c09d"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:5d59872d"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:return_value:acc2e162"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:call_deletion:0279b609"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:return_value:8964c11c"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:651df732"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:651df732.2"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:e176ed8c"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:error_path:8031d3ab"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:return_value:7f57a16c"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports these exact helper-path findings as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:return_value:4c6be8b8"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports this exact helper-path finding as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:99fd203e"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports this exact helper-path finding as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:e24053b1"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports this exact helper-path finding as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:c258b3fb"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports this exact helper-path finding as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:1b59b8f6"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports this exact helper-path finding as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:error_path:84951a6f"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports this exact helper-path finding as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:error_path:e15df766"
+owner = "ub-review/m2"
+reason = "PR #803 deterministic model-native proof-intent resolver: colocated proof::intent::tests cover exact approved targets, generated commands, terminal statuses and reasons, malicious labels, ambiguity, deduplication, unavailable metadata, timeout defaults, and full request identity. RIPR 0.10.0 still reports this exact helper-path finding as weakly_exposed or reachable_unrevealed despite those discriminating assertions; no wildcard, threshold, or behavior suppression is used. Re-verify after edits to src/proof/intent.rs or a RIPR upgrade."
