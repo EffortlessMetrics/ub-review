@@ -243,8 +243,10 @@ workflows use MiniMax primary with optional OpenCode fallback. The release happy
 path needs no action SHA; an explicit validated SHA is required only to permit
 the cached source-build fallback.
 
-**Remaining action:** cut the actual v0.1.0 tag with maintainer authorization
-and execute the release smoke plan recorded in issue #716.
+**Release state:** v0.1.0 was published with maintainer authorization. The
+remaining post-release evidence is the clean no-host-Cargo installation proof
+tracked in #815; v0.1.1 preparation and publication remain separately
+authorized through #816/#817.
 
 ### PR 12 — Fleet rollout — IN PROGRESS (external adoption blocked)
 
@@ -253,13 +255,11 @@ references in `.ripr/suppressions.toml` point to upstream tooling issue
 trackers, not ub-review rollout infrastructure.
 
 The single-gate adoption surface is now executable but has not been applied to
-an external repository. A read-only release workflow dispatch on 2026-07-12
-completed the build, checksum, and archive-upload stages on `main` (run
-29182345044); no tag or release was created, and the Linux asset was not
-executed on Windows. The actual v0.1.0 tag remains an explicitly authorized
-release action. Current release-installed pilot drafts are Bun #34046 and
-perl-lsp-swarm #4015; both remain unable to prove the release path until
-ub-review publishes v0.1.0.
+an external repository. v0.1.0 is published with its Linux archive and
+checksum; the remaining release-only installation receipt is tracked in #815.
+Current release-installed pilot drafts are Bun #34046 and perl-lsp-swarm #4015;
+both remain advisory until the next released product path is independently
+validated.
 
 Read-only GitHub inspection found the current adoption blockers:
 

@@ -311,6 +311,8 @@ mod tests {
             "review",
             "--run-pass",
             "manual",
+            "--max-inline-comments",
+            "2",
         ])
         .map_err(|error| error.to_string())?;
         match cli.command {
@@ -379,13 +381,13 @@ mod tests {
         reply_body: &str,
     ) -> AnyResult<(String, FixtureApiHandle)> {
         crate::github_delivery::spawn_fake_delivery_api(vec![
-            crate::github_delivery::FakeHttpResponse {
-                status: 200,
-                body: serde_json::json!({"head": {"sha": exact_head}}).to_string(),
-            },
-            crate::github_delivery::FakeHttpResponse {
-                status: 200,
-                body: serde_json::json!([{
+            crate::github_delivery::FakeHttpResponse::new(
+                200,
+                serde_json::json!({"head": {"sha": exact_head}}).to_string(),
+            ),
+            crate::github_delivery::FakeHttpResponse::new(
+                200,
+                serde_json::json!([{
                     "id": source_thread_id,
                     "path": source_path,
                     "line": source_line,
@@ -394,14 +396,14 @@ mod tests {
                     "body": "The existing parser thread is current on this head."
                 }])
                 .to_string(),
-            },
-            crate::github_delivery::FakeHttpResponse {
-                status: 200,
-                body: serde_json::json!({"id": 987, "state": "PENDING"}).to_string(),
-            },
-            crate::github_delivery::FakeHttpResponse {
-                status: 200,
-                body: serde_json::json!([{
+            ),
+            crate::github_delivery::FakeHttpResponse::new(
+                200,
+                serde_json::json!({"id": 987, "state": "PENDING"}).to_string(),
+            ),
+            crate::github_delivery::FakeHttpResponse::new(
+                200,
+                serde_json::json!([{
                     "id": 2001,
                     "path": inline_comment.path,
                     "line": inline_comment.line,
@@ -410,25 +412,25 @@ mod tests {
                     "body": inline_comment.body
                 }])
                 .to_string(),
-            },
-            crate::github_delivery::FakeHttpResponse {
-                status: 200,
-                body: serde_json::json!({
+            ),
+            crate::github_delivery::FakeHttpResponse::new(
+                200,
+                serde_json::json!({
                     "id": 2002,
                     "commit_id": exact_head,
                     "in_reply_to_id": source_thread_id,
                     "body": reply_body
                 })
                 .to_string(),
-            },
-            crate::github_delivery::FakeHttpResponse {
-                status: 200,
-                body: serde_json::json!({"head": {"sha": exact_head}}).to_string(),
-            },
-            crate::github_delivery::FakeHttpResponse {
-                status: 200,
-                body: serde_json::json!({"id": 987, "state": "COMMENTED"}).to_string(),
-            },
+            ),
+            crate::github_delivery::FakeHttpResponse::new(
+                200,
+                serde_json::json!({"head": {"sha": exact_head}}).to_string(),
+            ),
+            crate::github_delivery::FakeHttpResponse::new(
+                200,
+                serde_json::json!({"id": 987, "state": "COMMENTED"}).to_string(),
+            ),
         ])
     }
 

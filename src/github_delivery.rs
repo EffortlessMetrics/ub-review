@@ -1114,13 +1114,13 @@ pub(crate) use tests::{FakeHttpResponse, spawn_fake_delivery_api};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anyhow::ensure;
+    use anyhow::{bail, ensure};
     use std::collections::BTreeMap;
     use std::collections::VecDeque;
-    use std::io::{BufRead, BufReader, Read, Write};
+    use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
     use std::net::{TcpListener, TcpStream};
     use std::thread;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     const HEAD: &str = "0123456789abcdef0123456789abcdef01234567";
 
@@ -1177,8 +1177,17 @@ mod tests {
 
     #[derive(Clone)]
     pub(crate) struct FakeHttpResponse {
-        pub(crate) status: u16,
-        pub(crate) body: String,
+        status: u16,
+        body: String,
+    }
+
+    impl FakeHttpResponse {
+        pub(crate) fn new(status: u16, body: impl Into<String>) -> Self {
+            Self {
+                status,
+                body: body.into(),
+            }
+        }
     }
 
     type FakeRequest = (String, String);
@@ -1223,12 +1232,35 @@ mod tests {
         responses: Vec<FakeHttpResponse>,
     ) -> Result<(String, FakeApiHandle)> {
         let listener = TcpListener::bind(("127.0.0.1", 0))?;
-        listener.set_nonblocking(false)?;
+        listener.set_nonblocking(true)?;
         let address = format!("http://{}", listener.local_addr()?);
         let handle = thread::spawn(move || {
-            let mut requests = Vec::new();
+            let mut requests: Vec<FakeRequest> = Vec::new();
             for response in responses {
-                let (stream, _) = listener.accept()?;
+                let deadline = Instant::now() + Duration::from_secs(5);
+                let (stream, _) = loop {
+                    match listener.accept() {
+                        Ok(connection) => break connection,
+                        Err(error)
+                            if error.kind() == ErrorKind::WouldBlock
+                                && Instant::now() < deadline =>
+                        {
+                            thread::sleep(Duration::from_millis(10));
+                        }
+                        Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                            let captured = requests
+                                .iter()
+                                .map(|(line, _)| line.as_str())
+                                .collect::<Vec<_>>();
+                            bail!(
+                                "fake delivery API timed out waiting for request {}; captured {}: {captured:?}",
+                                requests.len() + 1,
+                                requests.len()
+                            );
+                        }
+                        Err(error) => return Err(error.into()),
+                    }
+                };
                 stream.set_read_timeout(Some(Duration::from_secs(5)))?;
                 let request = read_fake_request(stream.try_clone()?)?;
                 write_fake_response(stream, &response)?;
