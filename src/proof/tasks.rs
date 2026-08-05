@@ -810,10 +810,22 @@ mod tests {
             request_ids: vec!["request-1".to_owned()],
         };
         let direct = focused_proof_plan_for_task(
-            task,
+            task.clone(),
             budget,
             "deferred_by_budget",
             "candidate recorded for portfolio accounting; execution is budget-gated".to_owned(),
+        );
+        assert_eq!(
+            focused_proof_plan_for_task(
+                task,
+                budget,
+                "deferred_by_budget",
+                "candidate recorded for portfolio accounting; execution is budget-gated"
+                    .to_owned(),
+            )
+            .status,
+            "deferred_by_budget",
+            "focused_proof_plan_for_task must preserve candidate status"
         );
         assert_eq!(direct.id, "proof-red-green-direct");
         assert_eq!(direct.test_file, "cargo-package:ub-review");
@@ -836,6 +848,11 @@ mod tests {
             diff_class: DiffClass::TestsOnly,
         };
         let candidate_plans = focused_proof_candidate_plans_from_diff(&diff, &[], budget);
+        assert_eq!(
+            focused_proof_candidate_plans_from_diff(&diff, &[], budget).len(),
+            1,
+            "focused_proof_candidate_plans_from_diff must record the candidate"
+        );
         assert_eq!(candidate_plans.len(), 1);
         assert_eq!(
             candidate_plans
@@ -886,6 +903,11 @@ mod tests {
             },
         ];
         let build_plans = focused_build_candidate_plans_from_requests(&build_requests, budget);
+        assert_eq!(
+            focused_build_candidate_plans_from_requests(&build_requests, budget).len(),
+            2,
+            "focused_build_candidate_plans_from_requests must retain all candidates"
+        );
         assert_eq!(build_plans.len(), 2);
         assert_eq!(
             build_plans
