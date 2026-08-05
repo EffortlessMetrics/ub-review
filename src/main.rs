@@ -14966,6 +14966,17 @@ required_proof_unprooven = true
         assert!(!surface.summary_only_policy_posted);
         assert_eq!(surface.review_payload_status, "skipped_artifact_only_body");
         assert!(surface.github_review.body.is_empty());
+        assert_eq!(surface.output_degradation.selected_mode, "artifact_only");
+        assert_eq!(surface.output_degradation.final_bytes, 0);
+        assert_eq!(surface.output_degradation.final_item_count, 0);
+        assert!(surface.output_degradation.retained_topic_ids.is_empty());
+        assert!(
+            surface
+                .output_degradation
+                .dropped_topics
+                .iter()
+                .all(|topic| topic.reason == "public_body_policy_suppressed")
+        );
         assert_eq!(surface.terminal_state.summary_only_findings, 1);
         assert_eq!(surface.terminal_state.substantive_summary_only_findings, 1);
         Ok(())

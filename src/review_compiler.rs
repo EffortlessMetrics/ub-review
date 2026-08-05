@@ -246,7 +246,7 @@ pub(crate) fn compile_review_surface(
     // The renderer may honor a larger artifact/configuration budget, but the
     // human-facing contract is always bounded by the hard PR body wall. The
     // degradation receipt records every topic removed by this boundary.
-    let (degraded_pr_body, output_degradation) = degrade_review_body(
+    let (degraded_pr_body, mut output_degradation) = degrade_review_body(
         pr_body,
         MAX_PR_REVIEW_BODY_BYTES,
         MAX_PR_REVIEW_BODY_BULLETS,
@@ -287,6 +287,25 @@ pub(crate) fn compile_review_surface(
             pr_body.clear();
             suppressed_artifact_only_pr_body = true;
         }
+    }
+    if suppressed_artifact_only_pr_body {
+        let retained_topics = std::mem::take(&mut output_degradation.retained_topic_ids);
+        output_degradation
+            .dropped_topics
+            .extend(
+                retained_topics
+                    .into_iter()
+                    .map(|topic_id| ReviewOutputDroppedTopic {
+                        topic_id,
+                        reason: "public_body_policy_suppressed".to_owned(),
+                    }),
+            );
+        output_degradation
+            .dropped_topics
+            .sort_by(|left, right| left.topic_id.cmp(&right.topic_id));
+        output_degradation.selected_mode = "artifact_only".to_owned();
+        output_degradation.final_bytes = 0;
+        output_degradation.final_item_count = 0;
     }
     // Body quality is a separate boundary from inline finding quality. If
     // prose is suppressed, retain validated inline findings as the concise

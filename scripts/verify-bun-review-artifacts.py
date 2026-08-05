@@ -1547,8 +1547,7 @@ def require_common_tree(root: pathlib.Path) -> None:
 
 def require_output_degradation_artifact(root: pathlib.Path) -> None:
     path = root / "review" / "output_degradation.json"
-    if not path.exists():
-        return
+    require_file(path)
     artifact = load_json(path)
     if not isinstance(artifact, dict):
         fail("output_degradation.json is not an object")
@@ -11553,6 +11552,12 @@ def self_test_output_degradation_contract() -> None:
         expect_self_test_failure(
             "output degradation unexplained loss",
             "retained and dropped identities do not account for every input item",
+            lambda: require_output_degradation_artifact(root),
+        )
+        path.unlink()
+        expect_self_test_failure(
+            "output degradation missing receipt",
+            "missing file",
             lambda: require_output_degradation_artifact(root),
         )
 

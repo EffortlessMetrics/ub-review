@@ -314,6 +314,7 @@ pub(crate) struct ReviewOutputDroppedTopic {
 #[derive(Clone, Debug)]
 struct OutputTopic {
     id: String,
+    content_key: String,
     section: String,
     text: String,
     rank: u8,
@@ -355,9 +356,10 @@ pub(crate) fn degrade_review_body(
     let mut dropped_topics = Vec::new();
     let mut unique = Vec::new();
     for topic in all_topics {
-        if let Some(existing) = unique.iter_mut().find(|existing: &&mut OutputTopic| {
-            normalize_output_topic(&existing.text) == normalize_output_topic(&topic.text)
-        }) {
+        if let Some(existing) = unique
+            .iter_mut()
+            .find(|existing: &&mut OutputTopic| existing.content_key == topic.content_key)
+        {
             let existing = existing as &mut OutputTopic;
             let replace = (topic.rank, topic.section.as_str(), topic.id.as_str())
                 > (
@@ -475,8 +477,18 @@ fn output_degradation_receipt(
 
 fn output_topics(text: &str) -> Vec<OutputTopic> {
     let mut section = String::new();
-    text.lines()
+    let mut in_fenced_block = false;
+    let mut topics = text
+        .lines()
         .filter_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.starts_with("```") {
+                in_fenced_block = !in_fenced_block;
+                return None;
+            }
+            if in_fenced_block {
+                return None;
+            }
             if line.starts_with("## ") {
                 section = line.trim().to_owned();
                 return None;
@@ -491,13 +503,25 @@ fn output_topics(text: &str) -> Vec<OutputTopic> {
             }
             let normalized = normalize_output_topic(topic_text);
             Some(OutputTopic {
-                id: format!("topic-{}", &sha256_hex(normalized.as_bytes())[..16]),
+                id: String::new(),
+                content_key: normalized,
                 section: section.clone(),
                 text: topic_text.to_owned(),
                 rank: output_topic_rank(&section, topic_text),
             })
         })
-        .collect()
+        .collect::<Vec<_>>();
+    let mut occurrences = BTreeMap::<String, usize>::new();
+    for topic in &mut topics {
+        let occurrence = occurrences.entry(topic.content_key.clone()).or_default();
+        let identity_input = format!("{}:{occurrence}", topic.content_key);
+        topic.id = format!(
+            "topic-{}-{occurrence}",
+            &sha256_hex(identity_input.as_bytes())[..16]
+        );
+        *occurrence += 1;
+    }
+    topics
 }
 
 fn normalize_output_topic(text: &str) -> String {
@@ -510,7 +534,8 @@ fn normalize_output_topic(text: &str) -> String {
 }
 
 fn output_topic_rank(section: &str, text: &str) -> u8 {
-    let lower = text.to_ascii_lowercase();
+    let tokens = normalize_output_topic(text);
+    let tokens = tokens.split_whitespace().collect::<Vec<_>>();
     let rank_by_section: &[(&[&str], u8)] = &[
         (
             &["## Confirmed findings", "## Test proof", "## Proof results"],
@@ -539,13 +564,13 @@ fn output_topic_rank(section: &str, text: &str) -> u8 {
         .unwrap_or(1);
     if ["executed", "receipt", "confirmed", "reproduced"]
         .iter()
-        .any(|marker| lower.contains(marker))
+        .any(|marker| tokens.contains(marker))
     {
         rank = rank.saturating_add(2);
     }
-    if lower.contains("blocker") || lower.contains("high") {
+    if tokens.contains(&"blocker") || tokens.contains(&"high") {
         rank = rank.saturating_add(2);
-    } else if lower.contains("medium") {
+    } else if tokens.contains(&"medium") {
         rank = rank.saturating_add(1);
     }
     rank
@@ -944,6 +969,8 @@ mod output_degradation_tests {
             "\n## Confirmed findings\n\n",
             "- Parser concern remains.\n",
             "- Parser concern remains.\n",
+            "\n## Summary-only findings\n\n",
+            "- Parser concern remains.\n",
             "- Separate concern remains.\n",
         );
         let (body, receipt) = degrade_review_body(input.to_owned(), 500, 2, "head-fold");
@@ -954,7 +981,7 @@ mod output_degradation_tests {
         assert_eq!(receipt.retained_topic_ids.len(), 2);
         assert_eq!(receipt.max_bytes, 500);
         assert_eq!(receipt.max_bullets, 2);
-        assert_eq!(receipt.dropped_topics.len(), 2);
+        assert_eq!(receipt.dropped_topics.len(), 3);
         assert!(
             receipt
                 .dropped_topics
@@ -967,6 +994,17 @@ mod output_degradation_tests {
                 .iter()
                 .any(|topic| { topic.reason == "duplicate_evidence_folded_into_existing_topic" })
         );
+        let mut all_ids = receipt.retained_topic_ids.clone();
+        all_ids.extend(
+            receipt
+                .dropped_topics
+                .iter()
+                .map(|topic| topic.topic_id.clone()),
+        );
+        all_ids.sort();
+        assert_eq!(all_ids.len(), receipt.original_item_count);
+        all_ids.dedup();
+        assert_eq!(all_ids.len(), receipt.original_item_count);
     }
 
     #[test]
@@ -998,6 +1036,10 @@ mod output_degradation_tests {
         let input = concat!(
             "## Reporter summary\n\n",
             "A material parser interaction changes the review decision.\n",
+            "```rust\n",
+            "## Internal implementation detail\n",
+            "- Never publish this command.\n",
+            "```\n",
             "\n## Custom evidence\n\n",
             "- Executed receipt confirms the custom evidence.\n",
         );
@@ -1006,6 +1048,11 @@ mod output_degradation_tests {
         assert!(body.contains("## Reporter summary"));
         assert!(body.contains("material parser interaction"));
         assert!(body.contains("## Custom evidence"));
+        let topics = output_topics(input);
+        assert_eq!(topics.len(), 2);
+        let rendered = render_output_topics(&topics);
+        assert!(!rendered.contains("Internal implementation detail"));
+        assert!(!rendered.contains("Never publish this command"));
         assert_eq!(receipt.selected_mode, "full");
         assert_eq!(receipt.final_item_count, 2);
         assert_eq!(receipt.max_bytes, 500);
@@ -1037,7 +1084,8 @@ mod output_degradation_tests {
         let (body, receipt) = degrade_review_body(input.to_owned(), 32, 12, "head-utf8");
 
         assert!(body.len() <= 32);
-        assert!(body.is_char_boundary(body.len()));
+        assert!(body.is_empty() || body.contains("🙂"));
+        assert!(!body.contains('�'));
         assert_eq!(receipt.final_bytes, body.len());
         assert!(receipt.final_bytes <= receipt.max_bytes);
         assert_eq!(receipt.max_bytes, 32);
@@ -1085,15 +1133,19 @@ mod output_degradation_tests {
         assert_eq!(output_topic_rank("## Summary-only findings", "finding"), 3);
         assert_eq!(output_topic_rank("## Parked follow-ups", "finding"), 2);
         assert_eq!(output_topic_rank("## Custom", "high confirmed finding"), 5);
+        assert_eq!(output_topic_rank("## Custom", "unexecuted check"), 1);
+        assert_eq!(output_topic_rank("## Custom", "unconfirmed highlight"), 1);
 
         let low = OutputTopic {
             id: "topic-b".to_owned(),
+            content_key: "low".to_owned(),
             section: "## Custom".to_owned(),
             text: "low".to_owned(),
             rank: 1,
         };
         let high = OutputTopic {
             id: "topic-a".to_owned(),
+            content_key: "high".to_owned(),
             section: "## Custom".to_owned(),
             text: "high".to_owned(),
             rank: 2,
@@ -1141,6 +1193,7 @@ mod output_degradation_tests {
         assert_eq!(render_output_topics(&[]), "");
         let topics = vec![OutputTopic {
             id: "topic-custom".to_owned(),
+            content_key: "a retained custom topic".to_owned(),
             section: "## Custom evidence".to_owned(),
             text: "A retained custom topic.".to_owned(),
             rank: 1,
