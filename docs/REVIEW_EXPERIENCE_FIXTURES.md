@@ -22,9 +22,11 @@ Run the focused proof with:
 cargo test --locked review_experience::tests::perl_lsp_3627
 ```
 
-This fixture is the regression boundary for claim-graph integration,
-receipt-driven replanning, and transactional inline delivery. Its test adapts
-the fixture into the production claim graph and inline reconciler, proving that
-current-head threads suppress duplicates while stale-head threads do not. It
-does not by itself prove GitHub posting or reply delivery; transactional
-posting remains #748 work.
+This fixture is the regression boundary for the integrated M1 review path
+(#801). Its production replay adapts the fixture into the claim graph, compiler,
+exact proof receipt, pending-review transport, reply delivery, and fixed-head
+silence path. The fake GitHub server receives the real create/list/reconcile,
+reply, head-recheck, and submit sequence; the test also verifies terminal
+delivery receipts and the exact current-head bindings. It is intentionally
+not an external perl-lsp run: release-installed product validation remains
+owned by #806 and #808.

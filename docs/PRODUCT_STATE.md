@@ -135,7 +135,8 @@ proof receipts outrank validated facts, citations, and model interpretations;
 equal-precedence conflicts remain explicitly conflicted. Diff-irrelevance is
 guidance text, not enforced routing. Cross-section body dedupe is doctrine
 and structural cross-section claim identity is now implemented (PRs #749/#750).
-Transactional inline delivery remains in draft PR #748. The upstream RIPR
+Transactional inline delivery is complete through merged PRs #831 and #832.
+The upstream RIPR
 CLI-subprocess analyzer contract is now merged in RIPR #1455, with the
 structured warning consumer and 0.10.1 release-prep work merged in PR #1457
 and PR #1456.
@@ -160,11 +161,9 @@ delivery state. Each topic also records the current thread disposition
 `fixed_on_current_head`, or `superseded_by_head_change`). Current-head inline
 candidates already covered by an anchored
 thread are withheld from a second comment; stale threads do not suppress new
-delivery. Transactional replies and confirmed GitHub delivery receipts remain
-the separate #748 seam. That PR already carries the pending-review ->
-comment-list -> submit lifecycle, cleanup receipts, and focused mismatch
-coverage; its hosted gate still awaits a published RIPR 0.10.1 artifact, so
-this branch does not duplicate that posting implementation. Explicit
+delivery. Pending-review creation, exact comment reconciliation, head
+revalidation, replies, retry identity, and confirmed GitHub delivery receipts
+are now exercised by the production Perl #3627 replay in #801. Explicit
 evidence-precedence conflicts now carry winner/loser claim IDs, and final
 surface reconciliation suppresses only the adjudicated loser while retaining
 it in the claim graph artifact.
@@ -307,16 +306,14 @@ extracting when next touched:
   (~2,600+ lines); ripr's analysis of the full codebase exceeds the 7 GB
   runner budget. The self-gate is back at a strict zero ceiling; any future
   exception must be narrowly receipted and evidenced.
-- **Issue #716:** no published `v0.1.0` GitHub Release yet. The release packet
-  must name the exact candidate SHA, pre-tag receipts, archive/checksum names,
-  downstream smoke plan, and rollback before maintainer authorization.
-- **RIPR semantic-probe contract:** #748 (transactional inline delivery),
-  #681 (production sanitizer witness), and the published follow-ups #753/#754
-  have green functional proof but remain unpublished or unmergeable while RIPR
-  reports unresolved CLI/subprocess or semantic-probe exposure gaps. No
-  aliases or threshold relaxation are permitted; current upstream tracking is
-  ripr-swarm#1528 and the related semantic-probe fixes. (#745, the terminal
-  watchdog classifier slice, landed separately — see "What is already done".)
+- **Issue #716:** `v0.1.0` is shipped; the remaining release-only proof is the
+  clean no-host-Cargo installation receipt tracked by #815. Any `v0.1.1`
+  candidate still requires exact-SHA preparation and explicit authorization.
+- **RIPR semantic-probe contract:** #681 (production sanitizer witness) remains
+  outside the focused M1 release path. No aliases or threshold relaxation are
+  permitted; current upstream tracking is ripr-swarm#1528 and the related
+  semantic-probe fixes. (#745, the terminal watchdog classifier slice, landed
+  separately — see "What is already done".)
 - **Issue-ledger #147:** closed (PRs #459/#460). Cross-lane conflict detection
   and suppression shipped; deeper evidence-precedence adjudication is the open
   next step (epic #655 milestone 4).
