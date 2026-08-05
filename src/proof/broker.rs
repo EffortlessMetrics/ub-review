@@ -1517,6 +1517,17 @@ mod tests {
             "current-head",
         ));
 
+        let stale_only_selection = select_proof_portfolio(ProofPortfolioInput {
+            test_tasks: std::slice::from_ref(&test),
+            build_tasks: &[],
+            proof_requests: std::slice::from_ref(&request),
+            proof_receipts: std::slice::from_ref(&stale_receipt),
+            head: "current-head",
+            budget: proof_budget_for_test(1, 60),
+            runtime: portfolio_runtime_for_test(60, 4, Some(8_192), Some(20_000)),
+        });
+        assert_eq!(stale_only_selection.test_tasks.len(), 1);
+
         let selection = select_proof_portfolio(ProofPortfolioInput {
             test_tasks: std::slice::from_ref(&test),
             build_tasks: &[],

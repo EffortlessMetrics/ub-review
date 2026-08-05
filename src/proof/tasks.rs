@@ -786,8 +786,15 @@ mod tests {
         assert_eq!(from_v1[0].test_name, from_v2[0].test_name);
         assert_eq!(from_v1[0].mode, from_v2[0].mode);
         assert_eq!(
-            from_v1[0].command_specs.is_some(),
-            from_v2[0].command_specs.is_some()
+            from_v1[0]
+                .command_specs
+                .as_ref()
+                .map(|specs| (&specs.head.argv, &specs.base_plus_tests.argv)),
+            from_v2[0]
+                .command_specs
+                .as_ref()
+                .map(|specs| (&specs.head.argv, &specs.base_plus_tests.argv)),
+            "v1 and v2 command specifications must preserve Cargo passthrough arguments"
         );
     }
 

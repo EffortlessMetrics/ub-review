@@ -1732,6 +1732,21 @@ index 1111111..2222222 100644
             "request-current-head",
             "current-head",
         ));
+        let stale_only = terminalize_proof_requests(
+            "current-head",
+            std::slice::from_ref(&request),
+            std::slice::from_ref(&receipt),
+        );
+        assert_eq!(
+            stale_only
+                .iter()
+                .map(|request| (
+                    request.status.as_str(),
+                    request.reason.contains("current-head")
+                ))
+                .collect::<Vec<_>>(),
+            vec![("deferred", true)]
+        );
         let terminal =
             terminalize_proof_requests("current-head", &[request], &[receipt, current_receipt]);
         assert_eq!(terminal[0].status, "satisfied");
