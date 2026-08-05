@@ -18278,7 +18278,7 @@ reason = "PR #801 test-only fixture plumbing: the production replay asserts the 
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_review_experience.rs:call_deletion:4f9f933f"
+finding_id = "probe:src_review_experience.rs:call_deletion:795d40b8"
 owner = "ub-review/m1"
 reason = "PR #801 test-only fixture plumbing: the production replay asserts the resulting claim graph, compiler surface, exact request sequence, terminal delivery receipts, confirmed-delivery body omission, and fixed-head silence. RIPR 0.10.0 does not trace these cfg(test) fixture constructors and response adapters through their callers; retain this exact receipt and re-verify after editing review_experience.rs or upgrading RIPR."
 
