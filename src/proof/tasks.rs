@@ -820,8 +820,7 @@ mod tests {
                 task,
                 budget,
                 "deferred_by_budget",
-                "candidate recorded for portfolio accounting; execution is budget-gated"
-                    .to_owned(),
+                "candidate recorded for portfolio accounting; execution is budget-gated".to_owned(),
             )
             .status,
             "deferred_by_budget",
