@@ -181,6 +181,10 @@ fn classify_claim(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result as AnyResult;
+    use clap::Parser;
+    use std::fs;
+    use std::path::Path;
 
     fn fixture() -> Result<ReviewExperienceFixture, String> {
         serde_json::from_str(include_str!(
@@ -202,13 +206,18 @@ mod tests {
         thread_commit: &str,
         review_head: &str,
     ) -> PrThreadContext {
+        production_thread_context_with_shape(fixture, thread_commit, review_head, None, &[])
+    }
+
+    fn production_thread_context_with_shape(
+        fixture: &ReviewExperienceFixture,
+        thread_commit: &str,
+        review_head: &str,
+        stale_thread_id: Option<&str>,
+        omitted_thread_ids: &[&str],
+    ) -> PrThreadContext {
         // Mirrors the production binding rule in `github_thread_records`: an
         // inline thread is `current` only when its commit is the reviewed head.
-        let head_binding = if thread_commit == review_head {
-            "current"
-        } else {
-            "stale"
-        };
         PrThreadContext {
             schema: PR_THREAD_CONTEXT_SCHEMA.to_owned(),
             status: "seeded".to_owned(),
@@ -225,6 +234,7 @@ mod tests {
             threads: fixture
                 .threads
                 .iter()
+                .filter(|thread| !omitted_thread_ids.contains(&thread.id.as_str()))
                 .map(|thread| ReviewThreadRecord {
                     id: thread.id.clone(),
                     kind: "review-comment".to_owned(),
@@ -232,8 +242,19 @@ mod tests {
                     body: thread.body.clone(),
                     path: (!thread.path.is_empty()).then(|| thread.path.clone()),
                     line: thread.anchor,
-                    commit_id: Some(thread_commit.to_owned()),
-                    head_binding: head_binding.to_owned(),
+                    commit_id: Some(if Some(thread.id.as_str()) == stale_thread_id {
+                        fixture.base_sha.clone()
+                    } else {
+                        thread_commit.to_owned()
+                    }),
+                    head_binding: if Some(thread.id.as_str()) == stale_thread_id
+                        || thread_commit != review_head
+                    {
+                        "stale"
+                    } else {
+                        "current"
+                    }
+                    .to_owned(),
                     state: Some(thread.status.clone()),
                 })
                 .collect(),
@@ -270,6 +291,147 @@ mod tests {
                 }
             })
             .collect()
+    }
+
+    fn fixture_run_args(root: &Path, out: &Path, head: &str) -> Result<RunArgs, String> {
+        let root = root.to_string_lossy().into_owned();
+        let out = out.to_string_lossy().into_owned();
+        let cli = Cli::try_parse_from([
+            "ub-review",
+            "run",
+            "--root",
+            root.as_str(),
+            "--out",
+            out.as_str(),
+            "--base",
+            "fixture-base",
+            "--head",
+            head,
+            "--posting",
+            "review",
+            "--run-pass",
+            "manual",
+            "--max-inline-comments",
+            "2",
+        ])
+        .map_err(|error| error.to_string())?;
+        match cli.command {
+            Command::Run(args) => Ok(*args),
+            _ => Err("fixture argument parser returned a non-run command".to_owned()),
+        }
+    }
+
+    fn fixture_plan(fixture: &ReviewExperienceFixture) -> Plan {
+        Plan {
+            base: fixture.base_sha.clone(),
+            head: fixture.buggy_head_sha.clone(),
+            profile_name: "fixture".to_owned(),
+            diff_class: DiffClass::SourceGeneral,
+            changed_files: fixture.diff.iter().map(|diff| diff.path.clone()).collect(),
+            language_mix: LanguageMix::default(),
+            sensors: Vec::new(),
+            lanes: Vec::new(),
+            repo_lanes: Vec::new(),
+            docs_only: false,
+            notes: Vec::new(),
+        }
+    }
+
+    fn fixture_diff(fixture: &ReviewExperienceFixture, head: &str) -> DiffContext {
+        DiffContext {
+            base: fixture.base_sha.clone(),
+            head: head.to_owned(),
+            changed_files: fixture.diff.iter().map(|diff| diff.path.clone()).collect(),
+            patch: fixture
+                .diff
+                .iter()
+                .map(|diff| diff.hunk.as_str())
+                .collect::<Vec<_>>()
+                .join("\n"),
+            flags: DiffFlags {
+                source_changed: true,
+                ..DiffFlags::default()
+            },
+            diff_class: DiffClass::SourceGeneral,
+        }
+    }
+
+    fn fixture_comment(thread: &FixtureThread, body: &str) -> ReviewInlineComment {
+        ReviewInlineComment {
+            lane: "fixture".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: thread.path.clone(),
+            line: thread.anchor.unwrap_or_default(),
+            side: "RIGHT".to_owned(),
+            body: format!("[fixture] {body}"),
+            evidence: "focused parser proof receipt".to_owned(),
+            suggestion: None,
+        }
+    }
+
+    type FixtureApiHandle = std::thread::JoinHandle<anyhow::Result<Vec<(String, String)>>>;
+
+    fn spawn_fixture_delivery_api(
+        exact_head: &str,
+        source_thread_id: &str,
+        source_path: &str,
+        source_line: u32,
+        inline_comment: &GitHubReviewComment,
+        reply_body: &str,
+    ) -> AnyResult<(String, FixtureApiHandle)> {
+        crate::github_delivery::spawn_fake_delivery_api(vec![
+            crate::github_delivery::FakeHttpResponse::new(
+                200,
+                serde_json::json!({"head": {"sha": exact_head}}).to_string(),
+            ),
+            crate::github_delivery::FakeHttpResponse::new(
+                200,
+                serde_json::json!([{
+                    "id": source_thread_id,
+                    "path": source_path,
+                    "line": source_line,
+                    "side": "RIGHT",
+                    "commit_id": exact_head,
+                    "body": "The existing parser thread is current on this head."
+                }])
+                .to_string(),
+            ),
+            crate::github_delivery::FakeHttpResponse::new(
+                200,
+                serde_json::json!({"id": 987, "state": "PENDING"}).to_string(),
+            ),
+            crate::github_delivery::FakeHttpResponse::new(
+                200,
+                serde_json::json!([{
+                    "id": 2001,
+                    "path": inline_comment.path,
+                    "line": inline_comment.line,
+                    "side": inline_comment.side,
+                    "commit_id": exact_head,
+                    "body": inline_comment.body
+                }])
+                .to_string(),
+            ),
+            crate::github_delivery::FakeHttpResponse::new(
+                200,
+                serde_json::json!({
+                    "id": 2002,
+                    "commit_id": exact_head,
+                    "in_reply_to_id": source_thread_id,
+                    "body": reply_body
+                })
+                .to_string(),
+            ),
+            crate::github_delivery::FakeHttpResponse::new(
+                200,
+                serde_json::json!({"head": {"sha": exact_head}}).to_string(),
+            ),
+            crate::github_delivery::FakeHttpResponse::new(
+                200,
+                serde_json::json!({"id": 987, "state": "COMMENTED"}).to_string(),
+            ),
+        ])
     }
 
     #[test]
@@ -597,5 +759,306 @@ mod tests {
                 .any(|item| item.action == "reply"),
             "buggy head must reuse an existing thread",
         )
+    }
+
+    #[test]
+    fn perl_lsp_3627_runs_production_compiler_and_delivery_replay() -> Result<(), String> {
+        let _lock = crate::github_delivery::lock_fake_delivery_tests()
+            .map_err(|error| error.to_string())?;
+        let fixture = fixture()?;
+        let temp = tempfile::tempdir().map_err(|error| error.to_string())?;
+        let out = temp.path().join("review");
+        fs::create_dir_all(&out).map_err(|error| error.to_string())?;
+
+        let reply_thread = fixture
+            .threads
+            .iter()
+            .find(|thread| thread.id == "3558771748")
+            .ok_or_else(|| "fixture reply thread is missing".to_owned())?;
+        let inline_thread = fixture
+            .threads
+            .iter()
+            .find(|thread| thread.id == "3558766480")
+            .ok_or_else(|| "fixture inline thread is missing".to_owned())?;
+        let mut observations = production_observations(&fixture);
+        let reply_observation = observations
+            .iter_mut()
+            .find(|observation| observation.id == "fixture-parser:later-variable-subscript")
+            .ok_or_else(|| "fixture reply observation is missing".to_owned())?;
+        reply_observation.status = "refuted".to_owned();
+        reply_observation.evidence = vec!["focused parser proof receipt".to_owned()];
+
+        let reply_comment = fixture_comment(reply_thread, &reply_thread.body);
+        let inline_comment = fixture_comment(inline_thread, &inline_thread.body);
+        for observation in &mut observations {
+            if observation.line == reply_thread.anchor || observation.line == inline_thread.anchor {
+                observation.claim = format!("[fixture] {}", observation.claim);
+            }
+        }
+        let comments = vec![reply_comment, inline_comment];
+        let thread_context = production_thread_context_with_shape(
+            &fixture,
+            &fixture.buggy_head_sha,
+            &fixture.buggy_head_sha,
+            None,
+            &[inline_thread.id.as_str(), "3558707519"],
+        );
+        let initial_graph = build_active_claim_graph(
+            &fixture.buggy_head_sha,
+            &observations,
+            &comments,
+            &[],
+            &[],
+            &[],
+            &thread_context,
+        );
+        let reply_claim_id = initial_graph
+            .topics
+            .iter()
+            .find(|topic| topic.path.as_deref() == Some(reply_thread.path.as_str()))
+            .map(|topic| topic.claim_id.clone())
+            .ok_or_else(|| "reply claim was not produced by the production graph".to_owned())?;
+        let proof_receipt = ProofReceipt {
+            schema: "ub-review.proof_receipt.v1".to_owned(),
+            id: "fixture-focused-parser-proof".to_owned(),
+            kind: "focused-test".to_owned(),
+            base: fixture.base_sha.clone(),
+            head: fixture.buggy_head_sha.clone(),
+            test_patch_mode: "none".to_owned(),
+            requested_by: vec![reply_claim_id.clone()],
+            request_ids: vec![reply_claim_id],
+            commands: vec![ProofCommandReceipt {
+                side: "head".to_owned(),
+                command: fixture.pr_body.focused_command.clone(),
+                env: std::collections::BTreeMap::new(),
+                status: "passed".to_owned(),
+                exit_code: Some(0),
+                timed_out: false,
+                timeout_sec: 300,
+                duration_ms: 1,
+                stdout: "focused proof passed".to_owned(),
+                stderr: String::new(),
+                reason: "fixture proof receipt".to_owned(),
+            }],
+            result: "passed".to_owned(),
+            reason: "focused parser proof changed the reply disposition".to_owned(),
+        };
+        let proof_receipts = vec![proof_receipt];
+        let graph = build_active_claim_graph(
+            &fixture.buggy_head_sha,
+            &observations,
+            &comments,
+            &[],
+            &[],
+            &proof_receipts,
+            &thread_context,
+        );
+        let reply_topic = graph
+            .topics
+            .iter()
+            .find(|topic| topic.path.as_deref() == Some(reply_thread.path.as_str()))
+            .ok_or_else(|| "reply topic was not retained".to_owned())?;
+        require(
+            reply_topic.planned_action == "reply"
+                && reply_topic.planned_thread_id.as_deref() == Some(reply_thread.id.as_str())
+                && reply_topic.proof_receipts == vec!["fixture-focused-parser-proof"],
+            "production graph did not create an exact proof-backed reply plan",
+        )?;
+        let inline_topic = graph
+            .topics
+            .iter()
+            .find(|topic| topic.path.as_deref() == Some(inline_thread.path.as_str()))
+            .ok_or_else(|| "inline topic was not retained".to_owned())?;
+        require(
+            inline_topic.planned_action == "inline" && inline_topic.planned_thread_id.is_none(),
+            "production graph did not create a novel inline plan",
+        )?;
+        require(
+            graph.topics.len() == fixture.claims.len(),
+            format!(
+                "production graph collapsed distinct Perl claims: topics={} claims={} ids={:?}",
+                graph.topics.len(),
+                fixture.claims.len(),
+                graph
+                    .topics
+                    .iter()
+                    .map(|topic| {
+                        format!(
+                            "{}:{}:{}:{}",
+                            topic.path.as_deref().unwrap_or("<summary>"),
+                            topic.anchor.unwrap_or_default(),
+                            topic.mechanism,
+                            topic.subject
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            ),
+        )?;
+        write_claim_graph(temp.path(), &graph).map_err(|error| error.to_string())?;
+
+        let plan = fixture_plan(&fixture);
+        let diff = fixture_diff(&fixture, &fixture.buggy_head_sha);
+        let args = fixture_run_args(temp.path(), &out, &fixture.buggy_head_sha)?;
+        let body_policy = ReviewBodyPolicy::default();
+        let post_review_on = vec!["pull_request".to_owned()];
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "fixture-context",
+            review_body_policy: &body_policy,
+            run_pass: RunPass::Manual,
+            post_review_on: &post_review_on,
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &comments,
+            summary_only_findings: &[],
+            observations: &observations,
+            proof_receipts: &proof_receipts,
+            suggested_issues: &[],
+            final_follow_up_tasks: 0,
+            reporter_distillation: Some(
+                "The focused receipt changes the disposition; internal lane and queue state stays hidden.",
+            ),
+        })
+        .map_err(|error| error.to_string())?;
+        require(
+            surface.should_prepare_github_review && surface.github_review.comments.len() == 2,
+            "production compiler did not retain the reply and inline surfaces",
+        )?;
+        for forbidden in &fixture
+            .heads
+            .iter()
+            .find(|head| head.sha == fixture.buggy_head_sha)
+            .ok_or_else(|| "fixture buggy head is missing".to_owned())?
+            .forbidden_public_fragments
+        {
+            require(
+                !surface
+                    .github_review
+                    .body
+                    .to_ascii_lowercase()
+                    .contains(&forbidden.to_ascii_lowercase()),
+                format!("forbidden internal text reached compiled body: {forbidden}"),
+            )?;
+            for comment in &surface.github_review.comments {
+                require(
+                    !comment
+                        .body
+                        .to_ascii_lowercase()
+                        .contains(&forbidden.to_ascii_lowercase()),
+                    format!("forbidden internal text reached compiled comment: {forbidden}"),
+                )?;
+            }
+        }
+        let reply_index = surface
+            .github_review
+            .comments
+            .iter()
+            .position(|comment| comment.line == reply_thread.anchor.unwrap_or_default())
+            .ok_or_else(|| "compiled reply comment is missing".to_owned())?;
+        let inline_index = surface
+            .github_review
+            .comments
+            .iter()
+            .position(|comment| comment.line == inline_thread.anchor.unwrap_or_default())
+            .ok_or_else(|| "compiled inline comment is missing".to_owned())?;
+        let reply_body =
+            github_review_post_comment_body(&surface.github_review.comments[reply_index])
+                .map_err(|error| error.to_string())?;
+        let (api, server) = spawn_fixture_delivery_api(
+            &fixture.buggy_head_sha,
+            &reply_thread.id,
+            &reply_thread.path,
+            reply_thread.anchor.unwrap_or_default(),
+            &surface.github_review.comments[inline_index],
+            &reply_body,
+        )
+        .map_err(|error| error.to_string())?;
+        let post_args = PostArgs {
+            review_json: out.join("github-review.json"),
+            diff_patch: None,
+            out: out.clone(),
+            github_token: Some("fixture-token".to_owned()),
+            repo: Some("owner/repo".to_owned()),
+            pull_number: Some(42),
+            github_api_url: api,
+            fail_on_post_error: true,
+        };
+        let payload = github_review_post_payload(&surface.github_review)
+            .map_err(|error| error.to_string())?;
+        let outcome = execute_pending_review_delivery(&post_args, &surface.github_review, &payload)
+            .map_err(|error| error.to_string())?;
+        require(
+            outcome.response["state"] == "COMMENTED",
+            "production delivery did not submit the compiled review",
+        )?;
+        let requests = server
+            .join()
+            .map_err(|_| "fixture GitHub server panicked".to_owned())?
+            .map_err(|error| error.to_string())?;
+        require(
+            requests.len() == 7
+                && requests[0].0.starts_with("GET /repos/owner/repo/pulls/42 ")
+                && requests[1].0.contains("/pulls/42/comments?")
+                && requests[2]
+                    .0
+                    .starts_with("POST /repos/owner/repo/pulls/42/reviews ")
+                && requests[3].0.contains("/reviews/987/comments")
+                && requests[4]
+                    .0
+                    .starts_with("POST /repos/owner/repo/pulls/42/comments ")
+                && requests[5].0.starts_with("GET /repos/owner/repo/pulls/42 ")
+                && requests[6].0.contains("/reviews/987/events")
+                && !requests[6]
+                    .1
+                    .contains(&surface.github_review.comments[inline_index].body),
+            format!("unexpected production delivery request sequence: {requests:?}"),
+        )?;
+        let transaction: serde_json::Value = serde_json::from_slice(
+            &fs::read(out.join("delivery-transaction.json")).map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+        require(
+            transaction["state"] == "receipts_persisted"
+                && out.join("delivery-reconciliation.json").is_file()
+                && out.join("delivery-reply-receipts.json").is_file(),
+            "production delivery did not leave terminal receipts",
+        )?;
+
+        let fixed_args = fixture_run_args(temp.path(), &out, &fixture.fixed_head_sha)?;
+        let fixed_diff = fixture_diff(&fixture, &fixture.fixed_head_sha);
+        let fixed_plan = Plan {
+            head: fixture.fixed_head_sha.clone(),
+            ..plan.clone()
+        };
+        let fixed_surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "fixture-context-fixed",
+            review_body_policy: &body_policy,
+            run_pass: RunPass::Manual,
+            post_review_on: &post_review_on,
+            args: &fixed_args,
+            plan: &fixed_plan,
+            diff: &fixed_diff,
+            model_lanes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &[],
+            summary_only_findings: &[],
+            observations: &[],
+            proof_receipts: &[],
+            suggested_issues: &[],
+            final_follow_up_tasks: 0,
+            reporter_distillation: None,
+        })
+        .map_err(|error| error.to_string())?;
+        require(
+            !fixed_surface.should_prepare_github_review
+                && fixed_surface.github_review.comments.is_empty()
+                && fixed_surface.github_review.body.is_empty(),
+            "fixed production head did not remain silent",
+        )?;
+        Ok(())
     }
 }

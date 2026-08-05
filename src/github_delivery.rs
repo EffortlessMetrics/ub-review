@@ -1109,15 +1109,27 @@ fn failure_stage(
 }
 
 #[cfg(test)]
+pub(crate) use tests::{FakeHttpResponse, lock_fake_delivery_tests, spawn_fake_delivery_api};
+
+#[cfg(test)]
 mod tests {
     use super::*;
-    use anyhow::ensure;
+    use anyhow::{bail, ensure};
     use std::collections::BTreeMap;
     use std::collections::VecDeque;
-    use std::io::{BufRead, BufReader, Read, Write};
+    use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
     use std::net::{TcpListener, TcpStream};
+    use std::sync::{Mutex, MutexGuard};
     use std::thread;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
+
+    static FAKE_DELIVERY_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    pub(crate) fn lock_fake_delivery_tests() -> Result<MutexGuard<'static, ()>> {
+        FAKE_DELIVERY_TEST_LOCK
+            .lock()
+            .map_err(|_| anyhow::anyhow!("fake delivery test lock was poisoned"))
+    }
 
     const HEAD: &str = "0123456789abcdef0123456789abcdef01234567";
 
@@ -1173,9 +1185,18 @@ mod tests {
     }
 
     #[derive(Clone)]
-    struct FakeHttpResponse {
+    pub(crate) struct FakeHttpResponse {
         status: u16,
         body: String,
+    }
+
+    impl FakeHttpResponse {
+        pub(crate) fn new(status: u16, body: impl Into<String>) -> Self {
+            Self {
+                status,
+                body: body.into(),
+            }
+        }
     }
 
     type FakeRequest = (String, String);
@@ -1216,20 +1237,55 @@ mod tests {
         Ok(())
     }
 
-    fn spawn_fake_delivery_api(
+    pub(crate) fn spawn_fake_delivery_api(
         responses: Vec<FakeHttpResponse>,
     ) -> Result<(String, FakeApiHandle)> {
         let listener = TcpListener::bind(("127.0.0.1", 0))?;
-        listener.set_nonblocking(false)?;
+        listener.set_nonblocking(true)?;
         let address = format!("http://{}", listener.local_addr()?);
         let handle = thread::spawn(move || {
-            let mut requests = Vec::new();
-            for response in responses {
-                let (stream, _) = listener.accept()?;
-                stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-                let request = read_fake_request(stream.try_clone()?)?;
-                write_fake_response(stream, &response)?;
-                requests.push(request);
+            let mut requests: Vec<FakeRequest> = Vec::new();
+            let mut last_error: Option<String> = None;
+            for (response_index, response) in responses.iter().enumerate() {
+                let deadline = Instant::now() + Duration::from_secs(30);
+                loop {
+                    match listener.accept() {
+                        Ok((stream, _)) => {
+                            let result = (|| -> Result<()> {
+                                stream.set_read_timeout(Some(Duration::from_secs(30)))?;
+                                stream.set_write_timeout(Some(Duration::from_secs(30)))?;
+                                let request = read_fake_request(stream.try_clone()?)?;
+                                write_fake_response(stream, response)?;
+                                requests.push(request);
+                                Ok(())
+                            })();
+                            if let Err(error) = result {
+                                last_error = Some(error.to_string());
+                                continue;
+                            }
+                            break;
+                        }
+                        Err(error)
+                            if error.kind() == ErrorKind::WouldBlock
+                                && Instant::now() < deadline =>
+                        {
+                            thread::sleep(Duration::from_millis(10));
+                        }
+                        Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                            let captured = requests
+                                .iter()
+                                .map(|(line, _)| line.as_str())
+                                .collect::<Vec<_>>();
+                            bail!(
+                                "fake delivery API timed out waiting for request {}; captured {}: {captured:?}; last error: {:?}",
+                                response_index + 1,
+                                requests.len(),
+                                last_error
+                            );
+                        }
+                        Err(error) => return Err(error.into()),
+                    }
+                }
             }
             Ok(requests)
         });
@@ -1400,6 +1456,7 @@ mod tests {
 
     #[test]
     fn production_delivery_reconciles_head_comments_and_submission() -> Result<()> {
+        let _lock = lock_fake_delivery_tests()?;
         let temp = tempfile::tempdir()?;
         let graph = graph_for("src/lib.rs", 12, "inline", HEAD);
         fs::write(
@@ -1447,6 +1504,7 @@ mod tests {
 
     #[test]
     fn production_delivery_cleans_up_when_head_changes_before_submit() -> Result<()> {
+        let _lock = lock_fake_delivery_tests()?;
         let temp = tempfile::tempdir()?;
         let graph = graph_for("src/lib.rs", 12, "inline", HEAD);
         fs::write(
