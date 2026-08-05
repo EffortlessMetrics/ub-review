@@ -1589,6 +1589,10 @@ def require_output_degradation_artifact(root: pathlib.Path) -> None:
         if topic_id in dropped_ids or topic_id in retained_ids:
             fail(f"{label}.topic_id is duplicated or retained")
         dropped_ids.add(topic_id)
+    if len(retained_ids) + len(dropped_ids) != original_items:
+        fail(
+            "output_degradation retained and dropped identities do not account for every input item"
+        )
 
 
 def require_lane_packet_pr_thread_seed(lane_path: pathlib.Path, lane_text: str) -> None:
@@ -11541,6 +11545,14 @@ def self_test_output_degradation_contract() -> None:
         expect_self_test_failure(
             "output degradation retained count",
             "retained topic identities do not match final item count",
+            lambda: require_output_degradation_artifact(root),
+        )
+        broken = dict(valid)
+        broken["dropped_topics"] = []
+        write_self_test_json(path, broken)
+        expect_self_test_failure(
+            "output degradation unexplained loss",
+            "retained and dropped identities do not account for every input item",
             lambda: require_output_degradation_artifact(root),
         )
 
