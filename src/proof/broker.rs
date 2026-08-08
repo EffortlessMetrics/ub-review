@@ -29,6 +29,24 @@ fn current_portfolio_runtime(
     ))
 }
 
+/// Run the diff-derived proof floor.
+///
+/// `impact` is the run's single impact plan (already written to
+/// `review/impact_plan.json`). It maps the changed files to owning Cargo
+/// packages, closes over reverse dependencies, and ranks their test targets;
+/// this is the phase that owns diff-derived selection, so this is where that
+/// ranking becomes executable work instead of prompt text.
+///
+/// The plan's `selection_mode` is the *model planner* visibility gate
+/// ([`ImpactPlan::proof_planner_candidates`]) and is deliberately not read
+/// here: this path is deterministic Rust selection whose commands are
+/// re-validated by the focused-cargo-test allowlist, not model-proposed work.
+/// On a repo without cargo metadata the plan carries no candidates and the
+/// floor stays Bun-only.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the initial diff broker takes the run's checkout, packet, diff, profile, args, box state, clock, and impact plan; each is a distinct input the broker must not re-derive"
+)]
 pub(crate) fn run_initial_diff_proof_broker_v0(
     root: &Path,
     out: &Path,
@@ -37,10 +55,11 @@ pub(crate) fn run_initial_diff_proof_broker_v0(
     args: &RunArgs,
     box_state: &BoxState,
     run_started: &Instant,
+    impact: &ImpactPlan,
 ) -> Result<ProofBrokerResult> {
     let budget = proof_budget(profile)?;
     let runtime = current_portfolio_runtime(profile, box_state, run_started)?;
-    let tasks = focused_test_candidates_from_diff(diff, &[]);
+    let tasks = focused_test_candidates_from_diff(diff, &[], Some(impact));
     let selection = select_proof_portfolio(ProofPortfolioInput {
         test_tasks: &tasks,
         build_tasks: &[],
@@ -89,10 +108,19 @@ pub(crate) fn run_seeded_proof_stream_v0(
     event_log: &EventLog,
     run_started: &Instant,
     box_state: &BoxState,
+    impact: &ImpactPlan,
 ) -> Result<(ProofBrokerResult, Vec<RunLoopPhase>)> {
     let mut phases = Vec::new();
-    let initial_result =
-        run_initial_diff_proof_broker_v0(root, out, diff, profile, args, box_state, run_started);
+    let initial_result = run_initial_diff_proof_broker_v0(
+        root,
+        out,
+        diff,
+        profile,
+        args,
+        box_state,
+        run_started,
+        impact,
+    );
     let initial_status = if initial_result.is_ok() {
         "completed"
     } else {
@@ -641,7 +669,10 @@ where
     let v2_requests: Vec<ProofRequestV2> = proof_requests.iter().map(proof_request_to_v2).collect();
     let total_budget = proof_budget(profile)?;
     let budget = remaining_focused_proof_budget(total_budget, existing_leases);
-    let mut test_candidates = focused_test_candidates_from_diff(diff, &[]);
+    // Diff-derived Cargo candidates are owned by the initial diff broker and
+    // already carry receipts by the time a request phase runs; this phase
+    // re-plans requested work only.
+    let mut test_candidates = focused_test_candidates_from_diff(diff, &[], None);
     merge_focused_test_candidates(
         &mut test_candidates,
         focused_test_candidates_from_v2(&v2_requests),
@@ -743,7 +774,9 @@ pub(crate) fn run_follow_up_proof_broker_v0(
 ) -> Result<ProofBrokerResult> {
     let total_budget = proof_budget(profile)?;
     let budget = remaining_focused_proof_budget(total_budget, existing_leases);
-    let mut test_candidates = focused_test_candidates_from_diff(diff, &[]);
+    // As in the request phase: diff-derived Cargo candidates belong to the
+    // initial diff broker; follow-up re-plans requested work only.
+    let mut test_candidates = focused_test_candidates_from_diff(diff, &[], None);
     merge_focused_test_candidates(
         &mut test_candidates,
         focused_test_candidates_from_requests(proof_requests),
@@ -942,7 +975,9 @@ pub(crate) fn attach_request_metadata_to_focused_receipts(
     if proof_requests.is_empty() || proof_receipts.is_empty() {
         return;
     }
-    let request_metadata = focused_test_candidates_from_diff(diff, proof_requests)
+    // Request attribution only: impact-plan candidates carry no request ids
+    // and are filtered out below regardless, so the plan is not needed here.
+    let request_metadata = focused_test_candidates_from_diff(diff, proof_requests, None)
         .into_iter()
         .filter(|task| !task.request_ids.is_empty())
         .map(|task| (task.id, (task.requested_by, task.request_ids)))
@@ -1745,6 +1780,7 @@ mod tests {
                 load_1m: Some(0.25),
                 github_actions: false,
             },
+            &build_impact_plan(temp.path(), &diff.changed_files, "shadow"),
         )?;
 
         assert!(
@@ -2001,7 +2037,7 @@ mod tests {
         let mut diff = test_diff();
         diff.changed_files = vec!["test/js/bun/md/md-edge-cases.test.ts".to_owned()];
         diff.patch = "+test('parser regression', () => {});".to_owned();
-        let initial_task = focused_test_candidates_from_diff(&diff, &[])
+        let initial_task = focused_test_candidates_from_diff(&diff, &[], None)
             .into_iter()
             .next()
             .ok_or_else(|| anyhow::anyhow!("changed test did not produce an initial task"))?;

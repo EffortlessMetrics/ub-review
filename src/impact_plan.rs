@@ -36,6 +36,14 @@ pub(crate) struct ImpactPlan {
     /// Whether candidates remain artifact-only (`shadow`) or may enter model
     /// proof planning (`active`).
     pub(crate) selection_mode: &'static str,
+    /// Whether the workspace root has a committed `Cargo.lock`.
+    ///
+    /// Every brokered cargo command must pass `--locked`, and `--locked`
+    /// refuses to create a missing lock file. Without a lock file a focused
+    /// cargo proof cannot run at all, so promoting a candidate would report a
+    /// harness precondition failure as a failing test. `false` therefore means
+    /// missing evidence (recorded in `evidence_gaps`), never failed evidence.
+    pub(crate) cargo_lockfile: bool,
 }
 
 impl ImpactPlan {
@@ -67,6 +75,11 @@ pub(crate) struct ImpactPackage {
 pub(crate) struct ImpactCandidateTask {
     /// The test target or build command.
     pub(crate) target: String,
+    /// Cargo target kind this candidate came from: "test", "lib", or "bin".
+    /// The proof broker only promotes `test` targets to executable focused
+    /// proof tasks, so the kind must survive as data instead of being
+    /// re-derived from `expected_value`.
+    pub(crate) kind: String,
     /// Why this candidate is relevant to the diff.
     pub(crate) reason: String,
     /// Owning package of the changed file that triggered this candidate.
@@ -215,6 +228,7 @@ pub(crate) fn build_impact_plan(
                         impact_candidate_rank(target.kind.as_str(), expected_value, is_changed);
                     candidate_tasks.push(ImpactCandidateTask {
                         target: target.name.clone(),
+                        kind: target.kind.clone(),
                         reason,
                         owning_package: changed_pkg_names
                             .first()
@@ -233,7 +247,18 @@ pub(crate) fn build_impact_plan(
         // Ranking pass: sort by rank descending and mark low-rank candidates as
         // skipped. Active mode currently exposes the full ranked catalog; model
         // selection remains subject to Rust validation and proof-broker policy.
-        candidate_tasks.sort_by_key(|c| std::cmp::Reverse(c.rank));
+        // Rank descending, then package and target name ascending. The proof
+        // broker now takes the top-ranked test targets as real executable
+        // candidates, so equal-rank ties must not depend on `cargo metadata`
+        // emission order: two runs over the same commit must produce the same
+        // candidate order, and therefore the same proof task identities.
+        candidate_tasks.sort_by(|left, right| {
+            right
+                .rank
+                .cmp(&left.rank)
+                .then_with(|| left.test_package.cmp(&right.test_package))
+                .then_with(|| left.target.cmp(&right.target))
+        });
         // Every ranked candidate remains visible in the artifact. In active
         // mode the model may rank or reject the catalog downstream; bounded
         // catalog filtering remains follow-up work.
@@ -250,6 +275,21 @@ pub(crate) fn build_impact_plan(
         }
     }
 
+    let cargo_lockfile = cargo_graph.as_ref().is_some_and(|graph| {
+        root.join(&graph.workspace_root)
+            .join("Cargo.lock")
+            .is_file()
+    });
+    if cargo_graph.is_some() && !cargo_lockfile {
+        evidence_gaps.push(ImpactEvidenceGap {
+            kind: "no-cargo-lockfile",
+            detail: "Workspace has no committed Cargo.lock. Focused cargo test \
+                     proofs require --locked, which refuses to create one, so no \
+                     cargo test candidate can be executed for this diff."
+                .to_owned(),
+        });
+    }
+
     ImpactPlan {
         schema: IMPACT_PLAN_SCHEMA,
         changed_files: changed_files.to_vec(),
@@ -258,6 +298,7 @@ pub(crate) fn build_impact_plan(
         candidate_tasks,
         evidence_gaps,
         selection_mode,
+        cargo_lockfile,
     }
 }
 

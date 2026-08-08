@@ -4321,6 +4321,10 @@ fn write_review_artifacts(
     let impact_plan = build_impact_plan(root, &diff.changed_files, impact_mode);
     let impact_plan_candidate_tasks = impact_plan.proof_planner_candidates().to_vec();
     write_impact_plan(out, &impact_plan)?;
+    // The proof broker reads the same plan the artifact records, so the ranked
+    // Cargo test targets it executes are exactly the ones the packet shows.
+    // Bound as a reference so the scoped proof thread can borrow it.
+    let impact_plan_ref = &impact_plan;
     // Sensor evidence issues are collected after the late-phase join below
     // (#325): collecting here would misread still-running late sensors as
     // missing evidence.
@@ -4359,6 +4363,7 @@ fn write_review_artifacts(
                     event_log,
                     run_started,
                     box_state,
+                    impact_plan_ref,
                 )
             });
 
@@ -4563,6 +4568,7 @@ fn write_review_artifacts(
             args,
             box_state,
             run_started,
+            impact_plan_ref,
         )?;
         finish_run_loop(
             event_log,
@@ -9011,6 +9017,7 @@ index 1111111..2222222 100644
         let tasks = focused_test_tasks_from_diff(
             &diff,
             &proof_requests,
+            None,
             ProofBudget {
                 max_focused_test_files: 3,
                 max_focused_tests: 2,
@@ -9424,6 +9431,7 @@ index 1111111..2222222 100644
         let tasks = focused_test_tasks_from_diff(
             &diff,
             &proof_requests,
+            None,
             ProofBudget {
                 max_focused_test_files: 3,
                 max_focused_tests: 2,
@@ -9745,7 +9753,7 @@ index 1111111..2222222 100644
             flags: DiffFlags::default(),
             diff_class: DiffClass::TestsOnly,
         };
-        let initial_tasks = super::focused_test_candidates_from_diff(&diff, &[]);
+        let initial_tasks = super::focused_test_candidates_from_diff(&diff, &[], None);
         assert_eq!(initial_tasks.len(), 1);
         let mut receipts = vec![super::focused_red_green_receipt(
             &diff,
@@ -10053,7 +10061,7 @@ index 3333333..4444444 100644
                 status: "requested".to_owned(),
             },
         ];
-        let tasks = super::focused_test_candidates_from_diff(&diff, &proof_requests);
+        let tasks = super::focused_test_candidates_from_diff(&diff, &proof_requests, None);
         assert_eq!(tasks.len(), 2);
 
         let args = test_run_args(out.clone());
