@@ -147,9 +147,12 @@ paths as outputs, including `gate-outcome-path`, `github-review-path`,
 ```text
 review/github-review.json        event == "COMMENT"; body within
                                  review-body-max-bytes; comments validated;
-                                 optional suggestion is allowed only on
-                                 unsafe-review comments with bounded concrete
-                                 replacement text
+                                 any lane may carry an optional suggestion,
+                                 admitted on content: bounded literal
+                                 replacement text (no prose, elision, diff
+                                 markers, or fences) that matches the
+                                 indentation of the anchored RIGHT-side line
+                                 and is not identical to it
 review/github-review-skip.json   XOR with github-review.json; status one of
                                  skipped_empty_smoke |
                                  skipped_artifact_only_body |

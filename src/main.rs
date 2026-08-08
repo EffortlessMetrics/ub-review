@@ -2047,6 +2047,12 @@ struct CandidateRecord {
     line: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     side: Option<String>,
+    /// Click-to-apply replacement text for an inline candidate. Carried
+    /// through the candidate queue so a validated suggestion survives the
+    /// write/read round-trip in `cmd_run` instead of being dropped before
+    /// delivery. Absent for summary-only candidates.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    suggestion: Option<String>,
 }
 
 /// A follow-up too broad for the current PR, preserved as structured work
@@ -6224,6 +6230,22 @@ mod tests {
         assert!(!prompt.contains("If that objection arises"));
     }
 
+    /// Every lane may now propose a click-to-apply edit, so the lane prompt has
+    /// to name the field and state the shape the delivery gate enforces -
+    /// otherwise no model would ever emit one and the gate would be inert.
+    #[test]
+    fn lane_prompt_offers_suggestions_with_the_shape_the_gate_enforces() {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let spec = direct_minimax_spec(&args);
+        let prompt = render_lane_model_prompt(&lane_plan("ub"), &spec, "shared context");
+
+        assert!(prompt.contains("\"suggestion\": \"optional: exact replacement source"));
+        assert!(prompt.contains("replaces the anchored line verbatim"));
+        assert!(prompt.contains("same indentation as the line it replaces"));
+        assert!(prompt.contains("never prose, an ellipsis placeholder, a diff hunk"));
+        assert!(prompt.contains("Omit it when unsure"));
+    }
+
     #[test]
     fn lane_prompt_routes_execution_through_typed_or_legacy_requests() {
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
@@ -8196,16 +8218,17 @@ index 1111111..2222222 100644
                 confidence: "medium-high".to_owned(),
                 path: "src/lib.rs".to_owned(),
                 line: 2,
-                body: "[tests] model-proposed edit must remain advisory".to_owned(),
+                body: "[tests] the assertion never observes the changed boundary".to_owned(),
                 evidence: "diff hunk".to_owned(),
                 suggestion: Some("assert!(proved);".to_owned()),
             },
             &line_map,
         )
         .map_err(|finding| anyhow::anyhow!("unexpected rejection: {}", finding.reason))?;
-        assert!(
-            model_suggestion.suggestion.is_none(),
-            "non-unsafe-review lanes must not smuggle suggestion blocks"
+        assert_eq!(
+            model_suggestion.suggestion.as_deref(),
+            Some("assert!(proved);"),
+            "a well-formed suggestion is admitted on content, not on lane identity"
         );
 
         let rejected = validate_inline_candidate(
@@ -15983,6 +16006,104 @@ required_proof_unprooven = true
         Ok(())
     }
 
+    /// A click-to-apply fix is the highest-value thing a line-level reviewer
+    /// produces, so it is gated on content and anchor, not on lane identity: a
+    /// model lane's well-formed edit reaches the payload, and an edit that
+    /// would land misindented at its anchor is dropped while the finding keeps
+    /// posting as a plain comment.
+    #[test]
+    fn compiler_surface_admits_model_lane_suggestions_that_apply_at_the_anchor() -> Result<()> {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let diff = DiffContext {
+            changed_files: vec!["src/lib.rs".to_owned()],
+            patch: "\
+diff --git a/src/lib.rs b/src/lib.rs
+index 1111111..2222222 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,4 @@
+ pub fn active_len(len: usize) -> usize {
++    let ptr = &len as *const usize;
+     len
+ }
+"
+            .to_owned(),
+            ..test_diff()
+        };
+        let model_lanes = vec![model_lane_receipt("tests", "ok")];
+        let comment = |suggestion: &str| ReviewInlineComment {
+            lane: "tests".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium-high".to_owned(),
+            path: "src/lib.rs".to_owned(),
+            line: 2,
+            side: "RIGHT".to_owned(),
+            body: "[tests] The raw pointer is taken but never asserted upon.".to_owned(),
+            evidence: "diff hunk src/lib.rs:2".to_owned(),
+            suggestion: Some(suggestion.to_owned()),
+        };
+        let compile = |inline_comments: &[ReviewInlineComment]| {
+            compile_review_surface(ReviewCompilerInput {
+                shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                review_body_policy: &ReviewBodyPolicy::default(),
+                run_pass: super::RunPass::Manual,
+                post_review_on: &[],
+                args: &args,
+                plan: &plan,
+                diff: &diff,
+                model_lanes: &model_lanes,
+                missing_or_failed_sensor_evidence: &[],
+                missing_or_failed_model_evidence: &[],
+                inline_comments,
+                summary_only_findings: &[],
+                observations: &[],
+                proof_receipts: &[],
+                final_follow_up_tasks: 0,
+                suggested_issues: &[],
+                reporter_distillation: None,
+            })
+        };
+
+        let applies = compile(&[comment("    let ptr = core::ptr::from_ref(&len);")])?;
+        assert!(applies.should_prepare_github_review);
+        assert_eq!(
+            applies.github_review.comments[0].suggestion.as_deref(),
+            Some("    let ptr = core::ptr::from_ref(&len);"),
+            "a model lane's well-formed suggestion must reach the payload"
+        );
+        let right_lines = right_side_diff_lines(&diff.patch);
+        super::validate_github_review_payload_for_right_lines(
+            &applies.github_review,
+            &right_lines,
+            "compiler fixture",
+            &ReviewBodyPolicy::default(),
+            false,
+        )?;
+        let posted = super::github_review_post_payload(&applies.github_review)?;
+        let body = serde_json::to_value(&posted)?["comments"][0]["body"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        assert!(
+            body.contains("```suggestion\n    let ptr = core::ptr::from_ref(&len);\n```"),
+            "post body must carry the suggestion block: {body}"
+        );
+
+        let misindented = compile(&[comment("let ptr = core::ptr::from_ref(&len);")])?;
+        assert!(
+            misindented.github_review.comments[0].suggestion.is_none(),
+            "a suggestion that does not apply at its anchor must be dropped"
+        );
+        assert!(
+            misindented.github_review.comments[0]
+                .body
+                .contains("never asserted upon"),
+            "dropping the suggestion must not drop the finding"
+        );
+        Ok(())
+    }
+
     #[test]
     fn compiler_surface_prepares_review_for_synchronize_pass_in_profile_list() -> Result<()> {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
@@ -19438,6 +19559,7 @@ index 1111111..2222222 100644
             path: None,
             line: None,
             side: None,
+            suggestion: None,
         };
         write_candidate_artifacts(temp.path(), std::slice::from_ref(&candidate))?;
         let candidate_file = temp.path().join("candidates").join(format!(
@@ -19792,6 +19914,7 @@ index 1111111..2222222 100644
                 path: None,
                 line: None,
                 side: None,
+                suggestion: None,
             },
             super::CandidateRecord {
                 schema: "ub-review.candidate.v1".to_owned(),
@@ -19807,6 +19930,7 @@ index 1111111..2222222 100644
                 path: None,
                 line: None,
                 side: None,
+                suggestion: None,
             },
             super::CandidateRecord {
                 schema: "ub-review.candidate.v1".to_owned(),
@@ -19822,6 +19946,7 @@ index 1111111..2222222 100644
                 path: Some("src/lib.rs".to_owned()),
                 line: Some(42),
                 side: Some("RIGHT".to_owned()),
+                suggestion: None,
             },
             super::CandidateRecord {
                 schema: "ub-review.candidate.v1".to_owned(),
@@ -19837,6 +19962,7 @@ index 1111111..2222222 100644
                 path: None,
                 line: None,
                 side: None,
+                suggestion: None,
             },
             super::CandidateRecord {
                 schema: "ub-review.candidate.v1".to_owned(),
@@ -19852,6 +19978,7 @@ index 1111111..2222222 100644
                 path: None,
                 line: None,
                 side: None,
+                suggestion: None,
             },
             super::CandidateRecord {
                 schema: "ub-review.candidate.v1".to_owned(),
@@ -19867,6 +19994,7 @@ index 1111111..2222222 100644
                 path: None,
                 line: None,
                 side: None,
+                suggestion: None,
             },
         ];
 
@@ -20481,6 +20609,7 @@ index 1111111..2222222 100644
             path: None,
             line: None,
             side: None,
+            suggestion: None,
         }];
         let observations = Vec::new();
         let initial_plan = build_orchestrator_plan(&candidates, &observations, &[], &[], &[]);
@@ -20590,6 +20719,7 @@ index 1111111..2222222 100644
             path: None,
             line: None,
             side: None,
+            suggestion: None,
         }];
         let observations = Vec::new();
         let initial_plan = build_orchestrator_plan(&candidates, &observations, &[], &[], &[]);
@@ -20684,6 +20814,7 @@ index 1111111..2222222 100644
             path: None,
             line: None,
             side: None,
+            suggestion: None,
         }];
         let unrelated_observation = test_observation(
             "security",
@@ -23005,6 +23136,7 @@ index 1111111..2222222 100644
             path: None,
             line: None,
             side: None,
+            suggestion: None,
         }
     }
 
@@ -24340,26 +24472,58 @@ index 1111111..2222222 100644
         Ok(())
     }
 
+    /// Suggestions are gated on content, not on lane identity: any lane's
+    /// well-formed replacement text reaches the payload, and malformed text
+    /// is refused no matter which lane produced it.
     #[test]
-    fn github_review_payload_rejects_non_unsafe_review_suggestion() -> Result<()> {
-        let review = super::GitHubReview {
+    fn github_review_payload_gates_suggestions_on_content_not_lane() -> Result<()> {
+        let review_with = |body: &str, suggestion: &str| super::GitHubReview {
             event: "COMMENT".to_owned(),
             body: "## Verification questions\n\n- Confirm the test proof.".to_owned(),
             comments: vec![super::GitHubReviewComment {
                 path: "src/lib.rs".to_owned(),
                 line: 8,
                 side: "RIGHT".to_owned(),
-                body: "[tests] A model lane cannot provide one-click edits.".to_owned(),
-                suggestion: Some("assert!(proved);".to_owned()),
+                body: body.to_owned(),
+                suggestion: Some(suggestion.to_owned()),
             }],
         };
-        let err = super::validate_github_review_payload(&review)
-            .err()
-            .ok_or_else(|| anyhow::anyhow!("non-unsafe suggestion unexpectedly passed"))?;
-        assert!(
-            err.to_string().contains("sourced from unsafe-review"),
-            "{err:#}"
+
+        let model_lane = review_with(
+            "[tests] The assertion never observes the changed boundary.",
+            "    assert_eq!(active_len(3), 3);",
         );
+        super::validate_github_review_payload(&model_lane)?;
+        let payload = super::github_review_post_payload(&model_lane)?;
+        let body = serde_json::to_value(&payload)?["comments"][0]["body"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        assert!(
+            body.contains("```suggestion\n    assert_eq!(active_len(3), 3);\n```"),
+            "a non-unsafe-review lane must reach the payload with its suggestion: {body}"
+        );
+
+        for (label, malformed) in [
+            ("commentary", "Consider asserting the changed boundary here"),
+            (
+                "elision",
+                "fn active_len() {\n    // ...existing code...\n}",
+            ),
+            ("pasted diff", "--- a/src/lib.rs\n+++ b/src/lib.rs"),
+            ("fence", "```rust\nassert!(proved);\n```"),
+        ] {
+            let err = super::validate_github_review_payload(&review_with(
+                "[unsafe-review] Guard evidence is missing.",
+                malformed,
+            ))
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("{label} suggestion unexpectedly passed"))?;
+            assert!(
+                err.to_string().contains("github review suggestion"),
+                "{label}: {err:#}"
+            );
+        }
         Ok(())
     }
 

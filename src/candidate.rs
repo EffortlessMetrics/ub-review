@@ -185,8 +185,13 @@ pub(crate) fn build_candidate_records(
     for comment in inline_comments {
         let fingerprint = sha256_hex(
             format!(
-                "inline-comment\n{}\n{}\n{}\n{}\n{}",
-                comment.lane, comment.path, comment.line, comment.body, comment.evidence
+                "inline-comment\n{}\n{}\n{}\n{}\n{}\n{}",
+                comment.lane,
+                comment.path,
+                comment.line,
+                comment.body,
+                comment.evidence,
+                comment.suggestion.as_deref().unwrap_or_default()
             )
             .as_bytes(),
         );
@@ -208,6 +213,7 @@ pub(crate) fn build_candidate_records(
             path: Some(comment.path.clone()),
             line: Some(comment.line),
             side: Some(comment.side.clone()),
+            suggestion: comment.suggestion.clone(),
         });
     }
     for finding in summary_only_findings {
@@ -236,6 +242,7 @@ pub(crate) fn build_candidate_records(
             path: None,
             line: None,
             side: None,
+            suggestion: None,
         });
     }
     candidates
@@ -360,6 +367,10 @@ pub(crate) fn candidate_review_surfaces(
                 if side != "RIGHT" {
                     bail!("candidate {} side must be RIGHT", candidate.id);
                 }
+                // Re-validate rather than trust: `candidates.json` is an
+                // artifact between the write and this read, and a suggestion
+                // is the one field a reader commits verbatim into the repo.
+                let suggestion = normalize_github_suggestion_text(candidate.suggestion.as_deref());
                 inline_comments.push(ReviewInlineComment {
                     lane: candidate.lane.clone(),
                     severity: candidate.severity.clone(),
@@ -369,7 +380,7 @@ pub(crate) fn candidate_review_surfaces(
                     side,
                     body: candidate.claim.clone(),
                     evidence: candidate.evidence.clone(),
-                    suggestion: None,
+                    suggestion,
                 });
             }
             ("summary-only-finding", "summary-only") => {
@@ -379,7 +390,10 @@ pub(crate) fn candidate_review_surfaces(
                         candidate.id
                     );
                 }
-                if candidate.path.is_some() || candidate.line.is_some() || candidate.side.is_some()
+                if candidate.path.is_some()
+                    || candidate.line.is_some()
+                    || candidate.side.is_some()
+                    || candidate.suggestion.is_some()
                 {
                     bail!("summary-only candidate {} has inline fields", candidate.id);
                 }
@@ -560,4 +574,108 @@ pub(crate) fn write_orchestrator_artifacts(
     fs::write(out.join("follow_up_questions.ndjson"), ndjson)?;
     write_follow_up_question_packets(out, &plan.follow_up_tasks, proof_receipts)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::ensure;
+
+    use super::*;
+
+    fn inline_comment(lane: &str, suggestion: Option<&str>) -> ReviewInlineComment {
+        ReviewInlineComment {
+            lane: lane.to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium-high".to_owned(),
+            path: "src/lib.rs".to_owned(),
+            line: 2,
+            side: "RIGHT".to_owned(),
+            body: format!("[{lane}] The changed boundary is never asserted."),
+            evidence: "diff hunk".to_owned(),
+            suggestion: suggestion.map(str::to_owned),
+        }
+    }
+
+    /// `cmd_run` writes candidates and immediately reads them back before the
+    /// compiler runs, so anything the candidate record cannot carry is dropped
+    /// before delivery. A suggestion has to survive that round-trip or it can
+    /// never reach a PR.
+    #[test]
+    fn suggestions_survive_the_candidate_queue_round_trip() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let comments = vec![
+            inline_comment("tests", Some("    assert_eq!(active_len(3), 3);")),
+            inline_comment("ub", None),
+        ];
+        let candidates = build_candidate_records(&comments, &[]);
+        ensure!(
+            candidates[0].suggestion.as_deref() == Some("    assert_eq!(active_len(3), 3);"),
+            "candidate record must carry the suggestion"
+        );
+        ensure!(candidates[1].suggestion.is_none());
+
+        // Two findings identical except for the proposed edit are distinct
+        // candidates, so the suggestion has to reach the fingerprint. Each is
+        // built as the sole record so the shared `index` prefix cannot be what
+        // separates the two ids.
+        let with_edit = build_candidate_records(
+            &[inline_comment(
+                "tests",
+                Some("    assert_eq!(active_len(3), 3);"),
+            )],
+            &[],
+        );
+        let without_edit = build_candidate_records(&[inline_comment("tests", None)], &[]);
+        ensure!(
+            with_edit[0].id != without_edit[0].id,
+            "the suggestion must participate in the candidate fingerprint"
+        );
+
+        write_candidate_artifacts(temp.path(), &candidates)?;
+        let (round_tripped, summary_only) = read_candidate_review_surfaces(temp.path())?;
+        ensure!(summary_only.is_empty());
+        ensure!(round_tripped.len() == 2);
+        ensure!(
+            round_tripped[0].suggestion.as_deref() == Some("    assert_eq!(active_len(3), 3);"),
+            "suggestion lost across the candidate queue: {:?}",
+            round_tripped[0].suggestion
+        );
+        ensure!(round_tripped[1].suggestion.is_none());
+        Ok(())
+    }
+
+    /// The queue is an artifact boundary: a suggestion edited into an
+    /// uncommittable shape between write and read is dropped on read, and the
+    /// finding still posts as a plain comment.
+    #[test]
+    fn malformed_queued_suggestions_are_dropped_on_read() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut candidates = build_candidate_records(&[inline_comment("tests", None)], &[]);
+        candidates[0].suggestion = Some("Consider asserting the changed boundary here".to_owned());
+        write_candidate_artifacts(temp.path(), &candidates)?;
+        let (round_tripped, _) = read_candidate_review_surfaces(temp.path())?;
+        ensure!(round_tripped[0].suggestion.is_none());
+        ensure!(!round_tripped[0].body.is_empty());
+        Ok(())
+    }
+
+    /// Summary-only candidates have no anchored line, so a suggestion on one
+    /// is a corrupt artifact rather than a droppable field.
+    #[test]
+    fn summary_only_candidates_reject_a_suggestion() -> Result<()> {
+        let finding = SummaryOnlyFinding {
+            lane: "tests".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium".to_owned(),
+            reason: "kept summary-only".to_owned(),
+            evidence: "diff hunk".to_owned(),
+        };
+        let mut candidates = build_candidate_records(&[], std::slice::from_ref(&finding));
+        candidates[0].suggestion = Some("assert!(proved);".to_owned());
+        let error = candidate_review_surfaces(&candidates)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("summary-only suggestion was accepted"))?;
+        ensure!(format!("{error:#}").contains("has inline fields"));
+        Ok(())
+    }
 }

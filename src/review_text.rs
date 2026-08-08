@@ -777,7 +777,18 @@ pub(crate) fn cap_text_prefix(mut text: String, max_bytes: usize) -> String {
 }
 
 pub(crate) fn right_side_diff_lines(patch: &str) -> BTreeSet<(String, u32)> {
-    let mut lines = BTreeSet::new();
+    right_side_diff_line_text(patch).into_keys().collect()
+}
+
+/// The RIGHT-side (post-image) source text of every commentable diff line,
+/// keyed the same way as [`right_side_diff_lines`] - which is exactly this
+/// map's key set, so the two views of a patch cannot drift apart.
+///
+/// A GitHub `suggestion` block replaces the anchored line verbatim, so the
+/// anchor's own text is the only evidence available before posting that a
+/// proposed edit actually applies where it is anchored.
+pub(crate) fn right_side_diff_line_text(patch: &str) -> BTreeMap<(String, u32), String> {
+    let mut lines = BTreeMap::new();
     let mut current_path = String::new();
     let mut new_line: Option<u32> = None;
     for line in patch.lines() {
@@ -798,7 +809,12 @@ pub(crate) fn right_side_diff_lines(patch: &str) -> BTreeSet<(String, u32)> {
         let is_right_line =
             (line.starts_with('+') && !line.starts_with("+++")) || line.starts_with(' ');
         if is_right_line {
-            lines.insert((current_path.clone(), line_no));
+            // The leading marker is one ASCII byte, so byte index 1 is always
+            // a char boundary; the rest is the file's own line text.
+            lines.insert(
+                (current_path.clone(), line_no),
+                line.get(1..).unwrap_or_default().to_owned(),
+            );
             new_line = line_no.checked_add(1);
         } else if line.starts_with('-') && !line.starts_with("---") {
             new_line = Some(line_no);
@@ -931,10 +947,12 @@ pub(crate) fn github_review_post_comment_body(comment: &GitHubReviewComment) -> 
         return Ok(body);
     };
     validate_github_suggestion_text(suggestion)?;
+    // Only trailing whitespace is trimmed: the suggestion's own indentation is
+    // what GitHub commits in place of the anchored line.
     Ok(format!(
         "{}\n\n```suggestion\n{}\n```",
         body.trim_end(),
-        suggestion.trim()
+        suggestion.trim_end()
     ))
 }
 

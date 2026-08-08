@@ -53,10 +53,13 @@ pub(crate) fn validate_github_review_payload_with_policy_waiver(
         if has_forbidden_pr_review_boilerplate(&comment.body) {
             bail!("github review comment contains artifact-only boilerplate");
         }
+        // Suggestions are gated on content, not on which lane found the
+        // defect: a click-to-apply fix is the highest-value thing a line-level
+        // reviewer produces, and restricting it to one sensor lane meant it
+        // never reached an author. `validate_github_suggestion_text` is what
+        // keeps a malformed edit out; `validate_github_review_payload_for_post`
+        // additionally proves the edit applies at its anchor.
         if let Some(suggestion) = comment.suggestion.as_deref() {
-            if !comment.body.starts_with("[unsafe-review]") {
-                bail!("github review suggestion must be sourced from unsafe-review");
-            }
             validate_github_suggestion_text(suggestion)?;
         }
     }
@@ -80,14 +83,50 @@ pub(crate) fn validate_github_review_payload_for_post(
     }
     let patch = fs::read_to_string(&diff_patch)
         .with_context(|| format!("read {}", diff_patch.display()))?;
-    let right_lines = right_side_diff_lines(&patch);
+    let anchor_text = right_side_diff_line_text(&patch);
+    let right_lines = anchor_text.keys().cloned().collect::<BTreeSet<_>>();
+    let source = diff_patch.display().to_string();
     validate_github_review_payload_for_right_lines(
         review,
         &right_lines,
-        &diff_patch.display().to_string(),
+        &source,
         &review_body_policy,
         waive_suppressible,
-    )
+    )?;
+    validate_github_review_suggestion_anchors(review, &anchor_text, &source)
+}
+
+/// Prove every `suggestion` block applies to the line it replaces, using the
+/// same patch the anchors were just validated against. This runs only at post
+/// time, where the reviewed diff on disk is the authority; the right-line
+/// check above has already guaranteed each anchor is present in the map, so a
+/// missing anchor here is a real inconsistency and not a tolerable gap.
+pub(crate) fn validate_github_review_suggestion_anchors(
+    review: &GitHubReview,
+    anchor_text: &BTreeMap<(String, u32), String>,
+    source: &str,
+) -> Result<()> {
+    for comment in &review.comments {
+        let Some(suggestion) = comment.suggestion.as_deref() else {
+            continue;
+        };
+        let path = normalize_repo_path(&comment.path);
+        let anchor = anchor_text
+            .get(&(path.clone(), comment.line))
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "github review suggestion {path}:{} has no RIGHT-side line in {source}",
+                    comment.line
+                )
+            })?;
+        validate_github_suggestion_anchor(anchor, suggestion).with_context(|| {
+            format!(
+                "github review suggestion {path}:{} does not apply in {source}",
+                comment.line
+            )
+        })?;
+    }
+    Ok(())
 }
 
 /// The post step trusts the run's compile decision for the suppressible
@@ -215,4 +254,82 @@ pub(crate) fn is_valid_repo_slug(value: &str) -> bool {
 
 pub(crate) fn is_repo_slug_char(value: char) -> bool {
     value.is_ascii_alphanumeric() || matches!(value, '-' | '_' | '.')
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::ensure;
+
+    use super::*;
+
+    const PATCH: &str = "\
+diff --git a/src/lib.rs b/src/lib.rs
+index 1111111..2222222 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,4 @@
+ pub fn active_len(len: usize) -> usize {
++    let ptr = &len as *const usize;
+     len
+ }
+";
+
+    fn review_with(suggestion: Option<&str>) -> GitHubReview {
+        GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: "## Findings\n\n- [tests] the raw pointer is never asserted upon".to_owned(),
+            comments: vec![GitHubReviewComment {
+                path: "src/lib.rs".to_owned(),
+                line: 2,
+                side: "RIGHT".to_owned(),
+                body: "[tests] The raw pointer is taken but never asserted upon.".to_owned(),
+                suggestion: suggestion.map(str::to_owned),
+            }],
+        }
+    }
+
+    /// The reviewed diff on disk is the authority at post time: a suggestion
+    /// only posts when it demonstrably applies to the line it replaces.
+    #[test]
+    fn post_gate_proves_suggestions_apply_to_the_line_they_replace() -> Result<()> {
+        let anchors = right_side_diff_line_text(PATCH);
+        validate_github_review_suggestion_anchors(
+            &review_with(Some("    let ptr = core::ptr::from_ref(&len);")),
+            &anchors,
+            "input/diff.patch",
+        )?;
+        validate_github_review_suggestion_anchors(
+            &review_with(None),
+            &anchors,
+            "input/diff.patch",
+        )?;
+
+        let misindented = validate_github_review_suggestion_anchors(
+            &review_with(Some("let ptr = core::ptr::from_ref(&len);")),
+            &anchors,
+            "input/diff.patch",
+        )
+        .err()
+        .ok_or_else(|| anyhow::anyhow!("misindented suggestion passed the post gate"))?;
+        ensure!(format!("{misindented:#}").contains("does not apply in input/diff.patch"));
+
+        let noop = validate_github_review_suggestion_anchors(
+            &review_with(Some("    let ptr = &len as *const usize;")),
+            &anchors,
+            "input/diff.patch",
+        )
+        .err()
+        .ok_or_else(|| anyhow::anyhow!("no-op suggestion passed the post gate"))?;
+        ensure!(format!("{noop:#}").contains("identical to the line"));
+
+        let unanchored = validate_github_review_suggestion_anchors(
+            &review_with(Some("    let ptr = core::ptr::from_ref(&len);")),
+            &BTreeMap::new(),
+            "input/diff.patch",
+        )
+        .err()
+        .ok_or_else(|| anyhow::anyhow!("unanchored suggestion passed the post gate"))?;
+        ensure!(format!("{unanchored:#}").contains("no RIGHT-side line"));
+        Ok(())
+    }
 }

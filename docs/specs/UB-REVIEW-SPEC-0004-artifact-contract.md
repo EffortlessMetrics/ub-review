@@ -206,9 +206,10 @@ github-review.json             XOR github-review-skip.json (skip statuses:
                                skipped_gate_failure_artifact_only; only failed
                                artifact-only gates may use the last status,
                                and those gates never use
-                               skipped_empty_smoke); comments may include
-                               optional `suggestion` only when sourced from
-                               unsafe-review concrete replacement text
+                               skipped_empty_smoke); comments from any lane may
+                               include an optional `suggestion`, admitted on
+                               content: bounded literal replacement text that
+                               applies at the anchored RIGHT-side line
 provider-preflight-status.json provider/endpoint/status/cache_usage receipts
 shared_context.md              the shared model context
 shared_context_cache_block.md  byte-equal mirror of shared_context.md

@@ -831,6 +831,7 @@ mod tests {
             path: None,
             line: None,
             side: None,
+            suggestion: None,
         };
         let candidate_refs = [&candidate];
         let receipt = build_compiler_reconciliation_receipt(CompilerReconciliationInput {

@@ -311,6 +311,7 @@ pub(crate) fn compile_review_surface(
     // prose is suppressed, retain validated inline findings as the concise
     // reviewer surface rather than turning a formatting defect into silence.
     let pr_inline_comments: &[ReviewInlineComment] = &pr_inline_candidates;
+    let anchor_text = right_side_diff_line_text(&input.diff.patch);
     let github_review = GitHubReview {
         event: "COMMENT".to_owned(),
         body: pr_body.clone(),
@@ -321,7 +322,7 @@ pub(crate) fn compile_review_surface(
                 line: comment.line,
                 side: comment.side.clone(),
                 body: comment.body.clone(),
-                suggestion: comment.suggestion.clone(),
+                suggestion: applicable_suggestion(comment, &anchor_text),
             })
             .collect(),
     };
@@ -370,6 +371,30 @@ pub(crate) fn compile_review_surface(
         review_payload_status,
         terminal_state,
     })
+}
+
+/// The last gate a `suggestion` block passes before it becomes part of a
+/// payload: it must still be well-formed, and it must demonstrably apply to
+/// the line it is anchored to.
+///
+/// `anchor_text` is keyed by the same `(path, line)` pairs
+/// `write_github_review_payload` validates every comment against, so a comment
+/// whose anchor is missing here cannot reach `github-review.json` at all - the
+/// payload write fails first. Keeping such a suggestion is therefore not a
+/// hole, and dropping it would only make in-memory compiler tests diverge from
+/// the delivered payload.
+fn applicable_suggestion(
+    comment: &ReviewInlineComment,
+    anchor_text: &BTreeMap<(String, u32), String>,
+) -> Option<String> {
+    let suggestion = normalize_github_suggestion_text(comment.suggestion.as_deref())?;
+    let anchor = anchor_text.get(&(normalize_repo_path(&comment.path), comment.line));
+    match anchor {
+        Some(line) => validate_github_suggestion_anchor(line, &suggestion)
+            .ok()
+            .map(|()| suggestion),
+        None => Some(suggestion),
+    }
 }
 
 /// Admit only the reporter sentences that add human value beyond the
