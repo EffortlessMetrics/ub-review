@@ -711,6 +711,61 @@ mod tests {
     }
 
     #[test]
+    fn cargo_workspace_graph_is_memoized_under_its_exact_root() -> anyhow::Result<()> {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let returned = parse_cargo_workspace(root)
+            .ok_or_else(|| anyhow::anyhow!("cargo metadata returned None"))?;
+
+        // CARGO_WORKSPACE_MEMO must hold the answer keyed by the exact root it
+        // was read from. Without that insert every caller re-spawns
+        // `cargo metadata`, which is the subprocess cost and the cargo
+        // package-cache lock contention the memo exists to remove.
+        let memoized = CARGO_WORKSPACE_MEMO
+            .lock()
+            .map_err(|_| anyhow::anyhow!("cargo workspace memo was poisoned"))?
+            .get(root)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("root absent from CARGO_WORKSPACE_MEMO"))?
+            .ok_or_else(|| anyhow::anyhow!("memoized workspace graph was None"))?;
+        assert_eq!(
+            memoized.workspace_root, returned.workspace_root,
+            "memoized workspace root must equal the one handed to the caller"
+        );
+        assert_eq!(
+            memoized
+                .packages
+                .iter()
+                .map(|package| package.name.as_str())
+                .collect::<Vec<_>>(),
+            returned
+                .packages
+                .iter()
+                .map(|package| package.name.as_str())
+                .collect::<Vec<_>>(),
+            "memoized packages must equal the ones handed to the caller"
+        );
+
+        // A second call is served from the memo and must not change the answer.
+        let second = parse_cargo_workspace(root)
+            .ok_or_else(|| anyhow::anyhow!("memoized call returned None"))?;
+        assert_eq!(second.workspace_root, returned.workspace_root);
+        assert_eq!(second.packages.len(), returned.packages.len());
+
+        // The memo is keyed by root, so an unrelated root is a miss rather than
+        // an alias onto this repo's graph. Asserted without calling through,
+        // because a real call would spawn the `cargo metadata` this memo exists
+        // to avoid.
+        let memo = CARGO_WORKSPACE_MEMO
+            .lock()
+            .map_err(|_| anyhow::anyhow!("cargo workspace memo was poisoned"))?;
+        assert!(
+            !memo.contains_key(Path::new("ub-review-nonexistent-root")),
+            "an unrelated root must not resolve to a memoized graph"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn relative_to_repo_strips_prefix() {
         let root = std::path::Path::new("/code/repo");
         assert_eq!(

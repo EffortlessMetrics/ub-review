@@ -77,9 +77,9 @@ glob = ".ripr/suppressions.toml"
 category = "configuration-and-policy"
 language = "toml"
 owner = "ub-review/core"
-reason = "RIPR's durable suppression manifest; every entry carries owner and reason per the suppression-health contract, and suppressed findings stay visible as suppressed in the gate receipt. Content-addressed IDs follow code rather than source lines; the receipt's review_after/expires carries the dating obligation. Re-verify entries after semantic edits and RIPR upgrades."
+reason = "RIPR's durable suppression manifest; every entry carries owner and reason per the suppression-health contract, and suppressed findings stay visible as suppressed in the gate receipt. Content-addressed IDs follow code rather than source lines; the receipt's review_after/expires carries the dating obligation. Re-verify entries after semantic edits and RIPR upgrades. Reviewed 2026-08-08 (PR #848), which added 25 entries for cfg(test) and integration-test fixture probes plus const/static declarations that RIPR 0.10.0 scores as production seams (ripr-swarm#1055)."
 created = "2026-06-07"
-review_after = "2026-07-22"
+review_after = "2026-11-08"
 expires = "2026-12-22"
 
 [[exception]]

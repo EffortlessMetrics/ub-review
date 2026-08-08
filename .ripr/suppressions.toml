@@ -4,7 +4,7 @@ schema_version = 1
 # every entry carries owner + reason per the suppression-health contract.
 #
 # Dating obligation: ripr 0.8.0's suppressions schema does not support
-# per-entry created/review_after fields (issue #586 — adding them makes ripr
+# per-entry created/review_after fields (issue #586 ΓÇö adding them makes ripr
 # reject the whole file with exit 2, taking down the sensor). The file-level
 # dating obligation (last-reviewed, next-review) is carried by the
 # non-rust-ripr-suppressions receipt in policy/allow.toml, which xtask
@@ -22016,3 +22016,150 @@ kind = "exposure_gap"
 finding_id = "probe:src_noise.rs:return_value:b9d7a140"
 owner = "ub-review/core"
 reason = "Public boundary receipt: internal_audit_observations_are_withheld_from_public_review_boundary observes malformed-internal-audit exclusion from public review rendering. Re-verify after observation filter changes."
+
+# PR #848 (fix/red-main): test-harness fixes for the red main suite. Twenty-one of
+# these twenty-two probes are in cfg(test) or integration-test fixture code that
+# RIPR 0.10.0 probes as if it were production (ripr-swarm#1055); the remaining one
+# is a static's const initializer that cannot be deleted without a compile error.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:a6e7c71f"
+owner = "ub-review/core"
+reason = "PR #848 fake-delivery-API socket fix: this line is inside the cfg(test) spawn_fake_delivery_api fixture in src/github_delivery.rs, not production code. Its behavioral discriminator is exact and already exists: without stream.set_nonblocking(false) the accepted socket inherits the listener's non-blocking flag on Windows, read_fake_request races the client's first packet with WouldBlock, the connection is aborted and every later scripted response misaligns, and github_delivery::tests::production_delivery_cleans_up_when_head_changes_before_submit fails. RIPR 0.10.0 probes cfg(test) and integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). No test of a fake server's socket options will ever carry such text. This content-addressed receipt covers only this probe and must be re-verified after edits to src/github_delivery.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:951ce7d3"
+owner = "ub-review/core"
+reason = "PR #848 fake-delivery-API socket fix: this line is inside the cfg(test) spawn_fake_delivery_api fixture in src/github_delivery.rs, not production code. Its behavioral discriminator is exact and already exists: without stream.set_nonblocking(false) the accepted socket inherits the listener's non-blocking flag on Windows, read_fake_request races the client's first packet with WouldBlock, the connection is aborted and every later scripted response misaligns, and github_delivery::tests::production_delivery_cleans_up_when_head_changes_before_submit fails. RIPR 0.10.0 probes cfg(test) and integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). No test of a fake server's socket options will ever carry such text. This content-addressed receipt covers only this probe and must be re-verified after edits to src/github_delivery.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:18531440"
+owner = "ub-review/core"
+reason = "PR #848 fake-delivery-API socket fix: this line is inside the cfg(test) spawn_fake_delivery_api fixture in src/github_delivery.rs, not production code. Its behavioral discriminator is exact and already exists: without stream.set_nonblocking(false) the accepted socket inherits the listener's non-blocking flag on Windows, read_fake_request races the client's first packet with WouldBlock, the connection is aborted and every later scripted response misaligns, and github_delivery::tests::production_delivery_cleans_up_when_head_changes_before_submit fails. RIPR 0.10.0 probes cfg(test) and integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). No test of a fake server's socket options will ever carry such text. This content-addressed receipt covers only this probe and must be re-verified after edits to src/github_delivery.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:a2311b71"
+owner = "ub-review/core"
+reason = "PR #848 fake-delivery-API socket fix: this line is inside the cfg(test) spawn_fake_delivery_api fixture in src/github_delivery.rs, not production code. Its behavioral discriminator is exact and already exists: without stream.set_nonblocking(false) the accepted socket inherits the listener's non-blocking flag on Windows, read_fake_request races the client's first packet with WouldBlock, the connection is aborted and every later scripted response misaligns, and github_delivery::tests::production_delivery_cleans_up_when_head_changes_before_submit fails. RIPR 0.10.0 probes cfg(test) and integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). No test of a fake server's socket options will ever carry such text. This content-addressed receipt covers only this probe and must be re-verified after edits to src/github_delivery.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:913a6714"
+owner = "ub-review/core"
+reason = "PR #848 fake-delivery-API socket fix: this line is inside the cfg(test) spawn_fake_delivery_api fixture in src/github_delivery.rs, not production code. Its behavioral discriminator is exact and already exists: without stream.set_nonblocking(false) the accepted socket inherits the listener's non-blocking flag on Windows, read_fake_request races the client's first packet with WouldBlock, the connection is aborted and every later scripted response misaligns, and github_delivery::tests::production_delivery_cleans_up_when_head_changes_before_submit fails. RIPR 0.10.0 probes cfg(test) and integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). No test of a fake server's socket options will ever carry such text. This content-addressed receipt covers only this probe and must be re-verified after edits to src/github_delivery.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:d8b373f4"
+owner = "ub-review/core"
+reason = "PR #848 fake-delivery-API socket fix: this line is inside the cfg(test) spawn_fake_delivery_api fixture in src/github_delivery.rs, not production code. Its behavioral discriminator is exact and already exists: without stream.set_nonblocking(false) the accepted socket inherits the listener's non-blocking flag on Windows, read_fake_request races the client's first packet with WouldBlock, the connection is aborted and every later scripted response misaligns, and github_delivery::tests::production_delivery_cleans_up_when_head_changes_before_submit fails. RIPR 0.10.0 probes cfg(test) and integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). No test of a fake server's socket options will ever carry such text. This content-addressed receipt covers only this probe and must be re-verified after edits to src/github_delivery.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:0f622bb4"
+owner = "ub-review/core"
+reason = "PR #848 fake-delivery-API socket fix: this line is inside the cfg(test) spawn_fake_delivery_api fixture in src/github_delivery.rs, not production code. Its behavioral discriminator is exact and already exists: without stream.set_nonblocking(false) the accepted socket inherits the listener's non-blocking flag on Windows, read_fake_request races the client's first packet with WouldBlock, the connection is aborted and every later scripted response misaligns, and github_delivery::tests::production_delivery_cleans_up_when_head_changes_before_submit fails. RIPR 0.10.0 probes cfg(test) and integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). No test of a fake server's socket options will ever carry such text. This content-addressed receipt covers only this probe and must be re-verified after edits to src/github_delivery.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:18531440.2"
+owner = "ub-review/core"
+reason = "PR #848 fake-delivery-API socket fix: this line is inside the cfg(test) spawn_fake_delivery_api fixture in src/github_delivery.rs, not production code. Its behavioral discriminator is exact and already exists: without stream.set_nonblocking(false) the accepted socket inherits the listener's non-blocking flag on Windows, read_fake_request races the client's first packet with WouldBlock, the connection is aborted and every later scripted response misaligns, and github_delivery::tests::production_delivery_cleans_up_when_head_changes_before_submit fails. RIPR 0.10.0 probes cfg(test) and integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). No test of a fake server's socket options will ever carry such text. This content-addressed receipt covers only this probe and must be re-verified after edits to src/github_delivery.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:a2311b71.2"
+owner = "ub-review/core"
+reason = "PR #848 fake-delivery-API socket fix: this line is inside the cfg(test) spawn_fake_delivery_api fixture in src/github_delivery.rs, not production code. Its behavioral discriminator is exact and already exists: without stream.set_nonblocking(false) the accepted socket inherits the listener's non-blocking flag on Windows, read_fake_request races the client's first packet with WouldBlock, the connection is aborted and every later scripted response misaligns, and github_delivery::tests::production_delivery_cleans_up_when_head_changes_before_submit fails. RIPR 0.10.0 probes cfg(test) and integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). No test of a fake server's socket options will ever carry such text. This content-addressed receipt covers only this probe and must be re-verified after edits to src/github_delivery.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:913a6714.2"
+owner = "ub-review/core"
+reason = "PR #848 fake-delivery-API socket fix: this line is inside the cfg(test) spawn_fake_delivery_api fixture in src/github_delivery.rs, not production code. Its behavioral discriminator is exact and already exists: without stream.set_nonblocking(false) the accepted socket inherits the listener's non-blocking flag on Windows, read_fake_request races the client's first packet with WouldBlock, the connection is aborted and every later scripted response misaligns, and github_delivery::tests::production_delivery_cleans_up_when_head_changes_before_submit fails. RIPR 0.10.0 probes cfg(test) and integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). No test of a fake server's socket options will ever carry such text. This content-addressed receipt covers only this probe and must be re-verified after edits to src/github_delivery.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:call_deletion:6bb952d2"
+owner = "ub-review/core"
+reason = "PR #848 cargo metadata memo: this is the const initializer of the CARGO_WORKSPACE_MEMO static, so deleting the call does not compile and no test can discriminate it behaviorally. The memo behavior it initializes is covered by the new colocated impact_plan::tests::cargo_workspace_graph_is_memoized_under_its_exact_root, which asserts the root is present in CARGO_WORKSPACE_MEMO, that the memoized workspace root and package list equal what the caller received, and that a second root gets its own entry without evicting the first. RIPR 0.10.0 lists that test under reach and scores reach, infect, propagate and observe all yes; only the assertion-text match fails (observation_unverified). This content-addressed receipt covers only this probe and must be re-verified after edits to src/impact_plan.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:49606435"
+owner = "ub-review/core"
+reason = "PR #848 sensor fixture budget: FIXTURE_SENSOR_TIMEOUT_SEC is a constant in the cfg(test) mod tests of src/sensors/mod.rs that replaces three hardcoded 5s subprocess budgets that were losing a wall-clock race under parallel load and producing timed_out receipts. A test-module constant has no behavior of its own to assert; its discriminators are the three sensor tests that consume it. RIPR 0.10.0 probes cfg(test) and integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). No test of a fake server's socket options will ever carry such text. This content-addressed receipt covers only this probe and must be re-verified after edits to src/sensors/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:return_value:c6c6956b"
+owner = "ub-review/core"
+reason = "PR #848 fake-HTTP fixture budgets: this line is inside tests/common/mod.rs, the integration-test HTTP fixture helper, not production code. It sets a per-connection socket timeout to FAKE_HTTP_STREAM_TIMEOUT so a starved client is not cut off mid-request; the behavioral discriminator is the tests/cli.rs suite the fixture serves. RIPR 0.10.0 probes cfg(test) and integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). No test of a fake server's socket options will ever carry such text. This content-addressed receipt covers only this probe and must be re-verified after edits to tests/common/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:return_value:8bb43d65"
+owner = "ub-review/core"
+reason = "PR #848 fake-HTTP fixture budgets: this line is inside tests/common/mod.rs, the integration-test HTTP fixture helper, not production code. It sets a per-connection socket timeout to FAKE_HTTP_STREAM_TIMEOUT so a starved client is not cut off mid-request; the behavioral discriminator is the tests/cli.rs suite the fixture serves. RIPR 0.10.0 probes cfg(test) and integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). No test of a fake server's socket options will ever carry such text. This content-addressed receipt covers only this probe and must be re-verified after edits to tests/common/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:return_value:4e72e0c5"
+owner = "ub-review/core"
+reason = "PR #848 fake-HTTP fixture budgets: this line is inside tests/common/mod.rs, the integration-test HTTP fixture helper, not production code. It sets a per-connection socket timeout to FAKE_HTTP_STREAM_TIMEOUT so a starved client is not cut off mid-request; the behavioral discriminator is the tests/cli.rs suite the fixture serves. RIPR 0.10.0 probes cfg(test) and integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). No test of a fake server's socket options will ever carry such text. This content-addressed receipt covers only this probe and must be re-verified after edits to tests/common/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:return_value:7a70549f"
+owner = "ub-review/core"
+reason = "PR #848 fake-HTTP fixture budgets: this line is inside tests/common/mod.rs, the integration-test HTTP fixture helper, not production code. It sets a per-connection socket timeout to FAKE_HTTP_STREAM_TIMEOUT so a starved client is not cut off mid-request; the behavioral discriminator is the tests/cli.rs suite the fixture serves. RIPR 0.10.0 probes cfg(test) and integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). No test of a fake server's socket options will ever carry such text. This content-addressed receipt covers only this probe and must be re-verified after edits to tests/common/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:return_value:dd3ac656"
+owner = "ub-review/core"
+reason = "PR #848 fake-HTTP fixture budgets: this line is inside tests/common/mod.rs, the integration-test HTTP fixture helper, not production code. It sets a per-connection socket timeout to FAKE_HTTP_STREAM_TIMEOUT so a starved client is not cut off mid-request; the behavioral discriminator is the tests/cli.rs suite the fixture serves. RIPR 0.10.0 probes cfg(test) and integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). No test of a fake server's socket options will ever carry such text. This content-addressed receipt covers only this probe and must be re-verified after edits to tests/common/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:return_value:5a67ec34"
+owner = "ub-review/core"
+reason = "PR #848 fake-HTTP fixture budgets: this line is inside tests/common/mod.rs, the integration-test HTTP fixture helper, not production code. It sets a per-connection socket timeout to FAKE_HTTP_STREAM_TIMEOUT so a starved client is not cut off mid-request; the behavioral discriminator is the tests/cli.rs suite the fixture serves. RIPR 0.10.0 probes cfg(test) and integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). No test of a fake server's socket options will ever carry such text. This content-addressed receipt covers only this probe and must be re-verified after edits to tests/common/mod.rs or a RIPR upgrade."
+
+# Re-derived after rebasing PR #848 onto current main: the same fixture-budget and
+# memo declarations moved lines, so their content-addressed probe IDs shifted. The
+# five receipts below cover the rebased-code IDs for the declarations receipted above.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:field_construction:edfa957e"
+owner = "ub-review/core"
+reason = "PR #848 cargo metadata memo, rebased-code ID: this is the type-ascription line of the CARGO_WORKSPACE_MEMO static declaration in src/impact_plan.rs; deleting the declaration does not compile and no test can discriminate a static's type ascription behaviorally. The memo behavior it declares is covered by the colocated impact_plan::tests::cargo_workspace_graph_is_memoized_under_its_exact_root, which pins the memo hit, the returned graph equality, and the unrelated-root miss. RIPR 0.10.0 classifies the declaration as no_static_path (observation_unverified family). This content-addressed receipt covers only this probe and must be re-verified after edits to src/impact_plan.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:call_deletion:d141da09"
+owner = "ub-review/core"
+reason = "PR #848 fake-HTTP fixture budgets, rebased-code ID: FAKE_HTTP_IDLE_DEADLINE is a constant in the cfg(test) mod tests of src/main.rs that replaces hardcoded 20s accept-loop deadlines that starved under parallel load. A test-module constant has no behavior of its own to assert; its discriminators are the GitHub GraphQL, issue-broker and thread fixtures that consume it, which assert served requests, never latency. RIPR 0.10.0 probes cfg(test) code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). This content-addressed receipt covers only this probe and must be re-verified after edits to src/main.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:call_deletion:1a3bf4c8"
+owner = "ub-review/core"
+reason = "PR #848 fake-HTTP fixture budgets, rebased-code ID: FAKE_HTTP_STREAM_TIMEOUT is a constant in the cfg(test) mod tests of src/main.rs that replaces hardcoded 5s per-connection socket timeouts that cut off starved clients mid-request. A test-module constant has no behavior of its own to assert; its discriminators are the fixtures that consume it, which assert served requests, never latency. RIPR 0.10.0 probes cfg(test) code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). This content-addressed receipt covers only this probe and must be re-verified after edits to src/main.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:call_deletion:bc056038"
+owner = "ub-review/core"
+reason = "PR #848 fake-HTTP fixture budgets, rebased-code ID: FAKE_HTTP_IDLE_DEADLINE is a constant in tests/common/mod.rs, the integration-test HTTP fixture helper, not production code. It replaces a hardcoded 20s accept-loop deadline that starved under parallel load; the behavioral discriminator is the tests/cli.rs suite the fixture serves, which asserts requests received, never latency. RIPR 0.10.0 probes integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). This content-addressed receipt covers only this probe and must be re-verified after edits to tests/common/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:call_deletion:510a05ba"
+owner = "ub-review/core"
+reason = "PR #848 fake-HTTP fixture budgets, rebased-code ID: FAKE_HTTP_STREAM_TIMEOUT is a constant in tests/common/mod.rs, the integration-test HTTP fixture helper, not production code. It sets a per-connection socket timeout so a starved client is not cut off mid-request; the behavioral discriminator is the tests/cli.rs suite the fixture serves. RIPR 0.10.0 probes integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). This content-addressed receipt covers only this probe and must be re-verified after edits to tests/common/mod.rs or a RIPR upgrade."
