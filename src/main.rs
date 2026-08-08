@@ -16699,6 +16699,71 @@ required_proof_unprooven = true
         assert!(!has_standalone_approval_line(&body));
     }
 
+    /// Exercise every arm of the publication predicate directly. The rendered
+    /// body tests below reach it only through `render_review_body`, which
+    /// leaves the individual arms without a discriminating assertion.
+    #[test]
+    fn public_test_proof_result_admits_only_decision_changing_receipts() {
+        // Discriminating is the one green result worth a bullet: it proves the
+        // tests fail without the patch.
+        let discriminating = test_red_green_proof_receipt("discriminating", "failed");
+        assert!(super::proof_receipt_is_public_test_proof_result(
+            &discriminating
+        ));
+
+        // A red proof always changes the decision.
+        let head_failed = test_proof_receipt("head_failed", "failed");
+        assert!(super::proof_receipt_is_public_test_proof_result(
+            &head_failed
+        ));
+
+        // A passing build command is a successful-tool announcement.
+        let mut passing_build = test_proof_receipt("head_passed", "passed");
+        passing_build.kind = "focused-build".to_owned();
+        assert!(!super::proof_receipt_is_public_test_proof_result(
+            &passing_build
+        ));
+
+        // A focused test that passed at HEAD with no base+tests side says only
+        // that the test is green, which is equally true of a test asserting
+        // nothing.
+        let head_only = test_proof_receipt("head_passed", "passed");
+        assert!(
+            head_only
+                .commands
+                .iter()
+                .all(|c| c.side != "base-plus-tests")
+        );
+        assert!(!super::proof_receipt_is_public_test_proof_result(
+            &head_only
+        ));
+
+        // The same result with a real base+tests side is a red/green witness.
+        let head_passed_red_green = test_red_green_proof_receipt("head_passed", "failed");
+        assert!(super::proof_receipt_is_public_test_proof_result(
+            &head_passed_red_green
+        ));
+
+        // Everything else stays in artifacts.
+        for result in [
+            "timed_out",
+            "skipped_budget",
+            "base_patch_failed",
+            "non_discriminating",
+        ] {
+            let receipt = test_proof_receipt(result, "timed_out");
+            assert!(
+                !super::proof_receipt_is_public_test_proof_result(&receipt),
+                "{result} must not be published"
+            );
+        }
+
+        // Gate and follow-up truth are unchanged: an executed proof is still
+        // evidence even when it is not worth reviewer attention.
+        assert!(super::proof_receipt_is_test_proof_result(&passing_build));
+        assert!(super::proof_receipt_is_test_proof_result(&head_only));
+    }
+
     /// A green proof earns a bullet only when it discriminates the patch, which
     /// is the one result that answers "did this PR do what it intended?".
     #[test]
