@@ -342,6 +342,7 @@ fn classify_rust_patch_file(
         Vec::new()
     };
 
+    let new_file = file.old_path.is_empty() || file.header_has("new file mode");
     let mut slices = Vec::new();
     let mut dropped = 0_usize;
     for (index, hunk) in file.hunks.iter().enumerate() {
@@ -350,6 +351,12 @@ fn classify_rust_patch_file(
             match classify_hunk_slice(hunk, &range, &old_regions, &head_regions) {
                 Some(true) => kept.push(range),
                 Some(false) => dropped += 1,
+                None if new_file => {
+                    return Ok(RustFileDecision::Refused(format!(
+                        "{} is a new Rust file adding production code and its tests together; a base+tests patch cannot add the test without the code under test",
+                        file.new_path
+                    )));
+                }
                 None => {
                     return Ok(RustFileDecision::Refused(format!(
                         "{} hunk at old line {} mixes test and production changes; refusing to build a base+tests patch that could carry the fix",
@@ -730,6 +737,59 @@ mod tests {
             .as_deref()
             .ok_or_else(|| anyhow::anyhow!("expected a refusal, got {selection:?}"))?;
         assert!(refusal.contains("mixes test and production"), "{refusal}");
+        Ok(())
+    }
+
+    #[test]
+    fn new_rust_file_carrying_its_own_tests_refuses() -> Result<()> {
+        let repo = tempfile::tempdir()?;
+        init_repo(repo.path())?;
+        fs::create_dir_all(repo.path().join("src"))?;
+        fs::write(repo.path().join("src/lib.rs"), "pub mod added;\n")?;
+        let base = commit_all(repo.path(), "base")?;
+        fs::write(repo.path().join("src/added.rs"), BASE_SOURCE)?;
+        let head = commit_all(repo.path(), "head")?;
+        let diff = diff_context(&base, &head, &["src/added.rs"]);
+
+        let selection = base_plus_tests_selection(repo.path(), &diff)?;
+
+        let refusal = selection
+            .refusal
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("expected a refusal, got {selection:?}"))?;
+        assert!(refusal.contains("new Rust file"), "{refusal}");
+        Ok(())
+    }
+
+    /// A brand-new file that is nothing but tests can still discriminate: it
+    /// pins production code that already exists at base.
+    #[test]
+    fn new_test_only_rust_file_is_kept() -> Result<()> {
+        let repo = tempfile::tempdir()?;
+        init_repo(repo.path())?;
+        fs::create_dir_all(repo.path().join("src"))?;
+        fs::write(repo.path().join("src/lib.rs"), BASE_SOURCE)?;
+        let base = commit_all(repo.path(), "base")?;
+        fs::write(
+            repo.path().join("src/extra_tests.rs"),
+            "#![cfg(test)]\n\n#[test]\nfn boundary() {\n    assert_eq!(crate::classify(10), \"high\");\n}\n",
+        )?;
+        let head = commit_all(repo.path(), "head")?;
+        let diff = diff_context(&base, &head, &["src/extra_tests.rs"]);
+
+        let selection = base_plus_tests_selection(repo.path(), &diff)?;
+
+        assert!(selection.refusal.is_none(), "{selection:?}");
+        let record = selection
+            .files
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("expected one selection record"))?;
+        assert_eq!(record.mode, "hunk-split");
+        assert!(
+            selection.patch.contains("fn boundary"),
+            "{}",
+            selection.patch
+        );
         Ok(())
     }
 
