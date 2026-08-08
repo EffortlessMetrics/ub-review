@@ -8,10 +8,10 @@ BASE="${UB_REVIEW_SMOKE_BASE:-HEAD~1}"
 OUT=target/ub-review-smoke
 CONFIG=target/ub-review-smoke.toml
 
-cargo run -- doctor --profile gh-runner
-cargo run -- init --profile gh-runner --force --path "$CONFIG"
-cargo run -- plan --config "$CONFIG" --profile gh-runner --base "$BASE" --head HEAD --write --out "$OUT"
-cargo run -- run --config "$CONFIG" --profile gh-runner --base "$BASE" --head HEAD --dry-run --out "$OUT"
+cargo run --locked -- doctor --profile gh-runner
+cargo run --locked -- init --profile gh-runner --force --path "$CONFIG"
+cargo run --locked -- plan --config "$CONFIG" --profile gh-runner --base "$BASE" --head HEAD --write --out "$OUT"
+cargo run --locked -- run --config "$CONFIG" --profile gh-runner --base "$BASE" --head HEAD --dry-run --out "$OUT"
 
 # The exit code of `run` does not carry the gate verdict, so a smoke run that
 # only checks `set -e` cannot tell a clean review from a config the tool just
