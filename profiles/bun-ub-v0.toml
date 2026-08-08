@@ -6,6 +6,12 @@ review_profile = "bun-ub-v0"
 profile = "gh-runner"
 
 [repo]
+# Declared here rather than inherited from the global default. `kind` is
+# echo-only (propagated to the `repo_kind` artifact key, never branched on),
+# but the default is what `init` renders into a new user's config, so a Bun
+# default there misclassified every non-Bun repo. The Bun posture belongs to
+# the Bun profile.
+kind = "bun"
 ledger = ""
 base = "origin/main"
 head = "HEAD"
