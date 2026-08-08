@@ -432,3 +432,172 @@ pub(crate) fn diff_is_workflow_tool_pin_bump_only(patch: &str) -> bool {
     }
     saw_change
 }
+
+#[cfg(test)]
+mod tests {
+    use anyhow::{Result, anyhow};
+
+    use crate::tests::test_proof_receipt;
+    use crate::*;
+
+    /// `"discriminating" | "head_failed" => true`: both results change what the
+    /// reviewer does next, so neither consults the receipt kind or which
+    /// command sides ran.
+    #[test]
+    fn discriminating_and_head_failed_are_published_whatever_else_the_receipt_says() -> Result<()> {
+        for result in ["discriminating", "head_failed"] {
+            for kind in ["focused-red-green", "focused-test", "focused-build"] {
+                for sides in [
+                    &["head"][..],
+                    &["base-plus-tests"][..],
+                    &["head", "base-plus-tests"][..],
+                ] {
+                    let mut receipt = test_proof_receipt(result, "failed");
+                    receipt.kind = kind.to_owned();
+                    let template =
+                        receipt.commands.first().cloned().ok_or_else(|| {
+                            anyhow!("proof receipt fixture must ship one command")
+                        })?;
+                    receipt.commands = sides
+                        .iter()
+                        .map(|side| ProofCommandReceipt {
+                            side: (*side).to_owned(),
+                            ..template.clone()
+                        })
+                        .collect();
+                    assert!(
+                        proof_receipt_is_public_test_proof_result(&receipt),
+                        "{result} is publishable for kind {kind} with sides {sides:?}"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// `"head_passed" => kind != "focused-build" && any base-plus-tests side`:
+    /// the full input matrix for the one arm that reads more than the result.
+    #[test]
+    fn head_passed_is_published_only_as_a_focused_test_with_a_base_plus_tests_side() -> Result<()> {
+        for (kind, sides, expected) in [
+            ("focused-red-green", &["head", "base-plus-tests"][..], true),
+            ("focused-test", &["head", "base-plus-tests"][..], true),
+            ("focused-test", &["base-plus-tests"][..], true),
+            ("focused-test", &["head"][..], false),
+            ("focused-build", &["head", "base-plus-tests"][..], false),
+            ("focused-build", &["head"][..], false),
+        ] {
+            let mut receipt = test_proof_receipt("head_passed", "passed");
+            receipt.kind = kind.to_owned();
+            let template = receipt
+                .commands
+                .first()
+                .cloned()
+                .ok_or_else(|| anyhow!("proof receipt fixture must ship one command"))?;
+            receipt.commands = sides
+                .iter()
+                .map(|side| ProofCommandReceipt {
+                    side: (*side).to_owned(),
+                    ..template.clone()
+                })
+                .collect();
+            assert_eq!(
+                proof_receipt_is_public_test_proof_result(&receipt),
+                expected,
+                "head_passed publication for kind {kind} with sides {sides:?}"
+            );
+        }
+
+        // A receipt with no commands at all has no base+tests side either.
+        let mut headless = test_proof_receipt("head_passed", "passed");
+        headless.kind = "focused-test".to_owned();
+        headless.commands.clear();
+        assert!(!proof_receipt_is_public_test_proof_result(&headless));
+        Ok(())
+    }
+
+    /// `_ => false`: every remaining result stays in artifacts, including
+    /// results this crate never emits and near-misses of the published ones.
+    #[test]
+    fn every_other_result_stays_out_of_the_pr_body() -> Result<()> {
+        for result in [
+            "non_discriminating",
+            "base_patch_failed",
+            "timed_out",
+            "skipped_budget",
+            "skipped_profile",
+            "head_passed_with_warnings",
+            "",
+        ] {
+            let mut receipt = test_proof_receipt(result, "failed");
+            receipt.kind = "focused-red-green".to_owned();
+            let template = receipt
+                .commands
+                .first()
+                .cloned()
+                .ok_or_else(|| anyhow!("proof receipt fixture must ship one command"))?;
+            receipt.commands = ["head", "base-plus-tests"]
+                .iter()
+                .map(|side| ProofCommandReceipt {
+                    side: (*side).to_owned(),
+                    ..template.clone()
+                })
+                .collect();
+            assert!(
+                !proof_receipt_is_public_test_proof_result(&receipt),
+                "{result:?} must fall through to the default arm and stay unpublished"
+            );
+        }
+        Ok(())
+    }
+
+    /// `match receipt.result.as_str()`: publication switches on the result
+    /// string alone. Holding every other field of one receipt fixed, rewriting
+    /// `receipt.result` flips the answer in both directions.
+    #[test]
+    fn publication_switches_on_receipt_result_alone() -> Result<()> {
+        let mut receipt = test_proof_receipt("non_discriminating", "failed");
+        receipt.kind = "focused-red-green".to_owned();
+        let template = receipt
+            .commands
+            .first()
+            .cloned()
+            .ok_or_else(|| anyhow!("proof receipt fixture must ship one command"))?;
+        receipt.commands = ["head", "base-plus-tests"]
+            .iter()
+            .map(|side| ProofCommandReceipt {
+                side: (*side).to_owned(),
+                ..template.clone()
+            })
+            .collect();
+        assert!(!proof_receipt_is_public_test_proof_result(&receipt));
+
+        receipt.result = "discriminating".to_owned();
+        assert!(
+            proof_receipt_is_public_test_proof_result(&receipt),
+            "rewriting receipt.result to discriminating must publish the same receipt"
+        );
+
+        receipt.result = "timed_out".to_owned();
+        assert!(
+            !proof_receipt_is_public_test_proof_result(&receipt),
+            "rewriting receipt.result to timed_out must withhold the same receipt"
+        );
+        Ok(())
+    }
+
+    /// Gate and follow-up truth stay deliberately wider than publication: a
+    /// passing focused build and a head-only pass are still executed proof.
+    #[test]
+    fn gate_truth_still_admits_receipts_publication_withholds() {
+        let mut passing_build = test_proof_receipt("head_passed", "passed");
+        passing_build.kind = "focused-build".to_owned();
+        assert!(!proof_receipt_is_public_test_proof_result(&passing_build));
+        assert!(proof_receipt_is_test_proof_result(&passing_build));
+
+        let mut head_only = test_proof_receipt("head_passed", "passed");
+        head_only.kind = "focused-test".to_owned();
+        assert!(!proof_receipt_is_public_test_proof_result(&head_only));
+        assert!(proof_receipt_is_test_proof_result(&head_only));
+    }
+}
