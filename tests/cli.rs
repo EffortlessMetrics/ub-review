@@ -2557,7 +2557,25 @@ fn active_len_tracks_view_after_resize() {
             .unwrap_or_default()
     );
     assert_eq!(metrics["follow_up_results"]["calls_attempted"], 0);
-    assert_eq!(metrics["resource_leases"], 0);
+    // The fixture is a Cargo package with a `rab` integration-test target, so
+    // the deterministic impact floor can now select one focused cargo test for
+    // this Rust-only diff -- it selects none when `cargo metadata` is
+    // unavailable for the fixture, which is recorded as an impact-plan
+    // evidence gap. Either way `--dry-run` must never execute a proof: the
+    // packet records the lease and receipt as skipped.
+    let leased = metrics["resource_leases"].as_u64().unwrap_or_default();
+    assert!(
+        leased <= 1,
+        "a dry run must not lease more than the focused floor, got {leased}"
+    );
+    let dry_run_receipts: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_receipts.json"))?)?;
+    assert!(
+        dry_run_receipts
+            .iter()
+            .all(|receipt| receipt["result"] == "skipped_profile"),
+        "a dry run must not execute focused proofs: {dry_run_receipts:?}"
+    );
     assert_eq!(
         metrics["review_body_bytes"],
         review["body"].as_str().map(str::len).unwrap_or_default()
