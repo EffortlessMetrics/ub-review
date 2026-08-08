@@ -1247,7 +1247,7 @@ mod tests {
             let mut requests: Vec<FakeRequest> = Vec::new();
             let mut last_error: Option<String> = None;
             for (response_index, response) in responses.iter().enumerate() {
-                let deadline = Instant::now() + Duration::from_secs(30);
+                let deadline = Instant::now() + crate::tests::FAKE_HTTP_IDLE_DEADLINE;
                 loop {
                     match listener.accept() {
                         Ok((stream, _)) => {
@@ -1261,8 +1261,12 @@ mod tests {
                                 // `curl: (56) Recv failure`. Read timeouts
                                 // bound this socket instead.
                                 stream.set_nonblocking(false)?;
-                                stream.set_read_timeout(Some(Duration::from_secs(30)))?;
-                                stream.set_write_timeout(Some(Duration::from_secs(30)))?;
+                                stream.set_read_timeout(Some(
+                                    crate::tests::FAKE_HTTP_STREAM_TIMEOUT,
+                                ))?;
+                                stream.set_write_timeout(Some(
+                                    crate::tests::FAKE_HTTP_STREAM_TIMEOUT,
+                                ))?;
                                 let request = read_fake_request(stream.try_clone()?)?;
                                 write_fake_response(stream, response)?;
                                 requests.push(request);

@@ -10,7 +10,9 @@
 //! Order 1 of the evidence-control-plane epic (#655).
 
 use serde::Serialize;
-use std::path::Path;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use crate::artifacts::IMPACT_PLAN_SCHEMA;
 
@@ -295,10 +297,36 @@ pub(crate) struct CargoTargetInfo {
     pub(crate) src_path: String,
 }
 
+/// Per-root memo of [`read_cargo_workspace`], keyed by the root it was read
+/// from. The source checkout is immutable for the life of a run (see
+/// `docs/ARCHITECTURE.md` mutation zones), so a root's workspace graph cannot
+/// change under us and re-reading it only pays the `cargo metadata` cost again.
+static CARGO_WORKSPACE_MEMO: Mutex<BTreeMap<PathBuf, Option<CargoWorkspaceGraph>>> =
+    Mutex::new(BTreeMap::new());
+
 /// Parse `cargo metadata --format-version 1 --no-deps` and build the workspace
 /// graph. Returns `None` if cargo is unavailable or the output is unparseable
 /// (recorded as an evidence gap rather than a hard failure).
+///
+/// Memoized per root: `cargo metadata` is a subprocess that also takes cargo's
+/// global package-cache lock, so repeated calls both cost seconds each and
+/// serialize against every other cargo process on the machine.
 pub(crate) fn parse_cargo_workspace(root: &Path) -> Option<CargoWorkspaceGraph> {
+    // A poisoned or contended memo must never change the answer, only cost a
+    // re-read, so every lock failure falls through to the uncached path.
+    if let Ok(memo) = CARGO_WORKSPACE_MEMO.lock()
+        && let Some(cached) = memo.get(root)
+    {
+        return cached.clone();
+    }
+    let graph = read_cargo_workspace(root);
+    if let Ok(mut memo) = CARGO_WORKSPACE_MEMO.lock() {
+        memo.insert(root.to_path_buf(), graph.clone());
+    }
+    graph
+}
+
+fn read_cargo_workspace(root: &Path) -> Option<CargoWorkspaceGraph> {
     let output = std::process::Command::new("cargo")
         .args(["metadata", "--format-version", "1", "--no-deps"])
         .current_dir(root)

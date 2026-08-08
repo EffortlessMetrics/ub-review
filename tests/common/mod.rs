@@ -41,6 +41,20 @@ pub fn prepend_to_path(dir: &Path) -> Result<String> {
     Ok(std::env::join_paths(paths)?.to_string_lossy().into_owned())
 }
 
+/// How long a fake HTTP fixture waits for the next client connection before
+/// declaring the client absent. Sized for a saturated machine, not for the
+/// expected latency: the suite runs tests that shell out to real `cargo`/`git`
+/// for tens of seconds, so a client's `curl` spawn can be starved far past any
+/// plausible request latency. The deadline resets on every served request, so a
+/// generous budget costs a passing run nothing and only changes how long a
+/// genuinely absent client is waited for.
+pub const FAKE_HTTP_IDLE_DEADLINE: Duration = Duration::from_secs(120);
+
+/// Per-connection read/write budget for fake HTTP fixtures. Same reasoning as
+/// [`FAKE_HTTP_IDLE_DEADLINE`]: a connected but starved client can take seconds
+/// to push its request bytes.
+pub const FAKE_HTTP_STREAM_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// Drives a fake HTTP fixture listener until `expected_requests` requests have
 /// been served (or the deadline expires), returning each request's captured
 /// text.
@@ -132,7 +146,7 @@ fn spawn_fake_github_api_with_options(
             listener,
             if fail_submission { 6 } else { 5 },
             "GitHub",
-            Duration::from_secs(20),
+            FAKE_HTTP_IDLE_DEADLINE,
             move |idx, stream| {
                 handle_fake_github_request_at(
                     idx,
@@ -159,7 +173,7 @@ pub fn spawn_fake_setup_ci_api(
             listener,
             expected_requests,
             "setup-ci",
-            Duration::from_secs(20),
+            FAKE_HTTP_IDLE_DEADLINE,
             move |_idx, stream| handle_fake_setup_ci_request(stream, config_exists),
         )
     });
@@ -168,8 +182,8 @@ pub fn spawn_fake_setup_ci_api(
 
 pub fn handle_fake_setup_ci_request(mut stream: TcpStream, config_exists: bool) -> Result<String> {
     stream.set_nonblocking(false)?;
-    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_read_timeout(Some(FAKE_HTTP_STREAM_TIMEOUT))?;
+    stream.set_write_timeout(Some(FAKE_HTTP_STREAM_TIMEOUT))?;
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut headers = String::new();
     loop {
@@ -250,8 +264,8 @@ fn handle_fake_github_request_at(
     cleanup_success: bool,
 ) -> Result<String> {
     stream.set_nonblocking(false)?;
-    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_read_timeout(Some(FAKE_HTTP_STREAM_TIMEOUT))?;
+    stream.set_write_timeout(Some(FAKE_HTTP_STREAM_TIMEOUT))?;
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut headers = String::new();
     loop {
@@ -473,8 +487,8 @@ fn handle_fake_openai_request_with_status(
     status: u16,
 ) -> Result<String> {
     stream.set_nonblocking(false)?;
-    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_read_timeout(Some(FAKE_HTTP_STREAM_TIMEOUT))?;
+    stream.set_write_timeout(Some(FAKE_HTTP_STREAM_TIMEOUT))?;
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut headers = String::new();
     loop {
