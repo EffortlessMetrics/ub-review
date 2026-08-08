@@ -1034,6 +1034,196 @@ mod tests {
         Ok(())
     }
 
+    /// The Cargo floor reads exactly three things out of the impact plan: the
+    /// `cargo_lockfile` precondition, each candidate's `kind`, and its package
+    /// and target names. Everything else the planner records is advisory
+    /// bookkeeping for the artifact and the model prompt, and must have no
+    /// authority over which commands the broker is offered — otherwise a purely
+    /// descriptive planner edit would silently change what executes.
+    #[test]
+    fn the_cargo_floor_ignores_advisory_impact_plan_fields() -> Result<()> {
+        let baseline = impact_plan_with_test_targets(&[("ub-review", "cli", 190)]);
+        let floor = |plan: &ImpactPlan| {
+            focused_cargo_test_candidates_from_impact_plan(plan, MAX_IMPACT_CARGO_TEST_CANDIDATES)
+                .into_iter()
+                .map(|task| (task.file, task.id))
+                .collect::<Vec<_>>()
+        };
+        let expected = floor(&baseline);
+        assert_eq!(
+            expected.len(),
+            1,
+            "fixture must offer exactly the cli target, got {expected:?}"
+        );
+        assert_eq!(expected[0].0, "cargo-test:cli");
+
+        let advisory = [
+            (
+                "changed_files",
+                (|plan: &mut ImpactPlan| {
+                    plan.changed_files = vec!["docs/ARCHITECTURE.md".to_owned()];
+                }) as fn(&mut ImpactPlan),
+            ),
+            ("changed_packages", |plan| {
+                plan.changed_packages = vec![crate::ImpactPackage {
+                    name: "ub-review".to_owned(),
+                    manifest_path: "Cargo.toml".to_owned(),
+                    relation: "changed",
+                }];
+            }),
+            ("affected_packages", |plan| {
+                plan.affected_packages = vec![crate::ImpactPackage {
+                    name: "xtask".to_owned(),
+                    manifest_path: "xtask/Cargo.toml".to_owned(),
+                    relation: "reverse-dependency",
+                }];
+            }),
+            ("evidence_gaps", |plan| {
+                plan.evidence_gaps = vec![crate::ImpactEvidenceGap {
+                    kind: "no-test-targets-found",
+                    detail: "advisory only".to_owned(),
+                }];
+            }),
+            ("estimated_cost", |plan| {
+                for candidate in &mut plan.candidate_tasks {
+                    candidate.estimated_cost = "high";
+                }
+            }),
+            ("expected_value", |plan| {
+                for candidate in &mut plan.candidate_tasks {
+                    candidate.expected_value = "low";
+                }
+            }),
+        ];
+        for (field, mutate) in advisory {
+            let mut plan = baseline.clone();
+            mutate(&mut plan);
+            assert_eq!(
+                floor(&plan),
+                expected,
+                "mutating the advisory field {field} must not change the cargo floor"
+            );
+        }
+
+        // The contrast case: `cargo_lockfile` is the one plan-level field the
+        // floor obeys, because `--locked` refuses to create a missing lock file.
+        let mut lockless = baseline.clone();
+        lockless.cargo_lockfile = false;
+        assert_eq!(
+            floor(&lockless),
+            Vec::new(),
+            "cargo_lockfile = false must empty the cargo floor"
+        );
+
+        // And `kind` is the other: only `test` targets become proof tasks.
+        let mut library_only = baseline.clone();
+        for candidate in &mut library_only.candidate_tasks {
+            candidate.kind = "lib".to_owned();
+        }
+        assert_eq!(
+            floor(&library_only),
+            Vec::new(),
+            "only `test` targets may become executable proof tasks"
+        );
+        Ok(())
+    }
+
+    /// A cargo candidate's identity must be a pure function of the approved
+    /// command, because the broker merges and de-duplicates tasks by id and a
+    /// later model request naming the same command has to land on the same
+    /// task. Two plan entries for one package/target therefore collapse into a
+    /// single task regardless of rank, and the derived id must agree with
+    /// `focused_test_task_id_for_target` over the head-only, unnamed-test
+    /// shape the floor actually constructs.
+    #[test]
+    fn cargo_candidate_identity_follows_the_approved_command() -> Result<()> {
+        let plan = impact_plan_with_test_targets(&[
+            ("ub-review", "cli", 190),
+            ("ub-review", "cli", 40),
+            ("ub-review", "gate", 190),
+        ]);
+        let candidates =
+            focused_cargo_test_candidates_from_impact_plan(&plan, MAX_IMPACT_CARGO_TEST_CANDIDATES);
+        let labels = candidates
+            .iter()
+            .map(|task| task.file.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            labels,
+            ["cargo-test:cli", "cargo-test:gate"],
+            "duplicate targets must merge and distinct targets must stay separate"
+        );
+
+        for candidate in &candidates {
+            let specs = candidate
+                .command_specs
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("cargo candidate must carry an approved command"))?;
+            let label = focused_cargo_test_target_label(&specs.head.argv);
+            assert_eq!(
+                candidate.test_name, None,
+                "a head-only package proof names no single test"
+            );
+            assert_eq!(
+                candidate.mode,
+                FocusedProofMode::HeadOnly,
+                "a diff-derived cargo candidate claims HEAD passes, not red/green"
+            );
+            assert_eq!(
+                candidate.id,
+                focused_test_task_id_for_target(
+                    &label,
+                    None,
+                    FocusedProofMode::HeadOnly,
+                    Some(specs),
+                ),
+                "id: focused_test_task_id_for_target must be fed the target label, no test \
+                 name, head-only mode, and the approved command specs"
+            );
+            assert_ne!(
+                candidate.id,
+                focused_test_task_id_for_target(
+                    &label,
+                    None,
+                    FocusedProofMode::RedGreen,
+                    Some(specs),
+                ),
+                "the head-only mode must be part of the identity"
+            );
+            assert_eq!(
+                specs.base_plus_tests.argv, specs.head.argv,
+                "both command slots must hold the same allowlisted argv"
+            );
+        }
+        Ok(())
+    }
+
+    /// The floor is bounded so a wide refactor cannot flood the portfolio with
+    /// equally ranked targets, and it truncates from the front of the ranked
+    /// catalog rather than sampling it.
+    #[test]
+    fn the_cargo_floor_truncates_the_ranked_catalog_at_the_limit() -> Result<()> {
+        let targets = ["a", "b", "c", "d"]
+            .map(|target| ("ub-review", target, 190))
+            .to_vec();
+        let plan = impact_plan_with_test_targets(&targets);
+        for limit in 0..=targets.len() {
+            let labels = focused_cargo_test_candidates_from_impact_plan(&plan, limit)
+                .into_iter()
+                .map(|task| task.file)
+                .collect::<Vec<_>>();
+            let expected = targets[..limit]
+                .iter()
+                .map(|(_, target, _)| format!("cargo-test:{target}"))
+                .collect::<Vec<_>>();
+            assert_eq!(
+                labels, expected,
+                "limit {limit} must take the first {limit} ranked targets"
+            );
+        }
+        Ok(())
+    }
+
     #[test]
     fn focused_proof_mode_keys_and_command_counts_are_stable() {
         assert_eq!(FocusedProofMode::HeadOnly.key(), "head-only");

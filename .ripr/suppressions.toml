@@ -22215,3 +22215,207 @@ kind = "exposure_gap"
 finding_id = "probe:src_impact_plan.rs:return_value:ca5b2c93"
 owner = "ub-review/core"
 reason = "Return value of relative_to_repo when the normalized prefix strip succeeds. relative_to_repo_strips_prefix, relative_to_repo_resolves_relative_root_against_current_directory, and relative_to_repo_keeps_unresolvable_absolute_root each pin the exact returned string for a different root shape, so any mutation of the value fails an exact assertion. RIPR cannot connect function-output assertions to this return-site probe. Re-verify after edits to src/impact_plan.rs or a RIPR upgrade."
+# PR #852 - deterministic Cargo test floor (`feat(proof): select real cargo
+# tests for Rust diffs`). Nine behavioural gaps on this diff were closed with
+# real oracles in `impact_plan::tests` and `proof::tasks::tests`
+# (tied_impact_candidates_break_on_package_then_target,
+# cargo_lockfile_tracks_a_committed_lock_file_at_the_workspace_root,
+# a_tree_without_a_cargo_workspace_records_no_lockfile_gap,
+# this_repo_impact_plan_reports_its_committed_lockfile,
+# the_cargo_floor_ignores_advisory_impact_plan_fields,
+# cargo_candidate_identity_follows_the_approved_command,
+# the_cargo_floor_truncates_the_ranked_catalog_at_the_limit). The entries below
+# are the residue RIPR 0.10.0 cannot confirm by construction: its discriminate
+# check looks for assertion text that references the probe's changed
+# expression, and each expression here is either a punctuation fragment of a
+# multi-line construction (`});`, `),`, `None,`, `.to_owned(),`), an unchanged
+# argument line that only entered the diff when a parameter was added, or a
+# line inside a `#[cfg(test)]` fixture builder. Verified locally with
+# `ripr check --root . --diff <base..head> --mode ready` at ripr 0.10.0.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:field_construction:1cf39a65"
+owner = "ub-review/core"
+reason = "PR #852 lock-file evidence gap: the `.to_owned(),` fragment closes the multi-line `no-cargo-lockfile` detail string. cargo_lockfile_tracks_a_committed_lock_file_at_the_workspace_root asserts the gap appears exactly when cargo_lockfile is false and that its detail names both Cargo.lock and the --locked precondition; no assertion text can reference a bare `.to_owned(),`. Re-verify after edits to build_impact_plan or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:side_effect:0b73b7d6"
+owner = "ub-review/core"
+reason = "PR #852, side-effect twin of the `.to_owned(),` fragment above: the pushed ImpactEvidenceGap is pinned by cargo_lockfile_tracks_a_committed_lock_file_at_the_workspace_root (gap present exactly when cargo_lockfile is false, detail contains --locked and Cargo.lock). Re-verify after edits to build_impact_plan or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:side_effect:ef455936"
+owner = "ub-review/core"
+reason = "PR #852: the `});` line closing the evidence_gaps.push call. Same pinned behaviour as the two entries above; the expression is pure punctuation, so RIPR's assertion-text discriminator can never confirm it. Re-verify after edits to build_impact_plan or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:fdfb45dc"
+owner = "ub-review/core"
+reason = "PR #852: `impact_plan_ref,` is the new argument threaded into the proof stream spawned inside write_review_artifacts. It is argument forwarding into a scoped thread in the run orchestrator, with no return value or effect a unit assertion can name; what it enables is pinned by proof::tasks::tests (the Cargo floor) and by the tests/cli.rs dry-run packet contract. Re-verify after edits to write_review_artifacts or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:8c337c7a"
+owner = "ub-review/core"
+reason = "PR #852, return-value twin of the `impact_plan_ref,` argument-forwarding probe above. Same reasoning and the same pinning tests. Re-verify after edits to write_review_artifacts or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:d3be5b83"
+owner = "ub-review/core"
+reason = "PR #852: `box_state,` in the run_initial_diff_proof_broker_v0 call inside run_seeded_proof_stream_v0. The argument itself is unchanged; the line entered the diff only because adding the `impact` parameter reflowed the call. Nothing about forwarding box_state is separately assertable. Re-verify after edits to run_seeded_proof_stream_v0 or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:7a31adcd"
+owner = "ub-review/core"
+reason = "PR #852: `run_started,` in the same reflowed run_initial_diff_proof_broker_v0 call. Unchanged argument forwarding that the diff touched only as collateral of the new `impact` parameter. Re-verify after edits to run_seeded_proof_stream_v0 or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:aecf8225"
+owner = "ub-review/core"
+reason = "PR #852: the `);` closing the same reflowed run_initial_diff_proof_broker_v0 call. Pure punctuation, no assertable expression. Re-verify after edits to run_seeded_proof_stream_v0 or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:return_value:727c49cd"
+owner = "ub-review/core"
+reason = "PR #852: `Some(FocusedTestTask {` opens the task focused_cargo_test_task_from_impact_candidate returns. cargo_candidate_identity_follows_the_approved_command asserts that returned task in full - label, head-only mode, absent test name, identity recomputed from focused_test_task_id_for_target, and both command slots holding the same allowlisted argv - but no assertion text can reference an opening constructor fragment. Re-verify after edits to focused_cargo_test_task_from_impact_candidate or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:field_construction:dee65101"
+owner = "ub-review/core"
+reason = "PR #852: the `None,` argument (no single test name) inside the task-id derivation. cargo_candidate_identity_follows_the_approved_command recomputes the expected id with exactly that `None` and asserts candidate.test_name is None, so the value is genuinely discriminated; RIPR cannot match a bare `None,` against assertion text. Re-verify after edits to focused_cargo_test_task_from_impact_candidate or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:return_value:9f379f00"
+owner = "ub-review/core"
+reason = "PR #852, return-value twin of the `None,` probe above; same pinning test and same assertion-text limitation. Re-verify after edits to focused_cargo_test_task_from_impact_candidate or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:field_construction:36f8ce52"
+owner = "ub-review/core"
+reason = "PR #852: the `),` closing the focused_test_task_id_for_target call in the id field. Pure punctuation; the id it terminates is recomputed and compared exactly by cargo_candidate_identity_follows_the_approved_command. Re-verify after edits to focused_cargo_test_task_from_impact_candidate or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:return_value:3f4693a0"
+owner = "ub-review/core"
+reason = "PR #852, return-value twin of the `),` punctuation probe above; same pinning test. Re-verify after edits to focused_cargo_test_task_from_impact_candidate or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:field_construction:173fdad5"
+owner = "ub-review/core"
+reason = "PR #852: `changed_packages: Vec::new(),` inside impact_plan_with_test_targets, a `#[cfg(test)]` fixture builder in proof::tasks::tests. It ships no production behaviour, and the_cargo_floor_ignores_advisory_impact_plan_fields asserts precisely that this field has no authority over the Cargo floor. Re-verify if the fixture stops being test-only."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:return_value:8121524b"
+owner = "ub-review/core"
+reason = "PR #852, return-value twin of the `changed_packages: Vec::new(),` fixture line above. Test-only fixture construction. Re-verify if the fixture stops being test-only."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:field_construction:96269e12"
+owner = "ub-review/core"
+reason = "PR #852: `affected_packages: Vec::new(),` in the impact_plan_with_test_targets test fixture. Test-only construction; the_cargo_floor_ignores_advisory_impact_plan_fields pins that the field cannot change the floor. Re-verify if the fixture stops being test-only."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:return_value:944b8fda"
+owner = "ub-review/core"
+reason = "PR #852, return-value twin of the `affected_packages: Vec::new(),` fixture line above. Test-only fixture construction. Re-verify if the fixture stops being test-only."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:field_construction:57c148c5"
+owner = "ub-review/core"
+reason = "PR #852: the estimated_cost fixture line in impact_plan_with_test_targets. Test-only construction; the_cargo_floor_ignores_advisory_impact_plan_fields pins that estimated_cost is advisory and cannot change the floor. Re-verify if the fixture stops being test-only."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:return_value:e43a86f8"
+owner = "ub-review/core"
+reason = "PR #852, return-value twin of the estimated_cost fixture line above. Test-only fixture construction. Re-verify if the fixture stops being test-only."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:field_construction:240b8d31"
+owner = "ub-review/core"
+reason = "PR #852: the expected_value fixture line in impact_plan_with_test_targets. Test-only construction; the_cargo_floor_ignores_advisory_impact_plan_fields pins that expected_value is advisory and cannot change the floor. Re-verify if the fixture stops being test-only."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:return_value:0a35bdaf"
+owner = "ub-review/core"
+reason = "PR #852, return-value twin of the expected_value fixture line above. Test-only fixture construction. Re-verify if the fixture stops being test-only."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:field_construction:6c01295f"
+owner = "ub-review/core"
+reason = "PR #852: the `})` closing the per-target ImpactCandidateTask map inside the impact_plan_with_test_targets test fixture. Test-only punctuation. Re-verify if the fixture stops being test-only."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:field_construction:9dd1e75b"
+owner = "ub-review/core"
+reason = "PR #852: `evidence_gaps: Vec::new(),` in the impact_plan_with_test_targets test fixture. Test-only construction; the_cargo_floor_ignores_advisory_impact_plan_fields pins that recorded evidence gaps cannot change the floor. Re-verify if the fixture stops being test-only."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:return_value:89926e9c"
+owner = "ub-review/core"
+reason = "PR #852, return-value twin of the `evidence_gaps: Vec::new(),` fixture line above. Test-only fixture construction. Re-verify if the fixture stops being test-only."
+
+# Re-derived after rebasing PR #852 onto current main (#848's cargo metadata
+# memo and its test moved the surrounding context in src/impact_plan.rs, and
+# #891's budget-continuation tests moved src/proof/tasks.rs), so three
+# declaration lines receipted above under their pre-rebase probe families now
+# surface with new content-addressed IDs in the no_static_path class. The
+# receipts below cover exactly those rebased-code IDs.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:call_deletion:2b091dc9"
+owner = "ub-review/core"
+reason = "PR #852 rebased-code ID: the `pub(crate) cargo_lockfile: bool,` field declaration on ImpactPlan. Deleting the field does not compile and no assertion can name a declaration line; RIPR 0.10.0 scores it as a production seam with no static test path (same family as the PR #848 CARGO_WORKSPACE_MEMO receipt). The flag's behavior is pinned by cargo_lockfile_tracks_a_committed_lock_file_at_the_workspace_root (flag equals Cargo.lock.is_file() across absent/directory/file shapes and the gap appears exactly when false) and by the_cargo_floor_ignores_advisory_impact_plan_fields (false empties the floor). This content-addressed receipt covers only this probe; re-verify after edits to ImpactPlan or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:field_construction:f0434e24"
+owner = "ub-review/core"
+reason = "PR #852 rebased-code ID, field-construction twin of the `pub(crate) cargo_lockfile: bool,` call-deletion receipt above. Same pinning tests and re-verification trigger."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:call_deletion:3b2c47d4"
+owner = "ub-review/core"
+reason = "PR #852 rebased-code ID: the `pub(crate) kind: String,` field declaration on ImpactCandidateTask. Deleting the field does not compile and no assertion can name a declaration line; RIPR 0.10.0 scores it as a production seam with no static test path. The kind gate is pinned by the_cargo_floor_ignores_advisory_impact_plan_fields (only kind == \"test\" targets become tasks; rewriting every kind to lib empties the floor) and rust_only_diff_yields_a_focused_cargo_test_candidate. This content-addressed receipt covers only this probe; re-verify after edits to ImpactCandidateTask or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:field_construction:f6d670bf"
+owner = "ub-review/core"
+reason = "PR #852 rebased-code ID, field-construction twin of the `pub(crate) kind: String,` call-deletion receipt above. Same pinning tests and re-verification trigger."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:call_deletion:cadb39c9"
+owner = "ub-review/core"
+reason = "PR #852 rebased-code ID: the `MAX_IMPACT_CARGO_TEST_CANDIDATES` const declaration bounding the deterministic cargo floor. A constant has no runtime behavior of its own for an assertion to discriminate; RIPR 0.10.0 reports no_static_path for the declaration line. Its bound is pinned by the_cargo_floor_truncates_the_ranked_catalog_at_the_limit (first-N truncation at every limit) and this_repo_rust_diff_produces_deterministic_cargo_candidates (the real floor stays <= MAX). This content-addressed receipt covers only this probe; re-verify after edits to focused_cargo_test_candidates_from_impact_plan or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:field_construction:e18f80de"
+owner = "ub-review/core"
+reason = "PR #852 rebased-code ID, field-construction twin of the MAX_IMPACT_CARGO_TEST_CANDIDATES call-deletion receipt above. Same pinning tests and re-verification trigger."

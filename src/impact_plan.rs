@@ -776,6 +776,212 @@ mod tests {
         Ok(())
     }
 
+    /// The proof broker now promotes the top-ranked `test` candidates into
+    /// real executable proof tasks, so candidate order must be a total order
+    /// that does not inherit `cargo metadata` emission order: equal ranks break
+    /// on package name, then target name.
+    ///
+    /// The fixture workspace declares its members out of alphabetical order and
+    /// gives `alpha` two test targets named out of order, so a passing
+    /// assertion cannot be an accident of emission order. `beta` depends on
+    /// `alpha` and both are changed, which makes every `test` target tie on
+    /// rank and forces the tie-break to decide the whole prefix.
+    #[test]
+    fn tied_impact_candidates_break_on_package_then_target() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path();
+        std::fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"beta\", \"alpha\"]\nresolver = \"2\"\n",
+        )?;
+        for (package, dependencies, test_targets) in [
+            ("alpha", "", &["second", "first"][..]),
+            ("beta", "alpha = { path = \"../alpha\" }\n", &["first"][..]),
+        ] {
+            let dir = root.join(package);
+            std::fs::create_dir_all(dir.join("src"))?;
+            std::fs::create_dir_all(dir.join("tests"))?;
+            std::fs::write(
+                dir.join("Cargo.toml"),
+                format!(
+                    "[package]\nname = \"{package}\"\nversion = \"0.0.0\"\n\
+                     edition = \"2021\"\n\n[lib]\npath = \"src/lib.rs\"\n\n\
+                     [dependencies]\n{dependencies}"
+                ),
+            )?;
+            std::fs::write(dir.join("src/lib.rs"), "")?;
+            for target in test_targets {
+                std::fs::write(
+                    dir.join("tests").join(format!("{target}.rs")),
+                    "#[test]\nfn placeholder() {}\n",
+                )?;
+            }
+        }
+        let changed = ["alpha/src/lib.rs".to_owned(), "beta/src/lib.rs".to_owned()];
+
+        let order = |plan: &ImpactPlan| {
+            plan.candidate_tasks
+                .iter()
+                .map(|candidate| {
+                    (
+                        candidate.test_package.clone(),
+                        candidate.target.clone(),
+                        candidate.rank,
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        let tied_rank = impact_candidate_rank("test", "high", true);
+        let lib_rank = impact_candidate_rank("lib", "medium", true);
+        let expected: Vec<(String, String, u32)> = [
+            ("alpha", "first", tied_rank),
+            ("alpha", "second", tied_rank),
+            ("beta", "first", tied_rank),
+            ("alpha", "alpha", lib_rank),
+            ("beta", "beta", lib_rank),
+        ]
+        .into_iter()
+        .map(|(package, target, rank)| (package.to_owned(), target.to_owned(), rank))
+        .collect();
+
+        let plan = build_impact_plan(root, &changed, "shadow");
+        assert_eq!(
+            order(&plan),
+            expected,
+            "candidate_tasks must sort rank-descending, then test_package, then target"
+        );
+        let again = build_impact_plan(root, &changed, "shadow");
+        assert_eq!(
+            order(&again),
+            expected,
+            "two plans over the same tree must produce the same candidate order"
+        );
+        Ok(())
+    }
+
+    /// `cargo_lockfile` gates the whole focused-cargo floor, so it must track a
+    /// real committed lock *file* at the workspace root. A `Cargo.lock` that is
+    /// absent, or that exists but is not a regular file, leaves the flag false
+    /// and records the `no-cargo-lockfile` evidence gap: missing evidence about
+    /// a proof that cannot run, never a failing proof.
+    #[test]
+    fn cargo_lockfile_tracks_a_committed_lock_file_at_the_workspace_root() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path();
+        std::fs::create_dir_all(root.join("src"))?;
+        std::fs::create_dir_all(root.join("tests"))?;
+        std::fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\n\n[package]\nname = \"locked-fixture\"\nversion = \"0.0.0\"\n\
+             edition = \"2021\"\n\n[lib]\npath = \"src/lib.rs\"\n",
+        )?;
+        std::fs::write(root.join("src/lib.rs"), "")?;
+        std::fs::write(root.join("tests/only.rs"), "#[test]\nfn placeholder() {}\n")?;
+        let lock = root.join("Cargo.lock");
+        let changed = ["src/lib.rs".to_owned()];
+
+        for shape in ["absent", "directory", "file"] {
+            match shape {
+                "directory" => std::fs::create_dir_all(&lock)?,
+                "file" => {
+                    std::fs::remove_dir_all(&lock)?;
+                    std::fs::write(&lock, "version = 4\n")?;
+                }
+                _ => {}
+            }
+            let usable = lock.is_file();
+            assert_eq!(
+                usable,
+                shape == "file",
+                "fixture precondition: Cargo.lock {shape} is_file()"
+            );
+
+            let plan = build_impact_plan(root, &changed, "shadow");
+            assert_eq!(
+                plan.cargo_lockfile, usable,
+                "Cargo.lock {shape}: cargo_lockfile must equal Cargo.lock.is_file()"
+            );
+            let gap = plan
+                .evidence_gaps
+                .iter()
+                .find(|gap| gap.kind == "no-cargo-lockfile");
+            assert_eq!(
+                gap.is_some(),
+                !usable,
+                "Cargo.lock {shape}: the no-cargo-lockfile gap must appear exactly when \
+                 cargo_lockfile is false"
+            );
+            if let Some(gap) = gap {
+                assert!(
+                    gap.detail.contains("--locked"),
+                    "the no-cargo-lockfile gap must explain the --locked precondition: {}",
+                    gap.detail
+                );
+                assert!(
+                    gap.detail.contains("Cargo.lock"),
+                    "the no-cargo-lockfile gap must name Cargo.lock: {}",
+                    gap.detail
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// The lock-file gap is about the workspace, not about Cargo being
+    /// unavailable: a tree with no Cargo workspace at all records
+    /// `no-cargo-metadata` and must not also claim a missing lock file.
+    #[test]
+    fn a_tree_without_a_cargo_workspace_records_no_lockfile_gap() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let plan = build_impact_plan(temp.path(), &["src/lib.rs".to_owned()], "shadow");
+        if plan
+            .evidence_gaps
+            .iter()
+            .any(|gap| gap.kind == "no-cargo-metadata")
+        {
+            assert!(
+                !plan.cargo_lockfile,
+                "without a workspace graph the plan must not claim cargo_lockfile"
+            );
+            assert!(
+                !plan
+                    .evidence_gaps
+                    .iter()
+                    .any(|gap| gap.kind == "no-cargo-lockfile"),
+                "a missing workspace must not also report a missing lock file"
+            );
+        }
+        Ok(())
+    }
+
+    /// This repository commits a workspace `Cargo.lock`, so its own impact plan
+    /// must set `cargo_lockfile` and stay free of the lock-file gap.
+    #[test]
+    fn this_repo_impact_plan_reports_its_committed_lockfile() -> anyhow::Result<()> {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let graph = parse_cargo_workspace(root)
+            .ok_or_else(|| anyhow::anyhow!("cargo metadata should succeed on this repo"))?;
+        assert!(
+            root.join(&graph.workspace_root)
+                .join("Cargo.lock")
+                .is_file(),
+            "fixture precondition: this repo commits a workspace Cargo.lock"
+        );
+        let plan = build_impact_plan(root, &["src/main.rs".to_owned()], "shadow");
+        assert!(
+            plan.cargo_lockfile,
+            "a committed Cargo.lock must set cargo_lockfile"
+        );
+        assert!(
+            !plan
+                .evidence_gaps
+                .iter()
+                .any(|gap| gap.kind == "no-cargo-lockfile"),
+            "a locked workspace must not record the no-cargo-lockfile gap"
+        );
+        Ok(())
+    }
+
     #[test]
     fn cargo_workspace_graph_is_memoized_under_its_exact_root() -> anyhow::Result<()> {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
