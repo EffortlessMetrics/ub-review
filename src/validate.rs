@@ -916,7 +916,7 @@ pub(crate) const INLINE_COMMENT_MAX_REVIEWER_CHARS: usize = 400;
 
 /// Upper bound on the demoted summary text, matching the summary-only
 /// guard's own concise limit in `validate_summary_only_candidate`.
-const DEMOTED_SUMMARY_MAX_CHARS: usize = 1_200;
+pub(crate) const DEMOTED_SUMMARY_MAX_CHARS: usize = 1_200;
 
 pub(crate) fn validate_inline_candidate(
     lane: &LanePlan,
