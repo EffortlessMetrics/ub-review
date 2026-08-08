@@ -37,6 +37,36 @@ pub(crate) fn proof_receipt_is_test_proof_result(receipt: &ProofReceipt) -> bool
     )
 }
 
+/// Decide whether a proof receipt earns a bullet in the PR body.
+///
+/// This is deliberately narrower than [`proof_receipt_is_test_proof_result`],
+/// which still governs gate and follow-up truth: every executed proof counts as
+/// evidence internally, but only a proof that changes what the reviewer does
+/// next earns reviewer attention.
+///
+/// A green result is publishable only when it discriminates the patch — HEAD
+/// passing while base+tests fails is the one outcome that actually answers "did
+/// this PR do what it intended?". A bare `head_passed` does not: for a
+/// `focused-build` receipt it announces that `cargo doc` or `cargo check`
+/// succeeded, and for a focused test with no base+tests side it only says the
+/// test is green at HEAD, which is equally true of a test that asserts nothing.
+/// Both are successful-tool announcements, which `docs/REVIEW_BODY_CONTRACT.md`
+/// bans from PR commentary. Failures stay public because a red proof always
+/// changes the decision.
+pub(crate) fn proof_receipt_is_public_test_proof_result(receipt: &ProofReceipt) -> bool {
+    match receipt.result.as_str() {
+        "discriminating" | "head_failed" => true,
+        "head_passed" => {
+            receipt.kind != "focused-build"
+                && receipt
+                    .commands
+                    .iter()
+                    .any(|command| command.side == "base-plus-tests")
+        }
+        _ => false,
+    }
+}
+
 pub(crate) fn proof_receipt_is_residual_risk(receipt: &ProofReceipt) -> bool {
     matches!(receipt.result.as_str(), "non_discriminating")
 }

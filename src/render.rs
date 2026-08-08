@@ -301,7 +301,7 @@ pub(crate) fn render_pull_request_review_body(
         !missing_observations.is_empty() || !missing_proof_receipts.is_empty();
     let proof_result_receipts = proof_receipts
         .iter()
-        .filter(|receipt| proof_receipt_is_test_proof_result(receipt))
+        .filter(|receipt| proof_receipt_is_public_test_proof_result(receipt))
         .collect::<Vec<_>>();
     let current_proof_failure = proof_receipts
         .iter()
@@ -338,13 +338,6 @@ pub(crate) fn render_pull_request_review_body(
         text.push('\n');
     }
 
-    if !inline_comments.is_empty() {
-        text.push_str("\n## Confirmed findings\n\n");
-        for comment in inline_comments {
-            render_pr_model_signal(&mut text, &comment.body);
-        }
-    }
-
     let summary_concerns = summary_concerns
         .into_iter()
         .filter(|finding| {
@@ -361,8 +354,18 @@ pub(crate) fn render_pull_request_review_body(
                 .any(|comment| review_claims_match(&comment.body, &observation.claim))
         })
         .collect::<Vec<_>>();
-    if !summary_concerns.is_empty() || !concern_observations.is_empty() {
+    // One heading, emitted once. Inline comments lead because they are the
+    // anchored findings; the summary-only items follow. Previously each group
+    // opened its own `## Confirmed findings` block, so any review that had both
+    // an inline comment and a summary finding shipped the same H2 twice.
+    if !inline_comments.is_empty()
+        || !summary_concerns.is_empty()
+        || !concern_observations.is_empty()
+    {
         text.push_str("\n## Confirmed findings\n\n");
+        for comment in inline_comments {
+            render_pr_model_signal(&mut text, &comment.body);
+        }
         for observation in &concern_observations {
             render_review_observation(&mut text, observation, PrObservationTone::Signal);
         }
