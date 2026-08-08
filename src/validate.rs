@@ -988,25 +988,62 @@ pub(crate) fn validate_inline_candidate(
             evidence,
         })
     } else {
+        let diagnostic = format!(
+            "inline guard rejected {}:{}; severity_allowed={} confidence_allowed={} line_valid={} concise={} body_present={} evidence_present={} repo_relative={}",
+            path,
+            candidate.line,
+            allowed_severity,
+            allowed_confidence,
+            line_valid,
+            concise,
+            body_present,
+            evidence_present,
+            repo_relative
+        );
         Err(SummaryOnlyFinding {
             lane: lane.id.clone(),
             severity: candidate.severity,
             confidence: candidate.confidence,
-            reason: format!(
-                "inline guard rejected {}:{}; severity_allowed={} confidence_allowed={} line_valid={} concise={} body_present={} evidence_present={} repo_relative={}",
-                path,
-                candidate.line,
-                allowed_severity,
-                allowed_confidence,
-                line_valid,
-                concise,
-                body_present,
-                evidence_present,
-                repo_relative
-            ),
-            evidence,
+            reason: demoted_inline_finding_reason(&path, candidate.line, body_text, &diagnostic),
+            evidence: demoted_inline_finding_evidence(&evidence, &diagnostic),
         })
     }
+}
+
+/// Reviewer-facing text that survives when an inline candidate is demoted to a
+/// summary-only finding.
+///
+/// Demotion must not destroy what the model actually found. The internal
+/// diagnostic explaining *why* the candidate lost its inline slot is machine
+/// text and stays artifact-side; the public text is the model's own comment
+/// body, still anchored to `path:line` so a demoted finding remains line-level
+/// and actionable. A candidate with no body carries no finding to preserve, so
+/// the diagnostic is the only text left.
+pub(crate) fn demoted_inline_finding_reason(
+    path: &str,
+    line: u32,
+    body: &str,
+    diagnostic: &str,
+) -> String {
+    let body = strip_bracketed_lane_prefix(body).unwrap_or(body).trim();
+    if body.is_empty() {
+        return diagnostic.to_owned();
+    }
+    let path = path.trim();
+    if path.is_empty() || body.contains(&format!("{path}:{line}")) {
+        return body.to_owned();
+    }
+    format!("{path}:{line} — {body}")
+}
+
+/// Keep the demotion diagnostic next to the candidate's own evidence. Only
+/// `reason` reaches the PR body, so the diagnostic stays artifact-side here.
+pub(crate) fn demoted_inline_finding_evidence(evidence: &str, diagnostic: &str) -> String {
+    let evidence = evidence.trim();
+    if evidence.is_empty() {
+        return diagnostic.to_owned();
+    }
+    format!("{evidence} [demotion diagnostic: {diagnostic}]")
 }
 
 #[cfg(test)]
@@ -1082,5 +1119,134 @@ mod claim_identity_tests {
         let unclassified = make("The declaration list needs a clearer explanation here.");
         assert!(!same_inline_claim(&exact_left, &unclassified));
         assert!(inline_claim_code_tokens("plain prose").is_empty());
+    }
+}
+
+#[cfg(test)]
+mod inline_demotion_tests {
+    use std::collections::BTreeSet;
+
+    use anyhow::{Result, anyhow};
+
+    use crate::tests::{test_diff, test_plan};
+    use crate::*;
+
+    const MODEL_FINDING: &str = "The retry loop reuses the scratch buffer after the async write completes, so a second write can observe freed memory.";
+
+    fn demotion_lane() -> LanePlan {
+        LanePlan {
+            id: "ub".to_owned(),
+            role: "UB review".to_owned(),
+            model: "custom:MiniMax-M3-3".to_owned(),
+            model_display: "MiniMax-M3".to_owned(),
+            receives: vec!["ripr".to_owned()],
+            focus: "Check memory validity.".to_owned(),
+        }
+    }
+
+    fn unanchored_candidate() -> ModelCandidateComment {
+        ModelCandidateComment {
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/lib.rs".to_owned(),
+            line: 412,
+            body: MODEL_FINDING.to_owned(),
+            evidence: "src/lib.rs hunk around the retry loop".to_owned(),
+            suggestion: None,
+        }
+    }
+
+    #[test]
+    fn anchoring_failure_keeps_the_model_finding_out_of_the_diagnostic() -> Result<()> {
+        // Empty line map: the claimed anchor is not a changed RIGHT-side line.
+        let line_map = BTreeSet::new();
+        let finding =
+            validate_inline_candidate(&demotion_lane(), unanchored_candidate(), &line_map)
+                .err()
+                .ok_or_else(|| anyhow!("an unanchored candidate must be demoted"))?;
+
+        assert!(
+            finding.reason.contains(MODEL_FINDING),
+            "demotion dropped the model finding: {}",
+            finding.reason
+        );
+        assert!(
+            finding.reason.contains("src/lib.rs:412"),
+            "demotion dropped the line anchor: {}",
+            finding.reason
+        );
+        assert!(!finding.reason.contains("inline guard rejected"));
+        assert!(!finding.reason.contains("line_valid="));
+        assert!(
+            finding.evidence.contains("line_valid=false"),
+            "the guard diagnostic must stay artifact-side: {}",
+            finding.evidence
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn demoted_anchoring_failure_survives_into_the_pull_request_body() -> Result<()> {
+        let line_map = BTreeSet::new();
+        let finding =
+            validate_inline_candidate(&demotion_lane(), unanchored_candidate(), &line_map)
+                .err()
+                .ok_or_else(|| anyhow!("an unanchored candidate must be demoted"))?;
+
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[finding],
+            &[] as &[Observation],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(
+            body.contains("reuses the scratch buffer after the async write"),
+            "the model finding never reached the PR body: {body}"
+        );
+        assert!(body.contains("src/lib.rs:412"), "{body}");
+        assert!(!body.contains("inline guard rejected"), "{body}");
+        assert!(!body.contains("line_valid="), "{body}");
+        assert!(!body.contains("severity_allowed"), "{body}");
+        assert!(!body.contains("hunk around the retry loop"), "{body}");
+        Ok(())
+    }
+
+    #[test]
+    fn refuter_demotion_keeps_the_model_finding_and_parks_the_diagnostic() {
+        let comment = ReviewInlineComment {
+            lane: "ub".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/lib.rs".to_owned(),
+            line: 412,
+            side: "RIGHT".to_owned(),
+            body: format!("[ub] {MODEL_FINDING}"),
+            evidence: "src/lib.rs hunk around the retry loop".to_owned(),
+            suggestion: None,
+        };
+
+        let finding = summary_from_refuted_inline(comment, "confidence is not high enough");
+
+        assert!(finding.reason.contains(MODEL_FINDING), "{}", finding.reason);
+        assert!(
+            finding.reason.contains("src/lib.rs:412"),
+            "{}",
+            finding.reason
+        );
+        assert!(!finding.reason.contains("refuter"), "{}", finding.reason);
+        assert!(
+            finding.evidence.contains("confidence is not high enough"),
+            "{}",
+            finding.evidence
+        );
     }
 }

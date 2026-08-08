@@ -8033,10 +8033,13 @@ index 1111111..2222222 100644
             },
             &line_map,
         );
-        assert!(
-            missing_evidence
-                .is_err_and(|finding| { finding.reason.contains("evidence_present=false") })
-        );
+        assert!(missing_evidence.is_err_and(|finding| {
+            // The guard diagnostic stays artifact-side; the reviewer-facing
+            // reason keeps the model's own claim, anchored to the line.
+            finding.evidence.contains("evidence_present=false")
+                && finding.reason.contains("line-valid but unsupported claim")
+                && !finding.reason.contains("evidence_present=")
+        }));
 
         let empty_body = validate_inline_candidate(
             &lane,
@@ -8122,9 +8125,17 @@ index 1111111..2222222 100644
         assert!(
             summary_only_findings[0]
                 .reason
-                .contains("candidate-only lane emitted inline candidate")
+                .contains("src/lib.rs:2 — This is line-valid but must stay candidate-only."),
+            "{}",
+            summary_only_findings[0].reason
         );
-        assert_eq!(summary_only_findings[0].evidence, "diff hunk");
+        assert!(
+            summary_only_findings[0]
+                .evidence
+                .starts_with("diff hunk [demotion diagnostic: candidate-only lane demotion"),
+            "{}",
+            summary_only_findings[0].evidence
+        );
     }
 
     #[test]
@@ -10627,15 +10638,23 @@ index 1111111..2222222 100644
 
         assert!(inline_comments.is_empty());
         assert_eq!(summary_only_findings.len(), 2);
+        // Both demotions keep the model's own anchored finding public; the
+        // refuter diagnostic is parked in evidence.
+        assert!(summary_only_findings.iter().any(|finding| {
+            finding.reason == "src/lib.rs:2 — This test does not prove the changed boundary."
+        }));
+        assert!(summary_only_findings.iter().any(|finding| {
+            finding.reason == "src/lib.rs:4 — A sibling path may share the helper."
+        }));
         assert!(summary_only_findings.iter().any(|finding| {
             finding
-                .reason
+                .evidence
                 .contains("plausible but not line-local enough")
         }));
         assert!(
             summary_only_findings
                 .iter()
-                .any(|finding| finding.reason.contains("returned no decision"))
+                .any(|finding| finding.evidence.contains("returned no decision"))
         );
     }
 
@@ -10676,14 +10695,18 @@ index 1111111..2222222 100644
 
         assert!(inline_comments.is_empty());
         assert_eq!(summary_only_findings.len(), 1);
+        assert_eq!(
+            summary_only_findings[0].reason,
+            "src/lib.rs:2 — This test does not prove the changed boundary."
+        );
         assert!(
             summary_only_findings[0]
-                .reason
+                .evidence
                 .contains("refuter unavailable")
         );
         assert!(
             summary_only_findings[0]
-                .reason
+                .evidence
                 .contains("model call budget exhausted before refuter pass")
         );
         assert_eq!(model_lanes.len(), 1);
@@ -23419,8 +23442,17 @@ index 1111111..2222222 100644
         assert_eq!(summary_only_findings.len(), 1);
         assert_eq!(summary_only_findings[0].lane, "unsafe-review");
         assert!(
-            summary_only_findings[0].reason.contains("line_valid=false"),
+            summary_only_findings[0]
+                .evidence
+                .contains("line_valid=false"),
             "stale anchors must be rejected by validate_inline_candidate: {:?}",
+            summary_only_findings[0]
+        );
+        assert!(
+            summary_only_findings[0]
+                .reason
+                .starts_with("src/lib.rs:99 —"),
+            "the demoted finding must keep its anchor and text: {:?}",
             summary_only_findings[0]
         );
         Ok(())

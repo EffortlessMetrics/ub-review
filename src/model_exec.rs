@@ -1082,15 +1082,19 @@ pub(crate) fn summary_from_refuted_inline(
     comment: ReviewInlineComment,
     reason: &str,
 ) -> SummaryOnlyFinding {
+    let diagnostic = format!(
+        "refuter demotion at {}:{}: {}",
+        comment.path, comment.line, reason
+    );
+    let surviving_reason =
+        demoted_inline_finding_reason(&comment.path, comment.line, &comment.body, &diagnostic);
+    let evidence = demoted_inline_finding_evidence(&comment.evidence, &diagnostic);
     SummaryOnlyFinding {
         lane: comment.lane,
         severity: comment.severity,
         confidence: comment.confidence,
-        reason: format!(
-            "refuter demoted inline candidate at {}:{}: {}",
-            comment.path, comment.line, reason
-        ),
-        evidence: comment.evidence,
+        reason: surviving_reason,
+        evidence,
     }
 }
 
@@ -1703,15 +1707,21 @@ pub(crate) fn apply_model_output(
             continue;
         }
         if is_candidate_only_lane(&lane.id) {
+            let diagnostic = format!(
+                "candidate-only lane demotion at {}:{}; lane may not post inline",
+                candidate.path, candidate.line
+            );
             summary_only_findings.push(SummaryOnlyFinding {
                 lane: lane.id.clone(),
                 severity: candidate.severity,
                 confidence: candidate.confidence,
-                reason: format!(
-                    "candidate-only lane emitted inline candidate for {}:{}; kept summary-only",
-                    candidate.path, candidate.line
+                reason: demoted_inline_finding_reason(
+                    &candidate.path,
+                    candidate.line,
+                    &candidate.body,
+                    &diagnostic,
                 ),
-                evidence: candidate.evidence,
+                evidence: demoted_inline_finding_evidence(&candidate.evidence, &diagnostic),
             });
             continue;
         }
