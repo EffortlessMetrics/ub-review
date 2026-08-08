@@ -274,8 +274,11 @@ fn github_thread_records(
                     .map(str::to_owned),
                 line: item
                     .get("line")
-                    .or_else(|| item.get("original_line"))
                     .and_then(serde_json::Value::as_u64)
+                    .or_else(|| {
+                        item.get("original_line")
+                            .and_then(serde_json::Value::as_u64)
+                    })
                     .and_then(|line| u32::try_from(line).ok()),
                 commit_id,
                 head_binding: head_binding.to_owned(),
@@ -591,6 +594,38 @@ mod structured_thread_tests {
                 .first()
                 .is_some_and(|item| item.head_binding == "stale")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn github_records_fall_back_to_original_line_when_line_is_unusable() -> Result<()> {
+        let value = serde_json::json!([
+            {
+                "id": 44,
+                "path": "src/parser.rs",
+                "line": null,
+                "original_line": 23,
+                "commit_id": "abc123"
+            },
+            {
+                "id": 45,
+                "path": "src/parser.rs",
+                "line": "not-a-line",
+                "original_line": 29,
+                "commit_id": "abc123"
+            }
+        ]);
+
+        let records = github_thread_records("review-comments", &value, "abc123");
+        let first = records
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("expected null-line record"))?;
+        let second = records
+            .get(1)
+            .ok_or_else(|| anyhow::anyhow!("expected non-numeric-line record"))?;
+        anyhow::ensure!(records.len() == 2);
+        anyhow::ensure!(first.line == Some(23));
+        anyhow::ensure!(second.line == Some(29));
         Ok(())
     }
 
