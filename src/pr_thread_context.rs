@@ -630,6 +630,37 @@ mod structured_thread_tests {
     }
 
     #[test]
+    fn github_records_reject_unusable_original_line_instead_of_miscasting() -> Result<()> {
+        let value = serde_json::json!([
+            {
+                "id": 46,
+                "path": "src/parser.rs",
+                "line": null,
+                "original_line": -1,
+                "commit_id": "abc123"
+            },
+            {
+                "id": 47,
+                "path": "src/parser.rs",
+                "line": null,
+                "commit_id": "abc123"
+            }
+        ]);
+
+        let records = github_thread_records("review-comments", &value, "abc123");
+        anyhow::ensure!(records.len() == 2);
+        let sentinel = records
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("expected negative-sentinel record"))?;
+        let absent = records
+            .get(1)
+            .ok_or_else(|| anyhow::anyhow!("expected missing-original_line record"))?;
+        anyhow::ensure!(sentinel.line.is_none());
+        anyhow::ensure!(absent.line.is_none());
+        Ok(())
+    }
+
+    #[test]
     fn unbound_issue_comment_cannot_certify_current_head() -> Result<()> {
         let value = serde_json::json!([{
             "node_id": "IC_kwDO",
