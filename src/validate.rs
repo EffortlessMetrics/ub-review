@@ -1004,7 +1004,13 @@ pub(crate) fn validate_inline_candidate(
             lane: lane.id.clone(),
             severity: candidate.severity,
             confidence: candidate.confidence,
-            reason: demoted_inline_finding_reason(&path, candidate.line, body_text, &diagnostic),
+            reason: demoted_inline_finding_reason(
+                &path,
+                candidate.line,
+                body_text,
+                &evidence,
+                &diagnostic,
+            ),
             evidence: demoted_inline_finding_evidence(&evidence, &diagnostic),
         })
     }
@@ -1019,21 +1025,55 @@ pub(crate) fn validate_inline_candidate(
 /// body, still anchored to `path:line` so a demoted finding remains line-level
 /// and actionable. A candidate with no body carries no finding to preserve, so
 /// the diagnostic is the only text left.
+///
+/// A candidate with no evidence of its own likewise keeps the diagnostic as
+/// its reason, which leaves it artifact-only. Publishing an unsupported model
+/// claim under "## Confirmed findings" would break the architecture rule that
+/// missing evidence is recorded as missing evidence and never as clean
+/// evidence — and `evidence_present=false` is one of the rejections that
+/// reaches this path. Preserving the model's text is for findings that had
+/// something behind them.
 pub(crate) fn demoted_inline_finding_reason(
     path: &str,
     line: u32,
     body: &str,
+    evidence: &str,
     diagnostic: &str,
 ) -> String {
     let body = strip_bracketed_lane_prefix(body).unwrap_or(body).trim();
-    if body.is_empty() {
+    if body.is_empty() || evidence.trim().is_empty() {
         return diagnostic.to_owned();
     }
+    // Every sibling constructor caps its reviewer-facing text. Uncapped, a
+    // single oversized demoted finding pops every other topic out of the body
+    // during degradation and the rest of the review is lost — and the
+    // rejection that most often reaches this path is `concise=false`, i.e. a
+    // body that was already too long.
+    let body = truncate_chars(body, DEMOTED_INLINE_FINDING_MAX_CHARS);
     let path = path.trim();
-    if path.is_empty() || body.contains(&format!("{path}:{line}")) {
-        return body.to_owned();
+    if path.is_empty() || body_already_anchored(&body, path, line) {
+        return body;
     }
     format!("{path}:{line} — {body}")
+}
+
+/// Reviewer-facing cap for a demoted finding, matching the summary-candidate
+/// cap in this module.
+const DEMOTED_INLINE_FINDING_MAX_CHARS: usize = 1_200;
+
+/// True when the body already states this exact anchor.
+///
+/// A plain `contains("{path}:{line}")` also matches a longer line number, so a
+/// finding at line 41 whose body mentions `src/lib.rs:412` would silently lose
+/// its own anchor. Require that the match is not followed by another digit.
+fn body_already_anchored(body: &str, path: &str, line: u32) -> bool {
+    let needle = format!("{path}:{line}");
+    body.match_indices(&needle).any(|(index, _)| {
+        !body[index + needle.len()..]
+            .chars()
+            .next()
+            .is_some_and(|next| next.is_ascii_digit())
+    })
 }
 
 /// Keep the demotion diagnostic next to the candidate's own evidence. Only
@@ -1132,6 +1172,40 @@ mod inline_demotion_tests {
     use crate::*;
 
     const MODEL_FINDING: &str = "The retry loop reuses the scratch buffer after the async write completes, so a second write can observe freed memory.";
+
+    /// A body mentioning a longer line number at the same path must not be
+    /// mistaken for the finding's own anchor. `contains("src/lib.rs:41")`
+    /// matches inside `src/lib.rs:412`, which silently dropped the anchor.
+    #[test]
+    fn demoted_anchor_is_not_satisfied_by_a_longer_line_number() {
+        let body = "The caller at src/lib.rs:412 already revalidated the pointer.";
+        let reason = demoted_inline_finding_reason("src/lib.rs", 41, body, "ev", "diag");
+        assert!(
+            reason.starts_with("src/lib.rs:41 — "),
+            "line 41 must keep its own anchor: {reason}"
+        );
+
+        // The exact anchor is still recognized and not duplicated.
+        let exact = "src/lib.rs:41 is where the borrow escapes.";
+        let reason = demoted_inline_finding_reason("src/lib.rs", 41, exact, "ev", "diag");
+        assert_eq!(reason, exact);
+    }
+
+    /// A candidate with no evidence stays artifact-only, and an over-long body
+    /// cannot pop every other topic out of the degraded body.
+    #[test]
+    fn demoted_reason_withholds_unsupported_claims_and_caps_length() {
+        let reason = demoted_inline_finding_reason("src/lib.rs", 41, MODEL_FINDING, "  ", "diag");
+        assert_eq!(reason, "diag");
+
+        let long = "x".repeat(5_000);
+        let reason = demoted_inline_finding_reason("src/lib.rs", 41, &long, "ev", "diag");
+        assert!(
+            reason.chars().count() <= 1_200 + "src/lib.rs:41 — ".chars().count(),
+            "demoted reason must be capped, got {} chars",
+            reason.chars().count()
+        );
+    }
 
     fn demotion_lane() -> LanePlan {
         LanePlan {

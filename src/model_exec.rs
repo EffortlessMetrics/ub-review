@@ -1086,8 +1086,13 @@ pub(crate) fn summary_from_refuted_inline(
         "refuter demotion at {}:{}: {}",
         comment.path, comment.line, reason
     );
-    let surviving_reason =
-        demoted_inline_finding_reason(&comment.path, comment.line, &comment.body, &diagnostic);
+    let surviving_reason = demoted_inline_finding_reason(
+        &comment.path,
+        comment.line,
+        &comment.body,
+        &comment.evidence,
+        &diagnostic,
+    );
     let evidence = demoted_inline_finding_evidence(&comment.evidence, &diagnostic);
     SummaryOnlyFinding {
         lane: comment.lane,
@@ -1716,9 +1721,10 @@ pub(crate) fn apply_model_output(
                 severity: candidate.severity,
                 confidence: candidate.confidence,
                 reason: demoted_inline_finding_reason(
-                    &candidate.path,
+                    path.as_deref().unwrap_or_default(),
                     candidate.line,
                     &candidate.body,
+                    &candidate.evidence,
                     &diagnostic,
                 ),
                 evidence: demoted_inline_finding_evidence(&candidate.evidence, &diagnostic),

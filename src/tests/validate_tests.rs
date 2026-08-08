@@ -281,11 +281,13 @@ index 1111111..2222222 100644
         &line_map,
     );
     assert!(missing_evidence.is_err_and(|finding| {
-        // The guard diagnostic stays artifact-side; the reviewer-facing reason
-        // keeps the model's own claim, anchored to the rejected line.
-        finding.evidence.contains("evidence_present=false")
-            && finding.reason.contains("line-valid but unsupported claim")
-            && !finding.reason.contains("evidence_present=")
+        // A candidate rejected for having no evidence must NOT surface its
+        // claim publicly: missing evidence is recorded as missing evidence,
+        // never as clean evidence. The diagnostic stays in `reason`, which is
+        // what keeps the finding artifact-only.
+        finding.reason.contains("evidence_present=false")
+            && !finding.reason.contains("line-valid but unsupported claim")
+            && crate::is_pr_body_artifact_only_finding(&finding)
     }));
 
     let empty_body = validate_inline_candidate(
