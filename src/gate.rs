@@ -37,6 +37,42 @@ pub(crate) struct GateCheckOutcome {
 pub(crate) struct GateCheckReason {
     #[serde(default)]
     pub(crate) id: String,
+    /// What actually failed. The writer always emits this; enforcement used to
+    /// discard it, so a failing check printed a bare sensor name and the
+    /// operator had to open the artifact to learn anything.
+    #[serde(default)]
+    pub(crate) detail: String,
+    /// Operator action, present for operational failures.
+    #[serde(default)]
+    pub(crate) next_action: Option<String>,
+    #[serde(default)]
+    pub(crate) receipt: String,
+}
+
+/// Print one line per blocking reason, so a failing gate is actionable from
+/// the log alone. The `::error::` annotation stays a single line because
+/// GitHub renders it in the checks UI; this detail goes to the step log.
+fn print_gate_reason_detail(reasons: &[GateCheckReason]) {
+    for reason in reasons {
+        let id = reason.id.trim();
+        if id.is_empty() {
+            continue;
+        }
+        let detail = reason.detail.trim();
+        if detail.is_empty() {
+            println!("  {id}");
+        } else {
+            println!("  {id}: {detail}");
+        }
+        if !reason.receipt.trim().is_empty() {
+            println!("    receipt: {}", reason.receipt.trim());
+        }
+        if let Some(next_action) = reason.next_action.as_deref().map(str::trim)
+            && !next_action.is_empty()
+        {
+            println!("    next: {next_action}");
+        }
+    }
 }
 
 /// Single source of truth for gate enforcement: resolves `fail-on-gate` with
@@ -135,6 +171,7 @@ pub(crate) fn cmd_gate_check(args: GateCheckArgs) -> Result<()> {
                 "ub-review gate failed (blocking reasons: {reason_ids}); receipts are in {}",
                 path.display()
             );
+            print_gate_reason_detail(&outcome.reasons);
             // GitHub Actions error annotation; the bail below sets the exit code.
             println!("::error::{message}");
             bail!("{message}");
@@ -155,6 +192,7 @@ pub(crate) fn cmd_gate_check(args: GateCheckArgs) -> Result<()> {
                  receipts are in {}; check the artifact tree for what was missing",
                 path.display()
             );
+            print_gate_reason_detail(&outcome.reasons);
             println!("::error::{message}");
             bail!("{message}");
         }
@@ -684,6 +722,47 @@ mod tests {
         sensor_plan, test_plan, test_proof_receipt, test_run_args, test_terminal_state,
     };
     use crate::*;
+
+    /// Enforcement used to deserialize only `id`, so a failing gate printed a
+    /// bare sensor name while the artifact held the actual cause and the fix.
+    #[test]
+    fn gate_check_reason_carries_detail_and_next_action() -> Result<()> {
+        let outcome: GateCheckOutcome = serde_json::from_str(
+            r#"{
+                "schema": "ub-review.gate_outcome.v1",
+                "conclusion": "fail",
+                "reasons": [{
+                    "kind": "tool-gate",
+                    "id": "ripr",
+                    "detail": "new_unsuppressed=4 exceeds configured maximum 0",
+                    "receipt": "review/tool-gate-outcomes.json#ripr",
+                    "next_action": "inspect sensors/ripr/exposure-gaps.json"
+                }]
+            }"#,
+        )?;
+        let reason = outcome
+            .reasons
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("expected one blocking reason"))?;
+        anyhow::ensure!(reason.id == "ripr");
+        anyhow::ensure!(reason.detail == "new_unsuppressed=4 exceeds configured maximum 0");
+        anyhow::ensure!(reason.receipt == "review/tool-gate-outcomes.json#ripr");
+        anyhow::ensure!(
+            reason.next_action.as_deref() == Some("inspect sensors/ripr/exposure-gaps.json")
+        );
+        Ok(())
+    }
+
+    /// A reason with no detail must still print without panicking or emitting
+    /// a dangling separator.
+    #[test]
+    fn gate_check_reason_tolerates_missing_detail() -> Result<()> {
+        let outcome: GateCheckOutcome =
+            serde_json::from_str(r#"{"conclusion":"fail","reasons":[{"id":"policy"},{"id":""}]}"#)?;
+        anyhow::ensure!(outcome.reasons.len() == 2);
+        super::print_gate_reason_detail(&outcome.reasons);
+        Ok(())
+    }
 
     fn required_policy_proof_request(id: &str) -> ProofRequest {
         ProofRequest {
