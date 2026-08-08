@@ -49,27 +49,52 @@ pub(crate) struct GateCheckReason {
     pub(crate) receipt: String,
 }
 
+/// Collapse a gate-artifact string into a single safe log line.
+///
+/// GitHub Actions parses any line beginning with `::` as a workflow command,
+/// so a reason field containing a newline followed by `::set-output` (or
+/// `::add-mask`, `::error`) would inject one. These fields are not fully
+/// trusted: a `detail` can quote repository configuration, and a tool gate can
+/// surface text that originated in the reviewed branch. Fold every line break
+/// into a space so one field can only ever produce one line, and bound the
+/// length so a pathological artifact cannot flood the log.
+fn gate_reason_log_text(value: &str) -> String {
+    let folded = value
+        .split(['\r', '\n'])
+        .map(str::trim)
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    crate::truncate_chars(&folded, GATE_REASON_LOG_MAX_CHARS)
+}
+
+const GATE_REASON_LOG_MAX_CHARS: usize = 500;
+
 /// Print one line per blocking reason, so a failing gate is actionable from
 /// the log alone. The `::error::` annotation stays a single line because
 /// GitHub renders it in the checks UI; this detail goes to the step log.
 fn print_gate_reason_detail(reasons: &[GateCheckReason]) {
     for reason in reasons {
-        let id = reason.id.trim();
+        let id = gate_reason_log_text(&reason.id);
         if id.is_empty() {
             continue;
         }
-        let detail = reason.detail.trim();
+        let detail = gate_reason_log_text(&reason.detail);
         if detail.is_empty() {
             println!("  {id}");
         } else {
             println!("  {id}: {detail}");
         }
-        if !reason.receipt.trim().is_empty() {
-            println!("    receipt: {}", reason.receipt.trim());
+        let receipt = gate_reason_log_text(&reason.receipt);
+        if !receipt.is_empty() {
+            println!("    receipt: {receipt}");
         }
-        if let Some(next_action) = reason.next_action.as_deref().map(str::trim)
-            && !next_action.is_empty()
-        {
+        let next_action = reason
+            .next_action
+            .as_deref()
+            .map(gate_reason_log_text)
+            .unwrap_or_default();
+        if !next_action.is_empty() {
             println!("    next: {next_action}");
         }
     }
@@ -761,6 +786,25 @@ mod tests {
             serde_json::from_str(r#"{"conclusion":"fail","reasons":[{"id":"policy"},{"id":""}]}"#)?;
         anyhow::ensure!(outcome.reasons.len() == 2);
         super::print_gate_reason_detail(&outcome.reasons);
+        Ok(())
+    }
+
+    /// A reason field can quote repository configuration, so it is not fully
+    /// trusted. GitHub Actions treats any line starting with `::` as a
+    /// workflow command; an embedded newline would let one inject a command.
+    #[test]
+    fn gate_reason_log_text_cannot_inject_a_workflow_command() -> Result<()> {
+        let hostile = "boom\n::add-mask::secret\r\n::error::spoofed";
+        let folded = super::gate_reason_log_text(hostile);
+        anyhow::ensure!(!folded.contains('\n') && !folded.contains('\r'));
+        anyhow::ensure!(
+            folded == "boom ::add-mask::secret ::error::spoofed",
+            "unexpected fold: {folded}"
+        );
+
+        // Bounded so a pathological artifact cannot flood the step log.
+        let flood = "x".repeat(10_000);
+        anyhow::ensure!(super::gate_reason_log_text(&flood).chars().count() <= 500);
         Ok(())
     }
 
