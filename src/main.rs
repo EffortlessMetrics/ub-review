@@ -3984,14 +3984,17 @@ fn unsafe_review_comment_plan_candidates(
             })
             .unwrap_or_default();
         let suggestion = rq_entry.and_then(RepairQueueEntry::suggestion);
+        // The 155-character advisory footer this template used to repeat on
+        // every card was pure boilerplate on a source line and pushed the
+        // standard card past `INLINE_COMMENT_MAX_REVIEWER_CHARS`. The advisory
+        // status is stated once, briefly; the full trust-boundary sentence and
+        // sensor provenance remain in the shared context and artifacts.
         let body = truncate_chars(
             &format!(
                 "**{gap}**{card_label}\n\n\
                  **Next action**: {action}\n\n\
                  **Trust boundary** (advisory): {trust}{rq_context}\n\n\
-                 _Sourced from unsafe-review advisory output. \
-                 Apply only after reviewer verification. \
-                 Inline comments are advisory - they do not change the merge decision._"
+                 _Advisory: verify before applying._"
             ),
             1_100,
         );
