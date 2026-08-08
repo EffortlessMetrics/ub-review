@@ -332,7 +332,7 @@ pub(crate) fn render_pull_request_review_body(
     }
 
     if let Some(decision_sentence) = decision_sentence {
-        text.push_str("## Decision\n\n");
+        push_pr_section_heading(&mut text, "## Decision");
         text.push_str("- ");
         text.push_str(decision_sentence);
         text.push('\n');
@@ -362,7 +362,7 @@ pub(crate) fn render_pull_request_review_body(
         || !summary_concerns.is_empty()
         || !concern_observations.is_empty()
     {
-        text.push_str("\n## Confirmed findings\n\n");
+        push_pr_section_heading(&mut text, "## Confirmed findings");
         for comment in inline_comments {
             render_pr_model_signal(&mut text, &comment.body);
         }
@@ -375,7 +375,7 @@ pub(crate) fn render_pull_request_review_body(
     }
 
     if !verification_questions.is_empty() {
-        text.push_str("\n## Verification questions\n\n");
+        push_pr_section_heading(&mut text, "## Verification questions");
         for observation in &verification_observations {
             render_review_observation(&mut text, observation, PrObservationTone::Verification);
         }
@@ -383,14 +383,14 @@ pub(crate) fn render_pull_request_review_body(
             render_pr_model_verification(&mut text, &finding.reason);
         }
     } else if !verification_observations.is_empty() {
-        text.push_str("\n## Verification questions\n\n");
+        push_pr_section_heading(&mut text, "## Verification questions");
         for observation in &verification_observations {
             render_review_observation(&mut text, observation, PrObservationTone::Verification);
         }
     }
 
     if !refuted_observations.is_empty() {
-        text.push_str("\n## Refuted\n\n");
+        push_pr_section_heading(&mut text, "## Refuted");
         for observation in &refuted_observations {
             render_review_observation(&mut text, observation, PrObservationTone::Signal);
         }
@@ -401,9 +401,9 @@ pub(crate) fn render_pull_request_review_body(
             .iter()
             .any(|receipt| receipt.kind == "focused-build")
         {
-            text.push_str("\n## Proof results\n\n");
+            push_pr_section_heading(&mut text, "## Proof results");
         } else {
-            text.push_str("\n## Test proof\n\n");
+            push_pr_section_heading(&mut text, "## Test proof");
         }
         for receipt in proof_result_receipts {
             render_proof_receipt_summary(&mut text, receipt);
@@ -411,7 +411,7 @@ pub(crate) fn render_pull_request_review_body(
     }
 
     if !parked.is_empty() {
-        text.push_str("\n## Parked follow-ups\n\n");
+        push_pr_section_heading(&mut text, "## Parked follow-ups");
         for observation in &parked_observations {
             render_review_observation(&mut text, observation, PrObservationTone::Signal);
         }
@@ -419,14 +419,14 @@ pub(crate) fn render_pull_request_review_body(
             render_pr_model_signal(&mut text, &finding.reason);
         }
     } else if !parked_observations.is_empty() {
-        text.push_str("\n## Parked follow-ups\n\n");
+        push_pr_section_heading(&mut text, "## Parked follow-ups");
         for observation in &parked_observations {
             render_review_observation(&mut text, observation, PrObservationTone::Signal);
         }
     }
 
     if has_specific_missing_evidence {
-        text.push_str("\n## Evidence gaps\n\n");
+        push_pr_section_heading(&mut text, "## Evidence gaps");
         for observation in &missing_observations {
             render_review_observation(&mut text, observation, PrObservationTone::Signal);
         }
@@ -436,6 +436,22 @@ pub(crate) fn render_pull_request_review_body(
     }
 
     cap_review_body(text, review_body_max_bytes)
+}
+
+/// Open a PR-body section, separated from the previous one by exactly one
+/// blank line.
+///
+/// This owns the separator invariant rather than leaving each call site to
+/// hardcode a leading newline. Every section but `## Decision` used to embed
+/// its own `\n` prefix, so whenever the decision sentence was suppressed the
+/// posted review opened with a blank line — a visible glitch at the very top
+/// of the body, and one that no `contains` assertion could catch.
+fn push_pr_section_heading(text: &mut String, heading: &str) {
+    if !text.is_empty() {
+        text.push('\n');
+    }
+    text.push_str(heading);
+    text.push_str("\n\n");
 }
 
 /// Return true only when the receipt carries an exact identity emitted by the

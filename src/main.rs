@@ -16933,6 +16933,15 @@ index 1111111..2222222 100644
         assert!(!body.contains("stdout.txt"));
         assert!(!body.contains("stderr.txt"));
         assert!(!has_standalone_approval_line(&body));
+        // This is the shape where the decision sentence is suppressed, so the
+        // first section rendered is also the first line of the posted review.
+        // Every section but `## Decision` used to hardcode a leading newline,
+        // which opened the review with a blank line.
+        assert!(
+            body.starts_with("## "),
+            "posted body must not open with a blank line: {body:?}"
+        );
+        assert!(!body.contains("\n\n\n"));
     }
 
     #[test]
