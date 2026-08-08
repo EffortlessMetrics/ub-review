@@ -31,6 +31,12 @@ pub(crate) use planner::*;
 pub(crate) mod red_green;
 pub(crate) use red_green::*;
 
+pub(crate) mod patch_split;
+pub(crate) use patch_split::*;
+
+pub(crate) mod rust_test_regions;
+pub(crate) use rust_test_regions::*;
+
 pub(crate) mod worktree;
 pub(crate) use worktree::*;
 pub(crate) mod intent;
