@@ -802,9 +802,21 @@ mod tests {
             "unexpected fold: {folded}"
         );
 
-        // Bounded so a pathological artifact cannot flood the step log.
+        // Bounded so a pathological artifact cannot flood the step log. Pin
+        // the exact width: `<= 500` would still pass if the cap were lowered
+        // to 400, or if truncation dropped the text entirely.
         let flood = "x".repeat(10_000);
-        anyhow::ensure!(super::gate_reason_log_text(&flood).chars().count() <= 500);
+        let capped = super::gate_reason_log_text(&flood);
+        anyhow::ensure!(
+            capped == format!("{}...", "x".repeat(497)),
+            "expected 497 chars plus an ellipsis, got {} chars",
+            capped.chars().count()
+        );
+
+        // Just under the cap is returned whole, so the cap cannot be satisfied
+        // by truncating everything.
+        let short = "y".repeat(499);
+        anyhow::ensure!(super::gate_reason_log_text(&short) == short);
         Ok(())
     }
 
