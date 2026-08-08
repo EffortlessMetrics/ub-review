@@ -4375,6 +4375,17 @@ fn model_outage_degrades_review_without_reddening_enforced_gate() -> Result<()> 
     assert_eq!(gate["evidence_gaps_blocking"], 0);
     assert!(gate["evidence_gaps_advisory"].as_u64().unwrap_or_default() > 0);
     assert!(gate["reasons"].as_array().is_some_and(Vec::is_empty));
+    // #839: enforcement stays non-blocking (`conclusion` is still `pass`), but
+    // the reported results must not claim the outage produced a clean review.
+    assert_ne!(gate["analysis_result"], "clean");
+    assert_ne!(gate["gate_result"], "pass");
+    assert!(
+        gate["not_proven_reasons"]
+            .as_array()
+            .is_some_and(|reasons| !reasons.is_empty()),
+        "gate_outcome must name why nothing was proven: {gate}"
+    );
+    assert_eq!(gate["model_coverage"]["lanes_usable"], 0);
     Ok(())
 }
 

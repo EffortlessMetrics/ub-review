@@ -14,6 +14,10 @@ use serde::{Deserialize, Serialize};
 use crate::artifacts::GATE_OUTCOME_SCHEMA;
 use crate::cli::GateCheckArgs;
 use crate::config::Config;
+use crate::gate_truth::{
+    GateModelCoverage, GateSensorCoverage, GateTruthInput, build_gate_truth,
+    gate_reason_kind_is_evidence_unavailable,
+};
 use crate::{
     ModelEvidenceIssue, Plan, ProofReceipt, ProofRequest, ReviewTerminalState, RunArgs,
     RunCompletion, RunMode, SensorEvidenceIssue, SensorPlan, ToolGateOutcomeEntry,
@@ -261,13 +265,32 @@ pub(crate) fn cmd_gate_check(args: GateCheckArgs) -> Result<()> {
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct GateOutcome {
     pub(crate) schema: String,
+    /// Legacy single verdict, unchanged in meaning and the only field
+    /// `gate-check` enforces: `pass | fail | inconclusive`. #839 added the
+    /// separated `analysis_result` / `publication_result` / `gate_result`
+    /// alongside it rather than redefining it, so a consumer pinned by SHA
+    /// keeps the verdict it already branches on.
     pub(crate) conclusion: String,
     pub(crate) terminal_status: String,
+    /// What the investigation established: `clean | findings | limited |
+    /// not_proven` (#839).
+    pub(crate) analysis_result: String,
+    /// Whether reviewer-facing value reached the PR surface: `posted |
+    /// not_needed | failed | not_proven` (#839).
+    pub(crate) publication_result: String,
+    /// The truthful check verdict: `pass | finding | not_proven` (#839). May
+    /// be `not_proven` while `conclusion` is `pass`, which is exactly the
+    /// masking this separation removes; enforcement still follows
+    /// `conclusion`, so an advisory workflow stays non-blocking.
+    pub(crate) gate_result: String,
     pub(crate) reasons: Vec<GateReason>,
     pub(crate) required_proof: GateRequiredProofCounts,
     pub(crate) tool_gates: GateToolGateCounts,
     pub(crate) evidence_gaps_blocking: usize,
     pub(crate) evidence_gaps_advisory: usize,
+    pub(crate) sensor_coverage: GateSensorCoverage,
+    pub(crate) model_coverage: GateModelCoverage,
+    pub(crate) not_proven_reasons: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -611,34 +634,50 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
         // the gate is inconclusive rather than fail. This distinguishes
         // "we couldn't check" from "we checked and found a bug".
         // Evidence-unavailable reason kinds: required-sensor gaps, required-tool
-        // timeouts, missing required sensor evidence. Defect reason kinds:
-        // required-proof failures, tool-gate threshold exceeded, blocking
-        // findings, and sensor-finding (a required sensor that ran and
-        // demonstrated a failure, e.g. cargo-clippy exit 101).
-        matches!(
-            r.kind.as_str(),
-            "required-sensor"
-                | "required-tool-timeout"
-                | "required-evidence-unavailable"
-                // Stale/malformed reporter turns: deciding artifact unusable,
-                // not a demonstrated code defect.
-                | "reporter-evidence"
-        )
+        // timeouts, missing required sensor evidence, and stale/malformed
+        // reporter turns (a deciding artifact that is unusable, not a
+        // demonstrated code defect). Defect reason kinds: required-proof
+        // failures, tool-gate threshold exceeded, blocking findings, and
+        // sensor-finding (a required sensor that ran and demonstrated a
+        // failure, e.g. cargo-clippy exit 101). The list is owned by
+        // `gate_reason_kind_is_evidence_unavailable` (#839) so this
+        // classification and the separated results can never drift.
+        gate_reason_kind_is_evidence_unavailable(r.kind.as_str())
     }) {
         "inconclusive"
     } else {
         "fail"
     };
 
+    // #839: the separated results are derived from the same receipts, next to
+    // the legacy conclusion. They may disagree with it — a `pass` conclusion
+    // with a `not_proven` gate_result is the whole point — but they never move
+    // it, so enforcement posture is unchanged.
+    let truth = build_gate_truth(GateTruthInput {
+        plan: input.plan,
+        terminal_state: input.terminal_state,
+        sensor_issues: input.missing_or_failed_sensor_evidence,
+        model_issues: input.missing_or_failed_model_evidence,
+        reasons: &reasons,
+        required_proof,
+        conclusion,
+    });
+
     GateOutcome {
         schema: GATE_OUTCOME_SCHEMA.to_owned(),
         conclusion: conclusion.to_owned(),
         terminal_status: input.terminal_state.status.clone(),
+        analysis_result: truth.analysis_result,
+        publication_result: truth.publication_result,
+        gate_result: truth.gate_result,
         reasons,
         required_proof,
         tool_gates,
         evidence_gaps_blocking,
         evidence_gaps_advisory,
+        sensor_coverage: truth.sensor_coverage,
+        model_coverage: truth.model_coverage,
+        not_proven_reasons: truth.not_proven_reasons,
     }
 }
 
@@ -1119,6 +1158,14 @@ mod tests {
         assert!(gate.reasons.is_empty());
         assert_eq!(gate.evidence_gaps_blocking, 0);
         assert_eq!(gate.evidence_gaps_advisory, 1);
+        // #839: model unavailability still keeps enforcement non-blocking (the
+        // `conclusion` above is unchanged), but the reported results must not
+        // claim a review happened.
+        assert_eq!(gate.analysis_result, "not_proven");
+        assert_eq!(gate.publication_result, "not_proven");
+        assert_eq!(gate.gate_result, "not_proven");
+        assert!(!gate.not_proven_reasons.is_empty());
+        assert_eq!(gate.model_coverage.lanes_usable, 0);
     }
 
     #[test]

@@ -511,6 +511,12 @@ required = true
 | `post-stdout-path` | GitHub post response body artifact. |
 | `post-stderr-path` | GitHub post stderr artifact. |
 | `gate-outcome-path` | Deterministic gate verdict `review/gate_outcome.json`. |
+| `gate-conclusion` | Legacy single verdict — `pass`, `fail`, or `inconclusive`. Unchanged in meaning; this is what enforcement acts on. |
+| `analysis-result` | What the investigation established: `clean`, `findings`, `limited`, or `not_proven`. Insufficient evidence never reports `clean`. |
+| `publication-result` | Whether reviewer-facing value reached the PR: `posted`, `not_needed`, `failed`, or `not_proven`. |
+| `gate-result` | Truthful check verdict: `pass`, `finding`, or `not_proven`. May be `not_proven` while `gate-conclusion` is `pass` — enforcement is unchanged, the report is not. |
+| `not-proven-reasons` | JSON array of token-prefixed reasons any result is `not_proven`. Consume with `fromJSON`. |
+| `sensor-coverage` | JSON object of instrument coverage counts. Consume with `fromJSON`. |
 
 ## Bootstrap note
 
