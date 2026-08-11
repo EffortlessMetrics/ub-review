@@ -13,9 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  # Temporary on this branch only: the one-shot repair restores this workflow
-  # from main and removes its helper in the same source commit.
-  contents: write
+  contents: read
   actions: read
   pull-requests: write
   checks: write
@@ -34,47 +32,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref }}
           fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95.0
           components: rustfmt,clippy
-
-      - name: Apply the bounded PR 847 repair
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'fix/gate-diagnostics' && hashFiles('.github/workflows/repair-pr-847.yml') != ''
-        shell: bash
-        run: |
-          python3 - <<'PYRUN'
-          from pathlib import Path
-
-          helper = Path('.github/workflows/repair-pr-847.yml').read_text(encoding='utf-8')
-          marker = "          python3 - <<'PY'\n"
-          start = helper.index(marker) + len(marker)
-          end = helper.index("\n          PY\n", start)
-          raw = helper[start:end]
-          script = "\n".join(
-              line[10:] if line.startswith("          ") else line
-              for line in raw.splitlines()
-          ).lstrip() + "\n"
-          exec(compile(script, 'repair-pr-847', 'exec'), {'__name__': '__main__'})
-          PYRUN
-
-          cargo fmt --all
-          cargo fmt --all -- --check
-          git diff --check
-          cargo test --locked --bin ub-review gate_check_reason -- --test-threads=1
-          cargo test --locked --bin ub-review gate_reason -- --test-threads=1
-
-          git config user.name EffortlessSteven
-          git config user.email git@effortlesssteven.com
-          git rm .github/workflows/repair-pr-847.yml
-          git checkout origin/main -- .github/workflows/ub-review-gate.yml
-          git add src/gate.rs .github/workflows/ub-review-gate.yml
-          git commit -m "fix(gate): bound actionable diagnostics"
-          git push origin HEAD:fix/gate-diagnostics
 
       - uses: Swatinem/rust-cache@v2
         with:
