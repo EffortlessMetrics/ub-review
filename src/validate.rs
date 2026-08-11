@@ -904,6 +904,20 @@ pub(crate) fn validate_github_suggestion_text(value: &str) -> Result<()> {
     Ok(())
 }
 
+/// Maximum reviewer-facing characters a finding may occupy on a single source
+/// line. A line comment is a senior reviewer's margin note, not an essay: the
+/// accepted inline comments in `fixtures/review-experience/perl-lsp-3627.json`
+/// run 75-125 reviewer-facing characters, so 400 leaves better than three
+/// times the observed headroom for a two-sentence claim plus a named next
+/// action, while still refusing a wall of model prose anchored to one line.
+/// Longer content is not dropped: `validate_inline_candidate` demotes it to a
+/// summary-only finding that keeps its text.
+pub(crate) const INLINE_COMMENT_MAX_REVIEWER_CHARS: usize = 400;
+
+/// Upper bound on the demoted summary text, matching the summary-only
+/// guard's own concise limit in `validate_summary_only_candidate`.
+pub(crate) const DEMOTED_SUMMARY_MAX_CHARS: usize = 1_200;
+
 pub(crate) fn validate_inline_candidate(
     lane: &LanePlan,
     candidate: ModelCandidateComment,
@@ -916,8 +930,12 @@ pub(crate) fn validate_inline_candidate(
     let body_text = candidate.body.trim();
     let evidence = candidate.evidence.trim().to_owned();
     let body = ensure_lane_prefix(&lane.id, body_text);
-    let concise = body.chars().count() <= 1_200;
-    let body_present = !body_text.is_empty();
+    // The wall applies to what GitHub would actually render on the line, not
+    // to the artifact body: lane identity is stripped at the payload boundary
+    // and must not consume the reviewer's budget.
+    let reviewer_facing = reviewer_facing_pr_text(&body);
+    let concise = reviewer_facing.chars().count() <= INLINE_COMMENT_MAX_REVIEWER_CHARS;
+    let body_present = !reviewer_facing.is_empty();
     let evidence_present = !evidence.is_empty();
     let repo_relative = is_repo_relative_path(&path);
     let suggestion = if lane.id == "unsafe-review" {
@@ -944,6 +962,30 @@ pub(crate) fn validate_inline_candidate(
             body,
             evidence,
             suggestion,
+        })
+    } else if allowed_severity
+        && allowed_confidence
+        && line_valid
+        && body_present
+        && evidence_present
+        && repo_relative
+    {
+        // Length is the only failure: the finding itself is admissible, it is
+        // just too long to live on a source line. Demote it with its own
+        // reviewer-facing text plus the anchor it lost, so the content reaches
+        // the reviewer in the summary instead of becoming an artifact-only
+        // guard receipt.
+        Err(SummaryOnlyFinding {
+            lane: lane.id.clone(),
+            severity: candidate.severity,
+            confidence: candidate.confidence,
+            reason: format!(
+                "{} ({}:{})",
+                truncate_chars(&reviewer_facing, DEMOTED_SUMMARY_MAX_CHARS),
+                path,
+                candidate.line
+            ),
+            evidence,
         })
     } else {
         Err(SummaryOnlyFinding {

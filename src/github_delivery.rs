@@ -1134,7 +1134,7 @@ mod tests {
     const HEAD: &str = "0123456789abcdef0123456789abcdef01234567";
 
     fn planned() -> Result<PlannedDelivery> {
-        let body = "[tests] exact body";
+        let body = "exact body";
         PlannedDelivery::new(
             HEAD,
             "claim-1",
@@ -1252,6 +1252,15 @@ mod tests {
                     match listener.accept() {
                         Ok((stream, _)) => {
                             let result = (|| -> Result<()> {
+                                // The listener is non-blocking so the accept
+                                // loop can time out, and on Windows the
+                                // accepted socket inherits that mode. Reading a
+                                // request whose body has not arrived yet then
+                                // fails with WouldBlock and aborts the client's
+                                // connection, which showed up as a flaky
+                                // `curl: (56) Recv failure`. Read timeouts
+                                // bound this socket instead.
+                                stream.set_nonblocking(false)?;
                                 stream.set_read_timeout(Some(Duration::from_secs(30)))?;
                                 stream.set_write_timeout(Some(Duration::from_secs(30)))?;
                                 let request = read_fake_request(stream.try_clone()?)?;
@@ -1344,7 +1353,7 @@ mod tests {
             FakeHttpResponse {
                 status: 200,
                 body: format!(
-                    r#"[{{"id":123,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":"{HEAD}","body":"[tests] exact body"}}]"#
+                    r#"[{{"id":123,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":"{HEAD}","body":"exact body"}}]"#
                 ),
             },
             FakeHttpResponse {
@@ -1430,7 +1439,7 @@ mod tests {
                     "line": 12,
                     "side": "RIGHT",
                     "commit_id": HEAD,
-                    "body": "[tests] exact body"
+                    "body": "exact body"
                 }]),
                 serde_json::json!({"head": {"sha": HEAD}}),
             ]),
@@ -1633,7 +1642,7 @@ mod tests {
             ]),
             sends: VecDeque::from([scripted_output(
                 &format!(
-                    r#"{{"id":456,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":"{HEAD}","body":"[tests] exact body","in_reply_to_id":123,"pull_request_review_id":987}}"#
+                    r#"{{"id":456,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":"{HEAD}","body":"exact body","in_reply_to_id":123,"pull_request_review_id":987}}"#
                 ),
                 true,
             )?]),
@@ -1680,7 +1689,7 @@ mod tests {
         )?;
         let (review, payload) = delivery_review();
         let first_reply = format!(
-            r#"{{"id":456,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":"{HEAD}","body":"[tests] exact body","in_reply_to_id":123}}"#
+            r#"{{"id":456,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":"{HEAD}","body":"exact body","in_reply_to_id":123}}"#
         );
         let mut first_transport = ScriptedTransport {
             gets: VecDeque::from([
@@ -1723,7 +1732,7 @@ mod tests {
                         "line": 12,
                         "side": "RIGHT",
                         "commit_id": HEAD,
-                        "body": "[tests] exact body",
+                        "body": "exact body",
                         "in_reply_to_id": 123
                     }
                 ]),
@@ -1830,7 +1839,7 @@ mod tests {
                 }]),
             ]),
             sends: VecDeque::from([scripted_output(
-                r#"{"id":456,"commit_id":"wrong-head","body":"[tests] exact body"}"#,
+                r#"{"id":456,"commit_id":"wrong-head","body":"exact body"}"#,
                 true,
             )?]),
         };
@@ -1891,7 +1900,7 @@ mod tests {
             ]),
             sends: VecDeque::from([scripted_output(
                 &format!(
-                    r#"{{"id":456,"commit_id":"{HEAD}","body":"[tests] exact body","in_reply_to_id":999}}"#
+                    r#"{{"id":456,"commit_id":"{HEAD}","body":"exact body","in_reply_to_id":999}}"#
                 ),
                 true,
             )?]),
@@ -1917,7 +1926,7 @@ mod tests {
 
     #[test]
     fn reply_identity_requires_exact_head_source_and_body() -> Result<()> {
-        let body = "[tests] exact body";
+        let body = "exact body";
         let planned = PlannedDelivery::new(
             HEAD,
             "claim-1",
@@ -1960,12 +1969,9 @@ mod tests {
         let (review, _) = delivery_review();
         let graph = graph_for("src/lib.rs", 12, "inline", HEAD);
         let planned = build_planned_deliveries(&review, HEAD, Some(&graph))?;
-        let body = "## Confirmed findings\n\n- [tests] exact body\n- [tests] exact body\n- [tests] unrelated finding\n";
+        let body = "## Confirmed findings\n\n- exact body\n- exact body\n- unrelated finding\n";
         let filtered = body_after_confirmed_delivery(&review, body, &planned, &planned)?;
-        ensure!(
-            filtered
-                == "## Confirmed findings\n\n- [tests] exact body\n- [tests] unrelated finding"
-        );
+        ensure!(filtered == "## Confirmed findings\n\n- exact body\n- unrelated finding");
         Ok(())
     }
 
@@ -1985,7 +1991,7 @@ mod tests {
         };
         let graph = graph_for("src/lib.rs", 12, "inline", HEAD);
         let planned = build_planned_deliveries(&review, HEAD, Some(&graph))?;
-        let body = "- [unsafe-review] Guard evidence is missing.\n\n```suggestion\nlet header = guarded_header_read(ptr)?;\n```\n- retain this finding";
+        let body = "- Guard evidence is missing.\n\n```suggestion\nlet header = guarded_header_read(ptr)?;\n```\n- retain this finding";
         let filtered = body_after_confirmed_delivery(&review, body, &planned, &planned)?;
         ensure!(!filtered.contains("Guard evidence is missing"));
         ensure!(!filtered.contains("guarded_header_read"));
@@ -2062,7 +2068,7 @@ mod tests {
         });
         let planned = build_planned_deliveries(&review, HEAD, Some(&graph))?;
         ensure!(planned.len() == 2);
-        let body = "- [tests] first body\n- [tests] second body";
+        let body = "- first body\n- second body";
         let filtered = body_after_confirmed_delivery(&review, body, &planned[..1], &planned)?;
         ensure!(!filtered.contains("first body"));
         ensure!(filtered.contains("second body"));
@@ -2102,7 +2108,7 @@ mod tests {
             "line": 12,
             "side": "RIGHT",
             "commit_id": HEAD,
-            "body": "[tests] exact body"
+            "body": "exact body"
         }]);
         ensure!(
             prior_confirmed_deliveries(&args, &planned, Some(&current), HEAD)?.len() == 1,
@@ -2114,7 +2120,7 @@ mod tests {
             "line": 12,
             "side": "RIGHT",
             "commit_id": "old-head",
-            "body": "[tests] exact body"
+            "body": "exact body"
         }]);
         ensure!(
             prior_confirmed_deliveries(&args, &planned, Some(&stale_current), HEAD)?.is_empty(),
@@ -2314,7 +2320,7 @@ mod tests {
     #[test]
     fn returned_comment_reconciles_to_exact_planned_identity() -> Result<()> {
         let planned = planned()?;
-        let observed = observed_deliveries(&returned("[tests] exact body"), &[planned], HEAD)?;
+        let observed = observed_deliveries(&returned("exact body"), &[planned], HEAD)?;
         ensure!(observed.len() == 1, "expected one reconciled comment");
         Ok(())
     }
@@ -2324,20 +2330,20 @@ mod tests {
         let planned = planned()?;
         ensure!(
             observed_deliveries(
-                &returned("[tests] different body"),
+                &returned("different body"),
                 std::slice::from_ref(&planned),
                 HEAD
             )
             .is_err(),
             "wrong returned body was accepted"
         );
-        let mut wrong_head = returned("[tests] exact body");
+        let mut wrong_head = returned("exact body");
         wrong_head[0]["commit_id"] = serde_json::json!("another-head");
         ensure!(
             observed_deliveries(&wrong_head, std::slice::from_ref(&planned), HEAD).is_err(),
             "wrong returned head was accepted"
         );
-        let mut missing_head = returned("[tests] exact body");
+        let mut missing_head = returned("exact body");
         if let Some(comment) = missing_head
             .as_array_mut()
             .and_then(|items| items.first_mut())
@@ -2370,15 +2376,15 @@ mod tests {
             "line": 12,
             "side": "RIGHT",
             "commit_id": HEAD,
-            "body": "[tests] exact body"
+            "body": "exact body"
         }]);
         ensure!(
             observed_deliveries(&unexpected, std::slice::from_ref(&planned), HEAD).is_err(),
             "unexpected returned comment was accepted"
         );
         let duplicate = serde_json::json!([
-            {"id": 42, "path": "src/lib.rs", "line": 12, "side": "RIGHT", "commit_id": HEAD, "body": "[tests] exact body"},
-            {"id": 42, "path": "src/lib.rs", "line": 12, "side": "RIGHT", "commit_id": HEAD, "body": "[tests] exact body"}
+            {"id": 42, "path": "src/lib.rs", "line": 12, "side": "RIGHT", "commit_id": HEAD, "body": "exact body"},
+            {"id": 42, "path": "src/lib.rs", "line": 12, "side": "RIGHT", "commit_id": HEAD, "body": "exact body"}
         ]);
         let observed = observed_deliveries(&duplicate, std::slice::from_ref(&planned), HEAD)?;
         ensure!(

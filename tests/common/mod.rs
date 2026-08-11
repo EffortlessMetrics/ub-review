@@ -300,7 +300,12 @@ fn handle_fake_github_request_at(
                 "line": 2,
                 "side": "RIGHT",
                 "commit_id": "test-head",
-                "body": "[unsafe-review] Guard evidence is missing.\n\n```suggestion\nlet header = guarded_header_read(ptr)?;\n```"
+                // GitHub echoes back what was posted, and lane identity is now
+                // stripped at the payload boundary, so this response must not
+                // carry the `[unsafe-review] ` prefix. The delivery digest is
+                // taken over the posted body; a prefixed fixture makes the
+                // observed comment hash disagree and aborts submission.
+                "body": "Guard evidence is missing.\n\n```suggestion\nlet header = guarded_header_read(ptr)?;\n```"
             }])
         } else {
             serde_json::json!([])

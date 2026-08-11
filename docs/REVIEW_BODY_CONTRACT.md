@@ -33,6 +33,20 @@ disposition and appears once. A successfully posted inline comment is not
 repeated in the summary; failed inline delivery must render the actual concise
 finding rather than internal planning metadata.
 
+## Inline Comment Rule
+
+An inline comment is a margin note on one source line, so it carries two extra
+limits beyond the PR body rule:
+
+- **No lane identity.** `review/github-review.json` keeps the `[lane]` prefix as
+  artifact provenance; the text posted to GitHub is the reviewer-facing sentence
+  only. The strip happens once, in `github_review_post_comment_body`, alongside
+  the suggestion-fence rendering.
+- **Length.** A candidate whose reviewer-facing text exceeds
+  `INLINE_COMMENT_MAX_REVIEWER_CHARS` is not a line comment. It is demoted to a
+  summary-only finding that keeps its own text and names the anchor it lost —
+  never dropped.
+
 ## PR Body Rule
 
 Allowed content:

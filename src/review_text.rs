@@ -926,15 +926,37 @@ pub(crate) fn github_review_post_payload(review: &GitHubReview) -> Result<GitHub
 }
 
 pub(crate) fn github_review_post_comment_body(comment: &GitHubReviewComment) -> Result<String> {
+    let body = posted_inline_comment_text(&comment.body);
     let Some(suggestion) = comment.suggestion.as_deref() else {
-        return Ok(comment.body.clone());
+        return Ok(body);
     };
     validate_github_suggestion_text(suggestion)?;
     Ok(format!(
         "{}\n\n```suggestion\n{}\n```",
-        comment.body.trim_end(),
+        body.trim_end(),
         suggestion.trim()
     ))
+}
+
+/// Strip internal lane identity from an inline comment on its way to GitHub.
+///
+/// `review/github-review.json` keeps the `[lane]` prefix: lane identity is
+/// artifact provenance (docs/REVIEW_BODY_CONTRACT.md), and every packet-contract
+/// check still reads it there. What lands on the PR author's source line must
+/// read as one senior reviewer speaking, not as a lane roster, so the transform
+/// happens here — the single funnel every delivery path and the reconciliation
+/// comparison already share, alongside the suggestion-fence transform.
+///
+/// A body that is nothing but lane metadata would strip to empty; the inline
+/// guard already refuses those, and the fallback keeps such a comment from
+/// being posted blank.
+pub(crate) fn posted_inline_comment_text(body: &str) -> String {
+    let public = reviewer_facing_pr_text(body);
+    if public.is_empty() {
+        body.trim().to_owned()
+    } else {
+        public
+    }
 }
 
 #[cfg(test)]
