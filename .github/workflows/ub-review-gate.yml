@@ -49,13 +49,16 @@ jobs:
         run: |
           python3 - <<'PYRUN'
           from pathlib import Path
-          import textwrap
 
           helper = Path('.github/workflows/repair-pr-847.yml').read_text(encoding='utf-8')
           marker = "          python3 - <<'PY'\n"
           start = helper.index(marker) + len(marker)
           end = helper.index("\n          PY\n", start)
-          script = textwrap.dedent(helper[start:end])
+          raw = helper[start:end]
+          script = "\n".join(
+              line[10:] if line.startswith("          ") else line
+              for line in raw.splitlines()
+          ).lstrip() + "\n"
           exec(compile(script, 'repair-pr-847', 'exec'), {'__name__': '__main__'})
           PYRUN
 
