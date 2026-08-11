@@ -1,0 +1,10 @@
+case: clean-no-findings
+diff shape: small Rust refactor with nothing useful to say
+review payload status: skipped_empty_smoke
+posts a review: false
+event: COMMENT
+inline comments: 0
+
+=== pr review body ===
+(empty: nothing is posted to the pull request)
+=== end pr review body ===

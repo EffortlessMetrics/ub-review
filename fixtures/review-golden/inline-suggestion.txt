@@ -1,0 +1,27 @@
+case: inline-suggestion
+diff shape: one exact source-local repair suggestion
+review payload status: prepared
+posts a review: true
+event: COMMENT
+inline comments: 1
+
+=== pr review body ===
+## Decision
+
+- Needs reviewer attention before upstream: findings remain.
+
+## Confirmed findings
+
+- Move the zero-length return before constructing the slice.
+=== end pr review body ===
+
+=== inline comment 1 ===
+src/buffer.rs:39 RIGHT
+Move the zero-length return before constructing the slice.
+
+```suggestion
+if len == 0 {
+    return &[];
+}
+```
+=== end inline comment 1 ===

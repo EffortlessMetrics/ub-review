@@ -106,6 +106,8 @@ mod cost_artifact;
 #[cfg(test)]
 mod review_experience;
 #[cfg(test)]
+mod review_golden;
+#[cfg(test)]
 use cost_artifact::{build_cost_receipt, build_floor_trend_artifact};
 use cost_artifact::{write_cost_receipt_artifact, write_floor_trend_artifact};
 mod quality_artifact;
