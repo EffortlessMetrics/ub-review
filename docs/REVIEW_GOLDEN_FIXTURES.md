@@ -1,6 +1,6 @@
 # GitHub-facing review goldens
 
-`src/tests/review_golden.rs` runs six representative review shapes through the
+`src/tests.rs` runs six representative review shapes through the
 production review compiler and records the complete GitHub-facing surface under
 `fixtures/review-golden/`.
 

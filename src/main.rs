@@ -106,7 +106,7 @@ mod cost_artifact;
 #[cfg(test)]
 mod review_experience;
 #[cfg(test)]
-#[path = "tests/review_golden.rs"]
+#[path = "tests.rs"]
 mod review_golden;
 #[cfg(test)]
 use cost_artifact::{build_cost_receipt, build_floor_trend_artifact};
