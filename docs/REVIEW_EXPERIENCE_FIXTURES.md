@@ -1,39 +1,32 @@
-# Review experience fixtures
+# Review-experience fixtures
 
-`src/review_golden.rs` runs six representative review shapes through
-the production review compiler and records the complete GitHub-facing
-surface under `fixtures/review-golden/`.
+`fixtures/review-experience/perl-lsp-3627.json` is the first golden
+end-to-end case for the public review contract. It records the real PR
+conversation shape, current-head transition, structural claims, existing
+external-review threads, deterministic proof receipts, and the expected narrow
+human surface.
 
-The PR body is recorded verbatim. Every inline comment runs through
-`github_review_post_comment_body`, so the fixture includes the actual
-lane-prefix stripping and suggestion-fence rendering used by delivery.
-Artifact-side lane provenance remains present in the compiled review;
-it is deliberately absent from the posted snapshot.
+The fixture is deliberately independent of model wording and GitHub transport.
+It is a contract test for the boundaries that must survive implementation:
 
-The proof fixtures use the same coherent red/green shape as production:
-`focused-red-green`, `base-plus-tests`, a passing HEAD command, and a
-passing or failing base-plus-tests command consistent with the final
-result. A fixture may not label an incomplete or contradictory packet
-as discriminating.
+- claims with shared vocabulary remain distinct by structural identity;
+- an existing adequate thread is reused instead of duplicated;
+- current-head fixes invalidate old review surfaces and produce silence;
+- only current-head human-facing locations are eligible for delivery; and
+- planner, lane, skipped-proof, and unrelated workspace language stays out of
+  public finding text.
 
-## Cases
-
-- `clean-no-findings`: meaningful investigation, no public review.
-- `one-inline-finding`: one concise source-local action.
-- `inline-and-summary-finding`: an anchored defect plus a distinct
-  cross-cutting concern.
-- `evidence-gap`: HEAD and base+tests both pass, so the changed test is
-  non-discriminating.
-- `test-proof-and-verification`: HEAD passes and base+tests fails.
-- `inline-suggestion`: exact GitHub suggestion rendering.
-
-Refresh only after reviewing the output diff:
+Run the focused proof with:
 
 ```text
-UB_REVIEW_BLESS=1 cargo test --locked --bin ub-review review_golden -- --test-threads=1
-cargo test --locked --bin ub-review review_golden -- --test-threads=1
+cargo test --locked review_experience::tests::perl_lsp_3627
 ```
 
-These snapshots are descriptive evidence. They expose duplication,
-ordering, grammar, accidental machinery, and delivery-transform drift;
-they do not make current wording correct merely because it is recorded.
+This fixture is the regression boundary for the integrated M1 review path
+(#801). Its production replay adapts the fixture into the claim graph, compiler,
+exact proof receipt, pending-review transport, reply delivery, and fixed-head
+silence path. The fake GitHub server receives the real create/list/reconcile,
+reply, head-recheck, and submit sequence; the test also verifies terminal
+delivery receipts and the exact current-head bindings. It is intentionally
+not an external perl-lsp run: release-installed product validation remains
+owned by #806 and #808.
