@@ -13,9 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  # Temporary on this branch only. The repair commit restores this workflow
-  # from current main before pushing the source change.
-  contents: write
+  contents: read
   actions: read
   pull-requests: write
   checks: write
@@ -34,91 +32,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref }}
           fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95.0
           components: rustfmt,clippy
-
-      - name: Preserve the omission suffix in bounded gate summaries
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'fix/gate-diagnostics'
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path("src/gate.rs")
-          text = path.read_text(encoding="utf-8")
-          old = '''    let mut summary = ids.join(", ");
-              let omitted = gate_reason_log_omitted_count(reasons);
-              if omitted > 0 {
-                  summary.push_str(&format!(", ... +{omitted} more"));
-              }
-              crate::truncate_chars(&summary, GATE_REASON_LOG_MAX_CHARS)
-          '''
-          new = '''    let omitted = gate_reason_log_omitted_count(reasons);
-              let suffix = (omitted > 0).then(|| format!(", ... +{omitted} more"));
-              let suffix_chars = suffix.as_ref().map_or(0, |value| value.chars().count());
-              let mut summary = crate::truncate_chars(
-                  &ids.join(", "),
-                  GATE_REASON_LOG_MAX_CHARS.saturating_sub(suffix_chars),
-              );
-              if let Some(suffix) = suffix {
-                  summary.push_str(&suffix);
-              }
-              summary
-          '''
-          if text.count(old) != 1:
-              raise SystemExit("expected one gate summary block")
-          text = text.replace(old, new, 1)
-
-          old_test = '''        assert_eq!(
-                      super::gate_reason_id_summary(&reasons),
-                      "reason-0, reason-1, reason-2, reason-3, reason-4, reason-5, reason-6, reason-7, ... +12 more"
-                  );
-                  super::print_gate_reason_detail(&reasons);
-          '''
-          new_test = '''        assert_eq!(
-                      super::gate_reason_id_summary(&reasons),
-                      "reason-0, reason-1, reason-2, reason-3, reason-4, reason-5, reason-6, reason-7, ... +12 more"
-                  );
-
-                  let long_reasons = (0..9)
-                      .map(|index| GateCheckReason {
-                          id: format!("{}-{index}", "x".repeat(600)),
-                          detail: String::new(),
-                          next_action: None,
-                          receipt: String::new(),
-                      })
-                      .collect::<Vec<_>>();
-                  let long_summary = super::gate_reason_id_summary(&long_reasons);
-                  assert!(long_summary.ends_with(", ... +1 more"), "{long_summary}");
-                  assert_eq!(
-                      long_summary.chars().count(),
-                      super::GATE_REASON_LOG_MAX_CHARS
-                  );
-                  super::print_gate_reason_detail(&reasons);
-          '''
-          if text.count(old_test) != 1:
-              raise SystemExit("expected one bounded-summary test block")
-          text = text.replace(old_test, new_test, 1)
-          path.write_text(text, encoding="utf-8")
-          PY
-
-          cargo fmt --all
-          cargo fmt --all -- --check
-          git diff --check
-          cargo test --locked --bin ub-review gate_reason -- --test-threads=1
-
-          git config user.name EffortlessSteven
-          git config user.email git@effortlesssteven.com
-          git checkout origin/main -- .github/workflows/ub-review-gate.yml
-          git add src/gate.rs .github/workflows/ub-review-gate.yml
-          git commit -m "fix(gate): preserve bounded-summary omission suffix"
-          git push origin HEAD:fix/gate-diagnostics
 
       - uses: Swatinem/rust-cache@v2
         with:

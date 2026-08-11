@@ -94,12 +94,17 @@ fn gate_reason_id_summary(reasons: &[GateCheckReason]) -> String {
     if ids.is_empty() {
         return "none".to_owned();
     }
-    let mut summary = ids.join(", ");
     let omitted = gate_reason_log_omitted_count(reasons);
-    if omitted > 0 {
-        summary.push_str(&format!(", ... +{omitted} more"));
+    let suffix = (omitted > 0).then(|| format!(", ... +{omitted} more"));
+    let suffix_chars = suffix.as_ref().map_or(0, |value| value.chars().count());
+    let mut summary = crate::truncate_chars(
+        &ids.join(", "),
+        GATE_REASON_LOG_MAX_CHARS.saturating_sub(suffix_chars),
+    );
+    if let Some(suffix) = suffix {
+        summary.push_str(&suffix);
     }
-    crate::truncate_chars(&summary, GATE_REASON_LOG_MAX_CHARS)
+    summary
 }
 
 /// Print bounded detail for the first blocking reasons, so a failing gate is
@@ -852,6 +857,21 @@ mod tests {
         assert_eq!(
             super::gate_reason_id_summary(&reasons),
             "reason-0, reason-1, reason-2, reason-3, reason-4, reason-5, reason-6, reason-7, ... +12 more"
+        );
+
+        let long_reasons = (0..9)
+            .map(|index| GateCheckReason {
+                id: format!("{}-{index}", "x".repeat(600)),
+                detail: String::new(),
+                next_action: None,
+                receipt: String::new(),
+            })
+            .collect::<Vec<_>>();
+        let long_summary = super::gate_reason_id_summary(&long_reasons);
+        assert!(long_summary.ends_with(", ... +1 more"), "{long_summary}");
+        assert_eq!(
+            long_summary.chars().count(),
+            super::GATE_REASON_LOG_MAX_CHARS
         );
         super::print_gate_reason_detail(&reasons);
     }
