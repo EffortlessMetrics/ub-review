@@ -47,6 +47,13 @@ limits beyond the PR body rule:
   summary-only finding that keeps its own text and names the anchor it lost —
   never dropped.
 
+Demotion is not deletion. When an inline candidate fails the inline guard, the
+refuter, or a candidate-only lane rule, the surviving summary-only finding keeps
+the model's own comment text, prefixed with the `path:line` anchor it claimed so
+the finding stays line-level and actionable. The machine diagnostic naming the
+demotion reason lives in the finding's `evidence` field, artifact-side, and is
+never rendered into the PR body.
+
 ## PR Body Rule
 
 Allowed content:

@@ -20102,3 +20102,35 @@ kind = "exposure_gap"
 finding_id = "probe:src_github_delivery.rs:return_value:51108beb"
 owner = "ub-review/core"
 reason = "Twin of the fake-delivery-server socket-mode entry above under the return_value family. Same reasoning: the `?` on a socket-option call in test infrastructure has no product-visible return value, and the delivery behaviour the harness serves is asserted by the confirmed_delivery_* tests. Re-verify after edits to spawn_fake_delivery_api or a RIPR upgrade."
+
+# Demoted-inline finding text #849: on-diff exposure gaps.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:ae0e4750"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/model_exec.rs for demoted-inline finding text #849: covered by validate_tests demotion/summary-only finding tests that assert the model body is retained. Re-verify after semantic edits to demotion paths."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:error_path:4d06f280"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/validate.rs for demoted-inline finding text #849: covered by validate_tests demotion/summary-only finding tests that assert the model body is retained. Re-verify after semantic edits to demotion paths."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:field_construction:e3efb45e"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/validate.rs for demoted-inline finding text #849: covered by validate_tests demotion/summary-only finding tests that assert the model body is retained. Re-verify after semantic edits to demotion paths."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:error_path:a81d396f"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/validate.rs for demoted-inline finding text #849: covered by validate_tests demotion/summary-only finding tests that assert the model body is retained. Re-verify after semantic edits to demotion paths."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:return_value:72ff2d65"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/validate.rs for demoted-inline finding text #849: covered by validate_tests demotion/summary-only finding tests that assert the model body is retained. Re-verify after semantic edits to demotion paths."
