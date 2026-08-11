@@ -1,17 +1,23 @@
 name: ub-review/gate
 
+# Dogfood posture: this repo runs its own gate on every PR pass, including
+# synchronize — the gate must report on every head SHA because it is the
+# required check. Review posting policy lives in .ub-review.toml ([gate]
+# post_review_on): opened and ready_for_review post the grouped review;
+# synchronize and reopened stay gate-only so push storms do not become an
+# inbox tax. The compiler's skip logic still suppresses no-value posts, and
+# inline candidates still pass the diff-line guardrails.
 on:
   pull_request:
     types: [opened, reopened, ready_for_review, synchronize]
   workflow_dispatch:
 
 permissions:
-  # Temporary on review/golden only. The one-shot repair restores this file
-  # from current main before pushing the source commit.
-  contents: write
+  contents: read
   actions: read
   pull-requests: write
   checks: write
+  # OIDC for the post-gate Codecov upload of the coverage sensor's lcov receipt.
   id-token: write
 
 concurrency:
@@ -21,71 +27,29 @@ concurrency:
 jobs:
   gate:
     name: ub-review/gate
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: review/golden
           fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95.0
           components: rustfmt,clippy
 
-      - name: Move the golden harness into the test source tree
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'review/golden' && hashFiles('src/review_golden.rs') != ''
-        shell: bash
-        run: |
-          set -euo pipefail
-          git mv src/review_golden.rs src/tests/review_golden.rs
-
-          python3 - <<'PY'
-          from pathlib import Path
-
-          main = Path('src/main.rs')
-          text = main.read_text(encoding='utf-8')
-          old = '#[cfg(test)]\nmod review_golden;\n'
-          new = '#[cfg(test)]\n#[path = "tests/review_golden.rs"]\nmod review_golden;\n'
-          if text.count(old) != 1:
-              raise SystemExit('expected one review_golden module declaration')
-          main.write_text(text.replace(old, new, 1), encoding='utf-8')
-
-          docs = Path('docs/REVIEW_GOLDEN_FIXTURES.md')
-          doc_text = docs.read_text(encoding='utf-8')
-          if 'src/review_golden.rs' not in doc_text:
-              raise SystemExit('golden source path is absent from documentation')
-          docs.write_text(
-              doc_text.replace('src/review_golden.rs', 'src/tests/review_golden.rs'),
-              encoding='utf-8',
-          )
-          PY
-
-          cargo fmt --all
-          cargo fmt --all -- --check
-          cargo test --locked --bin ub-review review_golden -- --test-threads=1
-          git diff --check
-
-          git config user.name EffortlessSteven
-          git config user.email git@effortlesssteven.com
-          git checkout origin/main -- .github/workflows/ub-review-gate.yml
-          git add src/main.rs src/tests/review_golden.rs docs/REVIEW_GOLDEN_FIXTURES.md .github/workflows/ub-review-gate.yml
-          git commit -m "test(review): classify golden fixtures as test source"
-          git push origin HEAD:review/golden
-
       - uses: Swatinem/rust-cache@v2
-        if: always()
         with:
           cache-on-failure: true
 
+      # The leased coverage sensor runs `cargo llvm-cov` inside the gate
+      # (folded from the standalone coverage workflow).
       - name: Install cargo-llvm-cov
-        if: always()
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Run ub-review gate
-        if: always()
         uses: ./
         with:
           config: .ub-review.toml
@@ -93,14 +57,19 @@ jobs:
           runtime-profile: gh-runner-full
           mode: intelligent-ci
           run-pass: auto
+          # Lease the heavy witness classes so the enabled coverage sensor runs.
           allow-heavy: 'true'
           root: .
-          base: origin/main
+          base: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.event.pull_request.base.ref) || 'origin/main' }}
           out: target/ub-review
           github-token: ${{ github.token }}
-          posting: artifact-only
+          posting: ${{ github.event_name == 'pull_request' && 'review' || 'artifact-only' }}
           model-mode: auto
-          depth: standard
+          depth: ${{ github.event_name == 'workflow_dispatch' && 'deep' || 'standard' }}
+          # provider-policy is deliberately omitted: the action default is
+          # auto, which defers to [providers].policy in .ub-review.toml
+          # (primary-with-fallback) - the live proof that repo config drives
+          # provider routing (D1/D2, spec 0006).
           minimax-api-key: ${{ secrets.MINIMAX_API_KEY }}
           minimax-provider-kind: anthropic
           minimax-model: MiniMax-M3
@@ -115,9 +84,22 @@ jobs:
           --expected-review-profile ub-review-self
           --expected-repo-kind ub-review
 
+      # Folded from the standalone coverage workflow: same OIDC upload, now
+      # pointed at the coverage sensor's lcov receipt under target/ub-review.
+      # fail_ci_if_error stays false: with ub-review/gate as the only required
+      # check, a codecov.io outage must not block merges — coverage execution
+      # truth lives in the sensor receipt; the upload is telemetry.
+      - name: Upload coverage
+        if: always()
+        uses: codecov/codecov-action@v7
+        with:
+          use_oidc: true
+          files: target/ub-review/sensors/coverage/lcov.info
+          fail_ci_if_error: false
+
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: ub-review-gate
           path: target/ub-review
-          if-no-files-found: warn
+          if-no-files-found: error
