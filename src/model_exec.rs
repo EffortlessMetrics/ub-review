@@ -368,6 +368,8 @@ fn run_lane_continuation_turn(
         response_summary: revised.clone(),
         routed_evidence_refs: vec![format!("reporter-question:{question}")],
         receipt_ref: format!("review/threads/{}/turn-001.json", lane_receipt.lane),
+        head_sha: None,
+        verdict: None,
     };
     write_lane_thread_turn(
         review_dir,
@@ -414,6 +416,7 @@ pub(crate) fn run_reporter_coordination(
     model_calls_used: usize,
     event_log: &EventLog,
     message_log: &MessageLog,
+    current_head: &str,
 ) -> Result<usize> {
     let digests = lane_digests_from_receipts(model_lanes);
     if digests.is_empty() || model_calls_used >= args.max_model_calls {
@@ -467,14 +470,19 @@ pub(crate) fn run_reporter_coordination(
         }
     };
     let conclusion = parse_reporter_conclusion(&content.json_payload, &cohort_id, &thread_id);
-    write_reporter_thread(review_dir, &conclusion)?;
+    write_reporter_thread(review_dir, &conclusion, current_head)?;
     let _ = message_log.append(
         CrossLaneMessageKind::LaneReport,
         "reporter",
         "all-lanes",
         0,
         vec!["review/threads/reporter/turn-000.json".to_owned()],
-        serde_json::json!({"distillation": conclusion.distillation, "cohort_id": conclusion.cohort_id}),
+        serde_json::json!({
+            "distillation": conclusion.distillation,
+            "cohort_id": conclusion.cohort_id,
+            "verdict": verdict_to_wire(&conclusion.verdict),
+            "head_sha": current_head,
+        }),
     );
     for question in &conclusion.proposed_follow_ups {
         let (raw_target, q_text) = question
@@ -597,26 +605,19 @@ pub(crate) fn run_reporter_coordination(
         ) {
             let re_conclusion =
                 parse_reporter_conclusion(&re_content.json_payload, &cohort_id, &thread_id);
-            // Write the reporter's revised conclusion as turn-001.
-            let re_turn = LaneThreadTurn {
-                schema: REPORTER_THREAD_SCHEMA.to_owned(),
-                thread_id: thread_id.clone(),
-                turn: 1,
-                stage: "reporter".to_owned(),
-                prompt_packet_path: "review/threads/reporter/prompt.md".to_owned(),
-                response_summary: re_conclusion.distillation.clone(),
-                routed_evidence_refs: lane_answers
-                    .iter()
-                    .map(|(lane, _)| format!("lane-answer:{lane}"))
-                    .collect(),
-                receipt_ref: "review/threads/reporter/turn-001.json".to_owned(),
-            };
-            let _ = write_lane_thread_turn(
+            // Write the reporter's revised conclusion as turn-001 with the
+            // same structured verdict + head contract as turn-000.
+            let lane_answer_refs: Vec<String> = lane_answers
+                .iter()
+                .map(|(lane, _)| format!("lane-answer:{lane}"))
+                .collect();
+            let _ = write_reporter_turn(
                 review_dir,
-                "reporter",
-                &re_turn,
-                &cohort_id,
+                &re_conclusion,
+                1,
+                current_head,
                 "reporter_re_distilled",
+                &lane_answer_refs,
             );
             let _ = message_log.append(
                 CrossLaneMessageKind::LaneReport,
@@ -627,6 +628,8 @@ pub(crate) fn run_reporter_coordination(
                 serde_json::json!({
                     "distillation": re_conclusion.distillation,
                     "cohort_id": re_conclusion.cohort_id,
+                    "verdict": verdict_to_wire(&re_conclusion.verdict),
+                    "head_sha": current_head,
                     "round": "re-distillation",
                 }),
             );
@@ -635,6 +638,7 @@ pub(crate) fn run_reporter_coordination(
                 serde_json::json!({
                     "lane_answers": lane_answers.len(),
                     "distillation_length": re_conclusion.distillation.len(),
+                    "verdict": verdict_to_wire(&re_conclusion.verdict),
                 }),
             );
         }
@@ -843,6 +847,8 @@ pub(crate) fn run_receipt_reconsiderations(
                 .map(|receipt| format!("review/proof_receipts.json#{}", receipt.id))
                 .collect(),
             receipt_ref: turn_ref.clone(),
+            head_sha: None,
+            verdict: None,
         };
         write_lane_thread_turn(
             review_dir,

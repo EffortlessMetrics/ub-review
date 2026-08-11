@@ -39,6 +39,15 @@ pub(crate) struct LaneThreadTurn {
     pub(crate) routed_evidence_refs: Vec<String>,
     /// Reference to the `ModelLaneReceipt` for this turn (`review/model/<lane>/...`).
     pub(crate) receipt_ref: String,
+    /// Exact PR head this turn was produced for. Required on new reporter
+    /// turns; omitted on legacy turns and ordinary investigation lanes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) head_sha: Option<String>,
+    /// Structured reporter verdict (`clear` / `changes_requested` /
+    /// `uncertain` / `none`). Present only on reporter turns; never inferred
+    /// from distillation prose.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) verdict: Option<String>,
 }
 
 /// The rollup for a lane's logical thread. Written to
@@ -51,8 +60,21 @@ pub(crate) struct LaneThreadSession {
     pub(crate) cohort_id: String,
     /// Ordered turn ids ("turn-000", "turn-001", ...).
     pub(crate) turns: Vec<String>,
+    /// Highest-numbered turn id present on disk (same authority as
+    /// `latest_conclusion` / identity fields below).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) latest_turn: Option<String>,
+    /// Artifact path of the highest-numbered turn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) latest_turn_ref: Option<String>,
     /// The latest conclusion the lane reached (truncated response tail).
     pub(crate) latest_conclusion: String,
+    /// Head SHA bound on the highest-numbered turn, when present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) head_sha: Option<String>,
+    /// Structured verdict on the highest-numbered turn, when present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) verdict: Option<String>,
     /// Why the thread terminated, if it has ("completed" | "skipped_budget" |
     /// "preflight_failed" | ...). Empty while the thread is active.
     pub(crate) terminal_reason: String,
@@ -76,39 +98,60 @@ pub(crate) fn write_lane_thread_turn(
     fs::write(&turn_path, serde_json::to_vec_pretty(turn)?)?;
 
     // Rebuild the rollup from the turn files on disk so it reflects every turn
-    // written (including prior turns from earlier waves).
+    // written (including prior turns from earlier waves). All "latest" fields
+    // must come from the same highest-numbered parsed turn; never mix identity
+    // from the write call with conclusion from a different turn on disk.
     let mut turn_ids = Vec::new();
-    let mut latest = String::new();
     for entry in fs::read_dir(&thread_dir)? {
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().to_string();
         if name.starts_with("turn-") && name.ends_with(".json") {
             let stem = name.trim_end_matches(".json");
             turn_ids.push(stem.to_owned());
-            if let Ok(bytes) = fs::read(entry.path())
-                && let Ok(parsed) = serde_json::from_slice::<LaneThreadTurn>(&bytes)
-            {
-                latest = parsed.response_summary;
-            }
         }
     }
     turn_ids.sort();
-    // latest_conclusion = the response_summary of the highest-numbered turn.
+    let mut latest_conclusion = String::new();
+    let mut latest_turn = None;
+    let mut latest_turn_ref = None;
+    let mut latest_head_sha = None;
+    let mut latest_verdict = None;
+    let mut latest_thread_id = turn.thread_id.clone();
+    let mut latest_cohort_id = cohort_id.to_owned();
     if let Some(last_id) = turn_ids.last() {
         let last_path = thread_dir.join(format!("{last_id}.json"));
+        latest_turn = Some(last_id.clone());
+        latest_turn_ref = Some(format!("review/threads/{lane}/{last_id}.json"));
         if let Ok(bytes) = fs::read(&last_path)
             && let Ok(parsed) = serde_json::from_slice::<LaneThreadTurn>(&bytes)
         {
-            latest = parsed.response_summary;
+            latest_conclusion = parsed.response_summary;
+            latest_head_sha = parsed.head_sha;
+            latest_verdict = parsed.verdict;
+            latest_thread_id = parsed.thread_id;
+            // cohort is not stored on the turn; keep the write-call cohort only
+            // when this write produced the highest turn, otherwise leave the
+            // previous rollup cohort if present.
+            if parsed.turn == turn.turn {
+                latest_cohort_id = cohort_id.to_owned();
+            } else if let Ok(existing) = fs::read(thread_dir.join("thread.json"))
+                && let Ok(prev) = serde_json::from_slice::<LaneThreadSession>(&existing)
+            {
+                latest_cohort_id = prev.cohort_id;
+            }
         }
     }
     let session = LaneThreadSession {
         schema: LANE_THREAD_SCHEMA.to_owned(),
-        thread_id: turn.thread_id.clone(),
+        thread_id: latest_thread_id,
         lane: lane.to_owned(),
-        cohort_id: cohort_id.to_owned(),
+        cohort_id: latest_cohort_id,
         turns: turn_ids,
-        latest_conclusion: latest,
+        latest_turn,
+        latest_turn_ref,
+        latest_conclusion,
+        head_sha: latest_head_sha,
+        verdict: latest_verdict,
         terminal_reason: terminal_reason.to_owned(),
     };
     fs::write(
@@ -137,6 +180,8 @@ pub(crate) fn primary_turn(
         response_summary: truncate_summary(response_summary),
         routed_evidence_refs,
         receipt_ref: receipt_ref.to_owned(),
+        head_sha: None,
+        verdict: None,
     }
 }
 
@@ -212,5 +257,38 @@ mod tests {
         let s = truncate_summary(&long);
         assert!(s.chars().count() < 5000);
         assert!(s.contains("[truncated"));
+    }
+
+    #[test]
+    fn rollup_rewriting_older_turn_keeps_latest_identity() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        let mut t0 = primary_turn("tid-a", "lane", "initial", vec![], "r0");
+        t0.head_sha = Some("aaa".to_owned());
+        write_lane_thread_turn(&review_dir, "lane", &t0, "cid-a", "")?;
+        let mut t1 = primary_turn("tid-b", "lane", "revised", vec![], "r1");
+        t1.turn = 1;
+        t1.head_sha = Some("bbb".to_owned());
+        t1.verdict = Some("changes_requested".to_owned());
+        write_lane_thread_turn(&review_dir, "lane", &t1, "cid-b", "completed")?;
+
+        // Rewrite turn-000 under a different head/identity after turn-001 exists.
+        let mut t0_rewrite = primary_turn("tid-stale", "lane", "rewritten-initial", vec![], "r0b");
+        t0_rewrite.head_sha = Some("aaa".to_owned());
+        write_lane_thread_turn(&review_dir, "lane", &t0_rewrite, "cid-stale", "rewritten")?;
+
+        let session: LaneThreadSession =
+            serde_json::from_slice(&fs::read(review_dir.join("threads/lane/thread.json"))?)?;
+        assert_eq!(session.latest_turn.as_deref(), Some("turn-001"));
+        assert_eq!(
+            session.latest_turn_ref.as_deref(),
+            Some("review/threads/lane/turn-001.json")
+        );
+        assert!(session.latest_conclusion.contains("revised"));
+        assert_eq!(session.head_sha.as_deref(), Some("bbb"));
+        assert_eq!(session.verdict.as_deref(), Some("changes_requested"));
+        assert_eq!(session.thread_id, "tid-b");
+        assert_eq!(session.cohort_id, "cid-b");
+        Ok(())
     }
 }

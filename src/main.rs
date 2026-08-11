@@ -4540,6 +4540,7 @@ fn write_review_artifacts(
         model_calls_used,
         event_log,
         &message_log,
+        &diff.head,
     ) {
         Ok(calls) => {
             model_calls_used = model_calls_used.saturating_add(calls);
@@ -4918,10 +4919,11 @@ fn write_review_artifacts(
             proof_receipts: &review.proof_receipts,
         },
     )?;
-    // Order 10 (#678): read the reporter's distillation (Order 9 #696) to pass
-    // into the compiler as the review body's editorial summary. The compiler
-    // renders it verbatim (firewall, not truth reducer).
-    let reporter_distillation = read_reporter_distillation(&review_dir);
+    // Order 10 (#678) + #857: one current-head reporter resolution feeds the
+    // compiler distillation and (later) review-forward gate evidence. Stale or
+    // malformed turns stay out of the public body.
+    let reporter_resolution = resolve_reporter_turn(&review_dir, &diff.head);
+    let reporter_distillation = reporter_resolution.public_distillation().map(str::to_owned);
     let final_surface = compile_review_surface(ReviewCompilerInput {
         shared_context_id: &review.shared_context_id,
         review_body_policy: &config.review_body,
@@ -5003,7 +5005,8 @@ fn write_review_artifacts(
     )?;
     // Order 11 (#678): read the reporter's verdict for review-forward gate
     // policy. Only affects the gate when config.gate.review_forward == true.
-    let reporter_verdict = read_reporter_verdict(&review_dir);
+    // Same resolution object as the compiler — no second latest-turn search.
+    let reporter_gate = reporter_resolution.gate_input();
     let gate_outcome = build_gate_outcome(GateOutcomeInput {
         args,
         config,
@@ -5014,7 +5017,7 @@ fn write_review_artifacts(
         tool_gate_outcomes,
         missing_or_failed_sensor_evidence: &review.missing_or_failed_sensor_evidence,
         missing_or_failed_model_evidence: &review.missing_or_failed_model_evidence,
-        reporter_verdict,
+        reporter_gate,
     });
     if (gate_outcome.conclusion == "fail" || gate_outcome.conclusion == "inconclusive")
         && review_payload_status == "skipped_empty_smoke"
