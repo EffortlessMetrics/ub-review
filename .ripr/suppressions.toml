@@ -20049,3 +20049,23 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_broker.rs:error_path:49e7faaf"
 owner = "ub-review/m2"
 reason = "PR #803 portfolio artifact repair: the follow-up broker preserves the primary portfolio when no new proof request exists; the colocated regression pins both preserve and rewrite decisions. RIPR 0.10.0 reports the generic serde/filesystem `?` error path rather than the tested portfolio decision; this exact receipt covers only the content-addressed path and must be re-verified after edits to src/proof/broker.rs or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_decision_core.rs:match_arm:3ac63a5b"
+owner = "ub-review/core"
+reason = "PR #846 concise review body: the `match receipt.result.as_str()` scrutinee of proof_receipt_is_public_test_proof_result is pinned by the colocated publication_switches_on_receipt_result_alone, which holds every other receipt field fixed and flips the answer both ways by rewriting receipt.result. RIPR 0.10.0 reports discriminator `observation_unverified` for every arm of this match even when the assertion copies the expression verbatim (same false-negative family as the src/enable.rs inspected_repo_kind entries above). Content-addressed receipt; re-verify after any edit to proof_receipt_is_public_test_proof_result or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_decision_core.rs:match_arm:60807d87"
+owner = "ub-review/core"
+reason = "PR #846 concise review body: the `\"discriminating\" | \"head_failed\" => true` arm is pinned by the colocated discriminating_and_head_failed_are_published_whatever_else_the_receipt_says, which asserts both results publish across every receipt kind and command-side combination. RIPR 0.10.0 reports discriminator `observation_unverified` for match arms regardless of assertion form. Content-addressed receipt; re-verify after any edit to proof_receipt_is_public_test_proof_result or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_decision_core.rs:match_arm:12e09e7e"
+owner = "ub-review/core"
+reason = "PR #846 concise review body: the `\"head_passed\"` arm is pinned by the colocated head_passed_is_published_only_as_a_focused_test_with_a_base_plus_tests_side, a table over the full kind x command-side matrix including the empty-commands case, so both the focused-build exclusion and the base-plus-tests requirement are discriminated. RIPR 0.10.0 reports discriminator `observation_unverified` for match arms regardless of assertion form. Content-addressed receipt; re-verify after any edit to proof_receipt_is_public_test_proof_result or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_decision_core.rs:match_arm:3e5b5681"
+owner = "ub-review/core"
+reason = "PR #846 concise review body: the `_ => false` default arm is pinned by the colocated every_other_result_stays_out_of_the_pr_body, which asserts each non-published result string, a near-miss of a published one, and the empty string all stay unpublished. RIPR 0.10.0 reports discriminator `observation_unverified` for match arms regardless of assertion form. Content-addressed receipt; re-verify after any edit to proof_receipt_is_public_test_proof_result or a RIPR upgrade."

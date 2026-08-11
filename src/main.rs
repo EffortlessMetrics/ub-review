@@ -16687,11 +16687,126 @@ required_proof_unprooven = true
             ReviewBodyAudience::PullRequest,
         );
 
-        assert!(body.contains("## Test proof"));
+        // A head-only pass is not publishable proof: announcing "## Test proof"
+        // while the same body asks for a base+tests witness contradicts itself
+        // and spends reviewer attention on a successful-tool announcement. The
+        // receipt stays in artifacts and still counts as gate evidence.
+        assert!(!body.contains("## Test proof"));
+        assert!(!body.contains("## Proof results"));
         assert!(body.contains("## Verification questions"));
         assert!(body.contains("Confirm the new test still needs a base+tests red/green witness."));
         assert!(body.contains("Needs one test-proof clarification before upstream."));
         assert!(!has_standalone_approval_line(&body));
+    }
+
+    /// Exercise every arm of the publication predicate directly. The rendered
+    /// body tests below reach it only through `render_review_body`, which
+    /// leaves the individual arms without a discriminating assertion.
+    #[test]
+    fn public_test_proof_result_admits_only_decision_changing_receipts() {
+        // Discriminating is the one green result worth a bullet: it proves the
+        // tests fail without the patch.
+        let discriminating = test_red_green_proof_receipt("discriminating", "failed");
+        assert!(super::proof_receipt_is_public_test_proof_result(
+            &discriminating
+        ));
+
+        // A red proof always changes the decision.
+        let head_failed = test_proof_receipt("head_failed", "failed");
+        assert!(super::proof_receipt_is_public_test_proof_result(
+            &head_failed
+        ));
+
+        // A passing build command is a successful-tool announcement.
+        let mut passing_build = test_proof_receipt("head_passed", "passed");
+        passing_build.kind = "focused-build".to_owned();
+        assert!(!super::proof_receipt_is_public_test_proof_result(
+            &passing_build
+        ));
+
+        // A focused test that passed at HEAD with no base+tests side says only
+        // that the test is green, which is equally true of a test asserting
+        // nothing.
+        let head_only = test_proof_receipt("head_passed", "passed");
+        assert!(
+            head_only
+                .commands
+                .iter()
+                .all(|c| c.side != "base-plus-tests")
+        );
+        assert!(!super::proof_receipt_is_public_test_proof_result(
+            &head_only
+        ));
+
+        // The same result with a real base+tests side is a red/green witness.
+        let head_passed_red_green = test_red_green_proof_receipt("head_passed", "failed");
+        assert!(super::proof_receipt_is_public_test_proof_result(
+            &head_passed_red_green
+        ));
+
+        // Everything else stays in artifacts.
+        for result in [
+            "timed_out",
+            "skipped_budget",
+            "base_patch_failed",
+            "non_discriminating",
+        ] {
+            let receipt = test_proof_receipt(result, "timed_out");
+            assert!(
+                !super::proof_receipt_is_public_test_proof_result(&receipt),
+                "{result} must not be published"
+            );
+        }
+
+        // Gate and follow-up truth are unchanged: an executed proof is still
+        // evidence even when it is not worth reviewer attention.
+        assert!(super::proof_receipt_is_test_proof_result(&passing_build));
+        assert!(super::proof_receipt_is_test_proof_result(&head_only));
+    }
+
+    /// A green proof earns a bullet only when it discriminates the patch, which
+    /// is the one result that answers "did this PR do what it intended?".
+    #[test]
+    fn pr_review_body_publishes_discriminating_proof_but_not_passing_build() {
+        let discriminating = test_red_green_proof_receipt("discriminating", "failed");
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[] as &[SummaryOnlyFinding],
+            &[] as &[Observation],
+            &[discriminating],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+        assert!(body.contains("## Test proof"));
+        assert!(body.contains("discriminates the patch"));
+
+        let mut passing_build = test_proof_receipt("head_passed", "passed");
+        passing_build.kind = "focused-build".to_owned();
+        passing_build.commands[0].command = "cargo doc --workspace --no-deps --locked".to_owned();
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[] as &[SummaryOnlyFinding],
+            &[] as &[Observation],
+            &[passing_build],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+        // Nothing else had reviewer value, so the whole post is withheld rather
+        // than reduced to "cargo doc succeeded".
+        assert!(!body.contains("cargo doc"));
+        assert!(body.trim().is_empty());
     }
 
     #[test]
@@ -16883,6 +16998,15 @@ index 1111111..2222222 100644
         assert!(!body.contains("stdout.txt"));
         assert!(!body.contains("stderr.txt"));
         assert!(!has_standalone_approval_line(&body));
+        // This is the shape where the decision sentence is suppressed, so the
+        // first section rendered is also the first line of the posted review.
+        // Every section but `## Decision` used to hardcode a leading newline,
+        // which opened the review with a blank line.
+        assert!(
+            body.starts_with("## "),
+            "posted body must not open with a blank line: {body:?}"
+        );
+        assert!(!body.contains("\n\n\n"));
     }
 
     #[test]
