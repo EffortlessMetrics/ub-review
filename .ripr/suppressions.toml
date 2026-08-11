@@ -20134,3 +20134,437 @@ kind = "exposure_gap"
 finding_id = "probe:src_validate.rs:return_value:72ff2d65"
 owner = "ub-review/core"
 reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/validate.rs for demoted-inline finding text #849: covered by validate_tests demotion/summary-only finding tests that assert the model body is retained. Re-verify after semantic edits to demotion paths."
+# Reporter authority #857 / PR #858: on-diff exposure gaps from the gate run.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:match_arm:21911da3"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:match_arm:5b032556.2"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:match_arm:881697e1"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:match_arm:5b032556"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:match_arm:98d367ee.2"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:2af32fda"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:0e9a44f4"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:match_arm:98d367ee"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:2af32fda.2"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:0e9a44f4.2"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:match_arm:75a74bc1"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:match_arm:5f9c429f"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:match_arm:75a74bc1.2"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_threads.rs:return_value:5dd44727"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/lane_threads.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_threads.rs:return_value:13e7e5c9"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/lane_threads.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:045342a8"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/main.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:80c291b8"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/model_exec.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:24c06fc0"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/model_exec.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:cc46dc7b"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/model_exec.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:1c325f58"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/model_exec.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:6958c46a"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/model_exec.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:7ba6fe6e"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/model_exec.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:86de110b"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/model_exec.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:2dcb6cc7"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/model_exec.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:32010bb6"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/model_exec.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:29ff8b21"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/model_exec.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:b9f8bab5"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:b6630ecc"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:c456e668"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:96bd0dbc"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:d22ecbb4"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:field_construction:52b086aa"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:499c71f2"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:02a77bb9"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:aa666b9c"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:f03814ad"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:8e1300d4"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:32e75d8d"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:4d4434cd"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:40c33329"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:a657b467"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:field_construction:bab74307"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:field_construction:2eea4a8f"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:field_construction:6e4e534c"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:3ada7faa"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:d71cc20e"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:7644b48f"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:d037fae3"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:7c16c78b"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:614e4fc4"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:9302eed7"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:00f00ed3"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:b3264b0e"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:6eed6b78"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:fb95ca68"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:field_construction:d10d476f"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:d944df8e"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:e85fa089"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:25db3db5"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:1a8b5ff2"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:3bcce1fc"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:e086dd09"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:3749d138"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:1a8b5ff2.2"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:3bcce1fc.2"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:3bcce1fc.3"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:16ef5df2"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:4e0db8f9"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:b42257c7"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:f6da583b"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:8b9b7bb1"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:3ef3a369"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/reporter.rs for reporter-authority #857: covered by reporter/lane_threads/gate unit tests (round-trip, supersession, rollup rewrite, stale head, review_forward receipts). Re-verify after semantic edits to the reporter resolution path."
+

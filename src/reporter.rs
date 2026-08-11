@@ -497,33 +497,6 @@ pub(crate) fn resolve_reporter_turn(
     })
 }
 
-/// Read the current-head reporter distillation for the review compiler.
-/// Stale/malformed turns return None (artifact-only).
-pub(crate) fn read_reporter_distillation(review_dir: &Path, current_head: &str) -> Option<String> {
-    resolve_reporter_turn(review_dir, current_head)
-        .public_distillation()
-        .map(str::to_owned)
-}
-
-/// Read the current-head reporter verdict for review-forward gating.
-///
-/// Returns:
-/// - `None` when the reporter is absent;
-/// - `Some(verdict)` for a current-head turn;
-///
-/// Prefer [`resolve_reporter_turn`] + [`ReporterTurnResolution::gate_input`] so
-/// stale/malformed evidence stays explicit under review-forward.
-pub(crate) fn read_reporter_verdict(
-    review_dir: &Path,
-    current_head: &str,
-) -> Option<ReporterVerdict> {
-    match resolve_reporter_turn(review_dir, current_head) {
-        ReporterTurnResolution::Current(turn) => Some(turn.verdict),
-        ReporterTurnResolution::Absent => None,
-        ReporterTurnResolution::StaleHead { .. } | ReporterTurnResolution::Malformed { .. } => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -687,15 +660,18 @@ mod tests {
     }
 
     #[test]
-    fn read_reporter_distillation_returns_none_when_absent() -> Result<()> {
+    fn resolve_reporter_turn_absent_when_no_artifact() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let review_dir = temp.path().join("review");
-        assert!(read_reporter_distillation(&review_dir, "abc").is_none());
+        assert_eq!(
+            resolve_reporter_turn(&review_dir, "abc"),
+            ReporterTurnResolution::Absent
+        );
         Ok(())
     }
 
     #[test]
-    fn read_reporter_distillation_reads_conclusion() -> Result<()> {
+    fn resolve_reporter_turn_reads_current_head_distillation() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let review_dir = temp.path().join("review");
         let conclusion = ReporterConclusion {
@@ -707,9 +683,9 @@ mod tests {
             thread_id: "tid".to_owned(),
         };
         write_reporter_thread(&review_dir, &conclusion, "abc")?;
-        let distillation = read_reporter_distillation(&review_dir, "abc");
-        let distillation = distillation
-            .as_deref()
+        let resolved = resolve_reporter_turn(&review_dir, "abc");
+        let distillation = resolved
+            .public_distillation()
             .ok_or_else(|| anyhow::anyhow!("reporter distillation missing"))?;
         assert!(distillation.contains("safe to merge"));
         Ok(())
@@ -734,10 +710,12 @@ mod tests {
             }
             other => anyhow::bail!("expected Current, got {other:?}"),
         }
-        assert_eq!(
-            read_reporter_verdict(&review_dir, "head-a"),
-            Some(ReporterVerdict::ChangesRequested)
-        );
+        match resolve_reporter_turn(&review_dir, "head-a").gate_input() {
+            ReporterGateInput::Verdict { verdict, .. } => {
+                assert_eq!(verdict, ReporterVerdict::ChangesRequested);
+            }
+            other => anyhow::bail!("expected Verdict, got {other:?}"),
+        }
         Ok(())
     }
 
