@@ -6,12 +6,20 @@ on:
       - fix/gate-diagnostics
     paths:
       - .github/workflows/repair-pr-847.yml
+  pull_request:
+    branches:
+      - main
+    types:
+      - synchronize
+    paths:
+      - .github/workflows/repair-pr-847.yml
 
 permissions:
   contents: write
 
 jobs:
   repair:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'fix/gate-diagnostics'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
