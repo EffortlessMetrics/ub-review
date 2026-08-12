@@ -543,18 +543,32 @@ pub(crate) fn resolve_reporter_turn(
             };
         }
     };
-    if rollup.schema != crate::artifacts::LANE_THREAD_SCHEMA
-        || rollup.lane != "reporter"
-        || turn.schema != REPORTER_THREAD_SCHEMA
-        || turn.stage != "reporter"
-        || turn.receipt_ref != receipt_ref
-        || turn.response_summary != rollup.latest_conclusion
-    {
+    let mut payload_mismatches = Vec::new();
+    if rollup.schema != crate::artifacts::LANE_THREAD_SCHEMA {
+        payload_mismatches.push("rollup.schema");
+    }
+    if rollup.lane != "reporter" {
+        payload_mismatches.push("rollup.lane");
+    }
+    if turn.schema != REPORTER_THREAD_SCHEMA {
+        payload_mismatches.push("turn.schema");
+    }
+    if turn.stage != "reporter" {
+        payload_mismatches.push("turn.stage");
+    }
+    if turn.receipt_ref != receipt_ref {
+        payload_mismatches.push("turn.receipt_ref");
+    }
+    if turn.response_summary != rollup.latest_conclusion {
+        payload_mismatches.push("turn.response_summary/rollup.latest_conclusion");
+    }
+    if !payload_mismatches.is_empty() {
         return ReporterTurnResolution::Malformed {
             receipt: receipt_ref,
-            error:
-                "selected reporter turn has an invalid schema, stage, receipt, or rollup payload"
-                    .to_owned(),
+            error: format!(
+                "selected reporter turn payload mismatches: {}",
+                payload_mismatches.join(", ")
+            ),
         };
     }
     let Some(found_head) = turn
@@ -575,18 +589,31 @@ pub(crate) fn resolve_reporter_turn(
             receipt: receipt_ref,
         };
     }
+    let mut identity_mismatches = Vec::new();
     if turn.turn
         != latest_id
             .strip_prefix("turn-")
             .and_then(|value| value.parse().ok())
             .unwrap_or(u32::MAX)
-        || turn.thread_id != rollup.thread_id
-        || turn.head_sha != rollup.head_sha
-        || turn.verdict != rollup.verdict
     {
+        identity_mismatches.push("turn.turn/rollup.latest_turn");
+    }
+    if turn.thread_id != rollup.thread_id {
+        identity_mismatches.push("turn.thread_id/rollup.thread_id");
+    }
+    if turn.head_sha != rollup.head_sha {
+        identity_mismatches.push("turn.head_sha/rollup.head_sha");
+    }
+    if turn.verdict != rollup.verdict {
+        identity_mismatches.push("turn.verdict/rollup.verdict");
+    }
+    if !identity_mismatches.is_empty() {
         return ReporterTurnResolution::Malformed {
             receipt: receipt_ref,
-            error: "selected reporter turn disagrees with thread rollup identity".to_owned(),
+            error: format!(
+                "selected reporter turn identity mismatches: {}",
+                identity_mismatches.join(", ")
+            ),
         };
     }
     let verdict = match turn.verdict.as_deref().map(verdict_from_wire).transpose() {
@@ -1037,40 +1064,57 @@ mod tests {
     #[test]
     fn reporter_resolution_rejects_turn_rollup_identity_mismatches() -> Result<()> {
         let cases = [
-            ("turn-schema", "turn", "schema", serde_json::json!("future")),
+            (
+                "turn-schema",
+                "turn",
+                "schema",
+                serde_json::json!("future"),
+                "turn.schema",
+            ),
             (
                 "turn-stage",
                 "turn",
                 "stage",
                 serde_json::json!("follow-up"),
+                "turn.stage",
             ),
             (
                 "turn-receipt",
                 "turn",
                 "receipt_ref",
                 serde_json::json!("review/threads/reporter/turn-999.json"),
+                "turn.receipt_ref",
             ),
-            ("turn-number", "turn", "turn", serde_json::json!(7)),
+            (
+                "turn-number",
+                "turn",
+                "turn",
+                serde_json::json!(7),
+                "turn.turn/rollup.latest_turn",
+            ),
             (
                 "rollup-thread",
                 "rollup",
                 "thread_id",
                 serde_json::json!("other-thread"),
+                "rollup.thread_id",
             ),
             (
                 "rollup-head",
                 "rollup",
                 "head_sha",
                 serde_json::json!("other-head"),
+                "rollup.head_sha",
             ),
             (
                 "rollup-verdict",
                 "rollup",
                 "verdict",
                 serde_json::json!("uncertain"),
+                "rollup.verdict",
             ),
         ];
-        for (name, artifact, field, replacement) in cases {
+        for (name, artifact, field, replacement, expected_detail) in cases {
             let temp = tempfile::tempdir()?;
             let review_dir = temp.path().join("review");
             let conclusion = ReporterConclusion {
@@ -1095,10 +1139,10 @@ mod tests {
             std::fs::write(&path, serde_json::to_vec_pretty(&value)?)?;
 
             let resolution = resolve_reporter_turn(&review_dir, "head-a");
-            assert!(
-                matches!(resolution, ReporterTurnResolution::Malformed { .. }),
-                "{name}: {resolution:?}"
-            );
+            let ReporterTurnResolution::Malformed { error, .. } = &resolution else {
+                anyhow::bail!("{name}: expected malformed resolution, got {resolution:?}");
+            };
+            assert!(error.contains(expected_detail), "{name}: {error}");
             assert!(resolution.public_distillation().is_none(), "{name}");
         }
         Ok(())

@@ -317,6 +317,25 @@ mod tests {
     }
 
     #[test]
+    fn primary_turn_write_rejects_higher_turn_without_rollup() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        let thread_dir = review_dir.join("threads/lane");
+        fs::create_dir_all(&thread_dir)?;
+        fs::write(thread_dir.join("turn-001.json"), b"{ malformed")?;
+        let primary = primary_turn("tid", "lane", "primary", vec![], "r0");
+
+        let err = match write_lane_thread_turn(&review_dir, "lane", &primary, "cid", "completed") {
+            Ok(_) => anyhow::bail!("primary rewrite must propagate the higher-turn error"),
+            Err(err) => err,
+        };
+
+        assert!(err.to_string().contains("parse latest lane turn"));
+        assert!(!thread_dir.join("thread.json").exists());
+        Ok(())
+    }
+
+    #[test]
     fn rollup_orders_turns_by_numeric_identity() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let review_dir = temp.path().join("review");

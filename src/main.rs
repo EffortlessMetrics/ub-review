@@ -4263,13 +4263,13 @@ fn write_review_artifacts(
                     routed,
                     &receipt_ref,
                 );
-                let _ = write_lane_thread_turn(
+                write_lane_thread_turn(
                     &review_dir,
                     &receipt.lane,
                     &turn,
                     &receipt.cohort_id,
                     &receipt.status,
-                );
+                )?;
                 // Order 8 (#678): emit a lane_report message to the cross-lane
                 // queue so the reporter (Order 9) can consume the lane's
                 // conclusion. Also emit thread_terminal when the lane is done.
