@@ -8143,8 +8143,18 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
         }.items()
     ):
         fail("gate-decision.json has an incompatible pinned RIPR 0.10.0 envelope")
-    if decision.get("status") not in {"pass", "fail"}:
+    badge_status = decision.get("status")
+    if badge_status not in {"pass", "warn", "fail"}:
         fail(f"gate-decision.json has unsupported status: {decision.get('status')!r}")
+    warnings = decision.get("warnings")
+    if not isinstance(warnings, list) or any(
+        not isinstance(warning, str) or not warning for warning in warnings
+    ):
+        fail("gate-decision.json warnings must be an array of non-empty strings")
+    if badge_status == "pass" and warnings:
+        fail("gate-decision.json pass status must not carry warnings")
+    if badge_status == "warn" and not warnings:
+        fail("gate-decision.json warn status must carry at least one warning")
     counts = decision.get("counts")
     if not isinstance(counts, dict):
         fail("gate-decision.json is missing counts object")
@@ -9821,6 +9831,7 @@ def self_test_ripr_exposure_gap_contract() -> None:
             "scope": "diff",
             "basis": "finding_exposure",
             "status": "pass",
+            "warnings": [],
             "counts": {
                 "unsuppressed_exposure_gaps": unsuppressed,
                 "suppressed_exposure_gaps": suppressed,
@@ -9856,13 +9867,17 @@ def self_test_ripr_exposure_gap_contract() -> None:
     mixed_badge = badge(2, 1, 4)
     mixed_detail = raw_detail(4, 3)
     require_ripr_exposure_gap_details(write_root(mixed_badge, mixed_detail))
+    preview_warning = badge(0, 3, 4)
+    preview_warning["status"] = "warn"
+    preview_warning["warnings"] = ["preview-skipped: python"]
+    require_ripr_exposure_gap_details(write_root(preview_warning, mixed_detail))
     require_ripr_exposure_gap_details(write_root(badge(0, 3, 4), mixed_detail))
     require_ripr_exposure_gap_details(write_root(badge(0, 0, 0), raw_detail(0, 0)))
     require_ripr_exposure_gap_details(
         write_root(badge(1, 200, 250), raw_detail(250, 201))
     )
-    # Exact contradictory v1 regression shape from run 31616901455 is no
-    # longer silently reinterpreted: v2 carries no per-entry policy labels.
+    # The corrected v2 representation of run 31616901455 reconciles aggregate
+    # raw totals without pretending the badge can label individual IDs.
     require_ripr_exposure_gap_details(
         write_root(badge(0, 119, 246), raw_detail(246, 119))
     )
@@ -9878,6 +9893,15 @@ def self_test_ripr_exposure_gap_contract() -> None:
         "does not reconcile with gate-decision counts",
         lambda root=write_root(
             mixed_badge, raw_detail(4, 2)
+        ): require_ripr_exposure_gap_details(root),
+    )
+    warn_without_warning = badge(2, 1, 4)
+    warn_without_warning["status"] = "warn"
+    expect_self_test_failure(
+        "ripr warn badge explains preview-skipped state",
+        "warn status must carry at least one warning",
+        lambda root=write_root(
+            warn_without_warning, mixed_detail
         ): require_ripr_exposure_gap_details(root),
     )
     expect_self_test_failure(
@@ -9901,11 +9925,23 @@ def self_test_ripr_exposure_gap_contract() -> None:
             },
         ): require_ripr_exposure_gap_details(root),
     )
+    contradictory_v1 = raw_detail(246, 119)
+    contradictory_v1["schema"] = "ub-review.ripr_exposure_gaps.v1"
+    contradictory_v1["total_gap_findings"] = contradictory_v1.pop(
+        "total_raw_gap_findings"
+    )
+    contradictory_v1.pop("total_raw_findings")
+    contradictory_v1.pop("semantics")
+    contradictory_v1.pop("source")
+    contradictory_v1.pop("entry_cap")
+    for entry in contradictory_v1["entries"]:
+        entry["suppression_state"] = "unsuppressed"
+        entry["threshold_contribution"] = 1
     expect_self_test_failure(
-        "ripr v1 detail is rejected rather than reinterpreted",
+        "exact contradictory v1 0-unsuppressed 119-suppressed packet is rejected",
         "wrong schema",
         lambda root=write_root(
-            mixed_badge, dict(mixed_detail, schema="ub-review.ripr_exposure_gaps.v1")
+            badge(0, 119, 246), contradictory_v1
         ): require_ripr_exposure_gap_details(root),
     )
     contradictory = raw_detail(4, 3)

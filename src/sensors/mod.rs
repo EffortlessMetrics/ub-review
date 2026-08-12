@@ -1080,6 +1080,56 @@ mod tests {
     }
 
     #[test]
+    fn ripr_sensor_keeps_primary_receipts_when_successful_detail_output_is_truncated() -> Result<()>
+    {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("repo");
+        let out = temp.path().join("out");
+        let fake_bin = temp.path().join("fake-bin");
+        fs::create_dir_all(&root)?;
+        fs::create_dir_all(out.join("input"))?;
+        fs::write(
+            out.join("input/diff.patch"),
+            "diff --git a/src/lib.rs b/src/lib.rs\n",
+        )?;
+        fs::write(root.join("ripr-detail-truncated"), "force malformed JSON")?;
+        let fake_ripr = write_fake_ripr_command(&fake_bin)?;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let mut sensor = sensor_plan("ripr", &fake_ripr.display().to_string(), true);
+        sensor.timeout_sec = 5;
+        let plan = test_plan(vec![sensor.clone()]);
+
+        run_sensor(&root, &out, &sensor, &event_log, &plan)?;
+
+        let sensor_dir = out.join("sensors/ripr");
+        let status: serde_json::Value =
+            serde_json::from_slice(&fs::read(sensor_dir.join("ub-review-sensor-status.json"))?)?;
+        assert_eq!(status["status"], "ok");
+        assert_eq!(
+            fs::read(sensor_dir.join("gate-decision.json"))?,
+            fs::read(sensor_dir.join("stdout.txt"))?
+        );
+        let gate: serde_json::Value =
+            serde_json::from_slice(&fs::read(sensor_dir.join("gate-decision.json"))?)?;
+        assert_eq!(gate["counts"]["unsuppressed_exposure_gaps"], 1);
+        assert_eq!(gate["counts"]["suppressed_exposure_gaps"], 1);
+        let detail: serde_json::Value =
+            serde_json::from_slice(&fs::read(sensor_dir.join("exposure-gaps.json"))?)?;
+        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v2");
+        assert_eq!(detail["status"], "detail_unavailable");
+        assert!(
+            detail["error"]
+                .as_str()
+                .is_some_and(|error| error.contains("parse ripr --format json output"))
+        );
+        assert!(detail.get("total_raw_findings").is_none());
+        assert!(detail.get("entries").is_none());
+        assert!(!sensor_dir.join("exposure-gaps.stdout.tmp").exists());
+        assert!(!sensor_dir.join("exposure-gaps.stderr.tmp").exists());
+        Ok(())
+    }
+
+    #[test]
     fn cargo_allow_sensor_skips_without_policy_config() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let mut diff = test_diff();
@@ -1374,6 +1424,7 @@ fn main() {{
             fs::write(
                 &source,
                 r####"use std::env;
+use std::path::Path;
 
 const BADGE: &str = r###"{"schema_version":"0.6","kind":"ripr","scope":"diff","basis":"finding_exposure","label":"ripr","message":"1","status":"fail","color":"red","counts":{"unsuppressed_exposure_gaps":1,"suppressed_exposure_gaps":1,"unsuppressed_test_efficiency_findings":0,"analyzed_findings":2},"policy":{"include_unknowns":false,"fail_on_nonzero":false},"warnings":[]}"###;
 const DETAIL: &str = r###"{"schema_version":"0.2","tool":"ripr","mode":"ready","summary":{"findings":2},"findings":[{"id":"probe:src_lib_rs:12:call_deletion","classification":"weakly_exposed","probe":{"family":"call_deletion","file":"src/lib.rs","line":12,"expression":"crate::value()"},"ripr":{"reach":{"summary":"test reaches changed owner"},"discriminate":{"summary":"oracle does not distinguish behavior"}}},{"id":"probe:src_lib_rs:18:error_path","classification":"reachable_unrevealed","probe":{"family":"error_path","file":"src/lib.rs","line":18,"expression":"crate::fallible()"},"ripr":{"reach":{"summary":"raw reach gap"},"discriminate":{"summary":"raw oracle gap"}}}]}"###;
@@ -1386,6 +1437,7 @@ fn main() {
         .map(|pair| pair[1].as_str());
     match format {
         Some("badge-json") => println!("{BADGE}"),
+        Some("json") if Path::new("ripr-detail-truncated").is_file() => print!("{{"),
         Some("json") => println!("{DETAIL}"),
         other => {
             eprintln!("unexpected ripr format: {other:?}; args={args:?}");
@@ -1412,7 +1464,11 @@ case "$*" in
     printf '%s\n' '{"schema_version":"0.6","kind":"ripr","scope":"diff","basis":"finding_exposure","label":"ripr","message":"1","status":"fail","color":"red","counts":{"unsuppressed_exposure_gaps":1,"suppressed_exposure_gaps":1,"unsuppressed_test_efficiency_findings":0,"analyzed_findings":2},"policy":{"include_unknowns":false,"fail_on_nonzero":false},"warnings":[]}'
     ;;
   *"--format json"*)
-    printf '%s\n' '{"schema_version":"0.2","tool":"ripr","mode":"ready","summary":{"findings":2},"findings":[{"id":"probe:src_lib_rs:12:call_deletion","classification":"weakly_exposed","probe":{"family":"call_deletion","file":"src/lib.rs","line":12,"expression":"crate::value()"},"ripr":{"reach":{"summary":"test reaches changed owner"},"discriminate":{"summary":"oracle does not distinguish behavior"}}},{"id":"probe:src_lib_rs:18:error_path","classification":"reachable_unrevealed","probe":{"family":"error_path","file":"src/lib.rs","line":18,"expression":"crate::fallible()"},"ripr":{"reach":{"summary":"raw reach gap"},"discriminate":{"summary":"raw oracle gap"}}}]}'
+    if [ -f ripr-detail-truncated ]; then
+      printf '{'
+    else
+      printf '%s\n' '{"schema_version":"0.2","tool":"ripr","mode":"ready","summary":{"findings":2},"findings":[{"id":"probe:src_lib_rs:12:call_deletion","classification":"weakly_exposed","probe":{"family":"call_deletion","file":"src/lib.rs","line":12,"expression":"crate::value()"},"ripr":{"reach":{"summary":"test reaches changed owner"},"discriminate":{"summary":"oracle does not distinguish behavior"}}},{"id":"probe:src_lib_rs:18:error_path","classification":"reachable_unrevealed","probe":{"family":"error_path","file":"src/lib.rs","line":18,"expression":"crate::fallible()"},"ripr":{"reach":{"summary":"raw reach gap"},"discriminate":{"summary":"raw oracle gap"}}}]}'
+    fi
     ;;
   *)
     echo "unexpected ripr args: $*" >&2

@@ -241,7 +241,6 @@ pub(crate) fn write_ripr_exposure_gap_details(
 
 #[cfg(test)]
 mod tests {
-
     use anyhow::{Context as _, Result};
 
     #[test]
@@ -473,6 +472,29 @@ mod tests {
                 .with_context(|| format!("{name} unexpectedly accepted"))?;
             assert!(!format!("{error:#}").is_empty());
         }
+
+        let mut after_cap = valid.clone();
+        let first = valid["findings"][0].clone();
+        after_cap["findings"] = serde_json::Value::Array(
+            (0..=super::RIPR_GAP_DETAIL_CAP)
+                .map(|index| {
+                    let mut finding = valid["findings"][0].clone();
+                    finding["id"] = serde_json::json!(format!("finding-{index}"));
+                    finding
+                })
+                .chain(std::iter::once({
+                    let mut malformed = first;
+                    malformed["id"] = serde_json::json!("finding-after-cap");
+                    malformed["probe"]["line"] = serde_json::json!(0);
+                    malformed
+                }))
+                .collect(),
+        );
+        after_cap["summary"]["findings"] = serde_json::json!(202);
+        let error = super::ripr_exposure_gap_details_from_value(&after_cap)
+            .err()
+            .context("malformed finding after the presentation cap was accepted")?;
+        assert!(format!("{error:#}").contains("finding-after-cap"));
         Ok(())
     }
 }

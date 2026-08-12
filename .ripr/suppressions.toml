@@ -21417,18 +21417,6 @@ reason = "RIPR 0.10.0 ready-mode residual process/dispatch shape in the bounded 
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_artifacts.rs:call_deletion:445ec51f"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot connect the centralized schema constant directly to its consumers. ripr_sensor_writes_badge_and_detail_receipts_from_configured_command asserts the exact v2 schema emitted through the production sensor, and the artifact-verifier self-test accepts v2 while rejecting legacy v1. Re-verify after the RIPR exposure-detail schema or sensor composition changes."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_artifacts.rs:field_construction:c6ae408c"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot connect the centralized schema constant directly to its consumers. ripr_sensor_writes_badge_and_detail_receipts_from_configured_command asserts the exact v2 schema emitted through the production sensor, and the artifact-verifier self-test accepts v2 while rejecting legacy v1. Re-verify after the RIPR exposure-detail schema or sensor composition changes."
-
-[[suppressions]]
-kind = "exposure_gap"
 finding_id = "probe:src_sensors_ripr.rs:return_value:9d9a6beb"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 weak-oracle residual in the fallible raw-detail projection. ripr_exposure_gap_details_project_filter_cap_and_unavailable_shape observes the complete v2 value, raw totals, cap, truncation, omitted policy fields, and clipped diagnostics; ripr_exposure_gap_details_reject_malformed_pinned_input discriminates envelope, count, duplicate-ID, path, and line failures. Re-verify after projection semantics change."
@@ -21444,3 +21432,21 @@ kind = "exposure_gap"
 finding_id = "probe:src_sensors_ripr.rs:field_construction:be5569c0"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 weak-oracle residual around the canonical gap-class set. ripr_exposure_gap_details_project_filter_cap_and_unavailable_shape distinguishes exposed findings from all three canonical raw gap classes and asserts the resulting uncapped raw gap total and capped entry behavior. Re-verify after RIPR classification or detail-cap semantics change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:bcab99ad"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weak-oracle residual in the Unix fake-RIPR truncated-JSON fixture branch. ripr_sensor_keeps_primary_receipts_when_successful_detail_output_is_truncated executes the fake process successfully, forces this exact malformed output, asserts v2 detail_unavailable without counts/entries, preserves the primary sensor status and verbatim gate receipt, and proves temporary captures are removed. Re-verify after the fake sensor or detail failure contract changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:e510c495"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weak-oracle residual in the Unix fake-RIPR truncated-JSON fixture branch. ripr_sensor_keeps_primary_receipts_when_successful_detail_output_is_truncated executes the fake process successfully, forces this exact malformed output, asserts v2 detail_unavailable without counts/entries, preserves the primary sensor status and verbatim gate receipt, and proves temporary captures are removed. Re-verify after the fake sensor or detail failure contract changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:58552b06"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weak-oracle residual in the Unix fake-RIPR truncated-JSON fixture branch. ripr_sensor_keeps_primary_receipts_when_successful_detail_output_is_truncated executes the fake process successfully, forces this exact malformed output, asserts v2 detail_unavailable without counts/entries, preserves the primary sensor status and verbatim gate receipt, and proves temporary captures are removed. Re-verify after the fake sensor or detail failure contract changes."
