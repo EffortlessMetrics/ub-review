@@ -21008,6 +21008,18 @@ reason = "Local RIPR 0.10.0 ready-mode finding on advisory results and safe owne
 
 [[suppressions]]
 kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:29480275"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on shared bounded capture composition. clip_capture_bounds_streams_with_head_tail_and_marker pins precommit head/tail/marker behavior, and local_ripr_console_capture_is_bounded_and_keeps_head_and_tail pins the RIPR-specific budget and marker. Re-verify after capture composition edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:15984a47"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on shared bounded capture composition. clip_capture_bounds_streams_with_head_tail_and_marker pins precommit head/tail/marker behavior, and local_ripr_console_capture_is_bounded_and_keeps_head_and_tail pins the RIPR-specific budget and marker. Re-verify after capture composition edits."
+
+[[suppressions]]
+kind = "exposure_gap"
 finding_id = "probe:xtask_src_main.rs:return_value:9785824e"
 owner = "ub-review/core"
 reason = "Local RIPR 0.10.0 ready-mode finding on advisory results and safe owned output. local_ripr_unsuppressed_count_is_advisory_not_a_local_threshold, local_ripr_options_and_rust_input_contract_are_explicit, and local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pin the contract. Re-verify after local result or output ownership edits."
