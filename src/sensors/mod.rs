@@ -1426,7 +1426,7 @@ fn main() {{
                 r####"use std::env;
 use std::path::Path;
 
-const BADGE: &str = r###"{"schema_version":"0.6","kind":"ripr","scope":"diff","basis":"finding_exposure","label":"ripr","message":"1","status":"fail","color":"red","counts":{"unsuppressed_exposure_gaps":1,"suppressed_exposure_gaps":1,"unsuppressed_test_efficiency_findings":0,"analyzed_findings":2},"policy":{"include_unknowns":false,"fail_on_nonzero":false},"warnings":[]}"###;
+const BADGE: &str = r###"{"schema_version":"0.6","kind":"ripr","scope":"diff","basis":"finding_exposure","label":"ripr","message":"1","status":"warn","color":"yellow","counts":{"unsuppressed_exposure_gaps":1,"suppressed_exposure_gaps":1,"unsuppressed_test_efficiency_findings":0,"analyzed_findings":2},"policy":{"include_unknowns":false,"fail_on_nonzero":false},"warnings":[],"preview_skipped":[]}"###;
 const DETAIL: &str = r###"{"schema_version":"0.2","tool":"ripr","mode":"ready","summary":{"findings":2},"findings":[{"id":"probe:src_lib_rs:12:call_deletion","classification":"weakly_exposed","probe":{"family":"call_deletion","file":"src/lib.rs","line":12,"expression":"crate::value()"},"ripr":{"reach":{"summary":"test reaches changed owner"},"discriminate":{"summary":"oracle does not distinguish behavior"}}},{"id":"probe:src_lib_rs:18:error_path","classification":"reachable_unrevealed","probe":{"family":"error_path","file":"src/lib.rs","line":18,"expression":"crate::fallible()"},"ripr":{"reach":{"summary":"raw reach gap"},"discriminate":{"summary":"raw oracle gap"}}}]}"###;
 
 fn main() {
@@ -1461,7 +1461,7 @@ fn main() {
                 r####"#!/bin/sh
 case "$*" in
   *"--format badge-json"*)
-    printf '%s\n' '{"schema_version":"0.6","kind":"ripr","scope":"diff","basis":"finding_exposure","label":"ripr","message":"1","status":"fail","color":"red","counts":{"unsuppressed_exposure_gaps":1,"suppressed_exposure_gaps":1,"unsuppressed_test_efficiency_findings":0,"analyzed_findings":2},"policy":{"include_unknowns":false,"fail_on_nonzero":false},"warnings":[]}'
+    printf '%s\n' '{"schema_version":"0.6","kind":"ripr","scope":"diff","basis":"finding_exposure","label":"ripr","message":"1","status":"warn","color":"yellow","counts":{"unsuppressed_exposure_gaps":1,"suppressed_exposure_gaps":1,"unsuppressed_test_efficiency_findings":0,"analyzed_findings":2},"policy":{"include_unknowns":false,"fail_on_nonzero":false},"warnings":[],"preview_skipped":[]}'
     ;;
   *"--format json"*)
     if [ -f ripr-detail-truncated ]; then

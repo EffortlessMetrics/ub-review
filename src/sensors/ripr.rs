@@ -306,6 +306,11 @@ mod tests {
             ],
         });
         let detail = super::ripr_exposure_gap_details_from_value(&value)?;
+        assert_eq!(
+            detail,
+            super::ripr_exposure_gap_details_from_value(&value)?,
+            "stable raw IDs and entry order must reproduce byte-equivalent values"
+        );
         assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v2");
         assert_eq!(detail["status"], "ok");
         assert_eq!(detail["semantics"], "raw_pre_policy");
@@ -353,26 +358,29 @@ mod tests {
                 .is_some_and(|s| s.contains("relational oracle"))
         );
 
-        // The cap bounds the artifact and records the truncation.
-        let many: Vec<serde_json::Value> = (0..250)
-            .map(|i| finding(&format!("probe:x:{i}:call_deletion"), "no_static_path"))
-            .collect();
-        let capped = super::ripr_exposure_gap_details_from_value(&serde_json::json!({
-            "schema_version": "0.2",
-            "tool": "ripr",
-            "mode": "ready",
-            "summary": {"findings": 250},
-            "findings": many,
-        }))?;
-        assert_eq!(capped["total_raw_gap_findings"], 250);
-        assert_eq!(capped["truncated"], true);
-        assert_eq!(
-            capped["entries"]
-                .as_array()
-                .context("capped entries")?
-                .len(),
-            super::RIPR_GAP_DETAIL_CAP
-        );
+        // Exact boundary fixtures pin 200 as complete, 201 as truncated, and
+        // a larger input as still bounded to the presentation cap.
+        for total in [200, 201, 250] {
+            let many: Vec<serde_json::Value> = (0..total)
+                .map(|i| finding(&format!("probe:x:{i}:call_deletion"), "no_static_path"))
+                .collect();
+            let capped = super::ripr_exposure_gap_details_from_value(&serde_json::json!({
+                "schema_version": "0.2",
+                "tool": "ripr",
+                "mode": "ready",
+                "summary": {"findings": total},
+                "findings": many,
+            }))?;
+            assert_eq!(capped["total_raw_gap_findings"], total);
+            assert_eq!(capped["truncated"], total > super::RIPR_GAP_DETAIL_CAP);
+            assert_eq!(
+                capped["entries"]
+                    .as_array()
+                    .context("capped entries")?
+                    .len(),
+                total.min(super::RIPR_GAP_DETAIL_CAP)
+            );
+        }
 
         let empty = super::ripr_exposure_gap_details_from_value(&serde_json::json!({
             "schema_version": "0.2",
@@ -454,6 +462,19 @@ mod tests {
                 value["summary"]["findings"] = serde_json::json!(2);
                 value["findings"] =
                     serde_json::json!([value["findings"][0].clone(), value["findings"][0].clone()]);
+                value
+            }),
+            ("whitespace-id", {
+                let mut value = valid.clone();
+                value["findings"][0]["id"] = serde_json::json!("   ");
+                value
+            }),
+            ("classification", {
+                let mut value = valid.clone();
+                value["findings"][0]
+                    .as_object_mut()
+                    .context("fixture finding object")?
+                    .remove("classification");
                 value
             }),
             ("path", {

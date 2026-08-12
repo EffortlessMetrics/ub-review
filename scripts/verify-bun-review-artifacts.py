@@ -8151,10 +8151,11 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
         not isinstance(warning, str) or not warning for warning in warnings
     ):
         fail("gate-decision.json warnings must be an array of non-empty strings")
-    if badge_status == "pass" and warnings:
-        fail("gate-decision.json pass status must not carry warnings")
-    if badge_status == "warn" and not warnings:
-        fail("gate-decision.json warn status must carry at least one warning")
+    preview_skipped = decision.get("preview_skipped")
+    if not isinstance(preview_skipped, list) or any(
+        not isinstance(language, str) or not language for language in preview_skipped
+    ):
+        fail("gate-decision.json preview_skipped must be an array of non-empty strings")
     counts = decision.get("counts")
     if not isinstance(counts, dict):
         fail("gate-decision.json is missing counts object")
@@ -9832,6 +9833,7 @@ def self_test_ripr_exposure_gap_contract() -> None:
             "basis": "finding_exposure",
             "status": "pass",
             "warnings": [],
+            "preview_skipped": [],
             "counts": {
                 "unsuppressed_exposure_gaps": unsuppressed,
                 "suppressed_exposure_gaps": suppressed,
@@ -9867,10 +9869,18 @@ def self_test_ripr_exposure_gap_contract() -> None:
     mixed_badge = badge(2, 1, 4)
     mixed_detail = raw_detail(4, 3)
     require_ripr_exposure_gap_details(write_root(mixed_badge, mixed_detail))
+    one_gap_advisory = badge(1, 0, 4)
+    one_gap_advisory["status"] = "warn"
+    require_ripr_exposure_gap_details(
+        write_root(one_gap_advisory, raw_detail(4, 1))
+    )
     preview_warning = badge(0, 3, 4)
     preview_warning["status"] = "warn"
-    preview_warning["warnings"] = ["preview-skipped: python"]
+    preview_warning["preview_skipped"] = ["python"]
     require_ripr_exposure_gap_details(write_root(preview_warning, mixed_detail))
+    suppression_warning = badge(0, 3, 4)
+    suppression_warning["warnings"] = ["suppression did not match"]
+    require_ripr_exposure_gap_details(write_root(suppression_warning, mixed_detail))
     require_ripr_exposure_gap_details(write_root(badge(0, 3, 4), mixed_detail))
     require_ripr_exposure_gap_details(write_root(badge(0, 0, 0), raw_detail(0, 0)))
     require_ripr_exposure_gap_details(
@@ -9888,6 +9898,15 @@ def self_test_ripr_exposure_gap_contract() -> None:
         "without exposure-gaps.json",
         lambda root=write_root(mixed_badge, None): require_ripr_exposure_gap_details(root),
     )
+    stale_badge = badge(2, 1, 4)
+    stale_badge["schema_version"] = "0.5"
+    expect_self_test_failure(
+        "ripr 0.5 badge is rejected by the pinned 0.10.0 envelope",
+        "incompatible pinned RIPR 0.10.0 envelope",
+        lambda root=write_root(
+            stale_badge, mixed_detail
+        ): require_ripr_exposure_gap_details(root),
+    )
     expect_self_test_failure(
         "ripr raw gap total reconciles with badge partition",
         "does not reconcile with gate-decision counts",
@@ -9895,13 +9914,13 @@ def self_test_ripr_exposure_gap_contract() -> None:
             mixed_badge, raw_detail(4, 2)
         ): require_ripr_exposure_gap_details(root),
     )
-    warn_without_warning = badge(2, 1, 4)
-    warn_without_warning["status"] = "warn"
+    invalid_preview = badge(2, 1, 4)
+    invalid_preview["preview_skipped"] = [""]
     expect_self_test_failure(
-        "ripr warn badge explains preview-skipped state",
-        "warn status must carry at least one warning",
+        "ripr preview-skipped entries are non-empty strings",
+        "preview_skipped must be an array of non-empty strings",
         lambda root=write_root(
-            warn_without_warning, mixed_detail
+            invalid_preview, mixed_detail
         ): require_ripr_exposure_gap_details(root),
     )
     expect_self_test_failure(
