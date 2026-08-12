@@ -306,8 +306,10 @@ mod tests {
             review_dir.join("threads/lane/turn-001.json"),
             b"{ malformed",
         )?;
-        let err = write_lane_thread_turn(&review_dir, "lane", &t0, "cid-a", "rewritten")
-            .expect_err("malformed latest turn must fail the rollup refresh");
+        let err = match write_lane_thread_turn(&review_dir, "lane", &t0, "cid-a", "rewritten") {
+            Ok(_) => anyhow::bail!("malformed latest turn must fail the rollup refresh"),
+            Err(err) => err,
+        };
 
         assert!(err.to_string().contains("parse latest lane turn"));
         assert_eq!(fs::read(&rollup_path)?, prior_rollup);

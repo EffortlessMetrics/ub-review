@@ -1122,15 +1122,17 @@ mod tests {
         let mut revised = conclusion;
         revised.distillation = "revised".to_owned();
         revised.verdict = ReporterVerdict::Clear;
-        let err = write_reporter_turn(
+        let err = match write_reporter_turn(
             &review_dir,
             &revised,
             1,
             "head-a",
             "reporter_re_distilled",
             &[],
-        )
-        .expect_err("turn-001 write failure must propagate");
+        ) {
+            Ok(_) => anyhow::bail!("turn-001 write failure must propagate"),
+            Err(err) => err,
+        };
         assert!(!err.to_string().is_empty());
         assert_eq!(
             resolve_reporter_turn(&review_dir, "head-a"),
