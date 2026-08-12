@@ -37,6 +37,107 @@ pub(crate) struct GateCheckOutcome {
 pub(crate) struct GateCheckReason {
     #[serde(default)]
     pub(crate) id: String,
+    /// What actually failed. The writer always emits this; enforcement used to
+    /// discard it, so a failing check printed a bare sensor name and the
+    /// operator had to open the artifact to learn anything.
+    #[serde(default)]
+    pub(crate) detail: String,
+    /// Operator action, present for operational failures.
+    #[serde(default)]
+    pub(crate) next_action: Option<String>,
+    #[serde(default)]
+    pub(crate) receipt: String,
+}
+
+/// Collapse a gate-artifact string into a single safe log line.
+///
+/// GitHub Actions parses any line beginning with `::` as a workflow command,
+/// so a reason field containing a newline followed by `::set-output` (or
+/// `::add-mask`, `::error`) would inject one. These fields are not fully
+/// trusted: a `detail` can quote repository configuration, and a tool gate can
+/// surface text that originated in the reviewed branch. Fold every line break
+/// into a space so one field can only ever produce one line, and bound the
+/// length so a pathological artifact cannot flood the log.
+fn gate_reason_log_text(value: &str) -> String {
+    let folded = value
+        .split(['\r', '\n'])
+        .map(str::trim)
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    crate::truncate_chars(&folded, GATE_REASON_LOG_MAX_CHARS)
+}
+
+const GATE_REASON_LOG_MAX_CHARS: usize = 500;
+const GATE_REASON_LOG_MAX_REASONS: usize = 8;
+
+fn gate_reasons_for_log(reasons: &[GateCheckReason]) -> impl Iterator<Item = &GateCheckReason> {
+    reasons
+        .iter()
+        .filter(|reason| !reason.id.trim().is_empty())
+        .take(GATE_REASON_LOG_MAX_REASONS)
+}
+
+fn gate_reason_log_omitted_count(reasons: &[GateCheckReason]) -> usize {
+    reasons
+        .iter()
+        .filter(|reason| !reason.id.trim().is_empty())
+        .count()
+        .saturating_sub(GATE_REASON_LOG_MAX_REASONS)
+}
+
+fn gate_reason_id_summary(reasons: &[GateCheckReason]) -> String {
+    let ids = gate_reasons_for_log(reasons)
+        .map(|reason| gate_reason_log_text(&reason.id))
+        .filter(|id| !id.is_empty())
+        .collect::<Vec<_>>();
+    if ids.is_empty() {
+        return "none".to_owned();
+    }
+    let omitted = gate_reason_log_omitted_count(reasons);
+    let suffix = (omitted > 0).then(|| format!(", ... +{omitted} more"));
+    let suffix_chars = suffix.as_ref().map_or(0, |value| value.chars().count());
+    let mut summary = crate::truncate_chars(
+        &ids.join(", "),
+        GATE_REASON_LOG_MAX_CHARS.saturating_sub(suffix_chars),
+    );
+    if let Some(suffix) = suffix {
+        summary.push_str(&suffix);
+    }
+    summary
+}
+
+/// Print bounded detail for the first blocking reasons, so a failing gate is
+/// actionable from the log without allowing a pathological artifact to flood
+/// the step. The full lossless list remains in `review/gate_outcome.json`.
+fn print_gate_reason_detail(reasons: &[GateCheckReason]) {
+    for reason in gate_reasons_for_log(reasons) {
+        let id = gate_reason_log_text(&reason.id);
+        let detail = gate_reason_log_text(&reason.detail);
+        if detail.is_empty() {
+            println!("  {id}");
+        } else {
+            println!("  {id}: {detail}");
+        }
+        let receipt = gate_reason_log_text(&reason.receipt);
+        if !receipt.is_empty() {
+            println!("    receipt: {receipt}");
+        }
+        let next_action = reason
+            .next_action
+            .as_deref()
+            .map(gate_reason_log_text)
+            .unwrap_or_default();
+        if !next_action.is_empty() {
+            println!("    next: {next_action}");
+        }
+    }
+    let omitted = gate_reason_log_omitted_count(reasons);
+    if omitted > 0 {
+        println!(
+            "  ... {omitted} additional blocking reason(s) omitted; inspect review/gate_outcome.json"
+        );
+    }
 }
 
 /// Single source of truth for gate enforcement: resolves `fail-on-gate` with
@@ -121,40 +222,24 @@ pub(crate) fn cmd_gate_check(args: GateCheckArgs) -> Result<()> {
             Ok(())
         }
         Some("fail") => {
-            let mut reason_ids = outcome
-                .reasons
-                .iter()
-                .map(|reason| reason.id.as_str())
-                .filter(|id| !id.trim().is_empty())
-                .collect::<Vec<_>>()
-                .join(", ");
-            if reason_ids.is_empty() {
-                reason_ids = "none".to_owned();
-            }
+            let reason_ids = gate_reason_id_summary(&outcome.reasons);
             let message = format!(
                 "ub-review gate failed (blocking reasons: {reason_ids}); receipts are in {}",
                 path.display()
             );
+            print_gate_reason_detail(&outcome.reasons);
             // GitHub Actions error annotation; the bail below sets the exit code.
             println!("::error::{message}");
             bail!("{message}");
         }
         Some("inconclusive") => {
-            let mut reason_ids = outcome
-                .reasons
-                .iter()
-                .map(|reason| reason.id.as_str())
-                .filter(|id| !id.trim().is_empty())
-                .collect::<Vec<_>>()
-                .join(", ");
-            if reason_ids.is_empty() {
-                reason_ids = "none".to_owned();
-            }
+            let reason_ids = gate_reason_id_summary(&outcome.reasons);
             let message = format!(
                 "ub-review gate is inconclusive (required evidence unavailable: {reason_ids}); \
                  receipts are in {}; check the artifact tree for what was missing",
                 path.display()
             );
+            print_gate_reason_detail(&outcome.reasons);
             println!("::error::{message}");
             bail!("{message}");
         }
@@ -711,6 +796,112 @@ mod tests {
         sensor_plan, test_plan, test_proof_receipt, test_run_args, test_terminal_state,
     };
     use crate::*;
+
+    /// Enforcement used to deserialize only `id`, so a failing gate printed a
+    /// bare sensor name while the artifact held the actual cause and the fix.
+    #[test]
+    fn gate_check_reason_carries_detail_and_next_action() -> Result<()> {
+        let outcome: GateCheckOutcome = serde_json::from_str(
+            r#"{
+      "schema": "ub-review.gate_outcome.v1",
+      "conclusion": "fail",
+      "reasons": [{
+          "kind": "tool-gate",
+          "id": "ripr",
+          "detail": "new_unsuppressed=4 exceeds configured maximum 0",
+          "receipt": "review/tool-gate-outcomes.json#ripr",
+          "next_action": "inspect sensors/ripr/exposure-gaps.json"
+      }]
+  }"#,
+        )?;
+        let reason = outcome
+            .reasons
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("expected one blocking reason"))?;
+        assert_eq!(reason.id, "ripr");
+        assert_eq!(
+            reason.detail,
+            "new_unsuppressed=4 exceeds configured maximum 0"
+        );
+        assert_eq!(reason.receipt, "review/tool-gate-outcomes.json#ripr");
+        assert_eq!(
+            reason.next_action.as_deref(),
+            Some("inspect sensors/ripr/exposure-gaps.json")
+        );
+        Ok(())
+    }
+
+    /// A reason with no detail must still print without panicking or emitting
+    /// a dangling separator.
+    #[test]
+    fn gate_check_reason_tolerates_missing_detail() -> Result<()> {
+        let outcome: GateCheckOutcome =
+            serde_json::from_str(r#"{"conclusion":"fail","reasons":[{"id":"policy"},{"id":""}]}"#)?;
+        assert_eq!(outcome.reasons.len(), 2);
+        super::print_gate_reason_detail(&outcome.reasons);
+        Ok(())
+    }
+
+    /// A reason field can quote repository configuration, so it is not fully
+    /// trusted. GitHub Actions treats any line starting with `::` as a
+    /// workflow command; an embedded newline would let one inject a command.
+    #[test]
+    fn gate_reason_log_text_cannot_inject_a_workflow_command() {
+        let hostile = "boom\n::add-mask::secret\r\n::error::spoofed";
+        let folded = super::gate_reason_log_text(hostile);
+        assert!(!folded.contains('\n') && !folded.contains('\r'));
+        assert_eq!(folded, "boom ::add-mask::secret ::error::spoofed");
+
+        let flood = "x".repeat(10_000);
+        let capped = super::gate_reason_log_text(&flood);
+        assert_eq!(
+            capped,
+            format!("{}...", "x".repeat(super::GATE_REASON_LOG_MAX_CHARS - 3))
+        );
+        assert_eq!(capped.chars().count(), super::GATE_REASON_LOG_MAX_CHARS);
+
+        let short = "y".repeat(super::GATE_REASON_LOG_MAX_CHARS - 1);
+        assert_eq!(super::gate_reason_log_text(&short), short);
+    }
+
+    #[test]
+    fn gate_reason_diagnostics_bound_count_and_summary() {
+        let reasons = (0..20)
+            .map(|index| GateCheckReason {
+                id: format!("reason-{index}"),
+                detail: format!("detail-{index}"),
+                next_action: None,
+                receipt: format!("receipt-{index}"),
+            })
+            .collect::<Vec<_>>();
+        let selected = super::gate_reasons_for_log(&reasons)
+            .map(|reason| reason.id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(selected.len(), super::GATE_REASON_LOG_MAX_REASONS);
+        assert_eq!(selected.first().copied(), Some("reason-0"));
+        assert_eq!(selected.last().copied(), Some("reason-7"));
+        assert_eq!(super::gate_reason_log_omitted_count(&reasons), 12);
+        assert_eq!(
+            super::gate_reason_id_summary(&reasons),
+            "reason-0, reason-1, reason-2, reason-3, reason-4, reason-5, reason-6, reason-7, ... +12 more"
+        );
+
+        let long_reasons = (0..9)
+            .map(|index| GateCheckReason {
+                id: format!("{}-{index}", "x".repeat(600)),
+                detail: String::new(),
+                next_action: None,
+                receipt: String::new(),
+            })
+            .collect::<Vec<_>>();
+        let long_summary = super::gate_reason_id_summary(&long_reasons);
+        assert!(long_summary.ends_with(", ... +1 more"), "{long_summary}");
+        assert_eq!(
+            long_summary.chars().count(),
+            super::GATE_REASON_LOG_MAX_CHARS
+        );
+        super::print_gate_reason_detail(&reasons);
+    }
 
     fn required_policy_proof_request(id: &str) -> ProofRequest {
         ProofRequest {
