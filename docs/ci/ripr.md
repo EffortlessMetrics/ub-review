@@ -49,3 +49,8 @@ the strict-zero threshold, classify findings, edit suppressions, or replace
 tool issue where appropriate, or an owned exact suppression receipt. A nonzero
 local count is advisory and does not change the command's exit status; only the
 repository's existing hosted gate policy owns the strict-zero decision.
+
+RIPR 0.10.0 detail findings do not carry suppression state. The adapter
+therefore reconciles the total canonical-gap count while treating the badge's
+suppressed/unsuppressed partition as tool-reported rather than independently
+derived. Issue #873 tracks this upstream detail-schema parity gap.
