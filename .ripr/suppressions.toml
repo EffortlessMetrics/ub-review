@@ -21047,3 +21047,399 @@ kind = "exposure_gap"
 finding_id = "probe:xtask_src_main.rs:return_value:8cdfb495"
 owner = "ub-review/core"
 reason = "Local RIPR 0.10.0 ready-mode finding on advisory results and safe owned output. local_ripr_unsuppressed_count_is_advisory_not_a_local_threshold, local_ripr_options_and_rust_input_contract_are_explicit, and local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pin the contract. Re-verify after local result or output ownership edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:8df23922"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:424cacc8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in production post-payload fixture composition. review_goldens_match_the_exact_github_facing_surface validates every prepared case against real RIGHT-side patch lines before serializing the exact GitHub post payload. Re-verify after post-payload fixture edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:ec0ef2ec"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in production post-payload fixture composition. review_goldens_match_the_exact_github_facing_surface validates every prepared case against real RIGHT-side patch lines before serializing the exact GitHub post payload. Re-verify after post-payload fixture edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:793140aa"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in production post-payload fixture composition. review_goldens_match_the_exact_github_facing_surface validates every prepared case against real RIGHT-side patch lines before serializing the exact GitHub post payload. Re-verify after post-payload fixture edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:dc89e7ff"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in production post-payload fixture composition. review_goldens_match_the_exact_github_facing_surface validates every prepared case against real RIGHT-side patch lines before serializing the exact GitHub post payload. Re-verify after post-payload fixture edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:1a502e98"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:54947317"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:4799fd6d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:6e7c51a3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:9eea939d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:78703ebe"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:7e7673f2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:748cc59e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:cefe6a12"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:e130f188"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:473c0b9f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:0de9e8fb"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:5c60707f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:477e48d1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:44c59e94"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:e03c6a74"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:error_path:a3b3b2c3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:fe1cd181"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:2bbee035"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:4ecb2561"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:6381206e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:b0b04556"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:c250ffdc"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:22d38fef"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:067ca431"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:da148060"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:6b180fea"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:bf6df720"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:a6cd7a30"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:a8ad37f7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:2dd6a233"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:97f643c5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:8a76229b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:bf6df720.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:a6cd7a30.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:a8ad37f7.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:2dd6a233.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:97f643c5.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:56b2548b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:97f643c5.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:36e58ea3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:d73e6c79"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:8cbc58c4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:eaefab71"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:b030e3d1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:034c80ce"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:5e67c63e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:b86bbf62"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:b86bbf62.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:ed92f12b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:c6aa28f6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:e417e5d8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:c9f88bc0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:6842e4f3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:field_construction:08370623"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:45b1a859"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:1cc7a597"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:e6f900ba"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:e5c3e74e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:acbd529b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests.rs:return_value:9b215a8d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized delivery payload bytes across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."

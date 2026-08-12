@@ -8,3 +8,11 @@ inline comments: 0
 === pr review body ===
 (empty: nothing is posted to the pull request)
 === end pr review body ===
+
+=== serialized GitHub post payload ===
+{
+  "event": "COMMENT",
+  "body": "",
+  "comments": []
+}
+=== end serialized GitHub post payload ===

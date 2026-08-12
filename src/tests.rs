@@ -80,10 +80,34 @@ fn golden_dir() -> PathBuf {
 }
 
 fn bless_enabled() -> bool {
-    std::env::var("UB_REVIEW_BLESS").is_ok_and(|value| value == "1")
+    bless_value_enabled(std::env::var("UB_REVIEW_BLESS").ok().as_deref())
+}
+
+fn bless_value_enabled(value: Option<&str>) -> bool {
+    value == Some("1")
 }
 
 fn snapshot_text(case: &GoldenCase, surface: &CompiledReviewSurface) -> Result<String> {
+    let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/review-golden");
+    fs::create_dir_all(&out).with_context(|| format!("create {}", out.display()))?;
+    let patch_path = out.join(format!("{}.patch", case.id));
+    fs::write(&patch_path, &case.patch)
+        .with_context(|| format!("write {}", patch_path.display()))?;
+    let post_args = PostArgs {
+        review_json: out.join(format!("{}.json", case.id)),
+        diff_patch: Some(patch_path),
+        out,
+        github_token: None,
+        repo: None,
+        pull_number: None,
+        github_api_url: "https://api.github.invalid".to_owned(),
+        fail_on_post_error: true,
+    };
+    if surface.should_prepare_github_review {
+        validate_github_review_payload_for_post(&post_args, &surface.github_review)
+            .with_context(|| format!("validate `{}` post payload", case.id))?;
+    }
+    let post_payload = github_review_post_payload(&surface.github_review)?;
     let mut text = String::new();
     text.push_str(&format!("case: {}\n", case.id));
     text.push_str(&format!("diff shape: {}\n", case.shape));
@@ -112,19 +136,21 @@ fn snapshot_text(case: &GoldenCase, surface: &CompiledReviewSurface) -> Result<S
     }
     text.push_str("=== end pr review body ===\n");
 
-    for (index, comment) in surface.github_review.comments.iter().enumerate() {
+    for (index, comment) in post_payload.comments.iter().enumerate() {
         text.push_str(&format!("\n=== inline comment {} ===\n", index + 1));
         text.push_str(&format!(
             "{}:{} {}\n",
             comment.path, comment.line, comment.side
         ));
-        let posted_body = github_review_post_comment_body(comment)?;
-        text.push_str(&posted_body);
-        if !posted_body.ends_with('\n') {
+        text.push_str(&comment.body);
+        if !comment.body.ends_with('\n') {
             text.push('\n');
         }
         text.push_str(&format!("=== end inline comment {} ===\n", index + 1));
     }
+    text.push_str("\n=== serialized GitHub post payload ===\n");
+    text.push_str(&serde_json::to_string_pretty(&post_payload)?);
+    text.push_str("\n=== end serialized GitHub post payload ===\n");
     Ok(text)
 }
 
@@ -183,7 +209,7 @@ fn inline_comment(body: &str, suggestion: Option<&str>) -> ReviewInlineComment {
         path: "src/buffer.rs".to_owned(),
         line: 39,
         side: "RIGHT".to_owned(),
-        body: body.to_owned(),
+        body: format!("[ub] {body}"),
         evidence: "src/buffer.rs:39-41 and the changed call order".to_owned(),
         suggestion: suggestion.map(ToOwned::to_owned),
     }
@@ -368,10 +394,19 @@ fn suggestion_case() -> GoldenCase {
         diff_class: DiffClass::SourceUb,
         changed_files: vec!["src/buffer.rs".to_owned()],
         patch: rust_patch(),
-        inline_comments: vec![inline_comment(
-            "Move the zero-length return before constructing the slice.",
-            Some("if len == 0 {\n    return &[];\n}"),
-        )],
+        inline_comments: vec![ReviewInlineComment {
+            lane: "unsafe-review".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/buffer.rs".to_owned(),
+            line: 39,
+            side: "RIGHT".to_owned(),
+            body: "[unsafe-review] Avoid constructing a slice from the pointer when the length is zero.".to_owned(),
+            evidence: "src/buffer.rs:39 and the changed call order".to_owned(),
+            suggestion: Some(
+                "let slice = if len == 0 { &[] } else { unsafe { core::slice::from_raw_parts(ptr, len) } };".to_owned(),
+            ),
+        }],
         summary_only_findings: Vec::new(),
         observations: Vec::new(),
         proof_receipts: Vec::new(),
@@ -401,15 +436,32 @@ fn review_goldens_match_the_exact_github_facing_surface() -> Result<()> {
 
 #[test]
 fn proof_cases_use_production_red_green_receipts() {
-    for case in [evidence_gap_case(), discriminating_proof_case()] {
+    for (case, expected_result, expected_base_status, expected_base_exit) in [
+        (evidence_gap_case(), "non_discriminating", "passed", 0),
+        (discriminating_proof_case(), "discriminating", "failed", 1),
+    ] {
         let receipt = &case.proof_receipts[0];
         assert_eq!(receipt.kind, "focused-red-green");
         assert_eq!(receipt.test_patch_mode, "base-plus-tests");
+        assert_eq!(receipt.result, expected_result);
         assert_eq!(receipt.commands.len(), 2);
         assert_eq!(receipt.commands[0].side, "head");
         assert_eq!(receipt.commands[0].status, "passed");
+        assert_eq!(receipt.commands[0].exit_code, Some(0));
+        assert!(!receipt.commands[0].timed_out);
         assert_eq!(receipt.commands[1].side, "base-plus-tests");
+        assert_eq!(receipt.commands[1].status, expected_base_status);
+        assert_eq!(receipt.commands[1].exit_code, Some(expected_base_exit));
+        assert!(!receipt.commands[1].timed_out);
     }
+}
+
+#[test]
+fn golden_bless_is_fail_closed_without_exact_opt_in() {
+    for value in [None, Some(""), Some("0"), Some("true"), Some("01")] {
+        assert!(!bless_value_enabled(value));
+    }
+    assert!(bless_value_enabled(Some("1")));
 }
 
 #[test]
@@ -420,7 +472,9 @@ fn snapshot_uses_the_production_inline_delivery_transform() -> Result<()> {
 
     let actual = snapshot_text(&case, &surface)?;
     ensure!(!actual.contains("[ub]"));
-    ensure!(actual.contains("```suggestion\nif len == 0 {\n    return &[];\n}\n```"));
+    ensure!(actual.contains(
+        "```suggestion\nlet slice = if len == 0 { &[] } else { unsafe { core::slice::from_raw_parts(ptr, len) } };\n```"
+    ));
     Ok(())
 }
 
