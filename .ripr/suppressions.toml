@@ -20123,6 +20123,87 @@ reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/validate.rs for de
 # named executable regression tests; the overdue repository-wide
 # suppression-health receipt is not renewed by this bounded lane.
 
+# Hosted-only merge-ref IDs from run 31616425524. These are the same invariant
+# groups under GitHub's merge-ref diff shape, which RIPR keys separately.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:88a34922"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for primary lane authority failure propagation; `primary_turn_write_rejects_higher_turn_without_rollup` forces the higher-turn failure and asserts no rollup becomes authority. Re-verify after edits to primary lane writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:7275c3ea"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for primary lane authority failure propagation; `primary_turn_write_rejects_higher_turn_without_rollup` forces the higher-turn failure and asserts no rollup becomes authority. Re-verify after edits to primary lane writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:c0de5cf4"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for primary lane authority failure propagation; `primary_turn_write_rejects_higher_turn_without_rollup` forces the higher-turn failure and asserts no rollup becomes authority. Re-verify after edits to primary lane writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:7167025f"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for primary lane authority failure propagation; `primary_turn_write_rejects_higher_turn_without_rollup` forces the higher-turn failure and asserts no rollup becomes authority. Re-verify after edits to primary lane writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:e0e5eb50"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for field-specific reporter validation; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts each malformed case names its mismatched field and publishes no distillation. Re-verify after edits to reporter identity validation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:field_construction:ad7dc056.2"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for field-specific reporter validation; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts each malformed case names its mismatched field and publishes no distillation. Re-verify after edits to reporter identity validation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:956800ac.2"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for field-specific reporter validation; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts each malformed case names its mismatched field and publishes no distillation. Re-verify after edits to reporter identity validation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:c74248e5"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for field-specific reporter validation; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts each malformed case names its mismatched field and publishes no distillation. Re-verify after edits to reporter identity validation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:field_construction:ad7dc056.3"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for field-specific reporter validation; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts each malformed case names its mismatched field and publishes no distillation. Re-verify after edits to reporter identity validation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:956800ac.3"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for field-specific reporter validation; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts each malformed case names its mismatched field and publishes no distillation. Re-verify after edits to reporter identity validation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:3bcce1fc.9"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for field-specific reporter validation; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts each malformed case names its mismatched field and publishes no distillation. Re-verify after edits to reporter identity validation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:c981294a"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for field-specific reporter validation; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts each malformed case names its mismatched field and publishes no distillation. Re-verify after edits to reporter identity validation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:f6da583b.3"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for field-specific reporter validation; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts each malformed case names its mismatched field and publishes no distillation. Re-verify after edits to reporter identity validation."
+
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_gate.rs:match_arm:21911da3"
