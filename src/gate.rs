@@ -525,9 +525,9 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
     // current-head reporter turn may affect the gate. ChangesRequested and
     // Uncertain produce a gate reason with the exact selected turn receipt.
     // Stale/malformed reporter evidence is fail-closed as explicit
-    // reporter-evidence (never silent absence). Clear/None/Absent do not
-    // block. When review_forward is false (the default), reporter output has
-    // zero effect — model judgment never feeds the gate.
+    // reporter-evidence (never silent absence). Only Clear passes; None,
+    // Absent, and Uncertain are inconclusive. When review_forward is false
+    // (the default), reporter output has zero effect.
     if input.config.gate.review_forward {
         match &input.reporter_gate {
             crate::ReporterGateInput::Absent => {
@@ -2391,5 +2391,39 @@ mod tests {
             gate.reasons[0].receipt,
             "review/threads/reporter/turn-001.json"
         );
+    }
+
+    #[test]
+    fn review_forward_coordination_failure_is_exact_inconclusive() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let plan = test_plan(Vec::new());
+        let mut config = Config::default();
+        config.gate.review_forward = true;
+        let terminal_state = test_terminal_state("sufficient");
+        let receipt = "review/threads/reporter/thread.json";
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &config,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            tool_gate_outcomes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            reporter_gate: crate::ReporterGateInput::Unusable {
+                kind: "reporter-malformed".to_owned(),
+                detail: "reporter coordination failed before authority commit".to_owned(),
+                receipt: receipt.to_owned(),
+            },
+        });
+
+        assert_eq!(gate.conclusion, "inconclusive");
+        assert_eq!(gate.reasons.len(), 1);
+        assert_eq!(gate.reasons[0].kind, "reporter-evidence");
+        assert_eq!(gate.reasons[0].id, "reporter-malformed");
+        assert_eq!(gate.reasons[0].receipt, receipt);
     }
 }
