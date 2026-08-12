@@ -63,8 +63,8 @@ fn run() -> Result<()> {
             run_local_ripr(&root, options)?;
         }
         "smoke-base" => {
-            let base = SmokeBaseOptions::parse(args)?;
-            println!("{}", resolve_smoke_base(&root, &base.base)?);
+            let base = parse_smoke_base_options(args)?;
+            println!("{}", resolve_smoke_base(&root, &base)?);
         }
         "help" | "-h" | "--help" => {
             reject_extra_args(args)?;
@@ -121,51 +121,60 @@ smoke-base options
     );
 }
 
-#[derive(Debug)]
-struct SmokeBaseOptions {
-    base: String,
-}
-
-impl SmokeBaseOptions {
-    fn parse(mut args: impl Iterator<Item = String>) -> Result<Self> {
-        let mut base = "HEAD~1".to_owned();
-        while let Some(arg) = args.next() {
-            match arg.as_str() {
-                "--base" => base = args.next().context("--base requires a revision")?,
-                other => bail!("unexpected smoke-base argument `{other}`"),
-            }
+fn parse_smoke_base_options(mut args: impl Iterator<Item = String>) -> Result<String> {
+    let mut base = "HEAD~1".to_owned();
+    while let Some(arg) = args.next() {
+        if arg != "--base" {
+            bail!("unexpected smoke-base argument `{arg}`");
         }
-        if base.trim().is_empty() {
-            bail!("--base must not be empty");
-        }
-        Ok(Self { base })
+        base = args.next().context("--base requires a revision")?;
     }
+    if base.trim().is_empty() {
+        bail!("--base must not be empty");
+    }
+    Ok(base)
 }
 
 fn resolve_smoke_base(root: &Path, base: &str) -> Result<String> {
     let commit = format!("{base}^{{commit}}");
-    let available = Command::new("git")
+    let resolved = Command::new("git")
         .args(["rev-parse", "--verify", "--quiet", &commit])
         .current_dir(root)
-        .status()
+        .output()
         .context("check local smoke base")?;
-    if !available.success() {
+    if !resolved.status.success() {
         bail!(
             "smoke base `{base}` is unavailable; fetch/deepen history or pass `cargo xtask smoke-base --base <rev>` (UB_REVIEW_SMOKE_BASE for scripts/smoke-local.sh) with an available non-empty-diff base"
         );
     }
+    let resolved_sha = parse_resolved_smoke_sha(base, &resolved.stdout)?;
     let diff = Command::new("git")
-        .args(["diff", "--quiet", base, "HEAD", "--"])
+        .args(["diff", "--quiet", &resolved_sha, "HEAD", "--"])
         .current_dir(root)
         .status()
         .context("check local smoke diff")?;
-    match diff.code() {
-        Some(0) => bail!(
+    if diff.code() == Some(0) {
+        bail!(
             "smoke base `{base}` produces an empty diff; select an available revision with changes through HEAD"
-        ),
-        Some(1) => Ok(base.to_owned()),
-        _ => bail!("git diff failed while validating smoke base `{base}`"),
+        );
     }
+    if diff.code() != Some(1) {
+        bail!("git diff failed while validating smoke base `{base}`");
+    }
+    Ok(resolved_sha)
+}
+
+fn parse_resolved_smoke_sha(base: &str, stdout: &[u8]) -> Result<String> {
+    let text = std::str::from_utf8(stdout).context("git returned a non-UTF-8 smoke base")?;
+    let mut lines = text.lines();
+    let sha = lines
+        .next()
+        .filter(|line| !line.is_empty())
+        .with_context(|| format!("git returned an invalid resolved smoke base for `{base}`"))?;
+    if lines.next().is_some() {
+        bail!("git returned an invalid resolved smoke base for `{base}`");
+    }
+    Ok(sha.to_owned())
 }
 
 const LOCAL_RIPR_VERSION: &str = "0.10.0";
@@ -1744,11 +1753,28 @@ mod tests {
 
     #[test]
     fn smoke_base_rejects_shallow_and_empty_history_with_actionable_errors() -> Result<()> {
-        assert_eq!(SmokeBaseOptions::parse(std::iter::empty())?.base, "HEAD~1");
+        assert_eq!(parse_smoke_base_options(std::iter::empty())?, "HEAD~1");
         assert_eq!(
-            SmokeBaseOptions::parse(["--base", "origin/main"].into_iter().map(str::to_owned))?.base,
+            parse_smoke_base_options(["--base", "origin/main"].into_iter().map(str::to_owned))?,
             "origin/main"
         );
+        let missing_value = parse_smoke_base_options(["--base"].into_iter().map(str::to_owned))
+            .err()
+            .map(|error| error.to_string())
+            .context("missing --base value unexpectedly parsed")?;
+        assert!(missing_value.contains("--base requires a revision"));
+        let unexpected = parse_smoke_base_options(["--head"].into_iter().map(str::to_owned))
+            .err()
+            .map(|error| error.to_string())
+            .context("unexpected argument unexpectedly parsed")?;
+        assert!(unexpected.contains("unexpected smoke-base argument `--head`"));
+        for malformed in [b"".as_slice(), b"one\ntwo\n".as_slice()] {
+            let error = parse_resolved_smoke_sha("HEAD~1", malformed)
+                .err()
+                .map(|error| error.to_string())
+                .context("malformed Git output unexpectedly parsed")?;
+            assert!(error.contains("invalid resolved smoke base"), "{error}");
+        }
         let root = initialized_test_repo("smoke-base")?;
         let shallow = match resolve_smoke_base(&root, "HEAD~1") {
             Ok(base) => bail!("unavailable parent unexpectedly resolved as {base}"),
@@ -1766,8 +1792,31 @@ mod tests {
         fs::write(root.join("src/lib.rs"), "pub fn value() -> u8 { 2 }\n")?;
         git_test(&root, &["add", "src/lib.rs"])?;
         git_test(&root, &["commit", "-m", "change"])?;
-        assert_eq!(resolve_smoke_base(&root, "HEAD~1")?, "HEAD~1");
+        let resolved = resolve_smoke_base(&root, "HEAD~1")?;
+        assert_eq!(resolved.lines().count(), 1);
+        assert_eq!(resolved.len(), 40);
+        let diff = Command::new("git")
+            .args(["diff", "--quiet", &resolved, "HEAD", "--"])
+            .current_dir(&root)
+            .status()?;
+        assert_eq!(diff.code(), Some(1));
         fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn smoke_script_locks_every_cargo_invocation() -> Result<()> {
+        let script = fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../scripts/smoke-local.sh"),
+        )?;
+        let cargo_lines: Vec<&str> = script
+            .lines()
+            .filter(|line| line.contains("cargo "))
+            .collect();
+        assert_eq!(cargo_lines.len(), 7, "unexpected smoke Cargo surface");
+        for line in cargo_lines {
+            assert!(line.contains("--locked"), "unlocked Cargo command: {line}");
+        }
         Ok(())
     }
 

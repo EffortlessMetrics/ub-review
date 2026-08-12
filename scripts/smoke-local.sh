@@ -8,9 +8,9 @@ OUT=target/ub-review-smoke
 CONFIG=target/ub-review-smoke.toml
 
 if [[ -n "${UB_REVIEW_SMOKE_BASE:-}" ]]; then
-  BASE="$(cargo xtask smoke-base --base "$UB_REVIEW_SMOKE_BASE")"
+  BASE="$(cargo run --locked --package xtask -- smoke-base --base "$UB_REVIEW_SMOKE_BASE")"
 else
-  BASE="$(cargo xtask smoke-base)"
+  BASE="$(cargo run --locked --package xtask -- smoke-base)"
 fi
 
 cargo run --locked -- doctor --profile gh-runner
