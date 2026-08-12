@@ -96,8 +96,10 @@ For a copyable adoption guide, use [PORTING_BASELINE.md](PORTING_BASELINE.md).
   receipts; `review/receipt_routes.json` route entries cite exact
   `review/proof_receipts.json#<receipt-id>` and matching
   `review/resource_leases.json#<lease-id>` anchors; and
-  `sensors/ripr/exposure-gaps.json` carries per-finding ripr exposure-gap
-  detail so a red tool gate is diagnosable without a local rerun.
+  `sensors/ripr/exposure-gaps.json` carries bounded raw/pre-policy RIPR
+  exposure-gap detail so a red tool gate is diagnosable without a local
+  rerun; `gate-decision.json` remains the sole suppression and threshold
+  authority because pinned RIPR detail has no per-finding policy state.
 - `audit-ci` / `setup-ci` v0 is available for onboarding: `audit-ci` stays
   read-only, `setup-ci --print-pr` renders the migration plan and preview
   files locally, and `setup-ci --open-pr` opens a new-files-only migration PR.

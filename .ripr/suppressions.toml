@@ -21414,3 +21414,39 @@ kind = "exposure_gap"
 finding_id = "probe:xtask_src_main.rs:return_value:fc5263cb"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 ready-mode residual process/dispatch shape in the bounded smoke-base selector. smoke_base_rejects_shallow_and_empty_history_with_actionable_errors discriminates missing and unexpected arguments, unavailable parent history, an empty diff, and a valid resolved SHA; smoke_base_cli_prints_one_usable_resolved_revision pins one-line usable stdout; smoke_script_locks_every_cargo_invocation pins locked Cargo commands. This receipt does not claim uninduced OS process failures are executed. Re-verify after smoke-base parsing, process, or Git validation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:return_value:9d9a6beb"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weak-oracle residual in the fallible raw-detail projection. ripr_exposure_gap_details_project_filter_cap_and_unavailable_shape observes the complete v2 value, raw totals, cap, truncation, omitted policy fields, and clipped diagnostics; ripr_exposure_gap_details_reject_malformed_pinned_input discriminates envelope, count, duplicate-ID, path, and line failures. Re-verify after projection semantics change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:error_path:87ebd913"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weak-oracle residual in the fallible raw-detail projection. ripr_exposure_gap_details_reject_malformed_pinned_input forces incompatible envelope, missing findings, summary mismatch, duplicate ID, empty path, and invalid line errors; ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable proves a projection/invocation failure cannot synthesize raw counts or entries. Re-verify after projection validation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:field_construction:be5569c0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weak-oracle residual around the canonical gap-class set. ripr_exposure_gap_details_project_filter_cap_and_unavailable_shape distinguishes exposed findings from all three canonical raw gap classes and asserts the resulting uncapped raw gap total and capped entry behavior. Re-verify after RIPR classification or detail-cap semantics change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:bcab99ad"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weak-oracle residual in the Unix fake-RIPR truncated-JSON fixture branch. ripr_sensor_keeps_primary_receipts_when_successful_detail_output_is_truncated executes the fake process successfully, forces this exact malformed output, asserts v2 detail_unavailable without counts/entries, preserves the primary sensor status and verbatim gate receipt, and proves temporary captures are removed. Re-verify after the fake sensor or detail failure contract changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:e510c495"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weak-oracle residual in the Unix fake-RIPR truncated-JSON fixture branch. ripr_sensor_keeps_primary_receipts_when_successful_detail_output_is_truncated executes the fake process successfully, forces this exact malformed output, asserts v2 detail_unavailable without counts/entries, preserves the primary sensor status and verbatim gate receipt, and proves temporary captures are removed. Re-verify after the fake sensor or detail failure contract changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:58552b06"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weak-oracle residual in the Unix fake-RIPR truncated-JSON fixture branch. ripr_sensor_keeps_primary_receipts_when_successful_detail_output_is_truncated executes the fake process successfully, forces this exact malformed output, asserts v2 detail_unavailable without counts/entries, preserves the primary sensor status and verbatim gate receipt, and proves temporary captures are removed. Re-verify after the fake sensor or detail failure contract changes."

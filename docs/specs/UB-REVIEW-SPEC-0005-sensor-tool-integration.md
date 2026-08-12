@@ -320,7 +320,9 @@ new_unsuppressed=2), each answered by strengthening the genuine half,
 filing the tool half upstream, and carrying an owned suppression. A
 configured required gate that cannot evaluate raises a loud
 unevaluated-gate alarm in the running summary. Remaining honesty notes:
-per-finding detail ships in sensors/ripr/exposure-gaps.json (#347), and
+bounded raw/pre-policy per-finding detail ships in
+sensors/ripr/exposure-gaps.json while the badge alone owns the policy
+partition (#347, #873), and
 ripr's matcher/reach false-negatives plus line-keyed
 suppression ids (ripr-swarm#1052/#1053/#1054) make the suppression ledger
 require active stewardship.

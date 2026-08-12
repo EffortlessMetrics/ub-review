@@ -8118,11 +8118,12 @@ RIPR_GAP_DETAIL_CAP = 200
 
 
 def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
-    """#347: whenever the ripr sensor produced a gate-decision receipt, a
-    per-finding detail artifact must sit next to it - either `ok` with
-    entries whose totals reconcile against the badge counts, or
-    `detail_unavailable` naming the error. A tool-gate red is diagnosable
-    from the artifact tree alone; absence of detail is itself receipted."""
+    """#873: reconcile bounded raw detail with the authoritative RIPR badge.
+
+    RIPR 0.10.0 does not expose per-finding suppression state. The v2 detail
+    contract is therefore explicitly raw/pre-policy; only aggregate raw gap
+    totals can reconcile with the badge's policy-applied partition.
+    """
     decision_path = root / "sensors/ripr/gate-decision.json"
     detail_path = root / "sensors/ripr/exposure-gaps.json"
     if not decision_path.is_file():
@@ -8131,32 +8132,103 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
         return
     if not detail_path.is_file():
         fail("sensors/ripr/gate-decision.json present without exposure-gaps.json (#347)")
+    decision = load_json(decision_path)
+    if not isinstance(decision, dict) or any(
+        decision.get(field) != expected
+        for field, expected in {
+            "schema_version": "0.6",
+            "kind": "ripr",
+            "scope": "diff",
+            "basis": "finding_exposure",
+        }.items()
+    ):
+        fail("gate-decision.json has an incompatible pinned RIPR 0.10.0 envelope")
+    badge_status = decision.get("status")
+    if badge_status not in {"pass", "warn", "fail"}:
+        fail(f"gate-decision.json has unsupported status: {decision.get('status')!r}")
+    warnings = decision.get("warnings")
+    if not isinstance(warnings, list) or any(
+        not isinstance(warning, str) or not warning for warning in warnings
+    ):
+        fail("gate-decision.json warnings must be an array of non-empty strings")
+    preview_skipped = decision.get("preview_skipped")
+    if not isinstance(preview_skipped, list) or any(
+        not isinstance(language, str) or not language for language in preview_skipped
+    ):
+        fail("gate-decision.json preview_skipped must be an array of non-empty strings")
+    if badge_status == "pass" and preview_skipped:
+        fail("gate-decision.json pass status cannot carry preview_skipped languages")
+    counts = decision.get("counts")
+    if not isinstance(counts, dict):
+        fail("gate-decision.json is missing counts object")
+
+    def badge_count(name: str) -> int:
+        value = counts.get(name)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            fail(f"gate-decision.json counts.{name} must be a non-negative integer")
+        return value
+
+    unsuppressed = badge_count("unsuppressed_exposure_gaps")
+    suppressed = badge_count("suppressed_exposure_gaps")
+    analyzed = badge_count("analyzed_findings")
+
     detail = load_json(detail_path)
-    if detail.get("schema") != "ub-review.ripr_exposure_gaps.v1":
+    if not isinstance(detail, dict):
+        fail("exposure-gaps.json is not an object")
+    if detail.get("schema") != "ub-review.ripr_exposure_gaps.v2":
         fail(f"exposure-gaps.json has wrong schema: {detail.get('schema')!r}")
+    if detail.get("semantics") != "raw_pre_policy":
+        fail("exposure-gaps.json must declare raw_pre_policy semantics")
+    if detail.get("policy_authority") != "sensors/ripr/gate-decision.json":
+        fail("exposure-gaps.json has wrong policy_authority")
     status = detail.get("status")
     if status == "detail_unavailable":
         error = detail.get("error")
         if not isinstance(error, str) or not error:
             fail("exposure-gaps.json detail_unavailable without an error")
-        return
+        for field in ["total_raw_findings", "total_raw_gap_findings", "entries"]:
+            if field in detail:
+                fail(f"exposure-gaps.json detail_unavailable must omit {field}")
+        fail(f"exposure-gaps.json detail is unavailable: {error}")
     if status != "ok":
         fail(f"exposure-gaps.json status must be ok or detail_unavailable: {status!r}")
-    total = detail.get("total_gap_findings")
+    if detail.get("source") != {
+        "tool": "ripr",
+        "schema_version": "0.2",
+        "mode": "ready",
+    }:
+        fail("exposure-gaps.json has incompatible pinned RIPR detail source")
+    raw_total = detail.get("total_raw_findings")
+    total = detail.get("total_raw_gap_findings")
     entries = detail.get("entries")
+    if (
+        isinstance(raw_total, bool)
+        or not isinstance(raw_total, int)
+        or raw_total < 0
+    ):
+        fail("exposure-gaps.json total_raw_findings is not a non-negative integer")
     if not isinstance(total, int) or isinstance(total, bool):
-        fail("exposure-gaps.json total_gap_findings is not an integer")
+        fail("exposure-gaps.json total_raw_gap_findings is not an integer")
+    if total < 0 or total > raw_total:
+        fail("exposure-gaps.json raw gap total is outside the raw finding total")
     if not isinstance(entries, list):
         fail("exposure-gaps.json entries is not an array")
+    if detail.get("entry_cap") != RIPR_GAP_DETAIL_CAP:
+        fail("exposure-gaps.json entry_cap does not match the artifact contract")
     truncated = detail.get("truncated")
     if truncated is not (total > RIPR_GAP_DETAIL_CAP):
         fail("exposure-gaps.json truncated flag does not match total vs cap")
     if len(entries) != min(total, RIPR_GAP_DETAIL_CAP):
-        fail("exposure-gaps.json entries length does not match total_gap_findings")
+        fail("exposure-gaps.json entries length does not match total_raw_gap_findings")
+    entry_ids: set[str] = set()
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict) or not entry.get("id") or not entry.get("classification"):
             fail(f"exposure-gaps.json entry {index + 1} missing id/classification")
         label = f"exposure-gaps.json entry {index + 1}"
+        finding_id = require_string(entry, label, "id", nonempty=True)
+        if finding_id in entry_ids:
+            fail(f"{label} duplicates finding id {finding_id!r}")
+        entry_ids.add(finding_id)
         require_string(entry, label, "path", nonempty=True)
         range_value = entry.get("range")
         if not isinstance(range_value, dict):
@@ -8177,18 +8249,15 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
         )
         if exposure_gap_class != entry.get("classification"):
             fail(f"{label} exposure_gap_class does not match classification")
-        suppression_state = require_string(
-            entry, label, "suppression_state", nonempty=True
-        )
-        if suppression_state not in {"unsuppressed", "suppressed"}:
-            fail(f"{label} has unknown suppression_state: {suppression_state!r}")
-        contribution = entry.get("threshold_contribution")
-        if isinstance(contribution, bool) or contribution not in {0, 1}:
-            fail(f"{label} has invalid threshold_contribution: {contribution!r}")
-        if suppression_state == "suppressed" and contribution != 0:
-            fail(f"{label} suppressed entry contributes to threshold")
-        if suppression_state == "unsuppressed" and contribution != 1:
-            fail(f"{label} unsuppressed entry does not contribute to threshold")
+        if exposure_gap_class not in {
+            "weakly_exposed",
+            "reachable_unrevealed",
+            "no_static_path",
+        }:
+            fail(f"{label} has non-gap classification {exposure_gap_class!r}")
+        for forbidden in ["suppression_state", "threshold_contribution"]:
+            if forbidden in entry:
+                fail(f"{label} must not infer policy field {forbidden}")
         artifact_pointer = require_string(
             entry, label, "artifact_pointer", nonempty=True
         )
@@ -8198,19 +8267,18 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
                 f"{label} artifact_pointer {artifact_pointer!r} "
                 f"does not match {expected_pointer!r}"
             )
-    decision = load_json(decision_path)
-    counts = decision.get("counts")
-    if isinstance(counts, dict):
-        unsuppressed = counts.get("unsuppressed_exposure_gaps")
-        suppressed = counts.get("suppressed_exposure_gaps")
-        if isinstance(unsuppressed, int) and isinstance(suppressed, int):
-            expected = unsuppressed + suppressed
-            if total != expected:
-                fail(
-                    "exposure-gaps.json total_gap_findings "
-                    f"{total} does not reconcile with gate-decision counts "
-                    f"(unsuppressed {unsuppressed} + suppressed {suppressed})"
-                )
+    if raw_total != analyzed:
+        fail(
+            "exposure-gaps.json total_raw_findings "
+            f"{raw_total} does not reconcile with gate-decision analyzed_findings {analyzed}"
+        )
+    expected = unsuppressed + suppressed
+    if total != expected:
+        fail(
+            "exposure-gaps.json total_raw_gap_findings "
+            f"{total} does not reconcile with gate-decision counts "
+            f"(unsuppressed {unsuppressed} + suppressed {suppressed})"
+        )
 
 
 def require_tool_gate_outcome_artifacts(
@@ -9742,8 +9810,7 @@ def self_test_issue_broker_contract() -> None:
 
 
 def self_test_ripr_exposure_gap_contract() -> None:
-    """#347: gate-decision without detail fails; ok details must reconcile
-    against the badge counts; detail_unavailable needs an error."""
+    """#873: raw detail and authoritative badge reconcile fail closed."""
     import tempfile
 
     def write_root(decision: "dict | None", detail: "dict | None") -> "pathlib.Path":
@@ -9760,97 +9827,194 @@ def self_test_ripr_exposure_gap_contract() -> None:
             )
         return tmp
 
-    decision = {"counts": {"unsuppressed_exposure_gaps": 2, "suppressed_exposure_gaps": 1}}
-    entry = {
-        "id": "probe:src_x.rs:1:call_deletion",
-        "classification": "no_static_path",
-        "exposure_gap_class": "no_static_path",
-        "path": "src/x.rs",
-        "range": {"start_line": 1, "end_line": 1},
-        "suppression_state": "unsuppressed",
-        "threshold_contribution": 1,
-        "artifact_pointer": "sensors/ripr/exposure-gaps.json#/entries/0",
-    }
-    entry_2 = dict(entry, artifact_pointer="sensors/ripr/exposure-gaps.json#/entries/1")
-    entry_3 = dict(
-        entry,
-        artifact_pointer="sensors/ripr/exposure-gaps.json#/entries/2",
-        suppression_state="suppressed",
-        threshold_contribution=0,
-    )
-    detail = {
-        "schema": "ub-review.ripr_exposure_gaps.v1",
-        "status": "ok",
-        "total_gap_findings": 3,
-        "truncated": False,
-        "entries": [entry, entry_2, entry_3],
-    }
-    require_ripr_exposure_gap_details(write_root(decision, detail))
-    require_ripr_exposure_gap_details(
-        write_root(
-            decision,
-            {
-                "schema": "ub-review.ripr_exposure_gaps.v1",
-                "status": "detail_unavailable",
-                "error": "detail pass timed out",
-                "total_gap_findings": 0,
-                "truncated": False,
-                "entries": [],
+    def badge(unsuppressed: int, suppressed: int, analyzed: int) -> dict:
+        return {
+            "schema_version": "0.6",
+            "kind": "ripr",
+            "scope": "diff",
+            "basis": "finding_exposure",
+            "status": "pass",
+            "warnings": [],
+            "preview_skipped": [],
+            "counts": {
+                "unsuppressed_exposure_gaps": unsuppressed,
+                "suppressed_exposure_gaps": suppressed,
+                "analyzed_findings": analyzed,
             },
-        )
+        }
+
+    def raw_detail(raw_total: int, gap_total: int) -> dict:
+        entries = [
+            {
+                "id": f"probe:src_x.rs:return_value:{index:08d}",
+                "classification": "no_static_path",
+                "exposure_gap_class": "no_static_path",
+                "path": "src/x.rs",
+                "range": {"start_line": index + 1, "end_line": index + 1},
+                "artifact_pointer": f"sensors/ripr/exposure-gaps.json#/entries/{index}",
+            }
+            for index in range(min(gap_total, RIPR_GAP_DETAIL_CAP))
+        ]
+        return {
+            "schema": "ub-review.ripr_exposure_gaps.v2",
+            "status": "ok",
+            "semantics": "raw_pre_policy",
+            "policy_authority": "sensors/ripr/gate-decision.json",
+            "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"},
+            "total_raw_findings": raw_total,
+            "total_raw_gap_findings": gap_total,
+            "entry_cap": RIPR_GAP_DETAIL_CAP,
+            "truncated": gap_total > RIPR_GAP_DETAIL_CAP,
+            "entries": entries,
+        }
+
+    mixed_badge = badge(2, 1, 4)
+    mixed_detail = raw_detail(4, 3)
+    require_ripr_exposure_gap_details(write_root(mixed_badge, mixed_detail))
+    one_gap_advisory = badge(1, 0, 4)
+    one_gap_advisory["status"] = "warn"
+    require_ripr_exposure_gap_details(
+        write_root(one_gap_advisory, raw_detail(4, 1))
+    )
+    preview_warning = badge(0, 3, 4)
+    preview_warning["status"] = "warn"
+    preview_warning["preview_skipped"] = ["python"]
+    require_ripr_exposure_gap_details(write_root(preview_warning, mixed_detail))
+    suppression_warning = badge(0, 3, 4)
+    suppression_warning["warnings"] = ["suppression did not match"]
+    require_ripr_exposure_gap_details(write_root(suppression_warning, mixed_detail))
+    require_ripr_exposure_gap_details(write_root(badge(0, 3, 4), mixed_detail))
+    require_ripr_exposure_gap_details(write_root(badge(0, 0, 0), raw_detail(0, 0)))
+    require_ripr_exposure_gap_details(
+        write_root(badge(1, 200, 250), raw_detail(250, 201))
+    )
+    # The corrected v2 representation of run 31616901455 reconciles aggregate
+    # raw totals without pretending the badge can label individual IDs.
+    require_ripr_exposure_gap_details(
+        write_root(badge(0, 119, 246), raw_detail(246, 119))
     )
     require_ripr_exposure_gap_details(write_root(None, None))
 
     expect_self_test_failure(
         "ripr gate decision without detail artifact",
         "without exposure-gaps.json",
-        lambda root=write_root(decision, None): require_ripr_exposure_gap_details(root),
+        lambda root=write_root(mixed_badge, None): require_ripr_exposure_gap_details(root),
     )
+    stale_badge = badge(2, 1, 4)
+    stale_badge["schema_version"] = "0.5"
     expect_self_test_failure(
-        "ripr detail totals reconcile with badge counts",
-        "does not reconcile with gate-decision counts",
+        "ripr 0.5 badge is rejected by the pinned 0.10.0 envelope",
+        "incompatible pinned RIPR 0.10.0 envelope",
         lambda root=write_root(
-            decision, dict(detail, total_gap_findings=2, entries=[entry, entry_2])
+            stale_badge, mixed_detail
         ): require_ripr_exposure_gap_details(root),
     )
     expect_self_test_failure(
-        "ripr detail_unavailable needs an error",
-        "without an error",
+        "ripr raw gap total reconciles with badge partition",
+        "does not reconcile with gate-decision counts",
         lambda root=write_root(
-            decision,
+            mixed_badge, raw_detail(4, 2)
+        ): require_ripr_exposure_gap_details(root),
+    )
+    invalid_preview = badge(2, 1, 4)
+    invalid_preview["preview_skipped"] = [""]
+    expect_self_test_failure(
+        "ripr preview-skipped entries are non-empty strings",
+        "preview_skipped must be an array of non-empty strings",
+        lambda root=write_root(
+            invalid_preview, mixed_detail
+        ): require_ripr_exposure_gap_details(root),
+    )
+    pass_with_preview = badge(0, 3, 4)
+    pass_with_preview["preview_skipped"] = ["python"]
+    expect_self_test_failure(
+        "ripr preview downgrade cannot remain pass",
+        "pass status cannot carry preview_skipped languages",
+        lambda root=write_root(
+            pass_with_preview, mixed_detail
+        ): require_ripr_exposure_gap_details(root),
+    )
+    expect_self_test_failure(
+        "ripr raw finding total reconciles with badge analyzed count",
+        "does not reconcile with gate-decision analyzed_findings",
+        lambda root=write_root(
+            mixed_badge, raw_detail(5, 3)
+        ): require_ripr_exposure_gap_details(root),
+    )
+    expect_self_test_failure(
+        "ripr detail failure is explicit",
+        "detail is unavailable",
+        lambda root=write_root(
+            mixed_badge,
             {
-                "schema": "ub-review.ripr_exposure_gaps.v1",
+                "schema": "ub-review.ripr_exposure_gaps.v2",
                 "status": "detail_unavailable",
-                "total_gap_findings": 0,
-                "truncated": False,
-                "entries": [],
+                "semantics": "raw_pre_policy",
+                "policy_authority": "sensors/ripr/gate-decision.json",
+                "error": "detail pass timed out",
             },
         ): require_ripr_exposure_gap_details(root),
     )
+    contradictory_v1 = raw_detail(246, 119)
+    contradictory_v1["schema"] = "ub-review.ripr_exposure_gaps.v1"
+    contradictory_v1["total_gap_findings"] = contradictory_v1.pop(
+        "total_raw_gap_findings"
+    )
+    contradictory_v1.pop("total_raw_findings")
+    contradictory_v1.pop("semantics")
+    contradictory_v1.pop("source")
+    contradictory_v1.pop("entry_cap")
+    for entry in contradictory_v1["entries"]:
+        entry["suppression_state"] = "unsuppressed"
+        entry["threshold_contribution"] = 1
     expect_self_test_failure(
-        "ripr detail entries length matches total",
-        "entries length does not match",
+        "exact contradictory v1 0-unsuppressed 119-suppressed packet is rejected",
+        "wrong schema",
         lambda root=write_root(
-            decision, dict(detail, entries=[entry])
-        ): require_ripr_exposure_gap_details(root),
-        )
-    missing_action_entry = dict(entry)
-    missing_action_entry.pop("threshold_contribution")
-    expect_self_test_failure(
-        "ripr detail entries carry threshold contribution",
-        "invalid threshold_contribution",
-        lambda root=write_root(
-            decision,
-            dict(
-                detail,
-                entries=[
-                    missing_action_entry,
-                    entry_2,
-                    entry_3,
-                ],
-            ),
+            badge(0, 119, 246), contradictory_v1
         ): require_ripr_exposure_gap_details(root),
     )
+    contradictory = raw_detail(4, 3)
+    contradictory["entries"][0]["suppression_state"] = "unsuppressed"
+    contradictory["entries"][0]["threshold_contribution"] = 1
+    expect_self_test_failure(
+        "ripr raw entries omit inferred policy fields",
+        "must not infer policy field suppression_state",
+        lambda root=write_root(
+            mixed_badge, contradictory
+        ): require_ripr_exposure_gap_details(root),
+    )
+    duplicate = raw_detail(4, 3)
+    duplicate["entries"][1]["id"] = duplicate["entries"][0]["id"]
+    expect_self_test_failure(
+        "ripr raw entries have unique stable IDs",
+        "duplicates finding id",
+        lambda root=write_root(mixed_badge, duplicate): require_ripr_exposure_gap_details(root),
+    )
+    for name, invalid_count in [
+        ("boolean", True),
+        ("negative", -1),
+        ("missing", None),
+    ]:
+        malformed_badge = badge(2, 1, 4)
+        if invalid_count is None:
+            del malformed_badge["counts"]["unsuppressed_exposure_gaps"]
+        else:
+            malformed_badge["counts"]["unsuppressed_exposure_gaps"] = invalid_count
+        expect_self_test_failure(
+            f"ripr badge rejects {name} counts even when detail is unavailable",
+            "must be a non-negative integer",
+            lambda root=write_root(
+                malformed_badge,
+                {
+                    "schema": "ub-review.ripr_exposure_gaps.v2",
+                    "status": "detail_unavailable",
+                    "semantics": "raw_pre_policy",
+                    "policy_authority": "sensors/ripr/gate-decision.json",
+                    "error": "detail pass failed",
+                },
+            ): require_ripr_exposure_gap_details(root),
+        )
 
 
 def self_test_cost_receipt_contract() -> None:
