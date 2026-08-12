@@ -491,7 +491,7 @@ fn snapshot_uses_the_production_inline_delivery_transform() -> Result<()> {
     ensure!(surface.github_review.comments.len() == 1);
 
     let actual = snapshot_text(&case, &surface)?;
-    ensure!(!actual.contains("[ub]"));
+    ensure!(!actual.contains("[unsafe-review]"));
     ensure!(actual.contains(
         "```suggestion\nlet slice = if len == 0 { &[] } else { unsafe { core::slice::from_raw_parts(ptr, len) } };\n```"
     ));
