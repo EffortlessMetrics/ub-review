@@ -20663,3 +20663,81 @@ kind = "exposure_gap"
 finding_id = "probe:src_validate.rs:return_value:72ff2d65"
 owner = "ub-review/core"
 reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/validate.rs for demoted-inline finding text #849: covered by validate_tests demotion/summary-only finding tests that assert the model body is retained. Re-verify after semantic edits to demotion paths."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:45418955"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on the production reporter composition seam. production_reporter_failure_composition_withholds_public_text_and_gates_inconclusive asserts failed-call accounting, no public distillation, and the exact inconclusive gate receipt from the same resolved turn. Re-verify after edits to final reporter composition."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:289d06b4"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on the production reporter composition seam. production_reporter_failure_composition_withholds_public_text_and_gates_inconclusive asserts failed-call accounting, no public distillation, and the exact inconclusive gate receipt from the same resolved turn. Re-verify after edits to final reporter composition."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:d848efeb"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on the production reporter composition seam. production_reporter_failure_composition_withholds_public_text_and_gates_inconclusive asserts failed-call accounting, no public distillation, and the exact inconclusive gate receipt from the same resolved turn. Re-verify after edits to final reporter composition."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:40f4b6e6"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on the production reporter composition seam. production_reporter_failure_composition_withholds_public_text_and_gates_inconclusive asserts failed-call accounting, no public distillation, and the exact inconclusive gate receipt from the same resolved turn. Re-verify after edits to final reporter composition."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:match_arm:d43fc6f8"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on the production reporter composition seam. production_reporter_failure_composition_withholds_public_text_and_gates_inconclusive asserts failed-call accounting, no public distillation, and the exact inconclusive gate receipt from the same resolved turn. Re-verify after edits to final reporter composition."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:match_arm:72cd1cb5"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on the production reporter composition seam. production_reporter_failure_composition_withholds_public_text_and_gates_inconclusive asserts failed-call accounting, no public distillation, and the exact inconclusive gate receipt from the same resolved turn. Re-verify after edits to final reporter composition."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:29991bb0"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on failed reporter call accounting. turn_one_persistence_failure_composes_to_exact_inconclusive_gate forces the real redistillation write error at the call-budget boundary and asserts the consumed count plus exact inconclusive production gate outcome. Re-verify after edits to reporter call accounting."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:6cea1772"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on failed reporter call accounting. turn_one_persistence_failure_composes_to_exact_inconclusive_gate forces the real redistillation write error at the call-budget boundary and asserts the consumed count plus exact inconclusive production gate outcome. Re-verify after edits to reporter call accounting."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:1d4ad6b1"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on failed reporter call accounting. turn_one_persistence_failure_composes_to_exact_inconclusive_gate forces the real redistillation write error at the call-budget boundary and asserts the consumed count plus exact inconclusive production gate outcome. Re-verify after edits to reporter call accounting."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:6cea1772.2"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on failed reporter call accounting. turn_one_persistence_failure_composes_to_exact_inconclusive_gate forces the real redistillation write error at the call-budget boundary and asserts the consumed count plus exact inconclusive production gate outcome. Re-verify after edits to reporter call accounting."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:6cea1772.3"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on failed reporter call accounting. turn_one_persistence_failure_composes_to_exact_inconclusive_gate forces the real redistillation write error at the call-budget boundary and asserts the consumed count plus exact inconclusive production gate outcome. Re-verify after edits to reporter call accounting."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:e860345c"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on failed reporter call accounting. turn_one_persistence_failure_composes_to_exact_inconclusive_gate forces the real redistillation write error at the call-budget boundary and asserts the consumed count plus exact inconclusive production gate outcome. Re-verify after edits to reporter call accounting."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:c1fe198e"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on failed reporter call accounting. turn_one_persistence_failure_composes_to_exact_inconclusive_gate forces the real redistillation write error at the call-budget boundary and asserts the consumed count plus exact inconclusive production gate outcome. Re-verify after edits to reporter call accounting."
