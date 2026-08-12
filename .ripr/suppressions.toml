@@ -20125,12 +20125,6 @@ reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/validate.rs for de
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_main.rs:return_value:5ec39718"
-owner = "ub-review/core"
-reason = "Hosted RIPR 0.10.0 merge-ref finding on production reporter composition. `production_reporter_failure_composition_withholds_public_text_and_gates_inconclusive` and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` execute the production finalizer, preserve consumed-call accounting, withhold public text, and assert the exact inconclusive gate receipt. Re-verify after edits to reporter composition."
-
-[[suppressions]]
-kind = "exposure_gap"
 finding_id = "probe:src_model_exec.rs:call_deletion:2e0cd383"
 owner = "ub-review/core"
 reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
