@@ -380,6 +380,10 @@ mod tests {
         inline_comment: &GitHubReviewComment,
         reply_body: &str,
     ) -> AnyResult<(String, FixtureApiHandle)> {
+        // GitHub echoes back what was posted, which is the reviewer-facing
+        // rendering of the comment (no lane identity, suggestion fenced), not
+        // the artifact body the compiler stored.
+        let inline_posted_body = github_review_post_comment_body(inline_comment)?;
         crate::github_delivery::spawn_fake_delivery_api(vec![
             crate::github_delivery::FakeHttpResponse::new(
                 200,
@@ -409,7 +413,7 @@ mod tests {
                     "line": inline_comment.line,
                     "side": inline_comment.side,
                     "commit_id": exact_head,
-                    "body": inline_comment.body
+                    "body": inline_posted_body
                 }])
                 .to_string(),
             ),

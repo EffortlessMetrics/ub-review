@@ -904,6 +904,20 @@ pub(crate) fn validate_github_suggestion_text(value: &str) -> Result<()> {
     Ok(())
 }
 
+/// Maximum reviewer-facing characters a finding may occupy on a single source
+/// line. A line comment is a senior reviewer's margin note, not an essay: the
+/// accepted inline comments in `fixtures/review-experience/perl-lsp-3627.json`
+/// run 75-125 reviewer-facing characters, so 400 leaves better than three
+/// times the observed headroom for a two-sentence claim plus a named next
+/// action, while still refusing a wall of model prose anchored to one line.
+/// Longer content is not dropped: `validate_inline_candidate` demotes it to a
+/// summary-only finding that keeps its text.
+pub(crate) const INLINE_COMMENT_MAX_REVIEWER_CHARS: usize = 400;
+
+/// Upper bound on the demoted summary text, matching the summary-only
+/// guard's own concise limit in `validate_summary_only_candidate`.
+pub(crate) const DEMOTED_SUMMARY_MAX_CHARS: usize = 1_200;
+
 pub(crate) fn validate_inline_candidate(
     lane: &LanePlan,
     candidate: ModelCandidateComment,
@@ -916,8 +930,12 @@ pub(crate) fn validate_inline_candidate(
     let body_text = candidate.body.trim();
     let evidence = candidate.evidence.trim().to_owned();
     let body = ensure_lane_prefix(&lane.id, body_text);
-    let concise = body.chars().count() <= 1_200;
-    let body_present = !body_text.is_empty();
+    // The wall applies to what GitHub would actually render on the line, not
+    // to the artifact body: lane identity is stripped at the payload boundary
+    // and must not consume the reviewer's budget.
+    let reviewer_facing = reviewer_facing_pr_text(&body);
+    let concise = reviewer_facing.chars().count() <= INLINE_COMMENT_MAX_REVIEWER_CHARS;
+    let body_present = !reviewer_facing.is_empty();
     let evidence_present = !evidence.is_empty();
     let repo_relative = is_repo_relative_path(&path);
     let suggestion = if lane.id == "unsafe-review" {
@@ -945,26 +963,127 @@ pub(crate) fn validate_inline_candidate(
             evidence,
             suggestion,
         })
-    } else {
+    } else if allowed_severity
+        && allowed_confidence
+        && line_valid
+        && body_present
+        && evidence_present
+        && repo_relative
+    {
+        // Length is the only failure: the finding itself is admissible, it is
+        // just too long to live on a source line. Demote it with its own
+        // reviewer-facing text plus the anchor it lost, so the content reaches
+        // the reviewer in the summary instead of becoming an artifact-only
+        // guard receipt.
         Err(SummaryOnlyFinding {
             lane: lane.id.clone(),
             severity: candidate.severity,
             confidence: candidate.confidence,
             reason: format!(
-                "inline guard rejected {}:{}; severity_allowed={} confidence_allowed={} line_valid={} concise={} body_present={} evidence_present={} repo_relative={}",
+                "{} ({}:{})",
+                truncate_chars(&reviewer_facing, DEMOTED_SUMMARY_MAX_CHARS),
                 path,
-                candidate.line,
-                allowed_severity,
-                allowed_confidence,
-                line_valid,
-                concise,
-                body_present,
-                evidence_present,
-                repo_relative
+                candidate.line
             ),
             evidence,
         })
+    } else {
+        let diagnostic = format!(
+            "inline guard rejected {}:{}; severity_allowed={} confidence_allowed={} line_valid={} concise={} body_present={} evidence_present={} repo_relative={}",
+            path,
+            candidate.line,
+            allowed_severity,
+            allowed_confidence,
+            line_valid,
+            concise,
+            body_present,
+            evidence_present,
+            repo_relative
+        );
+        Err(SummaryOnlyFinding {
+            lane: lane.id.clone(),
+            severity: candidate.severity,
+            confidence: candidate.confidence,
+            reason: demoted_inline_finding_reason(
+                &path,
+                candidate.line,
+                body_text,
+                &evidence,
+                &diagnostic,
+            ),
+            evidence: demoted_inline_finding_evidence(&evidence, &diagnostic),
+        })
     }
+}
+
+/// Reviewer-facing text that survives when an inline candidate is demoted to a
+/// summary-only finding.
+///
+/// Demotion must not destroy what the model actually found. The internal
+/// diagnostic explaining *why* the candidate lost its inline slot is machine
+/// text and stays artifact-side; the public text is the model's own comment
+/// body, still anchored to `path:line` so a demoted finding remains line-level
+/// and actionable. A candidate with no body carries no finding to preserve, so
+/// the diagnostic is the only text left.
+///
+/// A candidate with no evidence of its own likewise keeps the diagnostic as
+/// its reason, which leaves it artifact-only. Publishing an unsupported model
+/// claim under "## Confirmed findings" would break the architecture rule that
+/// missing evidence is recorded as missing evidence and never as clean
+/// evidence — and `evidence_present=false` is one of the rejections that
+/// reaches this path. Preserving the model's text is for findings that had
+/// something behind them.
+pub(crate) fn demoted_inline_finding_reason(
+    path: &str,
+    line: u32,
+    body: &str,
+    evidence: &str,
+    diagnostic: &str,
+) -> String {
+    let body = strip_bracketed_lane_prefix(body).unwrap_or(body).trim();
+    if body.is_empty() || evidence.trim().is_empty() {
+        return diagnostic.to_owned();
+    }
+    // Every sibling constructor caps its reviewer-facing text. Uncapped, a
+    // single oversized demoted finding pops every other topic out of the body
+    // during degradation and the rest of the review is lost — and the
+    // rejection that most often reaches this path is `concise=false`, i.e. a
+    // body that was already too long.
+    let body = truncate_chars(body, DEMOTED_INLINE_FINDING_MAX_CHARS);
+    let path = path.trim();
+    if path.is_empty() || body_already_anchored(&body, path, line) {
+        return body;
+    }
+    format!("{path}:{line} — {body}")
+}
+
+/// Reviewer-facing cap for a demoted finding, matching the summary-candidate
+/// cap in this module.
+const DEMOTED_INLINE_FINDING_MAX_CHARS: usize = 1_200;
+
+/// True when the body already states this exact anchor.
+///
+/// A plain `contains("{path}:{line}")` also matches a longer line number, so a
+/// finding at line 41 whose body mentions `src/lib.rs:412` would silently lose
+/// its own anchor. Require that the match is not followed by another digit.
+fn body_already_anchored(body: &str, path: &str, line: u32) -> bool {
+    let needle = format!("{path}:{line}");
+    body.match_indices(&needle).any(|(index, _)| {
+        !body[index + needle.len()..]
+            .chars()
+            .next()
+            .is_some_and(|next| next.is_ascii_digit())
+    })
+}
+
+/// Keep the demotion diagnostic next to the candidate's own evidence. Only
+/// `reason` reaches the PR body, so the diagnostic stays artifact-side here.
+pub(crate) fn demoted_inline_finding_evidence(evidence: &str, diagnostic: &str) -> String {
+    let evidence = evidence.trim();
+    if evidence.is_empty() {
+        return diagnostic.to_owned();
+    }
+    format!("{evidence} [demotion diagnostic: {diagnostic}]")
 }
 
 #[cfg(test)]
@@ -1040,5 +1159,168 @@ mod claim_identity_tests {
         let unclassified = make("The declaration list needs a clearer explanation here.");
         assert!(!same_inline_claim(&exact_left, &unclassified));
         assert!(inline_claim_code_tokens("plain prose").is_empty());
+    }
+}
+
+#[cfg(test)]
+mod inline_demotion_tests {
+    use std::collections::BTreeSet;
+
+    use anyhow::{Result, anyhow};
+
+    use crate::tests::{test_diff, test_plan};
+    use crate::*;
+
+    const MODEL_FINDING: &str = "The retry loop reuses the scratch buffer after the async write completes, so a second write can observe freed memory.";
+
+    /// A body mentioning a longer line number at the same path must not be
+    /// mistaken for the finding's own anchor. `contains("src/lib.rs:41")`
+    /// matches inside `src/lib.rs:412`, which silently dropped the anchor.
+    #[test]
+    fn demoted_anchor_is_not_satisfied_by_a_longer_line_number() {
+        let body = "The caller at src/lib.rs:412 already revalidated the pointer.";
+        let reason = demoted_inline_finding_reason("src/lib.rs", 41, body, "ev", "diag");
+        assert!(
+            reason.starts_with("src/lib.rs:41 — "),
+            "line 41 must keep its own anchor: {reason}"
+        );
+
+        // The exact anchor is still recognized and not duplicated.
+        let exact = "src/lib.rs:41 is where the borrow escapes.";
+        let reason = demoted_inline_finding_reason("src/lib.rs", 41, exact, "ev", "diag");
+        assert_eq!(reason, exact);
+    }
+
+    /// A candidate with no evidence stays artifact-only, and an over-long body
+    /// cannot pop every other topic out of the degraded body.
+    #[test]
+    fn demoted_reason_withholds_unsupported_claims_and_caps_length() {
+        let reason = demoted_inline_finding_reason("src/lib.rs", 41, MODEL_FINDING, "  ", "diag");
+        assert_eq!(reason, "diag");
+
+        let long = "x".repeat(5_000);
+        let reason = demoted_inline_finding_reason("src/lib.rs", 41, &long, "ev", "diag");
+        assert!(
+            reason.chars().count() <= 1_200 + "src/lib.rs:41 — ".chars().count(),
+            "demoted reason must be capped, got {} chars",
+            reason.chars().count()
+        );
+    }
+
+    fn demotion_lane() -> LanePlan {
+        LanePlan {
+            id: "ub".to_owned(),
+            role: "UB review".to_owned(),
+            model: "custom:MiniMax-M3-3".to_owned(),
+            model_display: "MiniMax-M3".to_owned(),
+            receives: vec!["ripr".to_owned()],
+            focus: "Check memory validity.".to_owned(),
+        }
+    }
+
+    fn unanchored_candidate() -> ModelCandidateComment {
+        ModelCandidateComment {
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/lib.rs".to_owned(),
+            line: 412,
+            body: MODEL_FINDING.to_owned(),
+            evidence: "src/lib.rs hunk around the retry loop".to_owned(),
+            suggestion: None,
+        }
+    }
+
+    #[test]
+    fn anchoring_failure_keeps_the_model_finding_out_of_the_diagnostic() -> Result<()> {
+        // Empty line map: the claimed anchor is not a changed RIGHT-side line.
+        let line_map = BTreeSet::new();
+        let finding =
+            validate_inline_candidate(&demotion_lane(), unanchored_candidate(), &line_map)
+                .err()
+                .ok_or_else(|| anyhow!("an unanchored candidate must be demoted"))?;
+
+        assert!(
+            finding.reason.contains(MODEL_FINDING),
+            "demotion dropped the model finding: {}",
+            finding.reason
+        );
+        assert!(
+            finding.reason.contains("src/lib.rs:412"),
+            "demotion dropped the line anchor: {}",
+            finding.reason
+        );
+        assert!(!finding.reason.contains("inline guard rejected"));
+        assert!(!finding.reason.contains("line_valid="));
+        assert!(
+            finding.evidence.contains("line_valid=false"),
+            "the guard diagnostic must stay artifact-side: {}",
+            finding.evidence
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn demoted_anchoring_failure_survives_into_the_pull_request_body() -> Result<()> {
+        let line_map = BTreeSet::new();
+        let finding =
+            validate_inline_candidate(&demotion_lane(), unanchored_candidate(), &line_map)
+                .err()
+                .ok_or_else(|| anyhow!("an unanchored candidate must be demoted"))?;
+
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[finding],
+            &[] as &[Observation],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(
+            body.contains("reuses the scratch buffer after the async write"),
+            "the model finding never reached the PR body: {body}"
+        );
+        assert!(body.contains("src/lib.rs:412"), "{body}");
+        assert!(!body.contains("inline guard rejected"), "{body}");
+        assert!(!body.contains("line_valid="), "{body}");
+        assert!(!body.contains("severity_allowed"), "{body}");
+        assert!(!body.contains("hunk around the retry loop"), "{body}");
+        Ok(())
+    }
+
+    #[test]
+    fn refuter_demotion_keeps_the_model_finding_and_parks_the_diagnostic() {
+        let comment = ReviewInlineComment {
+            lane: "ub".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/lib.rs".to_owned(),
+            line: 412,
+            side: "RIGHT".to_owned(),
+            body: format!("[ub] {MODEL_FINDING}"),
+            evidence: "src/lib.rs hunk around the retry loop".to_owned(),
+            suggestion: None,
+        };
+
+        let finding = summary_from_refuted_inline(comment, "confidence is not high enough");
+
+        assert!(finding.reason.contains(MODEL_FINDING), "{}", finding.reason);
+        assert!(
+            finding.reason.contains("src/lib.rs:412"),
+            "{}",
+            finding.reason
+        );
+        assert!(!finding.reason.contains("refuter"), "{}", finding.reason);
+        assert!(
+            finding.evidence.contains("confidence is not high enough"),
+            "{}",
+            finding.evidence
+        );
     }
 }

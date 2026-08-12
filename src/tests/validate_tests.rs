@@ -280,10 +280,15 @@ index 1111111..2222222 100644
         },
         &line_map,
     );
-    assert!(
-        missing_evidence
-            .is_err_and(|finding| { finding.reason.contains("evidence_present=false") })
-    );
+    assert!(missing_evidence.is_err_and(|finding| {
+        // A candidate rejected for having no evidence must NOT surface its
+        // claim publicly: missing evidence is recorded as missing evidence,
+        // never as clean evidence. The diagnostic stays in `reason`, which is
+        // what keeps the finding artifact-only.
+        finding.reason.contains("evidence_present=false")
+            && !finding.reason.contains("line-valid but unsupported claim")
+            && crate::is_pr_body_artifact_only_finding(&finding)
+    }));
 
     let empty_body = validate_inline_candidate(
         &lane,
@@ -298,6 +303,7 @@ index 1111111..2222222 100644
         },
         &line_map,
     );
+    // With no model text to preserve, the diagnostic is the only surviving text.
     assert!(empty_body.is_err_and(|finding| { finding.reason.contains("body_present=false") }));
     Ok(())
 }
@@ -368,9 +374,17 @@ index 1111111..2222222 100644
     assert!(
         summary_only_findings[0]
             .reason
-            .contains("candidate-only lane emitted inline candidate")
+            .contains("src/lib.rs:2 — This is line-valid but must stay candidate-only."),
+        "{}",
+        summary_only_findings[0].reason
     );
-    assert_eq!(summary_only_findings[0].evidence, "diff hunk");
+    assert!(
+        summary_only_findings[0]
+            .evidence
+            .starts_with("diff hunk [demotion diagnostic: candidate-only lane demotion"),
+        "{}",
+        summary_only_findings[0].evidence
+    );
 }
 
 #[test]
@@ -783,4 +797,307 @@ fn degraded_model_lane_is_attempted_but_not_missing_evidence() {
 
     assert!(crate::model_call_attempted_status("degraded"));
     assert!(!crate::is_model_receipt_evidence_issue(&degraded));
+}
+
+/// A finding that is admissible in every way except length must not vanish.
+/// GitHub renders a line comment in a narrow gutter next to one source line;
+/// a wall of model prose there is what a junior reviewer posts. The guard
+/// demotes it to a summary-only finding carrying its own text and the anchor
+/// it lost, so the reviewer still reads the content.
+#[test]
+fn inline_guard_demotes_overlong_comment_to_summary_only() -> Result<()> {
+    let patch = "\
+diff --git a/src/lib.rs b/src/lib.rs
+index 1111111..2222222 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,4 @@
+ pub fn active_len(len: usize) -> usize {
++    let ptr = &len as *const usize;
+     len
+ }
+";
+    let line_map = right_side_diff_lines(patch);
+    let lane = default_lanes()
+        .into_iter()
+        .find(|lane| lane.id == "tests")
+        .ok_or_else(|| anyhow::anyhow!("tests lane missing"))?;
+
+    // Just inside the wall: still a line comment.
+    let at_limit = "x".repeat(crate::INLINE_COMMENT_MAX_REVIEWER_CHARS);
+    let accepted = validate_inline_candidate(
+        &lane,
+        ModelCandidateComment {
+            severity: "medium".to_owned(),
+            confidence: "medium-high".to_owned(),
+            path: "src/lib.rs".to_owned(),
+            line: 2,
+            body: at_limit.clone(),
+            evidence: "diff hunk".to_owned(),
+            suggestion: None,
+        },
+        &line_map,
+    )
+    .map_err(|finding| anyhow::anyhow!("unexpected rejection: {}", finding.reason))?;
+    assert_eq!(accepted.body, format!("[tests] {at_limit}"));
+
+    // One reviewer-facing character past the wall: no longer a line comment.
+    let essay = format!(
+        "The raw pointer taken here outlives the borrow. {}",
+        "y".repeat(crate::INLINE_COMMENT_MAX_REVIEWER_CHARS)
+    );
+    let demoted = validate_inline_candidate(
+        &lane,
+        ModelCandidateComment {
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/lib.rs".to_owned(),
+            line: 2,
+            body: essay.clone(),
+            evidence: "diff hunk".to_owned(),
+            suggestion: None,
+        },
+        &line_map,
+    )
+    .err()
+    .ok_or_else(|| anyhow::anyhow!("overlong candidate must not become a line comment"))?;
+
+    // Demoted, not dropped: severity, evidence, and the claim survive, and the
+    // reviewer still learns where the claim points.
+    assert_eq!(demoted.severity, "high");
+    assert_eq!(demoted.confidence, "high");
+    assert_eq!(demoted.evidence, "diff hunk");
+    assert!(
+        demoted
+            .reason
+            .starts_with("The raw pointer taken here outlives the borrow."),
+        "demoted finding must carry the model's own text: {}",
+        demoted.reason
+    );
+    assert!(
+        demoted.reason.contains("(src/lib.rs:2)"),
+        "demoted finding must keep the anchor it lost: {}",
+        demoted.reason
+    );
+    // It must reach the reviewer, not be filed as an artifact-only guard receipt.
+    assert!(
+        !crate::is_pr_body_artifact_only_finding(&demoted),
+        "a demoted finding is reviewer-facing content, not guard machinery: {}",
+        demoted.reason
+    );
+    Ok(())
+}
+
+/// Lane identity is artifact provenance (docs/REVIEW_BODY_CONTRACT.md), not
+/// something a PR author should read on their source line. The stored comment
+/// keeps `[lane]`; the GitHub payload does not.
+#[test]
+fn github_payload_strips_lane_identity_that_artifacts_keep() -> Result<()> {
+    let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+    let plan = test_plan(Vec::new());
+    let diff = test_diff();
+    let model_lanes = vec![model_lane_receipt("opposition", "ok")];
+    let inline = ReviewInlineComment {
+        lane: "opposition".to_owned(),
+        severity: "high".to_owned(),
+        confidence: "high".to_owned(),
+        path: "src/lib.rs".to_owned(),
+        line: 2,
+        side: "RIGHT".to_owned(),
+        body: "[opposition] The raw pointer outlives the borrow it was taken from.".to_owned(),
+        evidence: "diff hunk".to_owned(),
+        suggestion: None,
+    };
+
+    let surface = compile_review_surface(ReviewCompilerInput {
+        shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        review_body_policy: &ReviewBodyPolicy::default(),
+        run_pass: crate::RunPass::Manual,
+        post_review_on: &[],
+        args: &args,
+        plan: &plan,
+        diff: &diff,
+        model_lanes: &model_lanes,
+        missing_or_failed_sensor_evidence: &[],
+        missing_or_failed_model_evidence: &[],
+        inline_comments: std::slice::from_ref(&inline),
+        summary_only_findings: &[],
+        observations: &[],
+        proof_receipts: &[],
+        final_follow_up_tasks: 0,
+        suggested_issues: &[],
+        reporter_distillation: None,
+    })?;
+
+    // The artifact keeps lane provenance: `review/github-review.json` and the
+    // artifact body are both read by the packet-contract checks.
+    let stored = surface
+        .github_review
+        .comments
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("inline candidate missing from github payload"))?;
+    assert!(
+        stored.body.starts_with("[opposition]"),
+        "the stored payload must retain lane provenance: {}",
+        stored.body
+    );
+    assert!(
+        surface.artifact_body.contains("[opposition]"),
+        "the artifact body must retain lane provenance: {}",
+        surface.artifact_body
+    );
+
+    // What GitHub actually receives carries no lane identity.
+    let payload = crate::github_review_post_payload(&surface.github_review)?;
+    let posted = payload
+        .comments
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("inline candidate missing from post payload"))?;
+    assert_eq!(
+        posted.body, "The raw pointer outlives the borrow it was taken from.",
+        "GitHub must receive the reviewer sentence with no lane identity"
+    );
+    assert_eq!(posted.path, "src/lib.rs");
+    assert_eq!(posted.line, 2);
+    Ok(())
+}
+
+/// The two length walls a finding crosses on its way to the reviewer, pinned
+/// over the real input matrix:
+///
+/// 1. `INLINE_COMMENT_MAX_REVIEWER_CHARS` decides line comment vs. demotion.
+/// 2. `DEMOTED_SUMMARY_MAX_CHARS` decides whether the demoted text is carried
+///    whole or truncated, and the demoted `reason` always ends in the
+///    `(path:line)` anchor the finding lost when it left the source line.
+///
+/// Both walls measure reviewer-facing text, so the `[lane]` prefix the guard
+/// adds must not shift either boundary.
+#[test]
+fn inline_length_walls_demote_then_truncate_and_keep_the_anchor() -> Result<()> {
+    let patch = "\
+diff --git a/src/lib.rs b/src/lib.rs
+index 1111111..2222222 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,4 @@
+ pub fn active_len(len: usize) -> usize {
++    let ptr = &len as *const usize;
+     len
+ }
+";
+    let line_map = right_side_diff_lines(patch);
+    let lane = default_lanes()
+        .into_iter()
+        .find(|lane| lane.id == "tests")
+        .ok_or_else(|| anyhow::anyhow!("tests lane missing"))?;
+
+    let inline_wall = crate::INLINE_COMMENT_MAX_REVIEWER_CHARS;
+    let summary_wall = crate::DEMOTED_SUMMARY_MAX_CHARS;
+    assert_eq!(
+        inline_wall, 400,
+        "inline wall moved without a contract update"
+    );
+    assert_eq!(
+        summary_wall, 1_200,
+        "demoted-summary wall moved without a contract update"
+    );
+
+    // (reviewer-facing length, stays a line comment, demoted text is truncated)
+    let cases = [
+        (1_usize, true, false),
+        (inline_wall - 1, true, false),
+        (inline_wall, true, false),
+        (inline_wall + 1, false, false),
+        (summary_wall - 1, false, false),
+        (summary_wall, false, false),
+        (summary_wall + 1, false, true),
+        (summary_wall * 4, false, true),
+    ];
+
+    for (len, stays_inline, truncated) in cases {
+        let body = "x".repeat(len);
+        let outcome = validate_inline_candidate(
+            &lane,
+            ModelCandidateComment {
+                severity: "high".to_owned(),
+                confidence: "high".to_owned(),
+                path: "src/lib.rs".to_owned(),
+                line: 2,
+                body: body.clone(),
+                evidence: "diff hunk".to_owned(),
+                suggestion: None,
+            },
+            &line_map,
+        );
+
+        assert_eq!(
+            matches!(&outcome, Err(SummaryOnlyFinding { .. })),
+            !stays_inline,
+            "len {len}: the guard must choose between a line comment and the summary-only error variant on reviewer-facing length alone"
+        );
+
+        match (outcome, stays_inline) {
+            (Ok(comment), true) => {
+                // The stored body carries lane provenance on top of the
+                // reviewer's budget, which is why the wall cannot be measured
+                // against it.
+                assert_eq!(comment.body, format!("[tests] {body}"));
+                assert!(
+                    comment.body.chars().count() > inline_wall || len < inline_wall,
+                    "lane prefix must sit outside the reviewer budget"
+                );
+            }
+            (Err(demoted), false) => {
+                assert!(
+                    !demoted.reason.starts_with("inline guard rejected"),
+                    "len {len}: an over-long but otherwise admissible finding must be demoted with its own text, not a guard receipt: {}",
+                    demoted.reason
+                );
+                assert_eq!(demoted.lane, "tests", "len {len}");
+                assert_eq!(demoted.severity, "high", "len {len}");
+                assert_eq!(demoted.confidence, "high", "len {len}");
+                assert_eq!(demoted.evidence, "diff hunk", "len {len}");
+
+                // Spelled out independently of the production helpers, so this
+                // stays a real oracle rather than a restatement of the code.
+                let expected_text = if truncated {
+                    let clipped = format!("{}...", "x".repeat(summary_wall - 3));
+                    assert_eq!(
+                        clipped.chars().count(),
+                        summary_wall,
+                        "len {len}: clipped text must land exactly on the summary wall"
+                    );
+                    assert_eq!(
+                        clipped,
+                        crate::truncate_chars(&body, summary_wall),
+                        "len {len}: clipping must not disagree with truncate_chars"
+                    );
+                    clipped
+                } else {
+                    body.clone()
+                };
+                // Pin the whole rendering, not just its parts: the demoted
+                // reason is `<text> (<path>:<line>)`, with the anchor last so
+                // the reviewer reads the claim before the coordinates.
+                assert_eq!(
+                    demoted.reason,
+                    format!("{expected_text} (src/lib.rs:2)"),
+                    "len {len}: demoted reason rendering drifted"
+                );
+            }
+            (Ok(comment), false) => {
+                anyhow::bail!(
+                    "len {len}: expected demotion, got a line comment of {} chars",
+                    comment.body.chars().count()
+                );
+            }
+            (Err(demoted), true) => {
+                anyhow::bail!(
+                    "len {len}: expected a line comment, got: {}",
+                    demoted.reason
+                );
+            }
+        }
+    }
+    Ok(())
 }

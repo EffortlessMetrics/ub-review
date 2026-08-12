@@ -1,0 +1,37 @@
+case: inline-and-summary-finding
+diff shape: one anchored defect plus one cross-cutting route concern
+review payload status: prepared
+posts a review: true
+event: COMMENT
+inline comments: 1
+
+=== pr review body ===
+## Decision
+
+- Needs reviewer attention before upstream: findings remain.
+
+## Confirmed findings
+
+- `from_raw_parts` runs before the zero-length guard, so a dangling pointer is used even though the slice is never read.
+- `Pool::lease` retains the same construction outside this diff, so the changed fix does not cover every production route.
+=== end pr review body ===
+
+=== inline comment 1 ===
+src/buffer.rs:39 RIGHT
+`from_raw_parts` runs before the zero-length guard, so a dangling pointer is used even though the slice is never read.
+=== end inline comment 1 ===
+
+=== serialized pre-delivery review payload ===
+{
+  "event": "COMMENT",
+  "body": "## Decision\n\n- Needs reviewer attention before upstream: findings remain.\n\n## Confirmed findings\n\n- `from_raw_parts` runs before the zero-length guard, so a dangling pointer is used even though the slice is never read.\n- `Pool::lease` retains the same construction outside this diff, so the changed fix does not cover every production route.\n",
+  "comments": [
+    {
+      "path": "src/buffer.rs",
+      "line": 39,
+      "side": "RIGHT",
+      "body": "`from_raw_parts` runs before the zero-length guard, so a dangling pointer is used even though the slice is never read."
+    }
+  ]
+}
+=== end serialized pre-delivery review payload ===

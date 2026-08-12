@@ -106,6 +106,9 @@ mod cost_artifact;
 #[cfg(test)]
 mod review_experience;
 #[cfg(test)]
+#[path = "tests.rs"]
+mod review_golden;
+#[cfg(test)]
 use cost_artifact::{build_cost_receipt, build_floor_trend_artifact};
 use cost_artifact::{write_cost_receipt_artifact, write_floor_trend_artifact};
 mod quality_artifact;
@@ -3984,14 +3987,17 @@ fn unsafe_review_comment_plan_candidates(
             })
             .unwrap_or_default();
         let suggestion = rq_entry.and_then(RepairQueueEntry::suggestion);
+        // The 155-character advisory footer this template used to repeat on
+        // every card was pure boilerplate on a source line and pushed the
+        // standard card past `INLINE_COMMENT_MAX_REVIEWER_CHARS`. The advisory
+        // status is stated once, briefly; the full trust-boundary sentence and
+        // sensor provenance remain in the shared context and artifacts.
         let body = truncate_chars(
             &format!(
                 "**{gap}**{card_label}\n\n\
                  **Next action**: {action}\n\n\
                  **Trust boundary** (advisory): {trust}{rq_context}\n\n\
-                 _Sourced from unsafe-review advisory output. \
-                 Apply only after reviewer verification. \
-                 Inline comments are advisory - they do not change the merge decision._"
+                 _Advisory: verify before applying._"
             ),
             1_100,
         );
@@ -4072,6 +4078,32 @@ fn route_follow_up_proof_receipts(
                 );
             }
         }
+    }
+}
+
+struct ReporterCoordinationOutcome {
+    status: &'static str,
+    error: Option<String>,
+    resolution: ReporterTurnResolution,
+}
+
+fn finalize_reporter_coordination(
+    review_dir: &Path,
+    current_head: &str,
+    model_calls_used: &mut usize,
+    calls_attempted: usize,
+    result: Result<()>,
+) -> ReporterCoordinationOutcome {
+    *model_calls_used = model_calls_used.saturating_add(calls_attempted);
+    let error = result.err().map(|error| format!("{error:#}"));
+    ReporterCoordinationOutcome {
+        status: if error.is_some() {
+            "failed"
+        } else {
+            "completed"
+        },
+        resolution: resolve_reporter_after_coordination(review_dir, current_head, error.as_deref()),
+        error,
     }
 }
 
@@ -4260,13 +4292,13 @@ fn write_review_artifacts(
                     routed,
                     &receipt_ref,
                 );
-                let _ = write_lane_thread_turn(
+                write_lane_thread_turn(
                     &review_dir,
                     &receipt.lane,
                     &turn,
                     &receipt.cohort_id,
                     &receipt.status,
-                );
+                )?;
                 // Order 8 (#678): emit a lane_report message to the cross-lane
                 // queue so the reporter (Order 9) can consume the lane's
                 // conclusion. Also emit thread_terminal when the lane is done.
@@ -4526,7 +4558,8 @@ fn write_review_artifacts(
     // continuation (Order 9c proof-routing).
     let reporter_loop =
         start_run_loop(event_log, run_started, "model", "investigation", "reporter")?;
-    let reporter_status = match run_reporter_coordination(
+    let mut reporter_calls_attempted = 0;
+    let reporter_result = run_reporter_coordination(
         root,
         &review_dir,
         &shared_context,
@@ -4537,19 +4570,20 @@ fn write_review_artifacts(
         model_calls_used,
         event_log,
         &message_log,
-    ) {
-        Ok(calls) => {
-            model_calls_used = model_calls_used.saturating_add(calls);
-            "completed"
-        }
-        Err(e) => {
-            let _ = event_log.append(
-                "reporter_error",
-                serde_json::json!({"error": format!("{e:#}")}),
-            );
-            "failed"
-        }
-    };
+        &diff.head,
+        &mut reporter_calls_attempted,
+    );
+    let reporter_outcome = finalize_reporter_coordination(
+        &review_dir,
+        &diff.head,
+        &mut model_calls_used,
+        reporter_calls_attempted,
+        reporter_result,
+    );
+    let reporter_status = reporter_outcome.status;
+    if let Some(error) = &reporter_outcome.error {
+        let _ = event_log.append("reporter_error", serde_json::json!({"error": error}));
+    }
     finish_run_loop(
         event_log,
         run_started,
@@ -4915,10 +4949,11 @@ fn write_review_artifacts(
             proof_receipts: &review.proof_receipts,
         },
     )?;
-    // Order 10 (#678): read the reporter's distillation (Order 9 #696) to pass
-    // into the compiler as the review body's editorial summary. The compiler
-    // renders it verbatim (firewall, not truth reducer).
-    let reporter_distillation = read_reporter_distillation(&review_dir);
+    // Order 10 (#678) + #857: one current-head reporter resolution feeds the
+    // compiler distillation and (later) review-forward gate evidence. Stale or
+    // malformed turns stay out of the public body.
+    let reporter_resolution = reporter_outcome.resolution;
+    let reporter_distillation = reporter_resolution.public_distillation().map(str::to_owned);
     let final_surface = compile_review_surface(ReviewCompilerInput {
         shared_context_id: &review.shared_context_id,
         review_body_policy: &config.review_body,
@@ -5000,7 +5035,8 @@ fn write_review_artifacts(
     )?;
     // Order 11 (#678): read the reporter's verdict for review-forward gate
     // policy. Only affects the gate when config.gate.review_forward == true.
-    let reporter_verdict = read_reporter_verdict(&review_dir);
+    // Same resolution object as the compiler — no second latest-turn search.
+    let reporter_gate = reporter_resolution.gate_input();
     let gate_outcome = build_gate_outcome(GateOutcomeInput {
         args,
         config,
@@ -5011,7 +5047,7 @@ fn write_review_artifacts(
         tool_gate_outcomes,
         missing_or_failed_sensor_evidence: &review.missing_or_failed_sensor_evidence,
         missing_or_failed_model_evidence: &review.missing_or_failed_model_evidence,
-        reporter_verdict,
+        reporter_gate,
     });
     if (gate_outcome.conclusion == "fail" || gate_outcome.conclusion == "inconclusive")
         && review_payload_status == "skipped_empty_smoke"
@@ -8030,10 +8066,15 @@ index 1111111..2222222 100644
             },
             &line_map,
         );
-        assert!(
-            missing_evidence
-                .is_err_and(|finding| { finding.reason.contains("evidence_present=false") })
-        );
+        assert!(missing_evidence.is_err_and(|finding| {
+            // A candidate rejected for having no evidence must NOT surface its
+            // claim publicly: missing evidence is recorded as missing
+            // evidence, never as clean evidence. The diagnostic stays in
+            // `reason`, which is what keeps the finding artifact-only.
+            finding.reason.contains("evidence_present=false")
+                && !finding.reason.contains("line-valid but unsupported claim")
+                && super::is_pr_body_artifact_only_finding(&finding)
+        }));
 
         let empty_body = validate_inline_candidate(
             &lane,
@@ -8119,9 +8160,17 @@ index 1111111..2222222 100644
         assert!(
             summary_only_findings[0]
                 .reason
-                .contains("candidate-only lane emitted inline candidate")
+                .contains("src/lib.rs:2 — This is line-valid but must stay candidate-only."),
+            "{}",
+            summary_only_findings[0].reason
         );
-        assert_eq!(summary_only_findings[0].evidence, "diff hunk");
+        assert!(
+            summary_only_findings[0]
+                .evidence
+                .starts_with("diff hunk [demotion diagnostic: candidate-only lane demotion"),
+            "{}",
+            summary_only_findings[0].evidence
+        );
     }
 
     #[test]
@@ -10624,15 +10673,23 @@ index 1111111..2222222 100644
 
         assert!(inline_comments.is_empty());
         assert_eq!(summary_only_findings.len(), 2);
+        // Both demotions keep the model's own anchored finding public; the
+        // refuter diagnostic is parked in evidence.
+        assert!(summary_only_findings.iter().any(|finding| {
+            finding.reason == "src/lib.rs:2 — This test does not prove the changed boundary."
+        }));
+        assert!(summary_only_findings.iter().any(|finding| {
+            finding.reason == "src/lib.rs:4 — A sibling path may share the helper."
+        }));
         assert!(summary_only_findings.iter().any(|finding| {
             finding
-                .reason
+                .evidence
                 .contains("plausible but not line-local enough")
         }));
         assert!(
             summary_only_findings
                 .iter()
-                .any(|finding| finding.reason.contains("returned no decision"))
+                .any(|finding| finding.evidence.contains("returned no decision"))
         );
     }
 
@@ -10673,14 +10730,18 @@ index 1111111..2222222 100644
 
         assert!(inline_comments.is_empty());
         assert_eq!(summary_only_findings.len(), 1);
+        assert_eq!(
+            summary_only_findings[0].reason,
+            "src/lib.rs:2 — This test does not prove the changed boundary."
+        );
         assert!(
             summary_only_findings[0]
-                .reason
+                .evidence
                 .contains("refuter unavailable")
         );
         assert!(
             summary_only_findings[0]
-                .reason
+                .evidence
                 .contains("model call budget exhausted before refuter pass")
         );
         assert_eq!(model_lanes.len(), 1);
@@ -14526,6 +14587,150 @@ required_proof_unprooven = true
     }
 
     #[test]
+    fn production_reporter_failure_composition_withholds_public_text_and_gates_inconclusive()
+    -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        crate::write_reporter_thread(
+            &review_dir,
+            &crate::ReporterConclusion {
+                schema: crate::REPORTER_THREAD_SCHEMA.to_owned(),
+                distillation: "valid disk text that must remain private".to_owned(),
+                proposed_follow_ups: vec![],
+                verdict: crate::ReporterVerdict::Clear,
+                cohort_id: "cid".to_owned(),
+                thread_id: "tid".to_owned(),
+            },
+            "head-a",
+        )?;
+        let mut model_calls_used = 3;
+        let outcome = super::finalize_reporter_coordination(
+            &review_dir,
+            "head-a",
+            &mut model_calls_used,
+            4,
+            Err(anyhow::anyhow!("forced startup invalidation failure")),
+        );
+
+        assert_eq!(model_calls_used, 7);
+        assert_eq!(outcome.status, "failed");
+        assert!(outcome.resolution.public_distillation().is_none());
+
+        let mut args = test_run_args(temp.path().join("out"));
+        args.mode = RunMode::IntelligentCi;
+        let mut config = Config::default();
+        config.gate.review_forward = true;
+        let plan = test_plan(Vec::new());
+        let terminal_state = test_terminal_state("sufficient");
+        let gate = crate::build_gate_outcome(crate::GateOutcomeInput {
+            args: &args,
+            config: &config,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            tool_gate_outcomes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            reporter_gate: outcome.resolution.gate_input(),
+        });
+        assert_eq!(gate.conclusion, "inconclusive");
+        assert_eq!(gate.reasons.len(), 1);
+        assert_eq!(gate.reasons[0].kind, "reporter-evidence");
+        assert_eq!(gate.reasons[0].id, "reporter-malformed");
+        assert_eq!(
+            gate.reasons[0].receipt,
+            "review/threads/reporter/thread.json"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn turn_one_persistence_failure_composes_to_exact_inconclusive_gate() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        crate::write_reporter_thread(
+            &review_dir,
+            &crate::ReporterConclusion {
+                schema: crate::REPORTER_THREAD_SCHEMA.to_owned(),
+                distillation: "turn zero must be invalidated".to_owned(),
+                proposed_follow_ups: vec!["lane: reconsider".to_owned()],
+                verdict: crate::ReporterVerdict::Clear,
+                cohort_id: "cid".to_owned(),
+                thread_id: "tid".to_owned(),
+            },
+            "head-a",
+        )?;
+        std::fs::create_dir(review_dir.join("threads/reporter/turn-001.json"))?;
+        let refs = vec!["lane-answer:lane".to_owned()];
+        let redistillation = crate::run_reporter_redistillation(
+            crate::ReporterRedistillationContext {
+                review_dir: &review_dir,
+                current_head: "head-a",
+                cohort_id: "cid",
+                thread_id: "tid",
+                lane_answer_refs: &refs,
+            },
+            || {
+                Ok(crate::ModelPromptContent {
+                    json_payload: serde_json::json!({
+                        "distillation": "replacement",
+                        "verdict": "clear",
+                        "proposed_follow_ups": [],
+                    })
+                    .to_string(),
+                    parse_path: PathBuf::from("forced-response.json"),
+                    duration_ms: 1,
+                    http_status: Some(200),
+                    response_shape: "test".to_owned(),
+                    cache_usage: ModelCacheUsage::default(),
+                })
+            },
+        );
+        assert!(redistillation.is_err());
+
+        let max_model_calls = 7;
+        let mut model_calls_used = 3;
+        let outcome = super::finalize_reporter_coordination(
+            &review_dir,
+            "head-a",
+            &mut model_calls_used,
+            4,
+            redistillation.map(|_| ()),
+        );
+        assert_eq!(model_calls_used, max_model_calls);
+        assert!(model_calls_used >= max_model_calls);
+        assert!(outcome.resolution.public_distillation().is_none());
+
+        let mut args = test_run_args(temp.path().join("out"));
+        args.mode = RunMode::IntelligentCi;
+        let mut config = Config::default();
+        config.gate.review_forward = true;
+        let plan = test_plan(Vec::new());
+        let terminal_state = test_terminal_state("sufficient");
+        let gate = crate::build_gate_outcome(crate::GateOutcomeInput {
+            args: &args,
+            config: &config,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            tool_gate_outcomes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            reporter_gate: outcome.resolution.gate_input(),
+        });
+        assert_eq!(gate.conclusion, "inconclusive");
+        assert_eq!(gate.reasons.len(), 1);
+        assert_eq!(gate.reasons[0].id, "reporter-malformed");
+        assert_eq!(
+            gate.reasons[0].receipt,
+            "review/threads/reporter/thread.json"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn pipelined_late_sensor_phase_joins_before_gate_and_stays_missing_evidence() -> Result<()> {
         // #325 end-to-end: a late-phase required sensor runs behind the model
         // wave; its receipt must land before the gate evaluates, and a late
@@ -16687,11 +16892,126 @@ required_proof_unprooven = true
             ReviewBodyAudience::PullRequest,
         );
 
-        assert!(body.contains("## Test proof"));
+        // A head-only pass is not publishable proof: announcing "## Test proof"
+        // while the same body asks for a base+tests witness contradicts itself
+        // and spends reviewer attention on a successful-tool announcement. The
+        // receipt stays in artifacts and still counts as gate evidence.
+        assert!(!body.contains("## Test proof"));
+        assert!(!body.contains("## Proof results"));
         assert!(body.contains("## Verification questions"));
         assert!(body.contains("Confirm the new test still needs a base+tests red/green witness."));
         assert!(body.contains("Needs one test-proof clarification before upstream."));
         assert!(!has_standalone_approval_line(&body));
+    }
+
+    /// Exercise every arm of the publication predicate directly. The rendered
+    /// body tests below reach it only through `render_review_body`, which
+    /// leaves the individual arms without a discriminating assertion.
+    #[test]
+    fn public_test_proof_result_admits_only_decision_changing_receipts() {
+        // Discriminating is the one green result worth a bullet: it proves the
+        // tests fail without the patch.
+        let discriminating = test_red_green_proof_receipt("discriminating", "failed");
+        assert!(super::proof_receipt_is_public_test_proof_result(
+            &discriminating
+        ));
+
+        // A red proof always changes the decision.
+        let head_failed = test_proof_receipt("head_failed", "failed");
+        assert!(super::proof_receipt_is_public_test_proof_result(
+            &head_failed
+        ));
+
+        // A passing build command is a successful-tool announcement.
+        let mut passing_build = test_proof_receipt("head_passed", "passed");
+        passing_build.kind = "focused-build".to_owned();
+        assert!(!super::proof_receipt_is_public_test_proof_result(
+            &passing_build
+        ));
+
+        // A focused test that passed at HEAD with no base+tests side says only
+        // that the test is green, which is equally true of a test asserting
+        // nothing.
+        let head_only = test_proof_receipt("head_passed", "passed");
+        assert!(
+            head_only
+                .commands
+                .iter()
+                .all(|c| c.side != "base-plus-tests")
+        );
+        assert!(!super::proof_receipt_is_public_test_proof_result(
+            &head_only
+        ));
+
+        // The same result with a real base+tests side is a red/green witness.
+        let head_passed_red_green = test_red_green_proof_receipt("head_passed", "failed");
+        assert!(super::proof_receipt_is_public_test_proof_result(
+            &head_passed_red_green
+        ));
+
+        // Everything else stays in artifacts.
+        for result in [
+            "timed_out",
+            "skipped_budget",
+            "base_patch_failed",
+            "non_discriminating",
+        ] {
+            let receipt = test_proof_receipt(result, "timed_out");
+            assert!(
+                !super::proof_receipt_is_public_test_proof_result(&receipt),
+                "{result} must not be published"
+            );
+        }
+
+        // Gate and follow-up truth are unchanged: an executed proof is still
+        // evidence even when it is not worth reviewer attention.
+        assert!(super::proof_receipt_is_test_proof_result(&passing_build));
+        assert!(super::proof_receipt_is_test_proof_result(&head_only));
+    }
+
+    /// A green proof earns a bullet only when it discriminates the patch, which
+    /// is the one result that answers "did this PR do what it intended?".
+    #[test]
+    fn pr_review_body_publishes_discriminating_proof_but_not_passing_build() {
+        let discriminating = test_red_green_proof_receipt("discriminating", "failed");
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[] as &[SummaryOnlyFinding],
+            &[] as &[Observation],
+            &[discriminating],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+        assert!(body.contains("## Test proof"));
+        assert!(body.contains("discriminates the patch"));
+
+        let mut passing_build = test_proof_receipt("head_passed", "passed");
+        passing_build.kind = "focused-build".to_owned();
+        passing_build.commands[0].command = "cargo doc --workspace --no-deps --locked".to_owned();
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[] as &[SummaryOnlyFinding],
+            &[] as &[Observation],
+            &[passing_build],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+        // Nothing else had reviewer value, so the whole post is withheld rather
+        // than reduced to "cargo doc succeeded".
+        assert!(!body.contains("cargo doc"));
+        assert!(body.trim().is_empty());
     }
 
     #[test]
@@ -16883,6 +17203,15 @@ index 1111111..2222222 100644
         assert!(!body.contains("stdout.txt"));
         assert!(!body.contains("stderr.txt"));
         assert!(!has_standalone_approval_line(&body));
+        // This is the shape where the decision sentence is suppressed, so the
+        // first section rendered is also the first line of the posted review.
+        // Every section but `## Decision` used to hardcode a leading newline,
+        // which opened the review with a blank line.
+        assert!(
+            body.starts_with("## "),
+            "posted body must not open with a blank line: {body:?}"
+        );
+        assert!(!body.contains("\n\n\n"));
     }
 
     #[test]
@@ -23292,8 +23621,17 @@ index 1111111..2222222 100644
         assert_eq!(summary_only_findings.len(), 1);
         assert_eq!(summary_only_findings[0].lane, "unsafe-review");
         assert!(
-            summary_only_findings[0].reason.contains("line_valid=false"),
+            summary_only_findings[0]
+                .evidence
+                .contains("line_valid=false"),
             "stale anchors must be rejected by validate_inline_candidate: {:?}",
+            summary_only_findings[0]
+        );
+        assert!(
+            summary_only_findings[0]
+                .reason
+                .starts_with("src/lib.rs:99 —"),
+            "the demoted finding must keep its anchor and text: {:?}",
             summary_only_findings[0]
         );
         Ok(())

@@ -37,6 +37,107 @@ pub(crate) struct GateCheckOutcome {
 pub(crate) struct GateCheckReason {
     #[serde(default)]
     pub(crate) id: String,
+    /// What actually failed. The writer always emits this; enforcement used to
+    /// discard it, so a failing check printed a bare sensor name and the
+    /// operator had to open the artifact to learn anything.
+    #[serde(default)]
+    pub(crate) detail: String,
+    /// Operator action, present for operational failures.
+    #[serde(default)]
+    pub(crate) next_action: Option<String>,
+    #[serde(default)]
+    pub(crate) receipt: String,
+}
+
+/// Collapse a gate-artifact string into a single safe log line.
+///
+/// GitHub Actions parses any line beginning with `::` as a workflow command,
+/// so a reason field containing a newline followed by `::set-output` (or
+/// `::add-mask`, `::error`) would inject one. These fields are not fully
+/// trusted: a `detail` can quote repository configuration, and a tool gate can
+/// surface text that originated in the reviewed branch. Fold every line break
+/// into a space so one field can only ever produce one line, and bound the
+/// length so a pathological artifact cannot flood the log.
+fn gate_reason_log_text(value: &str) -> String {
+    let folded = value
+        .split(['\r', '\n'])
+        .map(str::trim)
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    crate::truncate_chars(&folded, GATE_REASON_LOG_MAX_CHARS)
+}
+
+const GATE_REASON_LOG_MAX_CHARS: usize = 500;
+const GATE_REASON_LOG_MAX_REASONS: usize = 8;
+
+fn gate_reasons_for_log(reasons: &[GateCheckReason]) -> impl Iterator<Item = &GateCheckReason> {
+    reasons
+        .iter()
+        .filter(|reason| !reason.id.trim().is_empty())
+        .take(GATE_REASON_LOG_MAX_REASONS)
+}
+
+fn gate_reason_log_omitted_count(reasons: &[GateCheckReason]) -> usize {
+    reasons
+        .iter()
+        .filter(|reason| !reason.id.trim().is_empty())
+        .count()
+        .saturating_sub(GATE_REASON_LOG_MAX_REASONS)
+}
+
+fn gate_reason_id_summary(reasons: &[GateCheckReason]) -> String {
+    let ids = gate_reasons_for_log(reasons)
+        .map(|reason| gate_reason_log_text(&reason.id))
+        .filter(|id| !id.is_empty())
+        .collect::<Vec<_>>();
+    if ids.is_empty() {
+        return "none".to_owned();
+    }
+    let omitted = gate_reason_log_omitted_count(reasons);
+    let suffix = (omitted > 0).then(|| format!(", ... +{omitted} more"));
+    let suffix_chars = suffix.as_ref().map_or(0, |value| value.chars().count());
+    let mut summary = crate::truncate_chars(
+        &ids.join(", "),
+        GATE_REASON_LOG_MAX_CHARS.saturating_sub(suffix_chars),
+    );
+    if let Some(suffix) = suffix {
+        summary.push_str(&suffix);
+    }
+    summary
+}
+
+/// Print bounded detail for the first blocking reasons, so a failing gate is
+/// actionable from the log without allowing a pathological artifact to flood
+/// the step. The full lossless list remains in `review/gate_outcome.json`.
+fn print_gate_reason_detail(reasons: &[GateCheckReason]) {
+    for reason in gate_reasons_for_log(reasons) {
+        let id = gate_reason_log_text(&reason.id);
+        let detail = gate_reason_log_text(&reason.detail);
+        if detail.is_empty() {
+            println!("  {id}");
+        } else {
+            println!("  {id}: {detail}");
+        }
+        let receipt = gate_reason_log_text(&reason.receipt);
+        if !receipt.is_empty() {
+            println!("    receipt: {receipt}");
+        }
+        let next_action = reason
+            .next_action
+            .as_deref()
+            .map(gate_reason_log_text)
+            .unwrap_or_default();
+        if !next_action.is_empty() {
+            println!("    next: {next_action}");
+        }
+    }
+    let omitted = gate_reason_log_omitted_count(reasons);
+    if omitted > 0 {
+        println!(
+            "  ... {omitted} additional blocking reason(s) omitted; inspect review/gate_outcome.json"
+        );
+    }
 }
 
 /// Single source of truth for gate enforcement: resolves `fail-on-gate` with
@@ -121,40 +222,24 @@ pub(crate) fn cmd_gate_check(args: GateCheckArgs) -> Result<()> {
             Ok(())
         }
         Some("fail") => {
-            let mut reason_ids = outcome
-                .reasons
-                .iter()
-                .map(|reason| reason.id.as_str())
-                .filter(|id| !id.trim().is_empty())
-                .collect::<Vec<_>>()
-                .join(", ");
-            if reason_ids.is_empty() {
-                reason_ids = "none".to_owned();
-            }
+            let reason_ids = gate_reason_id_summary(&outcome.reasons);
             let message = format!(
                 "ub-review gate failed (blocking reasons: {reason_ids}); receipts are in {}",
                 path.display()
             );
+            print_gate_reason_detail(&outcome.reasons);
             // GitHub Actions error annotation; the bail below sets the exit code.
             println!("::error::{message}");
             bail!("{message}");
         }
         Some("inconclusive") => {
-            let mut reason_ids = outcome
-                .reasons
-                .iter()
-                .map(|reason| reason.id.as_str())
-                .filter(|id| !id.trim().is_empty())
-                .collect::<Vec<_>>()
-                .join(", ");
-            if reason_ids.is_empty() {
-                reason_ids = "none".to_owned();
-            }
+            let reason_ids = gate_reason_id_summary(&outcome.reasons);
             let message = format!(
                 "ub-review gate is inconclusive (required evidence unavailable: {reason_ids}); \
                  receipts are in {}; check the artifact tree for what was missing",
                 path.display()
             );
+            print_gate_reason_detail(&outcome.reasons);
             println!("::error::{message}");
             bail!("{message}");
         }
@@ -255,9 +340,10 @@ pub(crate) struct GateOutcomeInput<'a> {
     pub(crate) tool_gate_outcomes: &'a [ToolGateOutcomeEntry],
     pub(crate) missing_or_failed_sensor_evidence: &'a [SensorEvidenceIssue],
     pub(crate) missing_or_failed_model_evidence: &'a [ModelEvidenceIssue],
-    /// The reporter's verdict (Order 11 of #678). Only affects the gate when
-    /// `[gate].review_forward == true`. None when the reporter didn't run.
-    pub(crate) reporter_verdict: Option<crate::ReporterVerdict>,
+    /// Reporter authority for review-forward gating (Order 11 / #857). Absent
+    /// when the reporter did not run; Unusable when a turn exists but is not a
+    /// valid current-head deciding artifact.
+    pub(crate) reporter_gate: crate::ReporterGateInput,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -434,40 +520,80 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
         }
     }
 
-    // Order 11 (#678): review-forward gate policy. When the repo explicitly
-    // opts in via [gate].review_forward = true, the reporter's verdict may
-    // affect the gate. ChangesRequested and Uncertain produce a gate reason;
-    // Clear does not. When review_forward is false (the default), the
-    // reporter's verdict has zero effect — model output never feeds the gate.
-    if input.config.gate.review_forward
-        && let Some(ref verdict) = input.reporter_verdict
-    {
-        match verdict {
-            crate::ReporterVerdict::ChangesRequested => {
+    // Order 11 (#678) + #857: review-forward gate policy. When the repo
+    // explicitly opts in via [gate].review_forward = true, the resolved
+    // current-head reporter turn may affect the gate. ChangesRequested and
+    // Uncertain produce a gate reason with the exact selected turn receipt.
+    // Stale/malformed reporter evidence is fail-closed as explicit
+    // reporter-evidence (never silent absence). Only Clear passes; None,
+    // Absent, and Uncertain are inconclusive. When review_forward is false
+    // (the default), reporter output has zero effect.
+    if input.config.gate.review_forward {
+        match &input.reporter_gate {
+            crate::ReporterGateInput::Absent => {
                 reasons.push(GateReason {
-                    kind: "reporter-verdict".to_owned(),
-                    id: "reporter-changes-requested".to_owned(),
-                    detail: "the reporter model verdict is `changes_requested`; \
-                             [gate].review_forward is enabled"
-                        .to_owned(),
-                    receipt: "review/threads/reporter/turn-000.json".to_owned(),
-                    next_action: Some("address the reporter's concerns, then re-run".to_owned()),
+                    kind: "reporter-evidence".to_owned(),
+                    id: "reporter-absent".to_owned(),
+                    detail: "no reporter decision exists for this invocation; [gate].review_forward is enabled".to_owned(),
+                    receipt: "review/threads/reporter/thread.json".to_owned(),
+                    next_action: Some("re-run the review so the reporter produces a current-head decision".to_owned()),
                 });
             }
-            crate::ReporterVerdict::Uncertain => {
-                reasons.push(GateReason {
-                    kind: "reporter-verdict".to_owned(),
-                    id: "reporter-uncertain".to_owned(),
-                    detail: "the reporter model verdict is `uncertain`; \
+            crate::ReporterGateInput::Verdict { verdict, receipt } => match verdict {
+                crate::ReporterVerdict::ChangesRequested => {
+                    reasons.push(GateReason {
+                        kind: "reporter-verdict".to_owned(),
+                        id: "reporter-changes-requested".to_owned(),
+                        detail: "the reporter model verdict is `changes_requested`; \
                              [gate].review_forward is enabled"
-                        .to_owned(),
-                    receipt: "review/threads/reporter/turn-000.json".to_owned(),
+                            .to_owned(),
+                        receipt: receipt.clone(),
+                        next_action: Some(
+                            "address the reporter's concerns, then re-run".to_owned(),
+                        ),
+                    });
+                }
+                crate::ReporterVerdict::Uncertain => {
+                    reasons.push(GateReason {
+                        // Uncertain means the reporter could not establish a
+                        // decision, not that it demonstrated a code defect.
+                        kind: "reporter-evidence".to_owned(),
+                        id: "reporter-uncertain".to_owned(),
+                        detail: "the reporter model verdict is `uncertain`; \
+                             [gate].review_forward is enabled"
+                            .to_owned(),
+                        receipt: receipt.clone(),
+                        next_action: Some(
+                            "investigate the reporter's uncertainty, then re-run".to_owned(),
+                        ),
+                    });
+                }
+                crate::ReporterVerdict::Clear => {}
+                crate::ReporterVerdict::None => {
+                    reasons.push(GateReason {
+                        kind: "reporter-evidence".to_owned(),
+                        id: "reporter-verdict-missing".to_owned(),
+                        detail: "the current reporter turn has no explicit verdict; [gate].review_forward is enabled".to_owned(),
+                        receipt: receipt.clone(),
+                        next_action: Some("re-run the review so the reporter produces an explicit verdict".to_owned()),
+                    });
+                }
+            },
+            crate::ReporterGateInput::Unusable {
+                kind,
+                detail,
+                receipt,
+            } => {
+                reasons.push(GateReason {
+                    kind: "reporter-evidence".to_owned(),
+                    id: kind.clone(),
+                    detail: format!("{detail}; [gate].review_forward is enabled"),
+                    receipt: receipt.clone(),
                     next_action: Some(
-                        "investigate the reporter's uncertainty, then re-run".to_owned(),
+                        "re-run the review so the reporter decides on the current head".to_owned(),
                     ),
                 });
             }
-            crate::ReporterVerdict::Clear | crate::ReporterVerdict::None => {}
         }
     }
 
@@ -491,7 +617,12 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
         // demonstrated a failure, e.g. cargo-clippy exit 101).
         matches!(
             r.kind.as_str(),
-            "required-sensor" | "required-tool-timeout" | "required-evidence-unavailable"
+            "required-sensor"
+                | "required-tool-timeout"
+                | "required-evidence-unavailable"
+                // Stale/malformed reporter turns: deciding artifact unusable,
+                // not a demonstrated code defect.
+                | "reporter-evidence"
         )
     }) {
         "inconclusive"
@@ -685,6 +816,112 @@ mod tests {
     };
     use crate::*;
 
+    /// Enforcement used to deserialize only `id`, so a failing gate printed a
+    /// bare sensor name while the artifact held the actual cause and the fix.
+    #[test]
+    fn gate_check_reason_carries_detail_and_next_action() -> Result<()> {
+        let outcome: GateCheckOutcome = serde_json::from_str(
+            r#"{
+      "schema": "ub-review.gate_outcome.v1",
+      "conclusion": "fail",
+      "reasons": [{
+          "kind": "tool-gate",
+          "id": "ripr",
+          "detail": "new_unsuppressed=4 exceeds configured maximum 0",
+          "receipt": "review/tool-gate-outcomes.json#ripr",
+          "next_action": "inspect sensors/ripr/exposure-gaps.json"
+      }]
+  }"#,
+        )?;
+        let reason = outcome
+            .reasons
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("expected one blocking reason"))?;
+        assert_eq!(reason.id, "ripr");
+        assert_eq!(
+            reason.detail,
+            "new_unsuppressed=4 exceeds configured maximum 0"
+        );
+        assert_eq!(reason.receipt, "review/tool-gate-outcomes.json#ripr");
+        assert_eq!(
+            reason.next_action.as_deref(),
+            Some("inspect sensors/ripr/exposure-gaps.json")
+        );
+        Ok(())
+    }
+
+    /// A reason with no detail must still print without panicking or emitting
+    /// a dangling separator.
+    #[test]
+    fn gate_check_reason_tolerates_missing_detail() -> Result<()> {
+        let outcome: GateCheckOutcome =
+            serde_json::from_str(r#"{"conclusion":"fail","reasons":[{"id":"policy"},{"id":""}]}"#)?;
+        assert_eq!(outcome.reasons.len(), 2);
+        super::print_gate_reason_detail(&outcome.reasons);
+        Ok(())
+    }
+
+    /// A reason field can quote repository configuration, so it is not fully
+    /// trusted. GitHub Actions treats any line starting with `::` as a
+    /// workflow command; an embedded newline would let one inject a command.
+    #[test]
+    fn gate_reason_log_text_cannot_inject_a_workflow_command() {
+        let hostile = "boom\n::add-mask::secret\r\n::error::spoofed";
+        let folded = super::gate_reason_log_text(hostile);
+        assert!(!folded.contains('\n') && !folded.contains('\r'));
+        assert_eq!(folded, "boom ::add-mask::secret ::error::spoofed");
+
+        let flood = "x".repeat(10_000);
+        let capped = super::gate_reason_log_text(&flood);
+        assert_eq!(
+            capped,
+            format!("{}...", "x".repeat(super::GATE_REASON_LOG_MAX_CHARS - 3))
+        );
+        assert_eq!(capped.chars().count(), super::GATE_REASON_LOG_MAX_CHARS);
+
+        let short = "y".repeat(super::GATE_REASON_LOG_MAX_CHARS - 1);
+        assert_eq!(super::gate_reason_log_text(&short), short);
+    }
+
+    #[test]
+    fn gate_reason_diagnostics_bound_count_and_summary() {
+        let reasons = (0..20)
+            .map(|index| GateCheckReason {
+                id: format!("reason-{index}"),
+                detail: format!("detail-{index}"),
+                next_action: None,
+                receipt: format!("receipt-{index}"),
+            })
+            .collect::<Vec<_>>();
+        let selected = super::gate_reasons_for_log(&reasons)
+            .map(|reason| reason.id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(selected.len(), super::GATE_REASON_LOG_MAX_REASONS);
+        assert_eq!(selected.first().copied(), Some("reason-0"));
+        assert_eq!(selected.last().copied(), Some("reason-7"));
+        assert_eq!(super::gate_reason_log_omitted_count(&reasons), 12);
+        assert_eq!(
+            super::gate_reason_id_summary(&reasons),
+            "reason-0, reason-1, reason-2, reason-3, reason-4, reason-5, reason-6, reason-7, ... +12 more"
+        );
+
+        let long_reasons = (0..9)
+            .map(|index| GateCheckReason {
+                id: format!("{}-{index}", "x".repeat(600)),
+                detail: String::new(),
+                next_action: None,
+                receipt: String::new(),
+            })
+            .collect::<Vec<_>>();
+        let long_summary = super::gate_reason_id_summary(&long_reasons);
+        assert!(long_summary.ends_with(", ... +1 more"), "{long_summary}");
+        assert_eq!(
+            long_summary.chars().count(),
+            super::GATE_REASON_LOG_MAX_CHARS
+        );
+        super::print_gate_reason_detail(&reasons);
+    }
+
     fn required_policy_proof_request(id: &str) -> ProofRequest {
         ProofRequest {
             schema: "ub-review.proof_request.v1".to_owned(),
@@ -835,7 +1072,7 @@ mod tests {
                 proof_receipts: &[],
                 missing_or_failed_sensor_evidence: &[],
                 missing_or_failed_model_evidence: &[],
-                reporter_verdict: None,
+                reporter_gate: crate::ReporterGateInput::Absent,
             });
 
             assert_eq!(gate.schema, "ub-review.gate_outcome.v1");
@@ -874,7 +1111,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &model_issues,
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -904,7 +1141,7 @@ mod tests {
             proof_receipts: std::slice::from_ref(&receipt),
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -942,7 +1179,7 @@ mod tests {
             proof_receipts: std::slice::from_ref(&receipt),
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -988,7 +1225,7 @@ mod tests {
             proof_receipts: std::slice::from_ref(&receipt),
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -1045,7 +1282,7 @@ mod tests {
             proof_receipts: &receipts,
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -1078,7 +1315,7 @@ mod tests {
             proof_receipts: std::slice::from_ref(&receipt),
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -1110,7 +1347,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         assert_eq!(gate.conclusion, "inconclusive");
@@ -1136,7 +1373,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         assert_eq!(review_byok_gate.conclusion, "pass");
@@ -1171,7 +1408,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
         assert_eq!(
             gate.conclusion, "inconclusive",
@@ -1203,7 +1440,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         assert_eq!(gate.conclusion, "inconclusive");
@@ -1242,7 +1479,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         assert_eq!(gate.conclusion, "inconclusive");
@@ -1289,7 +1526,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         assert_eq!(gate.reasons.len(), 1);
@@ -1333,7 +1570,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         assert_eq!(gate.reasons.len(), 1);
@@ -1388,7 +1625,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         assert_eq!(gate.reasons.len(), 1);
@@ -1440,7 +1677,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         // Two reasons: one evidence-gap (missing), one finding (failed).
@@ -1491,7 +1728,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &sensor_issues,
             missing_or_failed_model_evidence: &model_issues,
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -1527,7 +1764,7 @@ mod tests {
             proof_receipts: std::slice::from_ref(&receipt),
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -1603,7 +1840,7 @@ mod tests {
             tool_gate_outcomes: &entries,
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -1657,7 +1894,7 @@ mod tests {
             tool_gate_outcomes: &entries,
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -1689,7 +1926,7 @@ mod tests {
             tool_gate_outcomes: &entries,
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         // Only the required tool blocks; the non-required gap stays advisory
@@ -1808,7 +2045,7 @@ mod tests {
                 tool_gate_outcomes: std::slice::from_ref(&non_required_entry),
                 missing_or_failed_sensor_evidence: &[],
                 missing_or_failed_model_evidence: &[],
-                reporter_verdict: None,
+                reporter_gate: crate::ReporterGateInput::Absent,
             });
             assert_eq!(gate.conclusion, "pass");
             assert_eq!(gate.tool_gates.failed, 0);
@@ -1834,7 +2071,7 @@ mod tests {
             tool_gate_outcomes: std::slice::from_ref(&required_entry),
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
         assert_eq!(default_gate.conclusion, "pass");
         assert!(default_gate.reasons.is_empty());
@@ -1848,7 +2085,7 @@ mod tests {
             tool_gate_outcomes: std::slice::from_ref(&required_entry),
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
         assert_eq!(opted_in_gate.conclusion, "fail");
         assert_eq!(opted_in_gate.reasons.len(), 1);
@@ -1898,7 +2135,7 @@ mod tests {
             tool_gate_outcomes: std::slice::from_ref(&entry),
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
         assert_eq!(gate.conclusion, "fail");
         assert_eq!(gate.tool_gates.failed, 1);
@@ -1944,7 +2181,7 @@ mod tests {
             tool_gate_outcomes: &[],
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         anyhow::ensure!(gate.conclusion == "fail");
@@ -1989,7 +2226,7 @@ mod tests {
             tool_gate_outcomes: &[],
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
-            reporter_verdict: None,
+            reporter_gate: crate::ReporterGateInput::Absent,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -2007,5 +2244,186 @@ mod tests {
             gate.reasons[1].receipt,
             "review/proof_receipts.json#proof-receipt-budget"
         );
+    }
+
+    #[test]
+    fn review_forward_uses_exact_reporter_receipt_and_verdict() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let plan = test_plan(Vec::new());
+        let mut config = Config::default();
+        config.gate.review_forward = true;
+        let terminal_state = test_terminal_state("sufficient");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &config,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            tool_gate_outcomes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            reporter_gate: crate::ReporterGateInput::Verdict {
+                verdict: crate::ReporterVerdict::ChangesRequested,
+                receipt: "review/threads/reporter/turn-001.json".to_owned(),
+            },
+        });
+        assert_eq!(gate.conclusion, "fail");
+        assert_eq!(gate.reasons.len(), 1);
+        assert_eq!(gate.reasons[0].kind, "reporter-verdict");
+        assert_eq!(gate.reasons[0].id, "reporter-changes-requested");
+        assert_eq!(
+            gate.reasons[0].receipt,
+            "review/threads/reporter/turn-001.json"
+        );
+    }
+
+    #[test]
+    fn reporter_verdicts_respect_review_forward_and_evidence_semantics() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let plan = test_plan(Vec::new());
+        let terminal_state = test_terminal_state("sufficient");
+        let receipt = "review/threads/reporter/turn-001.json";
+
+        for (review_forward, verdict, expected_conclusion, expected_reason) in [
+            (
+                false,
+                crate::ReporterVerdict::ChangesRequested,
+                "pass",
+                None,
+            ),
+            (true, crate::ReporterVerdict::Clear, "pass", None),
+            (
+                true,
+                crate::ReporterVerdict::Uncertain,
+                "inconclusive",
+                Some(("reporter-evidence", "reporter-uncertain")),
+            ),
+            (
+                true,
+                crate::ReporterVerdict::None,
+                "inconclusive",
+                Some(("reporter-evidence", "reporter-verdict-missing")),
+            ),
+        ] {
+            let mut config = Config::default();
+            config.gate.review_forward = review_forward;
+            let gate = build_gate_outcome(GateOutcomeInput {
+                args: &args,
+                config: &config,
+                plan: &plan,
+                terminal_state: &terminal_state,
+                proof_requests: &[],
+                proof_receipts: &[],
+                tool_gate_outcomes: &[],
+                missing_or_failed_sensor_evidence: &[],
+                missing_or_failed_model_evidence: &[],
+                reporter_gate: crate::ReporterGateInput::Verdict {
+                    verdict,
+                    receipt: receipt.to_owned(),
+                },
+            });
+            assert_eq!(gate.conclusion, expected_conclusion);
+            match expected_reason {
+                Some((kind, id)) => {
+                    assert_eq!(gate.reasons.len(), 1);
+                    assert_eq!(gate.reasons[0].kind, kind);
+                    assert_eq!(gate.reasons[0].id, id);
+                    assert_eq!(gate.reasons[0].receipt, receipt);
+                }
+                None => assert!(gate.reasons.is_empty()),
+            }
+        }
+
+        let mut config = Config::default();
+        config.gate.review_forward = true;
+        let absent = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &config,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            tool_gate_outcomes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            reporter_gate: crate::ReporterGateInput::Absent,
+        });
+        assert_eq!(absent.conclusion, "inconclusive");
+        assert_eq!(absent.reasons.len(), 1);
+        assert_eq!(absent.reasons[0].id, "reporter-absent");
+    }
+
+    #[test]
+    fn review_forward_stale_reporter_is_inconclusive_not_silent() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let plan = test_plan(Vec::new());
+        let mut config = Config::default();
+        config.gate.review_forward = true;
+        let terminal_state = test_terminal_state("sufficient");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &config,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            tool_gate_outcomes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            reporter_gate: crate::ReporterGateInput::Unusable {
+                kind: "reporter-stale-head".to_owned(),
+                detail: "latest reporter turn is bound to head `old`, not current head `new`"
+                    .to_owned(),
+                receipt: "review/threads/reporter/turn-001.json".to_owned(),
+            },
+        });
+        assert_eq!(gate.conclusion, "inconclusive");
+        assert_eq!(gate.reasons.len(), 1);
+        assert_eq!(gate.reasons[0].kind, "reporter-evidence");
+        assert_eq!(gate.reasons[0].id, "reporter-stale-head");
+        assert_eq!(
+            gate.reasons[0].receipt,
+            "review/threads/reporter/turn-001.json"
+        );
+    }
+
+    #[test]
+    fn review_forward_coordination_failure_is_exact_inconclusive() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let plan = test_plan(Vec::new());
+        let mut config = Config::default();
+        config.gate.review_forward = true;
+        let terminal_state = test_terminal_state("sufficient");
+        let receipt = "review/threads/reporter/thread.json";
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &config,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            tool_gate_outcomes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            reporter_gate: crate::ReporterGateInput::Unusable {
+                kind: "reporter-malformed".to_owned(),
+                detail: "reporter coordination failed before authority commit".to_owned(),
+                receipt: receipt.to_owned(),
+            },
+        });
+
+        assert_eq!(gate.conclusion, "inconclusive");
+        assert_eq!(gate.reasons.len(), 1);
+        assert_eq!(gate.reasons[0].kind, "reporter-evidence");
+        assert_eq!(gate.reasons[0].id, "reporter-malformed");
+        assert_eq!(gate.reasons[0].receipt, receipt);
     }
 }

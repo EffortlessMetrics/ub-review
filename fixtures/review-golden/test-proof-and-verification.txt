@@ -1,0 +1,20 @@
+case: test-proof-and-verification
+diff shape: focused test passes on HEAD and fails on base plus changed tests
+review payload status: prepared
+posts a review: true
+event: COMMENT
+inline comments: 0
+
+=== pr review body ===
+## Test proof
+
+- Focused red/green proof discriminates the patch: HEAD passed (exit 0) and base+tests failed (exit 1) for `cargo test --locked empty_buffer_returns_empty_slice`.
+=== end pr review body ===
+
+=== serialized pre-delivery review payload ===
+{
+  "event": "COMMENT",
+  "body": "## Test proof\n\n- Focused red/green proof discriminates the patch: HEAD passed (exit 0) and base+tests failed (exit 1) for `cargo test --locked empty_buffer_returns_empty_slice`.\n",
+  "comments": []
+}
+=== end serialized pre-delivery review payload ===
