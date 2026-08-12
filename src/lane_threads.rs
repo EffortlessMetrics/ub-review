@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use crate::artifacts::LANE_THREAD_SCHEMA;
 
@@ -110,48 +110,49 @@ pub(crate) fn write_lane_thread_turn(
             turn_ids.push(stem.to_owned());
         }
     }
-    turn_ids.sort();
-    let mut latest_conclusion = String::new();
-    let mut latest_turn = None;
-    let mut latest_turn_ref = None;
-    let mut latest_head_sha = None;
-    let mut latest_verdict = None;
-    let mut latest_thread_id = turn.thread_id.clone();
-    let mut latest_cohort_id = cohort_id.to_owned();
-    if let Some(last_id) = turn_ids.last() {
-        let last_path = thread_dir.join(format!("{last_id}.json"));
-        latest_turn = Some(last_id.clone());
-        latest_turn_ref = Some(format!("review/threads/{lane}/{last_id}.json"));
-        if let Ok(bytes) = fs::read(&last_path)
-            && let Ok(parsed) = serde_json::from_slice::<LaneThreadTurn>(&bytes)
-        {
-            latest_conclusion = parsed.response_summary;
-            latest_head_sha = parsed.head_sha;
-            latest_verdict = parsed.verdict;
-            latest_thread_id = parsed.thread_id;
-            // cohort is not stored on the turn; keep the write-call cohort only
-            // when this write produced the highest turn, otherwise leave the
-            // previous rollup cohort if present.
-            if parsed.turn == turn.turn {
-                latest_cohort_id = cohort_id.to_owned();
-            } else if let Ok(existing) = fs::read(thread_dir.join("thread.json"))
-                && let Ok(prev) = serde_json::from_slice::<LaneThreadSession>(&existing)
-            {
-                latest_cohort_id = prev.cohort_id;
-            }
-        }
-    }
+    turn_ids.sort_by_key(|turn_id| {
+        turn_id
+            .strip_prefix("turn-")
+            .and_then(|value| value.parse::<u32>().ok())
+            .unwrap_or(u32::MAX)
+    });
+    let last_id = turn_ids
+        .last()
+        .cloned()
+        .context("lane thread has no turn after writing one")?;
+    let last_path = thread_dir.join(format!("{last_id}.json"));
+    // Read and parse the selected turn before changing any rollup identity.
+    // If an existing higher-numbered turn is malformed, leave the previous
+    // thread.json intact and surface the write failure to the caller.
+    let bytes = fs::read(&last_path)
+        .with_context(|| format!("read latest lane turn {}", last_path.display()))?;
+    let parsed: LaneThreadTurn = serde_json::from_slice(&bytes)
+        .with_context(|| format!("parse latest lane turn {}", last_path.display()))?;
+    let previous_cohort_id = fs::read(thread_dir.join("thread.json"))
+        .ok()
+        .and_then(|existing| serde_json::from_slice::<LaneThreadSession>(&existing).ok())
+        .map(|previous| previous.cohort_id);
+    // Cohort is not stored on the turn. Use the write-call cohort only when
+    // this write produced the selected latest turn; otherwise preserve the
+    // prior rollup cohort that owns the selected turn.
+    let latest_cohort_id = if parsed.turn == turn.turn {
+        cohort_id.to_owned()
+    } else {
+        previous_cohort_id.context(
+            "latest lane turn predates this write but no prior rollup carries its cohort",
+        )?
+    };
     let session = LaneThreadSession {
         schema: LANE_THREAD_SCHEMA.to_owned(),
-        thread_id: latest_thread_id,
+        thread_id: parsed.thread_id,
         lane: lane.to_owned(),
         cohort_id: latest_cohort_id,
         turns: turn_ids,
-        latest_turn,
-        latest_turn_ref,
-        latest_conclusion,
-        head_sha: latest_head_sha,
-        verdict: latest_verdict,
+        latest_turn: Some(last_id.clone()),
+        latest_turn_ref: Some(format!("review/threads/{lane}/{last_id}.json")),
+        latest_conclusion: parsed.response_summary,
+        head_sha: parsed.head_sha,
+        verdict: parsed.verdict,
         terminal_reason: terminal_reason.to_owned(),
     };
     fs::write(
@@ -289,6 +290,45 @@ mod tests {
         assert_eq!(session.verdict.as_deref(), Some("changes_requested"));
         assert_eq!(session.thread_id, "tid-b");
         assert_eq!(session.cohort_id, "cid-b");
+        Ok(())
+    }
+
+    #[test]
+    fn malformed_latest_turn_preserves_previous_rollup_identity() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        let t0 = primary_turn("tid-a", "lane", "initial", vec![], "r0");
+        write_lane_thread_turn(&review_dir, "lane", &t0, "cid-a", "completed")?;
+        let rollup_path = review_dir.join("threads/lane/thread.json");
+        let prior_rollup = fs::read(&rollup_path)?;
+
+        fs::write(
+            review_dir.join("threads/lane/turn-001.json"),
+            b"{ malformed",
+        )?;
+        let err = write_lane_thread_turn(&review_dir, "lane", &t0, "cid-a", "rewritten")
+            .expect_err("malformed latest turn must fail the rollup refresh");
+
+        assert!(err.to_string().contains("parse latest lane turn"));
+        assert_eq!(fs::read(&rollup_path)?, prior_rollup);
+        Ok(())
+    }
+
+    #[test]
+    fn rollup_orders_turns_by_numeric_identity() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        let mut t999 = primary_turn("tid", "lane", "older", vec![], "r999");
+        t999.turn = 999;
+        write_lane_thread_turn(&review_dir, "lane", &t999, "cid", "")?;
+        let mut t1000 = primary_turn("tid", "lane", "newer", vec![], "r1000");
+        t1000.turn = 1000;
+        write_lane_thread_turn(&review_dir, "lane", &t1000, "cid", "completed")?;
+
+        let session: LaneThreadSession =
+            serde_json::from_slice(&fs::read(review_dir.join("threads/lane/thread.json"))?)?;
+        assert_eq!(session.latest_turn.as_deref(), Some("turn-1000"));
+        assert_eq!(session.latest_conclusion, "newer");
         Ok(())
     }
 }

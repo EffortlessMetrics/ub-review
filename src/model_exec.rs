@@ -418,6 +418,11 @@ pub(crate) fn run_reporter_coordination(
     message_log: &MessageLog,
     current_head: &str,
 ) -> Result<usize> {
+    // A reusable target directory may contain reporter turns from an earlier
+    // invocation at the same head. Clear only the derived reporter authority
+    // before deciding whether this invocation can run, so skipped or failed
+    // reporter work cannot inherit an older decision.
+    prepare_reporter_run(review_dir)?;
     let digests = lane_digests_from_receipts(model_lanes);
     if digests.is_empty() || model_calls_used >= args.max_model_calls {
         let reason = if digests.is_empty() {
@@ -611,14 +616,14 @@ pub(crate) fn run_reporter_coordination(
                 .iter()
                 .map(|(lane, _)| format!("lane-answer:{lane}"))
                 .collect();
-            let _ = write_reporter_turn(
+            write_reporter_turn(
                 review_dir,
                 &re_conclusion,
                 1,
                 current_head,
                 "reporter_re_distilled",
                 &lane_answer_refs,
-            );
+            )?;
             let _ = message_log.append(
                 CrossLaneMessageKind::LaneReport,
                 "reporter",
