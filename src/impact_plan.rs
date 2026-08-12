@@ -420,9 +420,21 @@ fn read_cargo_workspace(root: &Path) -> Option<CargoWorkspaceGraph> {
 /// Convert an absolute path to a repo-relative path. If the path is not under
 /// the repo root, returns the original (best-effort).
 fn relative_to_repo(root: &Path, abs: &str) -> String {
+    let normalized_root = root.canonicalize().unwrap_or_else(|_| {
+        if root.is_absolute() {
+            root.to_path_buf()
+        } else {
+            std::env::current_dir()
+                .map(|cwd| cwd.join(root))
+                .unwrap_or_else(|_| root.to_path_buf())
+        }
+    });
     let abs_path = std::path::Path::new(abs);
-    abs_path
-        .strip_prefix(root)
+    let normalized_abs = abs_path
+        .canonicalize()
+        .unwrap_or_else(|_| abs_path.to_path_buf());
+    normalized_abs
+        .strip_prefix(&normalized_root)
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .unwrap_or_else(|_| abs.replace('\\', "/"))
 }
@@ -776,6 +788,20 @@ mod tests {
             relative_to_repo(root, "/code/repo/Cargo.toml"),
             "Cargo.toml"
         );
+    }
+
+    #[test]
+    fn relative_to_repo_resolves_relative_root_against_current_directory() -> anyhow::Result<()> {
+        let manifest_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let current_dir = std::env::current_dir()?;
+        let relative_root = manifest_root.strip_prefix(&current_dir)?;
+        let source_path = manifest_root.join("src/main.rs");
+
+        assert_eq!(
+            relative_to_repo(relative_root, &source_path.to_string_lossy()),
+            "src/main.rs"
+        );
+        Ok(())
     }
 
     #[test]
