@@ -1,10 +1,9 @@
-//! Byte-exact fixtures for the GitHub-facing review surface.
+//! Byte-exact fixtures for compiled review pre-delivery payload values.
 //!
 //! Each case runs through the production review compiler. Inline text
 //! then runs through `github_review_post_comment_body`, the same delivery
-//! transform that strips lane identity and renders suggestion fences.
-//! The checked-in files therefore show what a PR author receives, while
-//! artifact-side provenance remains available in the compiled surface.
+//! transform that strips lane identity and renders suggestion fences. The
+//! checked-in files stop before network delivery, which adds request metadata.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -148,16 +147,20 @@ fn snapshot_text(case: &GoldenCase, surface: &CompiledReviewSurface) -> Result<S
         }
         text.push_str(&format!("=== end inline comment {} ===\n", index + 1));
     }
-    text.push_str("\n=== serialized GitHub post payload ===\n");
+    text.push_str("\n=== serialized pre-delivery review payload ===\n");
     text.push_str(&serde_json::to_string_pretty(&post_payload)?);
-    text.push_str("\n=== end serialized GitHub post payload ===\n");
+    text.push_str("\n=== end serialized pre-delivery review payload ===\n");
     Ok(text)
 }
 
 fn assert_golden(case: &GoldenCase, actual: &str) -> Result<()> {
+    assert_golden_with_bless(case, actual, bless_enabled())
+}
+
+fn assert_golden_with_bless(case: &GoldenCase, actual: &str, bless: bool) -> Result<()> {
     let dir = golden_dir();
     let path = dir.join(format!("{}.txt", case.id));
-    if bless_enabled() {
+    if bless {
         fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
         fs::write(&path, actual).with_context(|| format!("write {}", path.display()))?;
         return Ok(());
@@ -462,6 +465,23 @@ fn golden_bless_is_fail_closed_without_exact_opt_in() {
         assert!(!bless_value_enabled(value));
     }
     assert!(bless_value_enabled(Some("1")));
+}
+
+#[test]
+fn missing_golden_reports_exact_path_and_refresh_command() -> Result<()> {
+    let mut case = clean_case();
+    case.id = "missing-golden-proof";
+    let error = match assert_golden_with_bless(&case, "unused", false) {
+        Ok(()) => anyhow::bail!("missing golden unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    let message = format!("{error:#}");
+    ensure!(message.contains("missing-golden-proof.txt"), "{message}");
+    ensure!(
+        message.contains("UB_REVIEW_BLESS=1 cargo test"),
+        "{message}"
+    );
+    Ok(())
 }
 
 #[test]

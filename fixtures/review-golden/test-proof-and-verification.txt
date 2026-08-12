@@ -11,10 +11,10 @@ inline comments: 0
 - Focused red/green proof discriminates the patch: HEAD passed (exit 0) and base+tests failed (exit 1) for `cargo test --locked empty_buffer_returns_empty_slice`.
 === end pr review body ===
 
-=== serialized GitHub post payload ===
+=== serialized pre-delivery review payload ===
 {
   "event": "COMMENT",
   "body": "## Test proof\n\n- Focused red/green proof discriminates the patch: HEAD passed (exit 0) and base+tests failed (exit 1) for `cargo test --locked empty_buffer_returns_empty_slice`.\n",
   "comments": []
 }
-=== end serialized GitHub post payload ===
+=== end serialized pre-delivery review payload ===

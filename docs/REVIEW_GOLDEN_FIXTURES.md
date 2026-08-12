@@ -1,15 +1,16 @@
-# GitHub-facing review goldens
+# Compiled review payload goldens
 
 `src/tests.rs` runs six representative review shapes through the
-production review compiler and records the complete GitHub-facing surface under
+production review compiler and records its pre-delivery payload values under
 `fixtures/review-golden/`.
 
 The PR body is recorded verbatim. Prepared reviews first pass production post
 validation against the fixture patch's real RIGHT-side diff lines, then run
-through `github_review_post_payload`. Each fixture records the serialized API
-payload, including the same lane-prefix stripping and suggestion-fence
-rendering used by delivery. Artifact-side lane provenance remains present in
-the compiled review; it is deliberately absent from the posted snapshot.
+through `github_review_post_payload`. Each fixture records that serialized
+pre-delivery payload, including lane-prefix stripping and suggestion-fence
+rendering. Network delivery is excluded: it can add request metadata such as a
+commit id and controls final submission. Artifact-side lane provenance remains
+present in the compiled review and absent from the transformed comment body.
 
 The harness characterizes compiler-to-post-payload behavior. Reporter
 distillation and the network POST are intentionally outside this fixture seam.
@@ -28,7 +29,7 @@ not label an incomplete or contradictory packet as discriminating.
 - `evidence-gap`: HEAD and base+tests both pass, so the changed test is
   non-discriminating.
 - `test-proof-and-verification`: HEAD passes and base+tests fails.
-- `inline-suggestion`: exact GitHub suggestion rendering.
+- `inline-suggestion`: pre-delivery suggestion rendering.
 
 Refresh only after reviewing the output diff:
 
@@ -43,5 +44,5 @@ compare bytes without modifying the snapshots. Always follow a bless pass with
 the non-bless command above so the refreshed files prove idempotent immediately.
 
 These snapshots are descriptive evidence. They expose duplication, ordering,
-grammar, accidental machinery, and delivery-transform drift; they do not make
+grammar, accidental machinery, and pre-delivery transform drift; they do not make
 current wording correct merely because it is recorded.

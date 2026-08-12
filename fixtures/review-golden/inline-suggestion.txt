@@ -24,7 +24,7 @@ let slice = if len == 0 { &[] } else { unsafe { core::slice::from_raw_parts(ptr,
 ```
 === end inline comment 1 ===
 
-=== serialized GitHub post payload ===
+=== serialized pre-delivery review payload ===
 {
   "event": "COMMENT",
   "body": "## Decision\n\n- Needs reviewer attention before upstream: findings remain.\n\n## Confirmed findings\n\n- Avoid constructing a slice from the pointer when the length is zero.\n",
@@ -37,4 +37,4 @@ let slice = if len == 0 { &[] } else { unsafe { core::slice::from_raw_parts(ptr,
     }
   ]
 }
-=== end serialized GitHub post payload ===
+=== end serialized pre-delivery review payload ===
