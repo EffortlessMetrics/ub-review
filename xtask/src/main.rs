@@ -448,7 +448,12 @@ fn validate_local_ripr_outputs(badge: &JsonValue, detail: &JsonValue) -> Result<
 
 fn bounded_text(bytes: &[u8]) -> String {
     let text = String::from_utf8_lossy(bytes);
-    let (bounded, _) = clip_capture(text.into_owned());
+    let (bounded, _) = clip_text(
+        text.into_owned(),
+        LOCAL_RIPR_CONSOLE_HEAD_BYTES,
+        LOCAL_RIPR_CONSOLE_TAIL_BYTES,
+        "local ripr capture",
+    );
     bounded.trim().to_owned()
 }
 
@@ -1419,27 +1424,11 @@ const CAPTURE_HEAD_BYTES: usize = 64 * 1024;
 const CAPTURE_TAIL_BYTES: usize = 16 * 1024;
 
 fn clip_capture(text: String) -> (String, bool) {
-    let budget = CAPTURE_HEAD_BYTES + CAPTURE_TAIL_BYTES;
-    if text.len() <= budget {
-        return (text, false);
-    }
-    let mut head_end = CAPTURE_HEAD_BYTES;
-    while !text.is_char_boundary(head_end) {
-        head_end -= 1;
-    }
-    let mut tail_start = text.len() - CAPTURE_TAIL_BYTES;
-    while !text.is_char_boundary(tail_start) {
-        tail_start += 1;
-    }
-    let elided = tail_start - head_end;
-    let marker = format!(
-        "
-[... {elided} bytes truncated by the precommit capture budget ...]
-"
-    );
-    (
-        format!("{}{marker}{}", &text[..head_end], &text[tail_start..]),
-        true,
+    clip_text(
+        text,
+        CAPTURE_HEAD_BYTES,
+        CAPTURE_TAIL_BYTES,
+        "the precommit capture",
     )
 }
 
@@ -1840,11 +1829,44 @@ mod tests {
         assert!(is_rust_input("crates/x/Cargo.toml"));
         assert!(is_rust_input("Cargo.lock"));
         assert!(!is_rust_input("docs/ci/ripr.md"));
-        let root = initialized_test_repo("ripr-out-dir-sentinel")?;
+        let root = changed_rust_repo("ripr-out-dir-sentinel")?;
         let sentinel = root.join("sentinel.txt");
         fs::write(&sentinel, "preserve me")?;
         assert!(RiprOptions::parse(["--out-dir", "."].into_iter().map(str::to_owned)).is_err());
+        run_local_ripr_with(
+            &root,
+            RiprOptions {
+                base: "HEAD".to_owned(),
+            },
+            |_, args, _| {
+                let stdout = if args == ["--version"] {
+                    b"ripr 0.10.0\n".to_vec()
+                } else if args.last().map(String::as_str) == Some("badge-json") {
+                    fake_badge(0, 0, 1)
+                } else if args.last().map(String::as_str) == Some("json") {
+                    fake_detail(&["exposed"])
+                } else {
+                    b"no gaps\n".to_vec()
+                };
+                Ok(RiprInvocation {
+                    success: true,
+                    stdout,
+                    stderr: Vec::new(),
+                })
+            },
+        )?;
         assert_eq!(fs::read_to_string(&sentinel)?, "preserve me");
+        let out_dir = root.join("target/xtask/ripr");
+        for artifact in [
+            "diff.patch",
+            "gate-decision.json",
+            "exposure-gaps.json",
+            "feedback.txt",
+            "receipt.json",
+        ] {
+            assert!(out_dir.join(artifact).is_file(), "missing {artifact}");
+            assert!(!root.join(artifact).exists(), "escaped output {artifact}");
+        }
         fs::remove_dir_all(root)?;
         Ok(())
     }

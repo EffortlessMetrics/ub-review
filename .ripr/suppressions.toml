@@ -20974,31 +20974,31 @@ reason = "Local RIPR 0.10.0 ready-mode finding on bounded human feedback. local_
 kind = "exposure_gap"
 finding_id = "probe:xtask_src_main.rs:error_path:3a42cad2.2"
 owner = "ub-review/core"
-reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_validation_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
+reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
 
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:xtask_src_main.rs:predicate:1630343e"
 owner = "ub-review/core"
-reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_validation_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
+reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
 
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:xtask_src_main.rs:error_path:26524194"
 owner = "ub-review/core"
-reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_validation_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
+reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
 
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:xtask_src_main.rs:error_path:26524194.2"
 owner = "ub-review/core"
-reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_validation_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
+reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
 
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:xtask_src_main.rs:return_value:dab8493f"
 owner = "ub-review/core"
-reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_validation_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
+reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
 
 [[suppressions]]
 kind = "exposure_gap"
