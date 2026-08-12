@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus};
+use std::process::{Command, ExitStatus, Output};
 
 use anyhow::{Context, Result, bail};
 use chrono::NaiveDate;
@@ -58,6 +58,10 @@ fn run() -> Result<()> {
                 );
             }
         }
+        "ripr" => {
+            let options = RiprOptions::parse(args)?;
+            run_local_ripr(&root, options)?;
+        }
         "help" | "-h" | "--help" => {
             reject_extra_args(args)?;
             print_help();
@@ -70,7 +74,7 @@ fn run() -> Result<()> {
         }
         other => {
             bail!(
-                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, calibration-report, or help"
+                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, ripr, calibration-report, or help"
             )
         }
     }
@@ -94,13 +98,346 @@ cargo xtask commands
   cargo xtask policy-inventory  print receipt and CI policy counts
   cargo xtask audit             run cargo-audit for RUSTSEC advisories (advisory)
   cargo xtask precommit         run diff-scoped Rust precommit checks
+  cargo xtask ripr              reproduce hosted ripr ready-mode feedback locally
   cargo xtask calibration-report <dir>  aggregate review/calibration.json files
 
 precommit options
 
   --staged                      inspect only staged changes
+
+ripr options
+
+  --base <rev>                  compare against this revision (default: origin/main)
+  --out-dir <path>              receipt directory (default: target/xtask/ripr)
 "
     );
+}
+
+const LOCAL_RIPR_VERSION: &str = "0.10.0";
+const LOCAL_RIPR_CONSOLE_HEAD_BYTES: usize = 12 * 1024;
+const LOCAL_RIPR_CONSOLE_TAIL_BYTES: usize = 4 * 1024;
+
+#[derive(Clone, Debug)]
+struct RiprOptions {
+    base: String,
+    out_dir: PathBuf,
+}
+
+impl Default for RiprOptions {
+    fn default() -> Self {
+        Self {
+            base: "origin/main".to_owned(),
+            out_dir: PathBuf::from("target/xtask/ripr"),
+        }
+    }
+}
+
+impl RiprOptions {
+    fn parse(mut args: impl Iterator<Item = String>) -> Result<Self> {
+        let mut options = Self::default();
+        while let Some(arg) = args.next() {
+            match arg.as_str() {
+                "--base" => options.base = args.next().context("--base requires a revision")?,
+                "--out-dir" => {
+                    options.out_dir =
+                        PathBuf::from(args.next().context("--out-dir requires a path")?)
+                }
+                other => bail!("unexpected ripr argument `{other}`"),
+            }
+        }
+        if options.base.trim().is_empty() {
+            bail!("--base must not be empty");
+        }
+        Ok(options)
+    }
+}
+
+#[derive(Debug)]
+struct RiprInvocation {
+    success: bool,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+}
+
+impl RiprInvocation {
+    fn from_output(output: Output) -> Self {
+        Self {
+            success: output.status.success(),
+            stdout: output.stdout,
+            stderr: output.stderr,
+        }
+    }
+}
+
+fn run_local_ripr(root: &Path, options: RiprOptions) -> Result<()> {
+    run_local_ripr_with(root, options, |program, args, cwd| {
+        Command::new(program)
+            .args(args)
+            .current_dir(cwd)
+            .output()
+            .map(RiprInvocation::from_output)
+    })
+}
+
+fn run_local_ripr_with<F>(root: &Path, options: RiprOptions, mut invoke: F) -> Result<()>
+where
+    F: FnMut(&str, &[String], &Path) -> std::io::Result<RiprInvocation>,
+{
+    let out_dir = if options.out_dir.is_absolute() {
+        options.out_dir.clone()
+    } else {
+        root.join(&options.out_dir)
+    };
+    fs::create_dir_all(&out_dir)
+        .with_context(|| format!("create ripr receipt directory {}", out_dir.display()))?;
+    let diff_path = out_dir.join("diff.patch");
+    let badge_path = out_dir.join("gate-decision.json");
+    let detail_path = out_dir.join("exposure-gaps.json");
+    let feedback_path = out_dir.join("feedback.txt");
+    let receipt_path = out_dir.join("receipt.json");
+    for path in [
+        &diff_path,
+        &badge_path,
+        &detail_path,
+        &feedback_path,
+        &receipt_path,
+    ] {
+        match fs::remove_file(path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error).with_context(|| format!("remove stale {}", path.display()));
+            }
+        }
+    }
+
+    let untracked = git_lines(root, &["ls-files", "--others", "--exclude-standard"])?;
+    let untracked_rust: Vec<&str> = untracked
+        .iter()
+        .map(String::as_str)
+        .filter(|path| is_rust_input(path))
+        .collect();
+    if !untracked_rust.is_empty() {
+        bail!(
+            "untracked Rust inputs are not included in git diff: {}; add or stage them, then rerun `cargo xtask ripr`",
+            untracked_rust.join(", ")
+        );
+    }
+
+    let merge_base_bytes = git_bytes(root, &["merge-base", &options.base, "HEAD"])
+        .with_context(|| format!("resolve local ripr base `{}`", options.base))?;
+    let merge_base = String::from_utf8_lossy(&merge_base_bytes).trim().to_owned();
+    if merge_base.is_empty() {
+        bail!(
+            "git merge-base returned an empty revision for `{}` and HEAD",
+            options.base
+        );
+    }
+    let changed = git_lines(root, &["diff", "--name-only", &merge_base, "--"])?;
+    let rust_changed = changed.iter().any(|path| is_rust_input(path));
+    if changed.is_empty() || !rust_changed {
+        let reason = if changed.is_empty() {
+            "clean diff"
+        } else {
+            "no Rust inputs changed"
+        };
+        let receipt = json!({
+            "schema": "ub-review.local_ripr.v1",
+            "status": "skipped",
+            "reason": reason,
+            "base": options.base,
+            "merge_base": merge_base,
+            "mode": "ready",
+            "receipt_dir": out_dir,
+        });
+        fs::write(&receipt_path, serde_json::to_vec_pretty(&receipt)?)
+            .with_context(|| format!("write {}", receipt_path.display()))?;
+        println!(
+            "ripr local feedback: skipped ({reason}); receipt: {}",
+            receipt_path.display()
+        );
+        return Ok(());
+    }
+
+    let diff = git_bytes(
+        root,
+        &["diff", "--binary", "--no-ext-diff", &merge_base, "--"],
+    )?;
+    fs::write(&diff_path, diff).with_context(|| format!("write {}", diff_path.display()))?;
+
+    let version = invoke("ripr", &["--version".to_owned()], root).map_err(|error| {
+        anyhow::anyhow!(
+            "could not invoke ripr ({error}); install with `cargo install ripr --locked --version {LOCAL_RIPR_VERSION} --force`"
+        )
+    })?;
+    if !version.success {
+        bail!(
+            "`ripr --version` failed: {}",
+            String::from_utf8_lossy(&version.stderr).trim()
+        );
+    }
+    let version_text = String::from_utf8_lossy(&version.stdout);
+    if version_text.trim() != format!("ripr {LOCAL_RIPR_VERSION}") {
+        bail!(
+            "ripr version mismatch: expected {LOCAL_RIPR_VERSION}, found `{}`; install with `cargo install ripr --locked --version {LOCAL_RIPR_VERSION} --force`",
+            version_text.trim()
+        );
+    }
+
+    let root_arg = root.display().to_string();
+    let diff_arg = diff_path.display().to_string();
+    let common = [
+        "check".to_owned(),
+        "--root".to_owned(),
+        root_arg,
+        "--diff".to_owned(),
+        diff_arg,
+        "--mode".to_owned(),
+        "ready".to_owned(),
+        "--format".to_owned(),
+    ];
+    let mut badge_args = common.to_vec();
+    badge_args.push("badge-json".to_owned());
+    let badge = invoke("ripr", &badge_args, root)
+        .map_err(|error| anyhow::anyhow!("invoke pinned ripr ready-mode badge pass: {error}"))?;
+    fs::write(&badge_path, &badge.stdout)
+        .with_context(|| format!("write verbatim {}", badge_path.display()))?;
+    if !badge.success {
+        bail!("ripr badge pass failed: {}", bounded_text(&badge.stderr));
+    }
+    let badge_json: JsonValue = serde_json::from_slice(&badge.stdout)
+        .context("parse ripr badge-json output; installed tool may be stale or incompatible")?;
+    let unsuppressed = badge_json
+        .pointer("/counts/unsuppressed_exposure_gaps")
+        .and_then(JsonValue::as_u64)
+        .context(
+            "ripr badge-json omitted counts.unsuppressed_exposure_gaps; expected ripr 0.10.0",
+        )?;
+
+    let mut detail_args = common.to_vec();
+    detail_args.push("json".to_owned());
+    let detail = invoke("ripr", &detail_args, root)
+        .map_err(|error| anyhow::anyhow!("invoke pinned ripr ready-mode detail pass: {error}"))?;
+    fs::write(&detail_path, &detail.stdout)
+        .with_context(|| format!("write verbatim {}", detail_path.display()))?;
+    if !detail.success {
+        bail!("ripr detail pass failed: {}", bounded_text(&detail.stderr));
+    }
+    let detail_json: JsonValue = serde_json::from_slice(&detail.stdout)
+        .context("parse ripr JSON detail output; installed tool may be stale or incompatible")?;
+    let findings = detail_json
+        .get("findings")
+        .and_then(JsonValue::as_array)
+        .context("ripr JSON omitted findings array; expected ripr 0.10.0")?;
+    let mut human_args = common.to_vec();
+    human_args.push("human".to_owned());
+    let human = invoke("ripr", &human_args, root)
+        .map_err(|error| anyhow::anyhow!("invoke pinned ripr ready-mode human pass: {error}"))?;
+    fs::write(&feedback_path, &human.stdout)
+        .with_context(|| format!("write verbatim {}", feedback_path.display()))?;
+    if !human.success {
+        bail!("ripr human pass failed: {}", bounded_text(&human.stderr));
+    }
+    println!("ripr local feedback: {unsuppressed} unsuppressed exposure gap(s)");
+    let (human_output, human_truncated) = clip_text(
+        String::from_utf8_lossy(&human.stdout).into_owned(),
+        LOCAL_RIPR_CONSOLE_HEAD_BYTES,
+        LOCAL_RIPR_CONSOLE_TAIL_BYTES,
+        "local ripr console",
+    );
+    if unsuppressed > 0 && !human_output.trim().is_empty() {
+        print!("{human_output}");
+        if !human_output.ends_with('\n') {
+            println!();
+        }
+    }
+    if unsuppressed > 0 && human_truncated {
+        println!("full human output: {}", feedback_path.display());
+    }
+    let receipt = json!({
+        "schema": "ub-review.local_ripr.v1",
+        "status": if unsuppressed == 0 { "passed" } else { "failed" },
+        "base": options.base,
+        "merge_base": merge_base,
+        "mode": "ready",
+        "ripr_version": LOCAL_RIPR_VERSION,
+        "unsuppressed_exposure_gaps": unsuppressed,
+        "finding_count": findings.len(),
+        "diff": diff_path,
+        "gate_decision": badge_path,
+        "exposure_gaps": detail_path,
+        "human_feedback": feedback_path,
+    });
+    fs::write(&receipt_path, serde_json::to_vec_pretty(&receipt)?)
+        .with_context(|| format!("write {}", receipt_path.display()))?;
+    println!("receipt: {}", receipt_path.display());
+    if unsuppressed > 0 {
+        bail!(
+            "ripr ready-mode found {unsuppressed} unsuppressed exposure gap(s); inspect {}",
+            detail_path.display()
+        );
+    }
+    Ok(())
+}
+
+fn bounded_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let (bounded, _) = clip_capture(text.into_owned());
+    bounded.trim().to_owned()
+}
+
+fn clip_text(text: String, head_bytes: usize, tail_bytes: usize, label: &str) -> (String, bool) {
+    let budget = head_bytes.saturating_add(tail_bytes);
+    if text.len() <= budget {
+        return (text, false);
+    }
+    let mut head_end = head_bytes;
+    while !text.is_char_boundary(head_end) {
+        head_end = head_end.saturating_sub(1);
+    }
+    let mut tail_start = text.len().saturating_sub(tail_bytes);
+    while !text.is_char_boundary(tail_start) {
+        tail_start = tail_start.saturating_add(1);
+    }
+    let elided = tail_start.saturating_sub(head_end);
+    (
+        format!(
+            "{}\n[... {elided} bytes truncated by {label} budget ...]\n{}",
+            &text[..head_end],
+            &text[tail_start..]
+        ),
+        true,
+    )
+}
+
+fn is_rust_input(path: &str) -> bool {
+    path.ends_with(".rs") || path.ends_with("Cargo.toml") || path.ends_with("Cargo.lock")
+}
+
+fn git_lines(root: &Path, args: &[&str]) -> Result<Vec<String>> {
+    let output = git_bytes(root, args)?;
+    Ok(String::from_utf8_lossy(&output)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_owned)
+        .collect())
+}
+
+fn git_bytes(root: &Path, args: &[&str]) -> Result<Vec<u8>> {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(root)
+        .output()
+        .with_context(|| format!("run git {}", args.join(" ")))?;
+    if !output.status.success() {
+        bail!(
+            "git {} failed: {}",
+            args.join(" "),
+            bounded_text(&output.stderr)
+        );
+    }
+    Ok(output.stdout)
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -1259,7 +1596,318 @@ fn path_to_slash_string(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
+    use std::io;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn test_ripr_root() -> Result<PathBuf> {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .map(Path::to_path_buf)
+            .context("xtask manifest has no workspace parent")
+    }
+
+    fn git_test(root: &Path, args: &[&str]) -> Result<()> {
+        let output = Command::new("git").args(args).current_dir(root).output()?;
+        if !output.status.success() {
+            bail!(
+                "test git {} failed: {}",
+                args.join(" "),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        Ok(())
+    }
+
+    fn initialized_test_repo(name: &str) -> Result<PathBuf> {
+        let root = temp_repo_root(name)?;
+        git_test(&root, &["init"])?;
+        git_test(&root, &["config", "user.email", "xtask@example.invalid"])?;
+        git_test(&root, &["config", "user.name", "xtask test"])?;
+        fs::write(root.join("README.md"), "initial\n")?;
+        git_test(&root, &["add", "README.md"])?;
+        git_test(&root, &["commit", "-m", "initial"])?;
+        Ok(root)
+    }
+
+    #[test]
+    fn local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs() -> Result<()> {
+        let root = test_ripr_root()?;
+        let out_dir = temp_repo_root("ripr-fake-output")?;
+        let calls = RefCell::new(Vec::<Vec<String>>::new());
+        let badge = br#"{"counts":{"unsuppressed_exposure_gaps":0}}"#.to_vec();
+        let detail = br#"{"findings":[]}"#.to_vec();
+        let human = b"ripr: no exposure gaps\n".to_vec();
+
+        run_local_ripr_with(
+            &root,
+            RiprOptions {
+                base: "origin/main".to_owned(),
+                out_dir: out_dir.clone(),
+            },
+            |program, args, _| {
+                let mut command = vec![program.to_owned()];
+                command.extend(args.iter().cloned());
+                calls.borrow_mut().push(command);
+                let stdout = if args == ["--version"] {
+                    b"ripr 0.10.0\n".to_vec()
+                } else if args.last().map(String::as_str) == Some("badge-json") {
+                    badge.clone()
+                } else if args.last().map(String::as_str) == Some("human") {
+                    human.clone()
+                } else {
+                    detail.clone()
+                };
+                Ok(RiprInvocation {
+                    success: true,
+                    stdout,
+                    stderr: Vec::new(),
+                })
+            },
+        )?;
+
+        let calls = calls.into_inner();
+        assert_eq!(calls.len(), 4);
+        assert_eq!(calls[0], ["ripr", "--version"]);
+        for (call, format) in calls[1..].iter().zip(["badge-json", "json", "human"]) {
+            assert_eq!(call[0], "ripr");
+            assert_eq!(call[1], "check");
+            assert_eq!(call[2], "--root");
+            assert_eq!(call[3], root.display().to_string());
+            assert_eq!(call[4], "--diff");
+            assert_eq!(call[5], out_dir.join("diff.patch").display().to_string());
+            assert_eq!(&call[6..], ["--mode", "ready", "--format", format]);
+        }
+        assert_eq!(fs::read(out_dir.join("gate-decision.json"))?, badge);
+        assert_eq!(fs::read(out_dir.join("exposure-gaps.json"))?, detail);
+        assert_eq!(fs::read(out_dir.join("feedback.txt"))?, human);
+        let receipt: JsonValue = serde_json::from_slice(&fs::read(out_dir.join("receipt.json"))?)?;
+        assert_eq!(receipt["status"], "passed");
+        assert_eq!(receipt["unsuppressed_exposure_gaps"], 0);
+        fs::remove_dir_all(&out_dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn local_ripr_missing_tool_is_loud_and_clears_stale_artifacts() -> Result<()> {
+        let root = test_ripr_root()?;
+        let out_dir = temp_repo_root("ripr-missing")?;
+        for name in [
+            "gate-decision.json",
+            "exposure-gaps.json",
+            "feedback.txt",
+            "receipt.json",
+        ] {
+            fs::write(out_dir.join(name), "stale")?;
+        }
+        let result = run_local_ripr_with(
+            &root,
+            RiprOptions {
+                base: "origin/main".to_owned(),
+                out_dir: out_dir.clone(),
+            },
+            |_, _, _| Err(io::Error::new(io::ErrorKind::NotFound, "missing fake ripr")),
+        );
+        let error = match result {
+            Ok(()) => bail!("missing ripr unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        let message = format!("{error:#}");
+        assert!(message.contains("could not invoke ripr"), "{message}");
+        assert!(message.contains("--version 0.10.0 --force"), "{message}");
+        assert!(!out_dir.join("gate-decision.json").exists());
+        assert!(!out_dir.join("exposure-gaps.json").exists());
+        assert!(!out_dir.join("feedback.txt").exists());
+        assert!(!out_dir.join("receipt.json").exists());
+        fs::remove_dir_all(&out_dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn local_ripr_options_and_rust_input_contract_are_explicit() -> Result<()> {
+        let parsed = RiprOptions::parse(
+            ["--base", "upstream/main", "--out-dir", "target/local-ripr"]
+                .into_iter()
+                .map(str::to_owned),
+        )?;
+        assert_eq!(parsed.base, "upstream/main");
+        assert_eq!(parsed.out_dir, PathBuf::from("target/local-ripr"));
+        assert!(is_rust_input("src/lib.rs"));
+        assert!(is_rust_input("crates/x/Cargo.toml"));
+        assert!(is_rust_input("Cargo.lock"));
+        assert!(!is_rust_input("docs/ci/ripr.md"));
+        Ok(())
+    }
+
+    #[test]
+    fn local_ripr_clean_and_non_rust_diffs_are_explicit_skips() -> Result<()> {
+        let root = initialized_test_repo("ripr-skips")?;
+        for (suffix, expected_reason) in
+            [("clean", "clean diff"), ("docs", "no Rust inputs changed")]
+        {
+            if suffix == "docs" {
+                fs::write(root.join("README.md"), "documentation only\n")?;
+            }
+            let out_dir = root.join(format!("target/{suffix}"));
+            run_local_ripr_with(
+                &root,
+                RiprOptions {
+                    base: "HEAD".to_owned(),
+                    out_dir: out_dir.clone(),
+                },
+                |_, _, _| Err(io::Error::other("ripr must not run for skipped input")),
+            )?;
+            let receipt: JsonValue =
+                serde_json::from_slice(&fs::read(out_dir.join("receipt.json"))?)?;
+            assert_eq!(receipt["status"], "skipped");
+            assert_eq!(receipt["reason"], expected_reason);
+        }
+        fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails() -> Result<()> {
+        let root = test_ripr_root()?;
+        let out_dir = temp_repo_root("ripr-nonzero")?;
+        let result = run_local_ripr_with(
+            &root,
+            RiprOptions {
+                base: "origin/main".to_owned(),
+                out_dir: out_dir.clone(),
+            },
+            |_, args, _| {
+                if args == ["--version"] {
+                    Ok(RiprInvocation {
+                        success: true,
+                        stdout: b"ripr 0.10.0\n".to_vec(),
+                        stderr: Vec::new(),
+                    })
+                } else {
+                    Ok(RiprInvocation {
+                        success: false,
+                        stdout: b"partial badge output".to_vec(),
+                        stderr: b"forced fake failure".to_vec(),
+                    })
+                }
+            },
+        );
+        let error = match result {
+            Ok(()) => bail!("nonzero ripr unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert!(format!("{error:#}").contains("forced fake failure"));
+        assert_eq!(
+            fs::read(out_dir.join("gate-decision.json"))?,
+            b"partial badge output"
+        );
+        assert!(!out_dir.join("receipt.json").exists());
+        fs::remove_dir_all(&out_dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn local_ripr_rejects_untracked_rust_and_missing_merge_base() -> Result<()> {
+        let root = initialized_test_repo("ripr-input-errors")?;
+        fs::write(root.join("untracked.rs"), "fn untracked() {}\n")?;
+        let untracked = run_local_ripr_with(
+            &root,
+            RiprOptions {
+                base: "HEAD".to_owned(),
+                out_dir: root.join("target/untracked"),
+            },
+            |_, _, _| Err(io::Error::other("tool must not run")),
+        );
+        let untracked_error = match untracked {
+            Ok(()) => bail!("untracked Rust unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert!(format!("{untracked_error:#}").contains("untracked.rs"));
+        fs::remove_file(root.join("untracked.rs"))?;
+
+        let missing_base = run_local_ripr_with(
+            &root,
+            RiprOptions {
+                base: "missing/base".to_owned(),
+                out_dir: root.join("target/missing-base"),
+            },
+            |_, _, _| Err(io::Error::other("tool must not run")),
+        );
+        let base_error = match missing_base {
+            Ok(()) => bail!("missing merge base unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        let message = format!("{base_error:#}");
+        assert!(message.contains("resolve local ripr base `missing/base`"));
+        assert!(message.contains("merge-base missing/base HEAD"));
+        fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn local_ripr_wrong_version_and_malformed_badge_fail_closed() -> Result<()> {
+        let root = test_ripr_root()?;
+        for (name, version, badge, expected) in [
+            (
+                "wrong-version",
+                "ripr 0.9.0\n",
+                "{}",
+                "ripr version mismatch: expected 0.10.0",
+            ),
+            (
+                "malformed-badge",
+                "ripr 0.10.0\n",
+                "{}",
+                "omitted counts.unsuppressed_exposure_gaps",
+            ),
+        ] {
+            let out_dir = temp_repo_root(name)?;
+            let result = run_local_ripr_with(
+                &root,
+                RiprOptions {
+                    base: "origin/main".to_owned(),
+                    out_dir: out_dir.clone(),
+                },
+                |_, args, _| {
+                    Ok(RiprInvocation {
+                        success: true,
+                        stdout: if args == ["--version"] {
+                            version.as_bytes().to_vec()
+                        } else {
+                            badge.as_bytes().to_vec()
+                        },
+                        stderr: Vec::new(),
+                    })
+                },
+            );
+            let error = match result {
+                Ok(()) => bail!("{name} unexpectedly succeeded"),
+                Err(error) => error,
+            };
+            assert!(format!("{error:#}").contains(expected));
+            fs::remove_dir_all(&out_dir)?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn local_ripr_console_capture_is_bounded_and_keeps_head_and_tail() {
+        let input = format!(
+            "HEAD{}TAIL",
+            "x".repeat(LOCAL_RIPR_CONSOLE_HEAD_BYTES + LOCAL_RIPR_CONSOLE_TAIL_BYTES)
+        );
+        let (output, truncated) = clip_text(
+            input,
+            LOCAL_RIPR_CONSOLE_HEAD_BYTES,
+            LOCAL_RIPR_CONSOLE_TAIL_BYTES,
+            "local ripr console",
+        );
+        assert!(truncated);
+        assert!(output.starts_with("HEAD"));
+        assert!(output.ends_with("TAIL"));
+        assert!(output.contains("truncated by local ripr console budget"));
+        assert!(output.len() < LOCAL_RIPR_CONSOLE_HEAD_BYTES + LOCAL_RIPR_CONSOLE_TAIL_BYTES + 200);
+    }
 
     #[test]
     fn missing_tool_receipt_is_never_success_and_carries_install_hint() {
