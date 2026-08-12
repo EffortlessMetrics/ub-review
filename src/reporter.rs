@@ -242,6 +242,49 @@ pub(crate) fn parse_reporter_conclusion(
     }
 }
 
+/// Parse a reporter response that is about to replace an already-committed
+/// turn. Re-distillation must be strict: once follow-up evidence exists, a
+/// malformed replacement cannot leave the earlier conclusion authoritative.
+pub(crate) fn parse_reporter_conclusion_strict(
+    content: &str,
+    cohort_id: &str,
+    thread_id: &str,
+) -> Result<ReporterConclusion> {
+    let parsed: serde_json::Value =
+        serde_json::from_str(content).context("parse reporter re-distillation JSON")?;
+    let distillation = parsed
+        .get("distillation")
+        .and_then(|value| value.as_str())
+        .context("reporter re-distillation is missing string `distillation`")?
+        .to_owned();
+    let verdict = parsed
+        .get("verdict")
+        .and_then(|value| value.as_str())
+        .context("reporter re-distillation is missing string `verdict`")
+        .and_then(verdict_from_wire)?;
+    let proposed_follow_ups = match parsed.get("proposed_follow_ups") {
+        None => Vec::new(),
+        Some(value) => value
+            .as_array()
+            .context("reporter re-distillation `proposed_follow_ups` is not an array")?
+            .iter()
+            .map(|item| {
+                item.as_str()
+                    .map(str::to_owned)
+                    .context("reporter re-distillation follow-up is not a string")
+            })
+            .collect::<Result<Vec<_>>>()?,
+    };
+    Ok(ReporterConclusion {
+        schema: REPORTER_THREAD_SCHEMA.to_owned(),
+        distillation,
+        proposed_follow_ups,
+        verdict,
+        cohort_id: cohort_id.to_owned(),
+        thread_id: thread_id.to_owned(),
+    })
+}
+
 /// Parse the reporter's verdict from a JSON value. Recognizes the
 /// snake_case strings from the prompt: "clear", "changes_requested",
 /// "uncertain". Falls back to None for missing or unrecognized values.
@@ -378,12 +421,8 @@ fn verdict_from_wire(raw: &str) -> Result<ReporterVerdict> {
 /// only the reporter decision turns and their derived rollup are replaced.
 pub(crate) fn prepare_reporter_run(review_dir: &Path) -> Result<()> {
     let thread_dir = review_dir.join("threads").join("reporter");
-    let rollup_path = thread_dir.join("thread.json");
-    match std::fs::remove_file(&rollup_path) {
-        Ok(()) => {}
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => return Err(err).context("remove prior reporter authority rollup"),
-    }
+    invalidate_reporter_authority(review_dir)
+        .context("invalidate prior reporter authority at invocation start")?;
     let entries = match std::fs::read_dir(&thread_dir) {
         Ok(entries) => entries,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -396,6 +435,18 @@ pub(crate) fn prepare_reporter_run(review_dir: &Path) -> Result<()> {
             std::fs::remove_file(entry.path())
                 .with_context(|| format!("remove prior reporter artifact `{name}`"))?;
         }
+    }
+    Ok(())
+}
+
+/// Remove the rollup that grants reporter authority. Call this before any
+/// fallible operation that attempts to replace an already-committed turn.
+pub(crate) fn invalidate_reporter_authority(review_dir: &Path) -> Result<()> {
+    let rollup_path = review_dir.join("threads/reporter/thread.json");
+    match std::fs::remove_file(&rollup_path) {
+        Ok(()) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err).context("remove prior reporter authority rollup"),
     }
     Ok(())
 }
@@ -413,12 +464,8 @@ pub(crate) fn write_reporter_turn(
     // replacement turn so any turn or rollup write failure is fail-closed;
     // an older reporter decision cannot remain authoritative after a failed
     // re-distillation commit.
-    let rollup_path = review_dir.join("threads/reporter/thread.json");
-    match std::fs::remove_file(&rollup_path) {
-        Ok(()) => {}
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => return Err(err).context("invalidate reporter authority rollup"),
-    }
+    invalidate_reporter_authority(review_dir)
+        .context("invalidate reporter authority before turn write")?;
     let receipt_ref = format!("review/threads/reporter/turn-{turn:03}.json");
     let mut routed_evidence_refs: Vec<String> = conclusion
         .proposed_follow_ups
@@ -634,6 +681,23 @@ pub(crate) fn resolve_reporter_turn(
         distillation: turn.response_summary,
         verdict,
     })
+}
+
+/// Resolve reporter authority after the production orchestration attempt.
+/// A coordination failure is authoritative in memory: disk state is never
+/// consulted because startup invalidation itself may have failed.
+pub(crate) fn resolve_reporter_after_coordination(
+    review_dir: &Path,
+    current_head: &str,
+    coordination_error: Option<&str>,
+) -> ReporterTurnResolution {
+    if let Some(error) = coordination_error {
+        return ReporterTurnResolution::Malformed {
+            receipt: "review/threads/reporter/thread.json".to_owned(),
+            error: format!("reporter coordination failed before authority commit: {error}"),
+        };
+    }
+    resolve_reporter_turn(review_dir, current_head)
 }
 
 #[cfg(test)]
@@ -992,6 +1056,53 @@ mod tests {
             other => anyhow::bail!("expected current invocation turn, got {other:?}"),
         }
         assert!(!review_dir.join("threads/reporter/turn-001.json").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn startup_invalidation_failure_withholds_restored_disk_authority() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        let conclusion = ReporterConclusion {
+            schema: REPORTER_THREAD_SCHEMA.to_owned(),
+            distillation: "must not be reused".to_owned(),
+            proposed_follow_ups: vec![],
+            verdict: ReporterVerdict::Clear,
+            cohort_id: "cid".to_owned(),
+            thread_id: "tid".to_owned(),
+        };
+        write_reporter_thread(&review_dir, &conclusion, "head-a")?;
+        let thread_dir = review_dir.join("threads/reporter");
+        let rollup_path = thread_dir.join("thread.json");
+        let saved_rollup = thread_dir.join("thread.saved.json");
+        std::fs::rename(&rollup_path, &saved_rollup)?;
+        std::fs::create_dir(&rollup_path)?;
+
+        let startup_error = match prepare_reporter_run(&review_dir) {
+            Ok(()) => anyhow::bail!("forced startup invalidation failure must propagate"),
+            Err(error) => error,
+        };
+
+        // Simulate a transient filesystem failure: the old valid authority is
+        // readable again before final compilation. The in-memory failure must
+        // still dominate disk state.
+        std::fs::remove_dir(&rollup_path)?;
+        std::fs::rename(&saved_rollup, &rollup_path)?;
+        let error = format!("{startup_error:#}");
+        let resolution = resolve_reporter_after_coordination(&review_dir, "head-a", Some(&error));
+        assert!(resolution.public_distillation().is_none());
+        match resolution.gate_input() {
+            ReporterGateInput::Unusable {
+                kind,
+                detail,
+                receipt,
+            } => {
+                assert_eq!(kind, "reporter-malformed");
+                assert!(detail.contains("invocation start"));
+                assert_eq!(receipt, "review/threads/reporter/thread.json");
+            }
+            other => anyhow::bail!("expected explicit unusable reporter evidence, got {other:?}"),
+        }
         Ok(())
     }
 

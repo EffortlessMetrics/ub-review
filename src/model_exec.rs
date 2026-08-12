@@ -599,57 +599,193 @@ pub(crate) fn run_reporter_coordination(
         let re_prompt = reporter_prompt(&updated_digests, late_sensor_evidence);
         let re_dir = review_dir.join("threads").join("reporter");
         calls_used += 1;
-        if let Ok(re_content) = call_model_prompt_content(
-            root,
-            &re_dir,
-            &spec,
-            Some(shared_context),
-            true,
-            &re_prompt,
-            args,
-        ) {
-            let re_conclusion =
-                parse_reporter_conclusion(&re_content.json_payload, &cohort_id, &thread_id);
-            // Write the reporter's revised conclusion as turn-001 with the
-            // same structured verdict + head contract as turn-000.
-            let lane_answer_refs: Vec<String> = lane_answers
-                .iter()
-                .map(|(lane, _)| format!("lane-answer:{lane}"))
-                .collect();
-            write_reporter_turn(
+        let lane_answer_refs: Vec<String> = lane_answers
+            .iter()
+            .map(|(lane, _)| format!("lane-answer:{lane}"))
+            .collect();
+        let re_conclusion = run_reporter_redistillation(
+            ReporterRedistillationContext {
                 review_dir,
-                &re_conclusion,
-                1,
                 current_head,
-                "reporter_re_distilled",
-                &lane_answer_refs,
-            )?;
-            let _ = message_log.append(
-                CrossLaneMessageKind::LaneReport,
-                "reporter",
-                "all-lanes",
-                1,
-                vec!["review/threads/reporter/turn-001.json".to_owned()],
-                serde_json::json!({
-                    "distillation": re_conclusion.distillation,
-                    "cohort_id": re_conclusion.cohort_id,
-                    "verdict": verdict_to_wire(&re_conclusion.verdict),
-                    "head_sha": current_head,
-                    "round": "re-distillation",
-                }),
-            );
-            let _ = event_log.append(
-                "reporter_re_distilled",
-                serde_json::json!({
-                    "lane_answers": lane_answers.len(),
-                    "distillation_length": re_conclusion.distillation.len(),
-                    "verdict": verdict_to_wire(&re_conclusion.verdict),
-                }),
-            );
-        }
+                cohort_id: &cohort_id,
+                thread_id: &thread_id,
+                lane_answer_refs: &lane_answer_refs,
+            },
+            || {
+                call_model_prompt_content(
+                    root,
+                    &re_dir,
+                    &spec,
+                    Some(shared_context),
+                    true,
+                    &re_prompt,
+                    args,
+                )
+            },
+        )?;
+        let _ = message_log.append(
+            CrossLaneMessageKind::LaneReport,
+            "reporter",
+            "all-lanes",
+            1,
+            vec!["review/threads/reporter/turn-001.json".to_owned()],
+            serde_json::json!({
+                "distillation": re_conclusion.distillation,
+                "cohort_id": re_conclusion.cohort_id,
+                "verdict": verdict_to_wire(&re_conclusion.verdict),
+                "head_sha": current_head,
+                "round": "re-distillation",
+            }),
+        );
+        let _ = event_log.append(
+            "reporter_re_distilled",
+            serde_json::json!({
+                "lane_answers": lane_answers.len(),
+                "distillation_length": re_conclusion.distillation.len(),
+                "verdict": verdict_to_wire(&re_conclusion.verdict),
+            }),
+        );
     }
 
     Ok(calls_used.saturating_sub(model_calls_used))
+}
+
+struct ReporterRedistillationContext<'a> {
+    review_dir: &'a Path,
+    current_head: &'a str,
+    cohort_id: &'a str,
+    thread_id: &'a str,
+    lane_answer_refs: &'a [String],
+}
+
+fn run_reporter_redistillation<F>(
+    context: ReporterRedistillationContext<'_>,
+    call: F,
+) -> Result<ReporterConclusion>
+where
+    F: FnOnce() -> Result<ModelPromptContent>,
+{
+    invalidate_reporter_authority(context.review_dir)
+        .context("invalidate turn-000 before reporter re-distillation")?;
+    let content = call().context("call reporter re-distillation")?;
+    let conclusion = parse_reporter_conclusion_strict(
+        &content.json_payload,
+        context.cohort_id,
+        context.thread_id,
+    )?;
+    write_reporter_turn(
+        context.review_dir,
+        &conclusion,
+        1,
+        context.current_head,
+        "reporter_re_distilled",
+        context.lane_answer_refs,
+    )?;
+    Ok(conclusion)
+}
+
+#[cfg(test)]
+mod reporter_authority_tests {
+    use super::*;
+
+    fn first_pass(review_dir: &Path) -> Result<()> {
+        write_reporter_thread(
+            review_dir,
+            &ReporterConclusion {
+                schema: REPORTER_THREAD_SCHEMA.to_owned(),
+                distillation: "turn zero must be withheld".to_owned(),
+                proposed_follow_ups: vec!["lane: reconsider".to_owned()],
+                verdict: ReporterVerdict::Clear,
+                cohort_id: "cid".to_owned(),
+                thread_id: "tid".to_owned(),
+            },
+            "head-a",
+        )
+    }
+
+    fn assert_failed_redistillation_is_inconclusive(
+        review_dir: &Path,
+        error: &anyhow::Error,
+    ) -> Result<()> {
+        assert_eq!(
+            resolve_reporter_turn(review_dir, "head-a"),
+            ReporterTurnResolution::Absent
+        );
+        let error = format!("{error:#}");
+        let resolution = resolve_reporter_after_coordination(review_dir, "head-a", Some(&error));
+        assert!(resolution.public_distillation().is_none());
+        match resolution.gate_input() {
+            ReporterGateInput::Unusable {
+                kind,
+                detail,
+                receipt,
+            } => {
+                assert_eq!(kind, "reporter-malformed");
+                assert!(detail.contains("reporter coordination failed"));
+                assert_eq!(receipt, "review/threads/reporter/thread.json");
+            }
+            other => anyhow::bail!("expected inconclusive reporter evidence, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn redistillation_provider_failure_withholds_turn_zero_authority() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        first_pass(&review_dir)?;
+        let refs = vec!["lane-answer:lane".to_owned()];
+        let error = match run_reporter_redistillation(
+            ReporterRedistillationContext {
+                review_dir: &review_dir,
+                current_head: "head-a",
+                cohort_id: "cid",
+                thread_id: "tid",
+                lane_answer_refs: &refs,
+            },
+            || anyhow::bail!("forced provider failure after follow-up evidence"),
+        ) {
+            Ok(_) => anyhow::bail!("forced provider failure must propagate"),
+            Err(error) => error,
+        };
+        assert_failed_redistillation_is_inconclusive(&review_dir, &error)
+    }
+
+    #[test]
+    fn redistillation_parse_failure_withholds_turn_zero_authority() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        first_pass(&review_dir)?;
+        let refs = vec!["lane-answer:lane".to_owned()];
+        let error = match run_reporter_redistillation(
+            ReporterRedistillationContext {
+                review_dir: &review_dir,
+                current_head: "head-a",
+                cohort_id: "cid",
+                thread_id: "tid",
+                lane_answer_refs: &refs,
+            },
+            || {
+                Ok(ModelPromptContent {
+                    json_payload: "{ malformed".to_owned(),
+                    parse_path: PathBuf::from("forced-response.json"),
+                    duration_ms: 1,
+                    http_status: Some(200),
+                    response_shape: "test".to_owned(),
+                    cache_usage: ModelCacheUsage::default(),
+                })
+            },
+        ) {
+            Ok(_) => anyhow::bail!("forced parse failure must propagate"),
+            Err(error) => error,
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("parse reporter re-distillation JSON")
+        );
+        assert_failed_redistillation_is_inconclusive(&review_dir, &error)
+    }
 }
 
 /// A lane's answer after deterministic proof arrived after the reporter's

@@ -4529,6 +4529,7 @@ fn write_review_artifacts(
     // continuation (Order 9c proof-routing).
     let reporter_loop =
         start_run_loop(event_log, run_started, "model", "investigation", "reporter")?;
+    let mut reporter_coordination_error = None;
     let reporter_status = match run_reporter_coordination(
         root,
         &review_dir,
@@ -4547,6 +4548,7 @@ fn write_review_artifacts(
             "completed"
         }
         Err(e) => {
+            reporter_coordination_error = Some(format!("{e:#}"));
             let _ = event_log.append(
                 "reporter_error",
                 serde_json::json!({"error": format!("{e:#}")}),
@@ -4922,7 +4924,11 @@ fn write_review_artifacts(
     // Order 10 (#678) + #857: one current-head reporter resolution feeds the
     // compiler distillation and (later) review-forward gate evidence. Stale or
     // malformed turns stay out of the public body.
-    let reporter_resolution = resolve_reporter_turn(&review_dir, &diff.head);
+    let reporter_resolution = resolve_reporter_after_coordination(
+        &review_dir,
+        &diff.head,
+        reporter_coordination_error.as_deref(),
+    );
     let reporter_distillation = reporter_resolution.public_distillation().map(str::to_owned);
     let final_surface = compile_review_surface(ReviewCompilerInput {
         shared_context_id: &review.shared_context_id,
