@@ -20117,6 +20117,784 @@ finding_id = "probe:src_validate.rs:error_path:4d06f280"
 owner = "ub-review/core"
 reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/validate.rs for demoted-inline finding text #849: covered by validate_tests demotion/summary-only finding tests that assert the model body is retained. Re-verify after semantic edits to demotion paths."
 
+
+# Reporter authority #857 / PR #858: exact ready-mode set after addressing
+# all current review threads. Entries are grouped by invariant and tied to
+# named executable regression tests; the overdue repository-wide
+# suppression-health receipt is not renewed by this bounded lane.
+
+# Hosted-only merge-ref IDs from run 31616425524. These are the same invariant
+# groups under GitHub's merge-ref diff shape, which RIPR keys separately.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:88a34922"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for primary lane authority failure propagation; `primary_turn_write_rejects_higher_turn_without_rollup` forces the higher-turn failure and asserts no rollup becomes authority. Re-verify after edits to primary lane writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:7275c3ea"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for primary lane authority failure propagation; `primary_turn_write_rejects_higher_turn_without_rollup` forces the higher-turn failure and asserts no rollup becomes authority. Re-verify after edits to primary lane writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:c0de5cf4"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for primary lane authority failure propagation; `primary_turn_write_rejects_higher_turn_without_rollup` forces the higher-turn failure and asserts no rollup becomes authority. Re-verify after edits to primary lane writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:7167025f"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for primary lane authority failure propagation; `primary_turn_write_rejects_higher_turn_without_rollup` forces the higher-turn failure and asserts no rollup becomes authority. Re-verify after edits to primary lane writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:e0e5eb50"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for field-specific reporter validation; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts each malformed case names its mismatched field and publishes no distillation. Re-verify after edits to reporter identity validation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:field_construction:ad7dc056.2"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for field-specific reporter validation; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts each malformed case names its mismatched field and publishes no distillation. Re-verify after edits to reporter identity validation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:956800ac.2"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for field-specific reporter validation; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts each malformed case names its mismatched field and publishes no distillation. Re-verify after edits to reporter identity validation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:c74248e5"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for field-specific reporter validation; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts each malformed case names its mismatched field and publishes no distillation. Re-verify after edits to reporter identity validation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:field_construction:ad7dc056.3"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for field-specific reporter validation; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts each malformed case names its mismatched field and publishes no distillation. Re-verify after edits to reporter identity validation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:956800ac.3"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for field-specific reporter validation; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts each malformed case names its mismatched field and publishes no distillation. Re-verify after edits to reporter identity validation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:3bcce1fc.9"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for field-specific reporter validation; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts each malformed case names its mismatched field and publishes no distillation. Re-verify after edits to reporter identity validation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:c981294a"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for field-specific reporter validation; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts each malformed case names its mismatched field and publishes no distillation. Re-verify after edits to reporter identity validation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:f6da583b.3"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref key for field-specific reporter validation; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts each malformed case names its mismatched field and publishes no distillation. Re-verify after edits to reporter identity validation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:match_arm:21911da3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this review-forward branch weakly exposed; `reporter_verdicts_respect_review_forward_and_evidence_semantics` asserts exact Clear/pass, ChangesRequested/fail, Uncertain/inconclusive, missing/inconclusive, absent/inconclusive, disabled-policy, reason kind/id, and receipt outcomes. Re-verify after edits to review-forward mapping."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:match_arm:5b032556.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this review-forward branch weakly exposed; `reporter_verdicts_respect_review_forward_and_evidence_semantics` asserts exact Clear/pass, ChangesRequested/fail, Uncertain/inconclusive, missing/inconclusive, absent/inconclusive, disabled-policy, reason kind/id, and receipt outcomes. Re-verify after edits to review-forward mapping."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:match_arm:881697e1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this review-forward branch weakly exposed; `reporter_verdicts_respect_review_forward_and_evidence_semantics` asserts exact Clear/pass, ChangesRequested/fail, Uncertain/inconclusive, missing/inconclusive, absent/inconclusive, disabled-policy, reason kind/id, and receipt outcomes. Re-verify after edits to review-forward mapping."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:match_arm:5b032556"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this review-forward branch weakly exposed; `reporter_verdicts_respect_review_forward_and_evidence_semantics` asserts exact Clear/pass, ChangesRequested/fail, Uncertain/inconclusive, missing/inconclusive, absent/inconclusive, disabled-policy, reason kind/id, and receipt outcomes. Re-verify after edits to review-forward mapping."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:2af32fda"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this review-forward branch weakly exposed; `reporter_verdicts_respect_review_forward_and_evidence_semantics` asserts exact Clear/pass, ChangesRequested/fail, Uncertain/inconclusive, missing/inconclusive, absent/inconclusive, disabled-policy, reason kind/id, and receipt outcomes. Re-verify after edits to review-forward mapping."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:0e9a44f4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this review-forward branch weakly exposed; `reporter_verdicts_respect_review_forward_and_evidence_semantics` asserts exact Clear/pass, ChangesRequested/fail, Uncertain/inconclusive, missing/inconclusive, absent/inconclusive, disabled-policy, reason kind/id, and receipt outcomes. Re-verify after edits to review-forward mapping."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:match_arm:98d367ee"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this review-forward branch weakly exposed; `reporter_verdicts_respect_review_forward_and_evidence_semantics` asserts exact Clear/pass, ChangesRequested/fail, Uncertain/inconclusive, missing/inconclusive, absent/inconclusive, disabled-policy, reason kind/id, and receipt outcomes. Re-verify after edits to review-forward mapping."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:2af32fda.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this review-forward branch weakly exposed; `reporter_verdicts_respect_review_forward_and_evidence_semantics` asserts exact Clear/pass, ChangesRequested/fail, Uncertain/inconclusive, missing/inconclusive, absent/inconclusive, disabled-policy, reason kind/id, and receipt outcomes. Re-verify after edits to review-forward mapping."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:0e9a44f4.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this review-forward branch weakly exposed; `reporter_verdicts_respect_review_forward_and_evidence_semantics` asserts exact Clear/pass, ChangesRequested/fail, Uncertain/inconclusive, missing/inconclusive, absent/inconclusive, disabled-policy, reason kind/id, and receipt outcomes. Re-verify after edits to review-forward mapping."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:match_arm:7d1057ad"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this review-forward branch weakly exposed; `reporter_verdicts_respect_review_forward_and_evidence_semantics` asserts exact Clear/pass, ChangesRequested/fail, Uncertain/inconclusive, missing/inconclusive, absent/inconclusive, disabled-policy, reason kind/id, and receipt outcomes. Re-verify after edits to review-forward mapping."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:match_arm:95b2a4d4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this review-forward branch weakly exposed; `reporter_verdicts_respect_review_forward_and_evidence_semantics` asserts exact Clear/pass, ChangesRequested/fail, Uncertain/inconclusive, missing/inconclusive, absent/inconclusive, disabled-policy, reason kind/id, and receipt outcomes. Re-verify after edits to review-forward mapping."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:match_arm:5f9c429f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this review-forward branch weakly exposed; `reporter_verdicts_respect_review_forward_and_evidence_semantics` asserts exact Clear/pass, ChangesRequested/fail, Uncertain/inconclusive, missing/inconclusive, absent/inconclusive, disabled-policy, reason kind/id, and receipt outcomes. Re-verify after edits to review-forward mapping."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:match_arm:75a74bc1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this review-forward branch weakly exposed; `reporter_verdicts_respect_review_forward_and_evidence_semantics` asserts exact Clear/pass, ChangesRequested/fail, Uncertain/inconclusive, missing/inconclusive, absent/inconclusive, disabled-policy, reason kind/id, and receipt outcomes. Re-verify after edits to review-forward mapping."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_threads.rs:call_deletion:60d80417"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this numeric rollup-selection expression weakly exposed; `rollup_orders_turns_by_numeric_identity` and `multiple_turns_rollup_picks_latest_conclusion` assert canonical numeric latest-turn and conclusion identity. Re-verify after edits to lane turn ordering."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_threads.rs:return_value:5ac7d90b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this numeric rollup-selection expression weakly exposed; `rollup_orders_turns_by_numeric_identity` and `multiple_turns_rollup_picks_latest_conclusion` assert canonical numeric latest-turn and conclusion identity. Re-verify after edits to lane turn ordering."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_threads.rs:call_deletion:9de4783f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this numeric rollup-selection expression weakly exposed; `rollup_orders_turns_by_numeric_identity` and `multiple_turns_rollup_picks_latest_conclusion` assert canonical numeric latest-turn and conclusion identity. Re-verify after edits to lane turn ordering."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_threads.rs:call_deletion:12c1d84d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this numeric rollup-selection expression weakly exposed; `rollup_orders_turns_by_numeric_identity` and `multiple_turns_rollup_picks_latest_conclusion` assert canonical numeric latest-turn and conclusion identity. Re-verify after edits to lane turn ordering."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_threads.rs:call_deletion:96d7745d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this numeric rollup-selection expression weakly exposed; `rollup_orders_turns_by_numeric_identity` and `multiple_turns_rollup_picks_latest_conclusion` assert canonical numeric latest-turn and conclusion identity. Re-verify after edits to lane turn ordering."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_threads.rs:call_deletion:2d8f20f5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this numeric rollup-selection expression weakly exposed; `rollup_orders_turns_by_numeric_identity` and `multiple_turns_rollup_picks_latest_conclusion` assert canonical numeric latest-turn and conclusion identity. Re-verify after edits to lane turn ordering."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_threads.rs:call_deletion:64380220"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this numeric rollup-selection expression weakly exposed; `rollup_orders_turns_by_numeric_identity` and `multiple_turns_rollup_picks_latest_conclusion` assert canonical numeric latest-turn and conclusion identity. Re-verify after edits to lane turn ordering."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_threads.rs:error_path:a5ac748f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this validate-before-replace rollup path as reachable_unrevealed; `malformed_latest_turn_preserves_previous_rollup_identity` and `primary_turn_write_rejects_higher_turn_without_rollup` force invalid higher turns, assert exact propagation, and assert no replacement rollup becomes authority. Re-verify after edits to rollup writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:045342a8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-gate composition field weakly exposed; `one_resolved_turn_drives_public_text_and_exact_gate_receipt` asserts the same resolved turn drives public distillation and the exact gate receipt. Re-verify after edits to review artifact composition."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:80c291b8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this current-invocation reset path weakly exposed; `new_reporter_run_rejects_prior_run_turns_on_the_same_head` and different-head stale coverage assert prior authority cannot survive a new reporter invocation. Re-verify after edits to reporter startup."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:0ac3cdf4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this current-invocation reset path weakly exposed; `new_reporter_run_rejects_prior_run_turns_on_the_same_head` and different-head stale coverage assert prior authority cannot survive a new reporter invocation. Re-verify after edits to reporter startup."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:24c06fc0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter re-distillation/write path as weakly_exposed; `turn_001_write_failure_is_propagated` forces the turn write failure, asserts propagation, and asserts no partial turn becomes authority. Re-verify after edits to reporter coordination writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:cc46dc7b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter re-distillation/write path as weakly_exposed; `turn_001_write_failure_is_propagated` forces the turn write failure, asserts propagation, and asserts no partial turn becomes authority. Re-verify after edits to reporter coordination writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:1c325f58"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter re-distillation/write path as weakly_exposed; `turn_001_write_failure_is_propagated` forces the turn write failure, asserts propagation, and asserts no partial turn becomes authority. Re-verify after edits to reporter coordination writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:6958c46a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter re-distillation/write path as weakly_exposed; `turn_001_write_failure_is_propagated` forces the turn write failure, asserts propagation, and asserts no partial turn becomes authority. Re-verify after edits to reporter coordination writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:7ba6fe6e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter re-distillation/write path as weakly_exposed; `turn_001_write_failure_is_propagated` forces the turn write failure, asserts propagation, and asserts no partial turn becomes authority. Re-verify after edits to reporter coordination writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:4dd62635"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter re-distillation/write path as weakly_exposed; `turn_001_write_failure_is_propagated` forces the turn write failure, asserts propagation, and asserts no partial turn becomes authority. Re-verify after edits to reporter coordination writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:86de110b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter re-distillation/write path as weakly_exposed; `turn_001_write_failure_is_propagated` forces the turn write failure, asserts propagation, and asserts no partial turn becomes authority. Re-verify after edits to reporter coordination writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:2dcb6cc7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter re-distillation/write path as weakly_exposed; `turn_001_write_failure_is_propagated` forces the turn write failure, asserts propagation, and asserts no partial turn becomes authority. Re-verify after edits to reporter coordination writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:32010bb6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter re-distillation/write path as weakly_exposed; `turn_001_write_failure_is_propagated` forces the turn write failure, asserts propagation, and asserts no partial turn becomes authority. Re-verify after edits to reporter coordination writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:error_path:dc4e6614"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter re-distillation/write path as reachable_unrevealed; `turn_001_write_failure_is_propagated` forces the turn write failure, asserts propagation, and asserts no partial turn becomes authority. Re-verify after edits to reporter coordination writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:29ff8b21"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter re-distillation/write path as weakly_exposed; `turn_001_write_failure_is_propagated` forces the turn write failure, asserts propagation, and asserts no partial turn becomes authority. Re-verify after edits to reporter coordination writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:b9f8bab5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this verdict parsing path weakly exposed; `unknown_wire_verdict_is_malformed_and_fails_closed` and `invalid_model_verdict_stays_explicitly_undecided` assert invalid verdicts publish no distillation and gate inconclusive. Re-verify after edits to reporter verdict parsing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:b6630ecc"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this verdict parsing path weakly exposed; `unknown_wire_verdict_is_malformed_and_fails_closed` and `invalid_model_verdict_stays_explicitly_undecided` assert invalid verdicts publish no distillation and gate inconclusive. Re-verify after edits to reporter verdict parsing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:c456e668"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this verdict parsing path weakly exposed; `unknown_wire_verdict_is_malformed_and_fails_closed` and `invalid_model_verdict_stays_explicitly_undecided` assert invalid verdicts publish no distillation and gate inconclusive. Re-verify after edits to reporter verdict parsing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:96bd0dbc"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this verdict parsing path weakly exposed; `unknown_wire_verdict_is_malformed_and_fails_closed` and `invalid_model_verdict_stays_explicitly_undecided` assert invalid verdicts publish no distillation and gate inconclusive. Re-verify after edits to reporter verdict parsing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:d22ecbb4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this verdict parsing path weakly exposed; `unknown_wire_verdict_is_malformed_and_fails_closed` and `invalid_model_verdict_stays_explicitly_undecided` assert invalid verdicts publish no distillation and gate inconclusive. Re-verify after edits to reporter verdict parsing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:field_construction:52b086aa"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this verdict parsing path weakly exposed; `unknown_wire_verdict_is_malformed_and_fails_closed` and `invalid_model_verdict_stays_explicitly_undecided` assert invalid verdicts publish no distillation and gate inconclusive. Re-verify after edits to reporter verdict parsing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:499c71f2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this verdict parsing path weakly exposed; `unknown_wire_verdict_is_malformed_and_fails_closed` and `invalid_model_verdict_stays_explicitly_undecided` assert invalid verdicts publish no distillation and gate inconclusive. Re-verify after edits to reporter verdict parsing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:02a77bb9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this verdict parsing path weakly exposed; `unknown_wire_verdict_is_malformed_and_fails_closed` and `invalid_model_verdict_stays_explicitly_undecided` assert invalid verdicts publish no distillation and gate inconclusive. Re-verify after edits to reporter verdict parsing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:aa666b9c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this verdict parsing path weakly exposed; `unknown_wire_verdict_is_malformed_and_fails_closed` and `invalid_model_verdict_stays_explicitly_undecided` assert invalid verdicts publish no distillation and gate inconclusive. Re-verify after edits to reporter verdict parsing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:f03814ad"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this verdict parsing path weakly exposed; `unknown_wire_verdict_is_malformed_and_fails_closed` and `invalid_model_verdict_stays_explicitly_undecided` assert invalid verdicts publish no distillation and gate inconclusive. Re-verify after edits to reporter verdict parsing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:8e1300d4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this verdict parsing path weakly exposed; `unknown_wire_verdict_is_malformed_and_fails_closed` and `invalid_model_verdict_stays_explicitly_undecided` assert invalid verdicts publish no distillation and gate inconclusive. Re-verify after edits to reporter verdict parsing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:280a6191"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this verdict parsing path weakly exposed; `unknown_wire_verdict_is_malformed_and_fails_closed` and `invalid_model_verdict_stays_explicitly_undecided` assert invalid verdicts publish no distillation and gate inconclusive. Re-verify after edits to reporter verdict parsing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:b86dfc4b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this verdict parsing path weakly exposed; `unknown_wire_verdict_is_malformed_and_fails_closed` and `invalid_model_verdict_stays_explicitly_undecided` assert invalid verdicts publish no distillation and gate inconclusive. Re-verify after edits to reporter verdict parsing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:09d900b0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this verdict parsing path weakly exposed; `unknown_wire_verdict_is_malformed_and_fails_closed` and `invalid_model_verdict_stays_explicitly_undecided` assert invalid verdicts publish no distillation and gate inconclusive. Re-verify after edits to reporter verdict parsing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:ef86b9d3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this verdict parsing path weakly exposed; `unknown_wire_verdict_is_malformed_and_fails_closed` and `invalid_model_verdict_stays_explicitly_undecided` assert invalid verdicts publish no distillation and gate inconclusive. Re-verify after edits to reporter verdict parsing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:8d4dd32c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this invocation-reset path weakly exposed; `new_reporter_run_rejects_prior_run_turns_on_the_same_head` plus different-head stale coverage assert prior turn and rollup authority are invalidated. Re-verify after edits to reporter run preparation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:96a949cb"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this invocation-reset path weakly exposed; `new_reporter_run_rejects_prior_run_turns_on_the_same_head` plus different-head stale coverage assert prior turn and rollup authority are invalidated. Re-verify after edits to reporter run preparation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:341dddea"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this invocation-reset path weakly exposed; `new_reporter_run_rejects_prior_run_turns_on_the_same_head` plus different-head stale coverage assert prior turn and rollup authority are invalidated. Re-verify after edits to reporter run preparation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:0f1b4693"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this invocation-reset path weakly exposed; `new_reporter_run_rejects_prior_run_turns_on_the_same_head` plus different-head stale coverage assert prior turn and rollup authority are invalidated. Re-verify after edits to reporter run preparation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:a6b6be95"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this invocation-reset path weakly exposed; `new_reporter_run_rejects_prior_run_turns_on_the_same_head` plus different-head stale coverage assert prior turn and rollup authority are invalidated. Re-verify after edits to reporter run preparation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:02d91a04"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this invocation-reset path weakly exposed; `new_reporter_run_rejects_prior_run_turns_on_the_same_head` plus different-head stale coverage assert prior turn and rollup authority are invalidated. Re-verify after edits to reporter run preparation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:167a8996"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this invocation-reset path weakly exposed; `new_reporter_run_rejects_prior_run_turns_on_the_same_head` plus different-head stale coverage assert prior turn and rollup authority are invalidated. Re-verify after edits to reporter run preparation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:429f9b76"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this invocation-reset path weakly exposed; `new_reporter_run_rejects_prior_run_turns_on_the_same_head` plus different-head stale coverage assert prior turn and rollup authority are invalidated. Re-verify after edits to reporter run preparation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:413ce2fd"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this invocation-reset path weakly exposed; `new_reporter_run_rejects_prior_run_turns_on_the_same_head` plus different-head stale coverage assert prior turn and rollup authority are invalidated. Re-verify after edits to reporter run preparation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:23189eb5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this invocation-reset path weakly exposed; `new_reporter_run_rejects_prior_run_turns_on_the_same_head` plus different-head stale coverage assert prior turn and rollup authority are invalidated. Re-verify after edits to reporter run preparation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:field_construction:bab74307"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this invocation-reset path weakly exposed; `new_reporter_run_rejects_prior_run_turns_on_the_same_head` plus different-head stale coverage assert prior turn and rollup authority are invalidated. Re-verify after edits to reporter run preparation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:field_construction:2eea4a8f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this invocation-reset path weakly exposed; `new_reporter_run_rejects_prior_run_turns_on_the_same_head` plus different-head stale coverage assert prior turn and rollup authority are invalidated. Re-verify after edits to reporter run preparation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:6eccf603"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this invocation-reset path weakly exposed; `new_reporter_run_rejects_prior_run_turns_on_the_same_head` plus different-head stale coverage assert prior turn and rollup authority are invalidated. Re-verify after edits to reporter run preparation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:48c5e856"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this invocation-reset path weakly exposed; `new_reporter_run_rejects_prior_run_turns_on_the_same_head` plus different-head stale coverage assert prior turn and rollup authority are invalidated. Re-verify after edits to reporter run preparation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:660125da"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this invocation-reset path weakly exposed; `new_reporter_run_rejects_prior_run_turns_on_the_same_head` plus different-head stale coverage assert prior turn and rollup authority are invalidated. Re-verify after edits to reporter run preparation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:5dab34d5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this invocation-reset path weakly exposed; `new_reporter_run_rejects_prior_run_turns_on_the_same_head` plus different-head stale coverage assert prior turn and rollup authority are invalidated. Re-verify after edits to reporter run preparation."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:field_construction:6e4e534c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this authority-write path weakly exposed; `turn_001_write_failure_is_propagated` and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert write failure propagation, rollup invalidation, and exact successful authority. Re-verify after edits to reporter writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:3ada7faa"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this authority-write path weakly exposed; `turn_001_write_failure_is_propagated` and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert write failure propagation, rollup invalidation, and exact successful authority. Re-verify after edits to reporter writes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:7644b48f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:d037fae3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:7c16c78b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:614e4fc4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:9302eed7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:00f00ed3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:b3264b0e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:6eed6b78"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:25db3db5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:8b890ddd"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:1a8b5ff2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:3bcce1fc"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:c0927557"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:c1e28328"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:1a8b5ff2.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:3bcce1fc.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:c946015c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:e7f657df"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:d944df8e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:f5cc4bd3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:2e2596f9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:f6da583b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:f6da583b.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:field_construction:ad7dc056"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:956800ac"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:3bcce1fc.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:25db3db5.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:1a8b5ff2.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:3bcce1fc.4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:e086dd09"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:3749d138"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:1a8b5ff2.4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:3bcce1fc.5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:field_construction:7de2c068"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:3bcce1fc.6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:field_construction:7de2c068.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:3bcce1fc.7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:4fb1b170"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:3bcce1fc.8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:565ad97c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:error_path:64fe385d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:1a8b5ff2.5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:fae9cada"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:b36a48a7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:0484dcf2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:be62d1ce"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:a6145b63"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 marks this reporter-resolution path weakly exposed; `reporter_resolution_rejects_turn_rollup_identity_mismatches` asserts field-specific mismatch detail, while `malformed_rollup_fails_closed_without_selecting_a_turn`, `legacy_turn_without_invocation_head_fails_closed`, `unknown_wire_verdict_is_malformed_and_fails_closed`, and `one_resolved_turn_drives_public_text_and_exact_gate_receipt` assert fail-closed behavior and exact successful authority. Re-verify after edits to reporter resolution."
+
+
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_validate.rs:field_construction:e3efb45e"

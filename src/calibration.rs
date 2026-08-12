@@ -544,6 +544,8 @@ mod tests {
                 .to_owned(),
             routed_evidence_refs: vec![],
             receipt_ref: "review/threads/tests-red-green/turn-000.json".to_owned(),
+            head_sha: None,
+            verdict: None,
         };
         std::fs::write(
             lane_dir.join("turn-000.json"),
@@ -561,6 +563,8 @@ mod tests {
                 "Withdraw changes_requested — proof shows test is non-discriminating.".to_owned(),
             routed_evidence_refs: vec!["proof evidence: receipt result".to_owned()],
             receipt_ref: "review/threads/tests-red-green/turn-001.json".to_owned(),
+            head_sha: None,
+            verdict: None,
         };
         std::fs::write(
             lane_dir.join("turn-001.json"),
