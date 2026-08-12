@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus};
+use std::process::{Command, ExitStatus, Output};
 
 use anyhow::{Context, Result, bail};
 use chrono::NaiveDate;
@@ -58,6 +58,10 @@ fn run() -> Result<()> {
                 );
             }
         }
+        "ripr" => {
+            let options = RiprOptions::parse(args)?;
+            run_local_ripr(&root, options)?;
+        }
         "help" | "-h" | "--help" => {
             reject_extra_args(args)?;
             print_help();
@@ -70,7 +74,7 @@ fn run() -> Result<()> {
         }
         other => {
             bail!(
-                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, calibration-report, or help"
+                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, ripr, calibration-report, or help"
             )
         }
     }
@@ -94,13 +98,417 @@ cargo xtask commands
   cargo xtask policy-inventory  print receipt and CI policy counts
   cargo xtask audit             run cargo-audit for RUSTSEC advisories (advisory)
   cargo xtask precommit         run diff-scoped Rust precommit checks
+  cargo xtask ripr              reproduce hosted ripr ready-mode feedback locally
   cargo xtask calibration-report <dir>  aggregate review/calibration.json files
 
 precommit options
 
   --staged                      inspect only staged changes
+
+ripr options
+
+  --base <rev>                  compare against this revision (default: origin/main)
 "
     );
+}
+
+const LOCAL_RIPR_VERSION: &str = "0.10.0";
+const LOCAL_RIPR_CONSOLE_HEAD_BYTES: usize = 12 * 1024;
+const LOCAL_RIPR_CONSOLE_TAIL_BYTES: usize = 4 * 1024;
+
+#[derive(Clone, Debug)]
+struct RiprOptions {
+    base: String,
+}
+
+impl Default for RiprOptions {
+    fn default() -> Self {
+        Self {
+            base: "origin/main".to_owned(),
+        }
+    }
+}
+
+impl RiprOptions {
+    fn parse(mut args: impl Iterator<Item = String>) -> Result<Self> {
+        let mut options = Self::default();
+        while let Some(arg) = args.next() {
+            match arg.as_str() {
+                "--base" => options.base = args.next().context("--base requires a revision")?,
+                other => bail!("unexpected ripr argument `{other}`"),
+            }
+        }
+        if options.base.trim().is_empty() {
+            bail!("--base must not be empty");
+        }
+        Ok(options)
+    }
+}
+
+#[derive(Debug)]
+struct RiprInvocation {
+    success: bool,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+}
+
+impl RiprInvocation {
+    fn from_output(output: Output) -> Self {
+        Self {
+            success: output.status.success(),
+            stdout: output.stdout,
+            stderr: output.stderr,
+        }
+    }
+}
+
+fn run_local_ripr(root: &Path, options: RiprOptions) -> Result<()> {
+    run_local_ripr_with(root, options, |program, args, cwd| {
+        Command::new(program)
+            .args(args)
+            .current_dir(cwd)
+            .output()
+            .map(RiprInvocation::from_output)
+    })
+}
+
+fn run_local_ripr_with<F>(root: &Path, options: RiprOptions, mut invoke: F) -> Result<()>
+where
+    F: FnMut(&str, &[String], &Path) -> std::io::Result<RiprInvocation>,
+{
+    let out_dir = root.join("target/xtask/ripr");
+    fs::create_dir_all(&out_dir)
+        .with_context(|| format!("create ripr receipt directory {}", out_dir.display()))?;
+    let diff_path = out_dir.join("diff.patch");
+    let badge_path = out_dir.join("gate-decision.json");
+    let detail_path = out_dir.join("exposure-gaps.json");
+    let feedback_path = out_dir.join("feedback.txt");
+    let receipt_path = out_dir.join("receipt.json");
+    for path in [
+        &diff_path,
+        &badge_path,
+        &detail_path,
+        &feedback_path,
+        &receipt_path,
+    ] {
+        match fs::remove_file(path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error).with_context(|| format!("remove stale {}", path.display()));
+            }
+        }
+    }
+
+    let untracked = git_lines(root, &["ls-files", "--others", "--exclude-standard"])?;
+    let untracked_rust: Vec<&str> = untracked
+        .iter()
+        .map(String::as_str)
+        .filter(|path| is_rust_input(path))
+        .collect();
+    if !untracked_rust.is_empty() {
+        bail!(
+            "untracked Rust inputs are not included in git diff: {}; add or stage them, then rerun `cargo xtask ripr`",
+            untracked_rust.join(", ")
+        );
+    }
+
+    let merge_base_bytes = git_bytes(root, &["merge-base", &options.base, "HEAD"])
+        .with_context(|| {
+            format!(
+                "resolve local ripr base `{}`; fetch the base and deepen a shallow clone until merge-base history is available",
+                options.base
+            )
+        })?;
+    let merge_base = String::from_utf8_lossy(&merge_base_bytes).trim().to_owned();
+    if merge_base.is_empty() {
+        bail!(
+            "git merge-base returned an empty revision for `{}` and HEAD",
+            options.base
+        );
+    }
+    let changed = git_lines(root, &["diff", "--name-only", &merge_base, "--"])?;
+    let rust_changed = changed.iter().any(|path| is_rust_input(path));
+    if changed.is_empty() || !rust_changed {
+        let reason = if changed.is_empty() {
+            "clean diff"
+        } else {
+            "no Rust inputs changed"
+        };
+        let receipt = json!({
+            "schema": "ub-review.local_ripr.v1",
+            "status": "skipped",
+            "reason": reason,
+            "base": options.base,
+            "merge_base": merge_base,
+            "mode": "ready",
+            "receipt_dir": out_dir,
+        });
+        fs::write(&receipt_path, serde_json::to_vec_pretty(&receipt)?)
+            .with_context(|| format!("write {}", receipt_path.display()))?;
+        println!(
+            "ripr local feedback: skipped ({reason}); receipt: {}",
+            receipt_path.display()
+        );
+        return Ok(());
+    }
+
+    let diff = git_bytes(
+        root,
+        &["diff", "--binary", "--no-ext-diff", &merge_base, "--"],
+    )?;
+    fs::write(&diff_path, diff).with_context(|| format!("write {}", diff_path.display()))?;
+
+    let version = invoke("ripr", &["--version".to_owned()], root).map_err(|error| {
+        anyhow::anyhow!(
+            "could not invoke ripr ({error}); install with `cargo install ripr --locked --version {LOCAL_RIPR_VERSION} --force`"
+        )
+    })?;
+    if !version.success {
+        bail!(
+            "`ripr --version` failed: {}",
+            String::from_utf8_lossy(&version.stderr).trim()
+        );
+    }
+    let version_text = String::from_utf8_lossy(&version.stdout);
+    if version_text.trim() != format!("ripr {LOCAL_RIPR_VERSION}") {
+        bail!(
+            "ripr version mismatch: expected {LOCAL_RIPR_VERSION}, found `{}`; install with `cargo install ripr --locked --version {LOCAL_RIPR_VERSION} --force`",
+            version_text.trim()
+        );
+    }
+
+    let root_arg = root.display().to_string();
+    let diff_arg = diff_path.display().to_string();
+    let common = [
+        "check".to_owned(),
+        "--root".to_owned(),
+        root_arg,
+        "--diff".to_owned(),
+        diff_arg,
+        "--mode".to_owned(),
+        "ready".to_owned(),
+        "--format".to_owned(),
+    ];
+    let mut badge_args = common.to_vec();
+    badge_args.push("badge-json".to_owned());
+    let badge = invoke("ripr", &badge_args, root)
+        .map_err(|error| anyhow::anyhow!("invoke pinned ripr ready-mode badge pass: {error}"))?;
+    fs::write(&badge_path, &badge.stdout)
+        .with_context(|| format!("write verbatim {}", badge_path.display()))?;
+    if !badge.success {
+        bail!("ripr badge pass failed: {}", bounded_text(&badge.stderr));
+    }
+    let badge_json: JsonValue = serde_json::from_slice(&badge.stdout)
+        .context("parse ripr badge-json output; installed tool may be stale or incompatible")?;
+
+    let mut detail_args = common.to_vec();
+    detail_args.push("json".to_owned());
+    let detail = invoke("ripr", &detail_args, root)
+        .map_err(|error| anyhow::anyhow!("invoke pinned ripr ready-mode detail pass: {error}"))?;
+    fs::write(&detail_path, &detail.stdout)
+        .with_context(|| format!("write verbatim {}", detail_path.display()))?;
+    if !detail.success {
+        bail!("ripr detail pass failed: {}", bounded_text(&detail.stderr));
+    }
+    let detail_json: JsonValue = serde_json::from_slice(&detail.stdout)
+        .context("parse ripr JSON detail output; installed tool may be stale or incompatible")?;
+    let summary = validate_local_ripr_outputs(&badge_json, &detail_json)?;
+    let mut human_args = common.to_vec();
+    human_args.push("human".to_owned());
+    let human = invoke("ripr", &human_args, root)
+        .map_err(|error| anyhow::anyhow!("invoke pinned ripr ready-mode human pass: {error}"))?;
+    fs::write(&feedback_path, &human.stdout)
+        .with_context(|| format!("write verbatim {}", feedback_path.display()))?;
+    if !human.success {
+        bail!("ripr human pass failed: {}", bounded_text(&human.stderr));
+    }
+    println!(
+        "ripr local feedback: {} unsuppressed exposure gap(s)",
+        summary.unsuppressed
+    );
+    let (human_output, human_truncated) = clip_text(
+        String::from_utf8_lossy(&human.stdout).into_owned(),
+        LOCAL_RIPR_CONSOLE_HEAD_BYTES,
+        LOCAL_RIPR_CONSOLE_TAIL_BYTES,
+        "local ripr console",
+    );
+    if summary.unsuppressed > 0 && !human_output.trim().is_empty() {
+        print!("{human_output}");
+        if !human_output.ends_with('\n') {
+            println!();
+        }
+    }
+    if summary.unsuppressed > 0 && human_truncated {
+        println!("full human output: {}", feedback_path.display());
+    }
+    let receipt = json!({
+        "schema": "ub-review.local_ripr.v1",
+        "status": "completed",
+        "advisory": summary.unsuppressed > 0,
+        "base": options.base,
+        "merge_base": merge_base,
+        "mode": "ready",
+        "ripr_version": LOCAL_RIPR_VERSION,
+        "unsuppressed_exposure_gaps": summary.unsuppressed,
+        "suppressed_exposure_gaps": summary.suppressed,
+        "finding_count": summary.findings,
+        "diff": diff_path,
+        "gate_decision": badge_path,
+        "exposure_gaps": detail_path,
+        "human_feedback": feedback_path,
+    });
+    fs::write(&receipt_path, serde_json::to_vec_pretty(&receipt)?)
+        .with_context(|| format!("write {}", receipt_path.display()))?;
+    println!("receipt: {}", receipt_path.display());
+    Ok(())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct LocalRiprSummary {
+    unsuppressed: u64,
+    suppressed: u64,
+    findings: usize,
+}
+
+fn validate_local_ripr_outputs(badge: &JsonValue, detail: &JsonValue) -> Result<LocalRiprSummary> {
+    if badge.get("schema_version").and_then(JsonValue::as_str) != Some("0.6")
+        || badge.get("kind").and_then(JsonValue::as_str) != Some("ripr")
+        || badge.get("scope").and_then(JsonValue::as_str) != Some("diff")
+        || badge.get("basis").and_then(JsonValue::as_str) != Some("finding_exposure")
+    {
+        bail!("ripr badge-json envelope is incompatible with pinned ripr 0.10.0");
+    }
+    if detail.get("schema_version").and_then(JsonValue::as_str) != Some("0.2")
+        || detail.get("tool").and_then(JsonValue::as_str) != Some("ripr")
+        || detail.get("mode").and_then(JsonValue::as_str) != Some("ready")
+    {
+        bail!("ripr detail envelope is incompatible with pinned ripr 0.10.0");
+    }
+    let counts = badge
+        .get("counts")
+        .and_then(JsonValue::as_object)
+        .context("ripr badge-json omitted counts object")?;
+    let count = |name: &str| -> Result<u64> {
+        counts
+            .get(name)
+            .and_then(JsonValue::as_u64)
+            .with_context(|| format!("ripr badge-json omitted counts.{name}"))
+    };
+    let unsuppressed = count("unsuppressed_exposure_gaps")?;
+    let suppressed = count("suppressed_exposure_gaps")?;
+    let analyzed = count("analyzed_findings")?;
+    let findings = detail
+        .get("findings")
+        .and_then(JsonValue::as_array)
+        .context("ripr JSON omitted findings array")?;
+    if analyzed != findings.len() as u64 {
+        bail!(
+            "ripr badge/detail mismatch: analyzed_findings={analyzed}, detail findings={}",
+            findings.len()
+        );
+    }
+    let mut canonical_gaps = 0u64;
+    for (index, finding) in findings.iter().enumerate() {
+        let object = finding
+            .as_object()
+            .with_context(|| format!("ripr finding[{index}] must be an object"))?;
+        let id = object
+            .get("id")
+            .and_then(JsonValue::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .with_context(|| format!("ripr finding[{index}] omitted id"))?;
+        let class = object
+            .get("classification")
+            .and_then(JsonValue::as_str)
+            .with_context(|| format!("ripr finding `{id}` omitted classification"))?;
+        object
+            .get("probe")
+            .and_then(JsonValue::as_object)
+            .with_context(|| format!("ripr finding `{id}` omitted probe object"))?;
+        if matches!(
+            class,
+            "weakly_exposed" | "reachable_unrevealed" | "no_static_path"
+        ) {
+            canonical_gaps = canonical_gaps.saturating_add(1);
+        }
+    }
+    if canonical_gaps != unsuppressed.saturating_add(suppressed) {
+        bail!(
+            "ripr badge/detail mismatch: canonical gaps={canonical_gaps}, unsuppressed+suppressed={}",
+            unsuppressed.saturating_add(suppressed)
+        );
+    }
+    Ok(LocalRiprSummary {
+        unsuppressed,
+        suppressed,
+        findings: findings.len(),
+    })
+}
+
+fn bounded_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let (bounded, _) = clip_text(
+        text.into_owned(),
+        LOCAL_RIPR_CONSOLE_HEAD_BYTES,
+        LOCAL_RIPR_CONSOLE_TAIL_BYTES,
+        "local ripr capture",
+    );
+    bounded.trim().to_owned()
+}
+
+fn clip_text(text: String, head_bytes: usize, tail_bytes: usize, label: &str) -> (String, bool) {
+    let budget = head_bytes.saturating_add(tail_bytes);
+    if text.len() <= budget {
+        return (text, false);
+    }
+    let mut head_end = head_bytes;
+    while !text.is_char_boundary(head_end) {
+        head_end = head_end.saturating_sub(1);
+    }
+    let mut tail_start = text.len().saturating_sub(tail_bytes);
+    while !text.is_char_boundary(tail_start) {
+        tail_start = tail_start.saturating_add(1);
+    }
+    let elided = tail_start.saturating_sub(head_end);
+    (
+        format!(
+            "{}\n[... {elided} bytes truncated by {label} budget ...]\n{}",
+            &text[..head_end],
+            &text[tail_start..]
+        ),
+        true,
+    )
+}
+
+fn is_rust_input(path: &str) -> bool {
+    path.ends_with(".rs") || path.ends_with("Cargo.toml") || path.ends_with("Cargo.lock")
+}
+
+fn git_lines(root: &Path, args: &[&str]) -> Result<Vec<String>> {
+    let output = git_bytes(root, args)?;
+    Ok(String::from_utf8_lossy(&output)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_owned)
+        .collect())
+}
+
+fn git_bytes(root: &Path, args: &[&str]) -> Result<Vec<u8>> {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(root)
+        .output()
+        .with_context(|| format!("run git {}", args.join(" ")))?;
+    if !output.status.success() {
+        bail!(
+            "git {} failed: {}",
+            args.join(" "),
+            bounded_text(&output.stderr)
+        );
+    }
+    Ok(output.stdout)
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -1016,27 +1424,11 @@ const CAPTURE_HEAD_BYTES: usize = 64 * 1024;
 const CAPTURE_TAIL_BYTES: usize = 16 * 1024;
 
 fn clip_capture(text: String) -> (String, bool) {
-    let budget = CAPTURE_HEAD_BYTES + CAPTURE_TAIL_BYTES;
-    if text.len() <= budget {
-        return (text, false);
-    }
-    let mut head_end = CAPTURE_HEAD_BYTES;
-    while !text.is_char_boundary(head_end) {
-        head_end -= 1;
-    }
-    let mut tail_start = text.len() - CAPTURE_TAIL_BYTES;
-    while !text.is_char_boundary(tail_start) {
-        tail_start += 1;
-    }
-    let elided = tail_start - head_end;
-    let marker = format!(
-        "
-[... {elided} bytes truncated by the precommit capture budget ...]
-"
-    );
-    (
-        format!("{}{marker}{}", &text[..head_end], &text[tail_start..]),
-        true,
+    clip_text(
+        text,
+        CAPTURE_HEAD_BYTES,
+        CAPTURE_TAIL_BYTES,
+        "the precommit capture",
     )
 }
 
@@ -1259,7 +1651,489 @@ fn path_to_slash_string(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
+    use std::io;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn git_test(root: &Path, args: &[&str]) -> Result<()> {
+        let output = Command::new("git").args(args).current_dir(root).output()?;
+        if !output.status.success() {
+            bail!(
+                "test git {} failed: {}",
+                args.join(" "),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        Ok(())
+    }
+
+    fn initialized_test_repo(name: &str) -> Result<PathBuf> {
+        let root = temp_repo_root(name)?;
+        git_test(&root, &["init"])?;
+        git_test(&root, &["config", "user.email", "xtask@example.invalid"])?;
+        git_test(&root, &["config", "user.name", "xtask test"])?;
+        fs::create_dir_all(root.join("src"))?;
+        fs::write(root.join("src/lib.rs"), "pub fn value() -> u8 { 1 }\n")?;
+        fs::write(root.join("README.md"), "initial\n")?;
+        git_test(&root, &["add", "src/lib.rs", "README.md"])?;
+        git_test(&root, &["commit", "-m", "initial"])?;
+        Ok(root)
+    }
+
+    fn changed_rust_repo(name: &str) -> Result<PathBuf> {
+        let root = initialized_test_repo(name)?;
+        fs::write(root.join("src/lib.rs"), "pub fn value() -> u8 { 2 }\n")?;
+        Ok(root)
+    }
+
+    fn fake_badge(unsuppressed: u64, suppressed: u64, analyzed: u64) -> Vec<u8> {
+        serde_json::to_vec(&json!({
+            "schema_version": "0.6",
+            "kind": "ripr",
+            "scope": "diff",
+            "basis": "finding_exposure",
+            "counts": {
+                "unsuppressed_exposure_gaps": unsuppressed,
+                "suppressed_exposure_gaps": suppressed,
+                "analyzed_findings": analyzed,
+            }
+        }))
+        .unwrap_or_default()
+    }
+
+    fn fake_detail(classes: &[&str]) -> Vec<u8> {
+        let findings: Vec<JsonValue> = classes
+            .iter()
+            .enumerate()
+            .map(|(index, class)| {
+                json!({
+                    "id": format!("finding-{index}"),
+                    "classification": class,
+                    "probe": {"file": "src/lib.rs", "line": index + 1},
+                })
+            })
+            .collect();
+        serde_json::to_vec(&json!({
+            "schema_version": "0.2",
+            "tool": "ripr",
+            "mode": "ready",
+            "summary": {"findings": findings.len()},
+            "findings": findings,
+        }))
+        .unwrap_or_default()
+    }
+
+    #[test]
+    fn local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs() -> Result<()> {
+        let root = changed_rust_repo("ripr fake output with spaces")?;
+        let out_dir = root.join("target/xtask/ripr");
+        let calls = RefCell::new(Vec::<Vec<String>>::new());
+        let badge = fake_badge(0, 0, 1);
+        let detail = fake_detail(&["exposed"]);
+        let human = b"ripr: no exposure gaps\n".to_vec();
+
+        run_local_ripr_with(
+            &root,
+            RiprOptions {
+                base: "HEAD".to_owned(),
+            },
+            |program, args, _| {
+                let mut command = vec![program.to_owned()];
+                command.extend(args.iter().cloned());
+                calls.borrow_mut().push(command);
+                let stdout = if args == ["--version"] {
+                    b"ripr 0.10.0\n".to_vec()
+                } else if args.last().map(String::as_str) == Some("badge-json") {
+                    badge.clone()
+                } else if args.last().map(String::as_str) == Some("human") {
+                    human.clone()
+                } else {
+                    detail.clone()
+                };
+                Ok(RiprInvocation {
+                    success: true,
+                    stdout,
+                    stderr: Vec::new(),
+                })
+            },
+        )?;
+
+        let calls = calls.into_inner();
+        assert_eq!(calls.len(), 4);
+        assert_eq!(calls[0], ["ripr", "--version"]);
+        for (call, format) in calls[1..].iter().zip(["badge-json", "json", "human"]) {
+            assert_eq!(call[0], "ripr");
+            assert_eq!(call[1], "check");
+            assert_eq!(call[2], "--root");
+            assert_eq!(call[3], root.display().to_string());
+            assert_eq!(call[4], "--diff");
+            assert_eq!(call[5], out_dir.join("diff.patch").display().to_string());
+            assert_eq!(&call[6..], ["--mode", "ready", "--format", format]);
+        }
+        assert_eq!(fs::read(out_dir.join("gate-decision.json"))?, badge);
+        assert_eq!(fs::read(out_dir.join("exposure-gaps.json"))?, detail);
+        assert_eq!(fs::read(out_dir.join("feedback.txt"))?, human);
+        assert_eq!(
+            fs::read(out_dir.join("diff.patch"))?,
+            git_bytes(&root, &["diff", "--binary", "--no-ext-diff", "HEAD", "--"])?
+        );
+        let receipt: JsonValue = serde_json::from_slice(&fs::read(out_dir.join("receipt.json"))?)?;
+        assert_eq!(receipt["status"], "completed");
+        assert_eq!(receipt["advisory"], false);
+        assert_eq!(receipt["unsuppressed_exposure_gaps"], 0);
+        fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn local_ripr_missing_tool_is_loud_and_clears_stale_artifacts() -> Result<()> {
+        let root = changed_rust_repo("ripr-missing")?;
+        let out_dir = root.join("target/xtask/ripr");
+        fs::create_dir_all(&out_dir)?;
+        for name in [
+            "gate-decision.json",
+            "exposure-gaps.json",
+            "feedback.txt",
+            "receipt.json",
+        ] {
+            fs::write(out_dir.join(name), "stale")?;
+        }
+        let result = run_local_ripr_with(
+            &root,
+            RiprOptions {
+                base: "HEAD".to_owned(),
+            },
+            |_, _, _| Err(io::Error::new(io::ErrorKind::NotFound, "missing fake ripr")),
+        );
+        let error = match result {
+            Ok(()) => bail!("missing ripr unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        let message = format!("{error:#}");
+        assert!(message.contains("could not invoke ripr"), "{message}");
+        assert!(message.contains("--version 0.10.0 --force"), "{message}");
+        assert!(!out_dir.join("gate-decision.json").exists());
+        assert!(!out_dir.join("exposure-gaps.json").exists());
+        assert!(!out_dir.join("feedback.txt").exists());
+        assert!(!out_dir.join("receipt.json").exists());
+        fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn local_ripr_options_and_rust_input_contract_are_explicit() -> Result<()> {
+        let parsed =
+            RiprOptions::parse(["--base", "upstream/main"].into_iter().map(str::to_owned))?;
+        assert_eq!(parsed.base, "upstream/main");
+        assert!(is_rust_input("src/lib.rs"));
+        assert!(is_rust_input("crates/x/Cargo.toml"));
+        assert!(is_rust_input("Cargo.lock"));
+        assert!(!is_rust_input("docs/ci/ripr.md"));
+        let root = changed_rust_repo("ripr-out-dir-sentinel")?;
+        let sentinel = root.join("sentinel.txt");
+        fs::write(&sentinel, "preserve me")?;
+        assert!(RiprOptions::parse(["--out-dir", "."].into_iter().map(str::to_owned)).is_err());
+        run_local_ripr_with(
+            &root,
+            RiprOptions {
+                base: "HEAD".to_owned(),
+            },
+            |_, args, _| {
+                let stdout = if args == ["--version"] {
+                    b"ripr 0.10.0\n".to_vec()
+                } else if args.last().map(String::as_str) == Some("badge-json") {
+                    fake_badge(0, 0, 1)
+                } else if args.last().map(String::as_str) == Some("json") {
+                    fake_detail(&["exposed"])
+                } else {
+                    b"no gaps\n".to_vec()
+                };
+                Ok(RiprInvocation {
+                    success: true,
+                    stdout,
+                    stderr: Vec::new(),
+                })
+            },
+        )?;
+        assert_eq!(fs::read_to_string(&sentinel)?, "preserve me");
+        let out_dir = root.join("target/xtask/ripr");
+        for artifact in [
+            "diff.patch",
+            "gate-decision.json",
+            "exposure-gaps.json",
+            "feedback.txt",
+            "receipt.json",
+        ] {
+            assert!(out_dir.join(artifact).is_file(), "missing {artifact}");
+            assert!(!root.join(artifact).exists(), "escaped output {artifact}");
+        }
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn local_ripr_clean_and_non_rust_diffs_are_explicit_skips() -> Result<()> {
+        let root = initialized_test_repo("ripr-skips")?;
+        for (suffix, expected_reason) in
+            [("clean", "clean diff"), ("docs", "no Rust inputs changed")]
+        {
+            if suffix == "docs" {
+                fs::write(root.join("README.md"), "documentation only\n")?;
+            }
+            let out_dir = root.join("target/xtask/ripr");
+            run_local_ripr_with(
+                &root,
+                RiprOptions {
+                    base: "HEAD".to_owned(),
+                },
+                |_, _, _| Err(io::Error::other("ripr must not run for skipped input")),
+            )?;
+            let receipt: JsonValue =
+                serde_json::from_slice(&fs::read(out_dir.join("receipt.json"))?)?;
+            assert_eq!(receipt["status"], "skipped");
+            assert_eq!(receipt["reason"], expected_reason);
+        }
+        fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails() -> Result<()> {
+        let root = changed_rust_repo("ripr-nonzero")?;
+        let out_dir = root.join("target/xtask/ripr");
+        let result = run_local_ripr_with(
+            &root,
+            RiprOptions {
+                base: "HEAD".to_owned(),
+            },
+            |_, args, _| {
+                if args == ["--version"] {
+                    Ok(RiprInvocation {
+                        success: true,
+                        stdout: b"ripr 0.10.0\n".to_vec(),
+                        stderr: Vec::new(),
+                    })
+                } else {
+                    Ok(RiprInvocation {
+                        success: false,
+                        stdout: b"partial badge output".to_vec(),
+                        stderr: b"forced fake failure".to_vec(),
+                    })
+                }
+            },
+        );
+        let error = match result {
+            Ok(()) => bail!("nonzero ripr unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert!(format!("{error:#}").contains("forced fake failure"));
+        assert_eq!(
+            fs::read(out_dir.join("gate-decision.json"))?,
+            b"partial badge output"
+        );
+        assert!(!out_dir.join("receipt.json").exists());
+        fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn local_ripr_rejects_untracked_rust_and_missing_merge_base() -> Result<()> {
+        let root = initialized_test_repo("ripr-input-errors")?;
+        fs::write(root.join("untracked.rs"), "fn untracked() {}\n")?;
+        let untracked = run_local_ripr_with(
+            &root,
+            RiprOptions {
+                base: "HEAD".to_owned(),
+            },
+            |_, _, _| Err(io::Error::other("tool must not run")),
+        );
+        let untracked_error = match untracked {
+            Ok(()) => bail!("untracked Rust unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert!(format!("{untracked_error:#}").contains("untracked.rs"));
+        fs::remove_file(root.join("untracked.rs"))?;
+
+        let missing_base = run_local_ripr_with(
+            &root,
+            RiprOptions {
+                base: "missing/base".to_owned(),
+            },
+            |_, _, _| Err(io::Error::other("tool must not run")),
+        );
+        let base_error = match missing_base {
+            Ok(()) => bail!("missing merge base unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        let message = format!("{base_error:#}");
+        assert!(message.contains("resolve local ripr base `missing/base`"));
+        assert!(message.contains("merge-base missing/base HEAD"));
+        assert!(message.contains("deepen a shallow clone"));
+        fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn local_ripr_no_common_ancestor_has_actionable_shallow_clone_error() -> Result<()> {
+        let root = initialized_test_repo("ripr-shallow-history")?;
+        git_test(&root, &["branch", "base-root", "HEAD"])?;
+        git_test(&root, &["checkout", "--orphan", "shallow-head"])?;
+        git_test(&root, &["add", "src/lib.rs", "README.md"])?;
+        git_test(&root, &["commit", "-m", "unrelated shallow head"])?;
+        fs::write(root.join("src/lib.rs"), "pub fn value() -> u8 { 3 }\n")?;
+        let result = run_local_ripr_with(
+            &root,
+            RiprOptions {
+                base: "base-root".to_owned(),
+            },
+            |_, _, _| Err(io::Error::other("tool must not run")),
+        );
+        let error = match result {
+            Ok(()) => bail!("unrelated histories unexpectedly found a merge base"),
+            Err(error) => error,
+        };
+        let message = format!("{error:#}");
+        assert!(message.contains("deepen a shallow clone"), "{message}");
+        assert!(message.contains("merge-base base-root HEAD"), "{message}");
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn local_ripr_wrong_version_and_malformed_badge_fail_closed() -> Result<()> {
+        for (name, version, badge, expected) in [
+            (
+                "wrong-version",
+                "ripr 0.9.0\n",
+                "{}",
+                "ripr version mismatch: expected 0.10.0",
+            ),
+            (
+                "malformed-badge",
+                "ripr 0.10.0\n",
+                "{}",
+                "badge-json envelope is incompatible",
+            ),
+        ] {
+            let root = changed_rust_repo(name)?;
+            let result = run_local_ripr_with(
+                &root,
+                RiprOptions {
+                    base: "HEAD".to_owned(),
+                },
+                |_, args, _| {
+                    Ok(RiprInvocation {
+                        success: true,
+                        stdout: if args == ["--version"] {
+                            version.as_bytes().to_vec()
+                        } else {
+                            badge.as_bytes().to_vec()
+                        },
+                        stderr: Vec::new(),
+                    })
+                },
+            );
+            let error = match result {
+                Ok(()) => bail!("{name} unexpectedly succeeded"),
+                Err(error) => error,
+            };
+            assert!(format!("{error:#}").contains(expected));
+            fs::remove_dir_all(&root)?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn local_ripr_console_capture_is_bounded_and_keeps_head_and_tail() {
+        let input = format!(
+            "HEAD{}TAIL",
+            "x".repeat(LOCAL_RIPR_CONSOLE_HEAD_BYTES + LOCAL_RIPR_CONSOLE_TAIL_BYTES)
+        );
+        let (output, truncated) = clip_text(
+            input,
+            LOCAL_RIPR_CONSOLE_HEAD_BYTES,
+            LOCAL_RIPR_CONSOLE_TAIL_BYTES,
+            "local ripr console",
+        );
+        assert!(truncated);
+        assert!(output.starts_with("HEAD"));
+        assert!(output.ends_with("TAIL"));
+        assert!(output.contains("truncated by local ripr console budget"));
+        assert!(output.len() < LOCAL_RIPR_CONSOLE_HEAD_BYTES + LOCAL_RIPR_CONSOLE_TAIL_BYTES + 200);
+    }
+
+    #[test]
+    fn local_ripr_schema_reconciles_suppressed_and_exposed_findings() -> Result<()> {
+        let badge = serde_json::from_slice(&fake_badge(1, 1, 3))?;
+        let detail = serde_json::from_slice(&fake_detail(&[
+            "exposed",
+            "weakly_exposed",
+            "no_static_path",
+        ]))?;
+        assert_eq!(
+            validate_local_ripr_outputs(&badge, &detail)?,
+            LocalRiprSummary {
+                unsuppressed: 1,
+                suppressed: 1,
+                findings: 3,
+            }
+        );
+
+        let mismatched = serde_json::from_slice(&fake_badge(0, 1, 3))?;
+        let error = match validate_local_ripr_outputs(&mismatched, &detail) {
+            Ok(_) => bail!("badge/detail mismatch unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert!(format!("{error:#}").contains("canonical gaps=2"));
+
+        let malformed = json!({
+            "schema_version": "0.2",
+            "tool": "ripr",
+            "mode": "ready",
+            "findings": [{"id": "missing-probe", "classification": "exposed"}],
+        });
+        let malformed_badge = serde_json::from_slice(&fake_badge(0, 0, 1))?;
+        let error = match validate_local_ripr_outputs(&malformed_badge, &malformed) {
+            Ok(_) => bail!("malformed finding unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert!(format!("{error:#}").contains("omitted probe object"));
+        Ok(())
+    }
+
+    #[test]
+    fn local_ripr_unsuppressed_count_is_advisory_not_a_local_threshold() -> Result<()> {
+        let root = changed_rust_repo("ripr-advisory")?;
+        run_local_ripr_with(
+            &root,
+            RiprOptions {
+                base: "HEAD".to_owned(),
+            },
+            |_, args, _| {
+                let stdout = if args == ["--version"] {
+                    b"ripr 0.10.0\n".to_vec()
+                } else if args.last().map(String::as_str) == Some("badge-json") {
+                    fake_badge(1, 0, 1)
+                } else if args.last().map(String::as_str) == Some("json") {
+                    fake_detail(&["weakly_exposed"])
+                } else {
+                    b"one actionable gap\n".to_vec()
+                };
+                Ok(RiprInvocation {
+                    success: true,
+                    stdout,
+                    stderr: Vec::new(),
+                })
+            },
+        )?;
+        let receipt: JsonValue =
+            serde_json::from_slice(&fs::read(root.join("target/xtask/ripr/receipt.json"))?)?;
+        assert_eq!(receipt["status"], "completed");
+        assert_eq!(receipt["advisory"], true);
+        assert_eq!(receipt["unsuppressed_exposure_gaps"], 1);
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
 
     #[test]
     fn missing_tool_receipt_is_never_success_and_carries_install_hint() {

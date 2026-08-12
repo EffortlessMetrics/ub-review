@@ -20735,3 +20735,315 @@ kind = "exposure_gap"
 finding_id = "probe:src_model_exec.rs:return_value:c1fe198e"
 owner = "ub-review/core"
 reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on failed reporter call accounting. turn_one_persistence_failure_composes_to_exact_inconclusive_gate forces the real redistillation write error at the call-budget boundary and asserts the consumed count plus exact inconclusive production gate outcome. Re-verify after edits to reporter call accounting."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:dfe67e51"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on the #856 command and option contract. local_ripr_options_and_rust_input_contract_are_explicit pins both supported arguments and Rust-input detection; the real cargo xtask ripr proof exercises command routing. Re-verify after command or option edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:8bda9fa7"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on the #856 command and option contract. local_ripr_options_and_rust_input_contract_are_explicit pins both supported arguments and Rust-input detection; the real cargo xtask ripr proof exercises command routing. Re-verify after command or option edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:ba530e86"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on the #856 command and option contract. local_ripr_options_and_rust_input_contract_are_explicit pins both supported arguments and Rust-input detection; the real cargo xtask ripr proof exercises command routing. Re-verify after command or option edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:5af5c18c"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on the #856 command and option contract. local_ripr_options_and_rust_input_contract_are_explicit pins both supported arguments and Rust-input detection; the real cargo xtask ripr proof exercises command routing. Re-verify after command or option edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:7ab7a0a0"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on the #856 command and option contract. local_ripr_options_and_rust_input_contract_are_explicit pins both supported arguments and Rust-input detection; the real cargo xtask ripr proof exercises command routing. Re-verify after command or option edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:cf3c1bed"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on the #856 command and option contract. local_ripr_options_and_rust_input_contract_are_explicit pins both supported arguments and Rust-input detection; the real cargo xtask ripr proof exercises command routing. Re-verify after command or option edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:95ecfe98"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on process invocation. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins exact argv/cwd/output, while local_ripr_missing_tool_is_loud_and_clears_stale_artifacts and local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails pin failure behavior. Re-verify after invocation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:623cb482"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on process invocation. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins exact argv/cwd/output, while local_ripr_missing_tool_is_loud_and_clears_stale_artifacts and local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails pin failure behavior. Re-verify after invocation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:15721a81"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on process invocation. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins exact argv/cwd/output, while local_ripr_missing_tool_is_loud_and_clears_stale_artifacts and local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails pin failure behavior. Re-verify after invocation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:7f0a4318"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on process invocation. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins exact argv/cwd/output, while local_ripr_missing_tool_is_loud_and_clears_stale_artifacts and local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails pin failure behavior. Re-verify after invocation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:59726765"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on process invocation. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins exact argv/cwd/output, while local_ripr_missing_tool_is_loud_and_clears_stale_artifacts and local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails pin failure behavior. Re-verify after invocation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:517904de"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on process invocation. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins exact argv/cwd/output, while local_ripr_missing_tool_is_loud_and_clears_stale_artifacts and local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails pin failure behavior. Re-verify after invocation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:c982bbdc"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:18a4e67a"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:08ef97cf"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:54474ae6"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:933e3b78"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:933e3b78.2"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:d9b5312b"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:25b9c021"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:168bfa08"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:3a42cad2"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:933e3b78.3"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:933e3b78.4"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:d9b5312b.2"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on raw output and advisory receipt composition. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins raw artifacts and completed receipt; local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails and local_ripr_wrong_version_and_malformed_badge_fail_closed pin tool and schema failures. Re-verify after receipt edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:35375289"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on raw output and advisory receipt composition. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins raw artifacts and completed receipt; local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails and local_ripr_wrong_version_and_malformed_badge_fail_closed pin tool and schema failures. Re-verify after receipt edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:cd462f99"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on raw output and advisory receipt composition. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins raw artifacts and completed receipt; local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails and local_ripr_wrong_version_and_malformed_badge_fail_closed pin tool and schema failures. Re-verify after receipt edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:0350485b"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on raw output and advisory receipt composition. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins raw artifacts and completed receipt; local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails and local_ripr_wrong_version_and_malformed_badge_fail_closed pin tool and schema failures. Re-verify after receipt edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:288c330c"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on raw output and advisory receipt composition. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins raw artifacts and completed receipt; local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails and local_ripr_wrong_version_and_malformed_badge_fail_closed pin tool and schema failures. Re-verify after receipt edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:aaa7683c"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on git output/error plumbing and test fixture setup. local_ripr_clean_and_non_rust_diffs_are_explicit_skips and local_ripr_rejects_untracked_rust_and_missing_merge_base execute successful and failed git paths with exact outcome assertions. Re-verify after git adapter edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:3b95163f"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on git output/error plumbing and test fixture setup. local_ripr_clean_and_non_rust_diffs_are_explicit_skips and local_ripr_rejects_untracked_rust_and_missing_merge_base execute successful and failed git paths with exact outcome assertions. Re-verify after git adapter edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:abbf2079"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on git output/error plumbing and test fixture setup. local_ripr_clean_and_non_rust_diffs_are_explicit_skips and local_ripr_rejects_untracked_rust_and_missing_merge_base execute successful and failed git paths with exact outcome assertions. Re-verify after git adapter edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:929093c6"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on git output/error plumbing and test fixture setup. local_ripr_clean_and_non_rust_diffs_are_explicit_skips and local_ripr_rejects_untracked_rust_and_missing_merge_base execute successful and failed git paths with exact outcome assertions. Re-verify after git adapter edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:bba4fc9a"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on git output/error plumbing and test fixture setup. local_ripr_clean_and_non_rust_diffs_are_explicit_skips and local_ripr_rejects_untracked_rust_and_missing_merge_base execute successful and failed git paths with exact outcome assertions. Re-verify after git adapter edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:31f99458"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on git output/error plumbing and test fixture setup. local_ripr_clean_and_non_rust_diffs_are_explicit_skips and local_ripr_rejects_untracked_rust_and_missing_merge_base execute successful and failed git paths with exact outcome assertions. Re-verify after git adapter edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:e200cc24"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on git output/error plumbing and test fixture setup. local_ripr_clean_and_non_rust_diffs_are_explicit_skips and local_ripr_rejects_untracked_rust_and_missing_merge_base execute successful and failed git paths with exact outcome assertions. Re-verify after git adapter edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:d26022d3"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on git output/error plumbing and test fixture setup. local_ripr_clean_and_non_rust_diffs_are_explicit_skips and local_ripr_rejects_untracked_rust_and_missing_merge_base execute successful and failed git paths with exact outcome assertions. Re-verify after git adapter edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:7145b440"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on bounded human feedback. local_ripr_console_capture_is_bounded_and_keeps_head_and_tail pins the exact head/tail retention, truncation marker, and size ceiling; full raw feedback remains preserved separately. Re-verify after console capture edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:855c511f"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on bounded human feedback. local_ripr_console_capture_is_bounded_and_keeps_head_and_tail pins the exact head/tail retention, truncation marker, and size ceiling; full raw feedback remains preserved separately. Re-verify after console capture edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:3a42cad2.2"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:predicate:1630343e"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:26524194"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:26524194.2"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:dab8493f"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:6fecda7e"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on advisory results and safe owned output. local_ripr_unsuppressed_count_is_advisory_not_a_local_threshold, local_ripr_options_and_rust_input_contract_are_explicit, and local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pin the contract. Re-verify after local result or output ownership edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:29480275"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on shared bounded capture composition. clip_capture_bounds_streams_with_head_tail_and_marker pins precommit head/tail/marker behavior, and local_ripr_console_capture_is_bounded_and_keeps_head_and_tail pins the RIPR-specific budget and marker. Re-verify after capture composition edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:15984a47"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on shared bounded capture composition. clip_capture_bounds_streams_with_head_tail_and_marker pins precommit head/tail/marker behavior, and local_ripr_console_capture_is_bounded_and_keeps_head_and_tail pins the RIPR-specific budget and marker. Re-verify after capture composition edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:9785824e"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on advisory results and safe owned output. local_ripr_unsuppressed_count_is_advisory_not_a_local_threshold, local_ripr_options_and_rust_input_contract_are_explicit, and local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pin the contract. Re-verify after local result or output ownership edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:d0c8bfbd"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on advisory results and safe owned output. local_ripr_unsuppressed_count_is_advisory_not_a_local_threshold, local_ripr_options_and_rust_input_contract_are_explicit, and local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pin the contract. Re-verify after local result or output ownership edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:baff766d"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on advisory results and safe owned output. local_ripr_unsuppressed_count_is_advisory_not_a_local_threshold, local_ripr_options_and_rust_input_contract_are_explicit, and local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pin the contract. Re-verify after local result or output ownership edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:953f140d"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on advisory results and safe owned output. local_ripr_unsuppressed_count_is_advisory_not_a_local_threshold, local_ripr_options_and_rust_input_contract_are_explicit, and local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pin the contract. Re-verify after local result or output ownership edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:8cdfb495"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on advisory results and safe owned output. local_ripr_unsuppressed_count_is_advisory_not_a_local_threshold, local_ripr_options_and_rust_input_contract_are_explicit, and local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pin the contract. Re-verify after local result or output ownership edits."
