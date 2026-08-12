@@ -1746,6 +1746,55 @@ phase = "sometime"
         Ok(())
     }
 
+    /// The rendered starter config must survive its own policy validator.
+    /// `init` starts from `Config::default()`, whose unset string fields would
+    /// otherwise serialize as `key = ""` and fail validation. The starter
+    /// renderer must omit those fields and the internal Bun dogfood defaults.
+    /// Their internal serialization remains unchanged for effective-config
+    /// receipts and profile hashes. The former output made a first-run path
+    /// (`init` then `run`) fail the gate on policy errors the user never
+    /// wrote, with nothing on stdout to explain it.
+    #[test]
+    fn rendered_default_config_has_no_policy_errors() -> anyhow::Result<()> {
+        let config = crate::init::starter_config("gh-runner");
+        let rendered = crate::init::render_starter_config(&config)?;
+        anyhow::ensure!(
+            !rendered.contains("policy = \"\""),
+            "starter config emits an empty [providers].policy: {rendered}"
+        );
+        anyhow::ensure!(
+            !rendered.contains("mode = \"\""),
+            "starter config emits an empty [impact].mode: {rendered}"
+        );
+        let reloaded = Config::from_toml_with_policy_receipts(&rendered)?;
+        anyhow::ensure!(
+            reloaded.policy_errors.is_empty(),
+            "rendered default config failed its own validator: {:?}",
+            reloaded.policy_errors
+        );
+        anyhow::ensure!(
+            reloaded.repo.kind.is_empty(),
+            "starter config retained repository kind {:?}",
+            reloaded.repo.kind
+        );
+        anyhow::ensure!(
+            reloaded.repo.ledger.is_empty(),
+            "starter config retained repository ledger {:?}",
+            reloaded.repo.ledger
+        );
+        anyhow::ensure!(
+            reloaded.providers.policy.is_empty(),
+            "starter config retained provider policy {:?}",
+            reloaded.providers.policy
+        );
+        anyhow::ensure!(
+            reloaded.impact.mode.is_empty(),
+            "starter config retained impact mode {:?}",
+            reloaded.impact.mode
+        );
+        Ok(())
+    }
+
     #[test]
     fn impact_section_receipts_malformed_values_and_unknown_keys() -> anyhow::Result<()> {
         let malformed =

@@ -62,22 +62,43 @@ pub(crate) fn cmd_init(args: InitArgs) -> Result<()> {
             );
         }
     }
-    let config = Config {
-        profile: args.profile.key().to_owned(),
-        ..Config::default()
-    };
+    let config = starter_config(args.profile.key());
     let guide = if args.no_guide {
         None
     } else {
         Some(render_init_guide(&args, &config)?)
     };
-    fs::write(&args.path, toml::to_string_pretty(&config)?)?;
+    fs::write(&args.path, render_starter_config(&config)?)?;
     println!("wrote {}", args.path.display());
     if let Some(guide) = guide {
         fs::write(&args.guide_out, guide)?;
         println!("wrote {}", args.guide_out.display());
     }
     Ok(())
+}
+
+pub(crate) fn starter_config(profile: &str) -> Config {
+    let mut config = Config {
+        profile: profile.to_owned(),
+        ..Config::default()
+    };
+    config.repo.kind.clear();
+    config.repo.ledger.clear();
+    config
+}
+
+pub(crate) fn render_starter_config(config: &Config) -> Result<String> {
+    let mut value = toml::Value::try_from(config)?;
+    for (section, field) in [("providers", "policy"), ("impact", "mode")] {
+        let table = value
+            .get_mut(section)
+            .and_then(toml::Value::as_table_mut)
+            .with_context(|| format!("starter config is missing [{section}]"))?;
+        if table.get(field).and_then(toml::Value::as_str) == Some("") {
+            table.remove(field);
+        }
+    }
+    toml::to_string_pretty(&value).context("serialize starter config")
 }
 
 pub(crate) fn init_destination_key(path: &Path) -> Result<PathBuf> {

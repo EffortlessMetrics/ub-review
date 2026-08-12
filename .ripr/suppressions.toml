@@ -21365,3 +21365,52 @@ kind = "exposure_gap"
 finding_id = "probe:src_tests.rs:return_value:9b215a8d"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized pre-delivery payload values across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:03e3ac6f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode residual process/dispatch shape in the bounded smoke-base selector. smoke_base_rejects_shallow_and_empty_history_with_actionable_errors discriminates missing and unexpected arguments, unavailable parent history, an empty diff, and a valid resolved SHA; smoke_base_cli_prints_one_usable_resolved_revision pins one-line usable stdout; smoke_script_locks_every_cargo_invocation pins locked Cargo commands. This receipt does not claim uninduced OS process failures are executed. Re-verify after smoke-base parsing, process, or Git validation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:fa0c7c7a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode residual process/dispatch shape in the bounded smoke-base selector. smoke_base_rejects_shallow_and_empty_history_with_actionable_errors discriminates missing and unexpected arguments, unavailable parent history, an empty diff, and a valid resolved SHA; smoke_base_cli_prints_one_usable_resolved_revision pins one-line usable stdout; smoke_script_locks_every_cargo_invocation pins locked Cargo commands. This receipt does not claim uninduced OS process failures are executed. Re-verify after smoke-base parsing, process, or Git validation changes."
+
+
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_tests_smoke_base_cli.rs:return_value:8a5fd38a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the test-only smoke-base CLI fixture helper. smoke_base_cli_prints_one_usable_resolved_revision forces the helper error path exactly, then proves the real xtask subprocess emits one 40-byte revision line usable as a non-empty Git diff base. Re-verify after the CLI fixture changes."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:predicate:048c8270"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode residual process/dispatch shape in the bounded smoke-base selector. smoke_base_rejects_shallow_and_empty_history_with_actionable_errors discriminates missing and unexpected arguments, unavailable parent history, an empty diff, and a valid resolved SHA; smoke_base_cli_prints_one_usable_resolved_revision pins one-line usable stdout; smoke_script_locks_every_cargo_invocation pins locked Cargo commands. This receipt does not claim uninduced OS process failures are executed. Re-verify after smoke-base parsing, process, or Git validation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:predicate:51cd74e8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode residual process/dispatch shape in the bounded smoke-base selector. smoke_base_rejects_shallow_and_empty_history_with_actionable_errors discriminates missing and unexpected arguments, unavailable parent history, an empty diff, and a valid resolved SHA; smoke_base_cli_prints_one_usable_resolved_revision pins one-line usable stdout; smoke_script_locks_every_cargo_invocation pins locked Cargo commands. This receipt does not claim uninduced OS process failures are executed. Re-verify after smoke-base parsing, process, or Git validation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:fa0c7c7a.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode residual process/dispatch shape in the bounded smoke-base selector. smoke_base_rejects_shallow_and_empty_history_with_actionable_errors discriminates missing and unexpected arguments, unavailable parent history, an empty diff, and a valid resolved SHA; smoke_base_cli_prints_one_usable_resolved_revision pins one-line usable stdout; smoke_script_locks_every_cargo_invocation pins locked Cargo commands. This receipt does not claim uninduced OS process failures are executed. Re-verify after smoke-base parsing, process, or Git validation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:predicate:ed18437a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode residual process/dispatch shape in the bounded smoke-base selector. smoke_base_rejects_shallow_and_empty_history_with_actionable_errors discriminates missing and unexpected arguments, unavailable parent history, an empty diff, and a valid resolved SHA; smoke_base_cli_prints_one_usable_resolved_revision pins one-line usable stdout; smoke_script_locks_every_cargo_invocation pins locked Cargo commands. This receipt does not claim uninduced OS process failures are executed. Re-verify after smoke-base parsing, process, or Git validation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:fc5263cb"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode residual process/dispatch shape in the bounded smoke-base selector. smoke_base_rejects_shallow_and_empty_history_with_actionable_errors discriminates missing and unexpected arguments, unavailable parent history, an empty diff, and a valid resolved SHA; smoke_base_cli_prints_one_usable_resolved_revision pins one-line usable stdout; smoke_script_locks_every_cargo_invocation pins locked Cargo commands. This receipt does not claim uninduced OS process failures are executed. Re-verify after smoke-base parsing, process, or Git validation changes."
