@@ -417,7 +417,8 @@ pub(crate) fn run_reporter_coordination(
     event_log: &EventLog,
     message_log: &MessageLog,
     current_head: &str,
-) -> Result<usize> {
+    calls_attempted: &mut usize,
+) -> Result<()> {
     // A reusable target directory may contain reporter turns from an earlier
     // invocation at the same head. Clear only the derived reporter authority
     // before deciding whether this invocation can run, so skipped or failed
@@ -438,7 +439,7 @@ pub(crate) fn run_reporter_coordination(
             vec![],
             serde_json::json!({"topic": "reporter_skipped", "reason": reason}),
         );
-        return Ok(0);
+        return Ok(());
     }
     let spec = direct_minimax_spec(args);
     let prefix_hash = sha256_hex(shared_context.as_bytes());
@@ -448,6 +449,7 @@ pub(crate) fn run_reporter_coordination(
     let reporter_dir = review_dir.join("threads").join("reporter");
     fs::create_dir_all(&reporter_dir)?;
     fs::write(reporter_dir.join("prompt.md"), &prompt)?;
+    *calls_attempted = calls_attempted.saturating_add(1);
     let content = match call_model_prompt_content(
         root,
         &reporter_dir,
@@ -471,7 +473,7 @@ pub(crate) fn run_reporter_coordination(
                 vec![],
                 serde_json::json!({"topic": "reporter_failed", "error": format!("{e:#}")}),
             );
-            return Ok(1);
+            return Ok(());
         }
     };
     let conclusion = parse_reporter_conclusion(&content.json_payload, &cohort_id, &thread_id);
@@ -524,7 +526,7 @@ pub(crate) fn run_reporter_coordination(
     // lane's thread with turn-001: shared prefix + compact lane history +
     // reporter question. The lane revises its conclusion, which feeds back to
     // the reporter for a re-distillation (turn-001).
-    let mut calls_used = model_calls_used + 1; // +1 for the reporter call above
+    let mut calls_used = model_calls_used.saturating_add(*calls_attempted);
     let mut lane_answers: Vec<(String, String)> = Vec::new();
     let known_lane_ids: Vec<&str> = model_lanes
         .iter()
@@ -570,6 +572,7 @@ pub(crate) fn run_reporter_coordination(
             proof_receipts,
             late_sensor_evidence,
         );
+        *calls_attempted = calls_attempted.saturating_add(1);
         calls_used += 1;
         if let Ok(revised) = answer {
             lane_answers.push((target.clone(), revised));
@@ -598,7 +601,7 @@ pub(crate) fn run_reporter_coordination(
             .collect();
         let re_prompt = reporter_prompt(&updated_digests, late_sensor_evidence);
         let re_dir = review_dir.join("threads").join("reporter");
-        calls_used += 1;
+        *calls_attempted = calls_attempted.saturating_add(1);
         let lane_answer_refs: Vec<String> = lane_answers
             .iter()
             .map(|(lane, _)| format!("lane-answer:{lane}"))
@@ -647,18 +650,18 @@ pub(crate) fn run_reporter_coordination(
         );
     }
 
-    Ok(calls_used.saturating_sub(model_calls_used))
+    Ok(())
 }
 
-struct ReporterRedistillationContext<'a> {
-    review_dir: &'a Path,
-    current_head: &'a str,
-    cohort_id: &'a str,
-    thread_id: &'a str,
-    lane_answer_refs: &'a [String],
+pub(crate) struct ReporterRedistillationContext<'a> {
+    pub(crate) review_dir: &'a Path,
+    pub(crate) current_head: &'a str,
+    pub(crate) cohort_id: &'a str,
+    pub(crate) thread_id: &'a str,
+    pub(crate) lane_answer_refs: &'a [String],
 }
 
-fn run_reporter_redistillation<F>(
+pub(crate) fn run_reporter_redistillation<F>(
     context: ReporterRedistillationContext<'_>,
     call: F,
 ) -> Result<ReporterConclusion>
