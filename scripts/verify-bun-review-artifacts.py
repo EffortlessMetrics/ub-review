@@ -8156,6 +8156,8 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
         not isinstance(language, str) or not language for language in preview_skipped
     ):
         fail("gate-decision.json preview_skipped must be an array of non-empty strings")
+    if badge_status == "pass" and preview_skipped:
+        fail("gate-decision.json pass status cannot carry preview_skipped languages")
     counts = decision.get("counts")
     if not isinstance(counts, dict):
         fail("gate-decision.json is missing counts object")
@@ -9921,6 +9923,15 @@ def self_test_ripr_exposure_gap_contract() -> None:
         "preview_skipped must be an array of non-empty strings",
         lambda root=write_root(
             invalid_preview, mixed_detail
+        ): require_ripr_exposure_gap_details(root),
+    )
+    pass_with_preview = badge(0, 3, 4)
+    pass_with_preview["preview_skipped"] = ["python"]
+    expect_self_test_failure(
+        "ripr preview downgrade cannot remain pass",
+        "pass status cannot carry preview_skipped languages",
+        lambda root=write_root(
+            pass_with_preview, mixed_detail
         ): require_ripr_exposure_gap_details(root),
     )
     expect_self_test_failure(
