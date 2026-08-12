@@ -583,11 +583,16 @@ Honest current-state limits a consumer must know:
   `sensors/<tool>/gate-decision.json`, which the ripr sensor produces in
   production since #335 (#316 closed): verbatim badge-json stdout, threshold
   on `counts.unsuppressed_exposure_gaps`, two real blocks (PR #342, #346).
-  Per-finding detail ships next to it in `sensors/ripr/exposure-gaps.json`
-  (verifier-reconciled against the badge counts; #347 closed). Each entry
-  carries the finding id, path/range, exposure-gap class, suppression state,
-  threshold contribution, and an artifact pointer so a red ripr gate is
-  diagnosable from receipts without a local rerun.
+  Bounded per-finding detail ships next to it in
+  `sensors/ripr/exposure-gaps.json` (#347, #873). Schema
+  `ripr_exposure_gaps.v2` declares `raw_pre_policy`; entries carry stable raw
+  finding IDs, path/range, exposure-gap class, summaries, and artifact
+  pointers, but never infer suppression state or threshold contribution that
+  RIPR 0.10.0 detail does not expose. The verifier checks the pinned source
+  envelopes, unique retained IDs, the uncapped raw finding total against badge
+  `analyzed_findings`, and the uncapped canonical-gap total against badge
+  suppressed plus unsuppressed counts. The capped entry list is diagnostic,
+  not a claim that the aggregate-only badge can be joined per finding.
 - Proof receipt and resource lease edge statuses are stable in shape but rare
   in production. Lease `absent` is verifier-covered as a skipped proof edge,
   `base_patch_failed` routes as missing evidence, and manual-cost/shell-token
@@ -684,7 +689,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/suggested_issues.md | experimental | none (rendered issue drafts) | humans (PR body links here since #346) | required (require_issue_capture_artifacts, existence) |
 | review/issue_broker_plan.json + issue_broker_plan.ndjson (root twin) | experimental | issue_broker_plan.v1 records | the broker (run decides and renders; post reads the plan) | conditional (require_issue_broker_artifacts; written only when [issues] mode=open-high-confidence, #348) |
 | review/issue_broker_results.json + issue_broker_results.ndjson (root twin) | experimental | issue_broker_result.v1 records | humans; downstream automation (the broker's receipts) | conditional (require_issue_broker_artifacts; post-side, checked when present; results without a plan fail) |
-| sensors/ripr/exposure-gaps.json | experimental | ripr_exposure_gaps.v1 | humans; downstream automation (tool-gate red diagnosis) | conditional (require_ripr_exposure_gap_details; required whenever gate-decision.json exists, ok totals reconciled against badge counts, detail_unavailable needs an error) |
+| sensors/ripr/exposure-gaps.json | experimental | ripr_exposure_gaps.v2 (`raw_pre_policy`) | humans; downstream automation (tool-gate red diagnosis) | conditional (require_ripr_exposure_gap_details; required whenever gate-decision.json exists; pinned badge/detail envelopes, uncapped raw totals, capped entries, unique IDs, and absence of inferred policy fields verified; detail_unavailable is explicit and fails verification) |
 | sensors/coverage/status.json (+ coverage-summary.json, changed-lines.json, upload.json, lcov.info) | experimental | coverage_status.v1, coverage_summary.v1 | gate-check (coverage tool gate); downstream automation | conditional (require_coverage_status_artifact; runs when tool-status carries the coverage tool) |
 | ci-audit/inventory.json, history.json, costs.json, correlation.json, recommendations.json | experimental | ci_inventory.v1, ci_history.v1, ci_costs.v1, ci_correlation.v1, ci_recommendations.v1 | setup-ci; humans; detailed semantics in spec 0007 | conditional (require_ci_audit_core_artifacts; required under --ci-audit-only, conditional when present in a full run root; schema/job/receipt checks) |
 | ci-audit/runner-cancellations.json | experimental | ci_runner_cancellations.v1 | humans; setup-ci validates when present; runner cancellation runbook | conditional (require_ci_audit_runner_cancellations; --ci-audit-only for audit roots) |
@@ -722,7 +727,9 @@ This spec is docs-only. Open contract-surface work it routes:
 #316   DONE (#335): sensors/ripr/gate-decision.json produced in production;
        the tool-gate receipt route no longer dangles
 #347   DONE: per-finding exposure-gap detail in
-       sensors/ripr/exposure-gaps.json, verifier-reconciled
+       sensors/ripr/exposure-gaps.json
+#873   v2 raw/pre-policy semantics; badge-only policy authority and
+       verifier-reconciled aggregate totals
 #306   DONE: delete [gate].synchronize_mode; update require_gate_config and
        this spec in the same PR
 #312   close the proof-broker edge-status test gaps so rare receipt/lease

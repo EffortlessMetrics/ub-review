@@ -1047,9 +1047,11 @@ mod tests {
         assert_eq!(gate["counts"]["suppressed_exposure_gaps"], 1);
         let detail: serde_json::Value =
             serde_json::from_slice(&fs::read(sensor_dir.join("exposure-gaps.json"))?)?;
-        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v1");
+        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v2");
         assert_eq!(detail["status"], "ok");
-        assert_eq!(detail["total_gap_findings"], 2);
+        assert_eq!(detail["semantics"], "raw_pre_policy");
+        assert_eq!(detail["total_raw_findings"], 2);
+        assert_eq!(detail["total_raw_gap_findings"], 2);
         assert_eq!(detail["truncated"], false);
         let entries = detail["entries"]
             .as_array()
@@ -1060,14 +1062,14 @@ mod tests {
         assert_eq!(entries[0]["range"]["start_line"], 12);
         assert_eq!(entries[0]["range"]["end_line"], 12);
         assert_eq!(entries[0]["exposure_gap_class"], "weakly_exposed");
-        assert_eq!(entries[0]["suppression_state"], "unsuppressed");
-        assert_eq!(entries[0]["threshold_contribution"], 1);
+        assert!(entries[0].get("suppression_state").is_none());
+        assert!(entries[0].get("threshold_contribution").is_none());
         assert_eq!(
             entries[0]["artifact_pointer"],
             "sensors/ripr/exposure-gaps.json#/entries/0"
         );
-        assert_eq!(entries[1]["suppression_state"], "suppressed");
-        assert_eq!(entries[1]["threshold_contribution"], 0);
+        assert!(entries[1].get("suppression_state").is_none());
+        assert!(entries[1].get("threshold_contribution").is_none());
         assert_eq!(
             entries[1]["artifact_pointer"],
             "sensors/ripr/exposure-gaps.json#/entries/1"
@@ -1373,8 +1375,8 @@ fn main() {{
                 &source,
                 r####"use std::env;
 
-const BADGE: &str = r###"{"schema_version":"0.5","kind":"ripr","scope":"diff","basis":"finding_exposure","label":"ripr","message":"1","status":"fail","color":"red","counts":{"unsuppressed_exposure_gaps":1,"suppressed_exposure_gaps":1,"unsuppressed_test_efficiency_findings":0,"analyzed_findings":2},"policy":{"include_unknowns":false,"fail_on_nonzero":false},"warnings":[]}"###;
-const DETAIL: &str = r###"{"findings":[{"id":"probe:src_lib_rs:12:call_deletion","classification":"weakly_exposed","probe":{"family":"call_deletion","file":"src/lib.rs","line":12,"expression":"crate::value()"},"ripr":{"reach":{"summary":"test reaches changed owner"},"discriminate":{"summary":"oracle does not distinguish behavior"}}},{"id":"probe:src_lib_rs:18:error_path","classification":"reachable_unrevealed","suppressed":true,"probe":{"family":"error_path","file":"src/lib.rs","line":18,"expression":"crate::fallible()"},"ripr":{"reach":{"summary":"suppressed reach gap"},"discriminate":{"summary":"suppressed oracle gap"}}}]}"###;
+const BADGE: &str = r###"{"schema_version":"0.6","kind":"ripr","scope":"diff","basis":"finding_exposure","label":"ripr","message":"1","status":"fail","color":"red","counts":{"unsuppressed_exposure_gaps":1,"suppressed_exposure_gaps":1,"unsuppressed_test_efficiency_findings":0,"analyzed_findings":2},"policy":{"include_unknowns":false,"fail_on_nonzero":false},"warnings":[]}"###;
+const DETAIL: &str = r###"{"schema_version":"0.2","tool":"ripr","mode":"ready","summary":{"findings":2},"findings":[{"id":"probe:src_lib_rs:12:call_deletion","classification":"weakly_exposed","probe":{"family":"call_deletion","file":"src/lib.rs","line":12,"expression":"crate::value()"},"ripr":{"reach":{"summary":"test reaches changed owner"},"discriminate":{"summary":"oracle does not distinguish behavior"}}},{"id":"probe:src_lib_rs:18:error_path","classification":"reachable_unrevealed","probe":{"family":"error_path","file":"src/lib.rs","line":18,"expression":"crate::fallible()"},"ripr":{"reach":{"summary":"raw reach gap"},"discriminate":{"summary":"raw oracle gap"}}}]}"###;
 
 fn main() {
     let args = env::args().skip(1).collect::<Vec<_>>();
@@ -1407,10 +1409,10 @@ fn main() {
                 r####"#!/bin/sh
 case "$*" in
   *"--format badge-json"*)
-    printf '%s\n' '{"schema_version":"0.5","kind":"ripr","scope":"diff","basis":"finding_exposure","label":"ripr","message":"1","status":"fail","color":"red","counts":{"unsuppressed_exposure_gaps":1,"suppressed_exposure_gaps":1,"unsuppressed_test_efficiency_findings":0,"analyzed_findings":2},"policy":{"include_unknowns":false,"fail_on_nonzero":false},"warnings":[]}'
+    printf '%s\n' '{"schema_version":"0.6","kind":"ripr","scope":"diff","basis":"finding_exposure","label":"ripr","message":"1","status":"fail","color":"red","counts":{"unsuppressed_exposure_gaps":1,"suppressed_exposure_gaps":1,"unsuppressed_test_efficiency_findings":0,"analyzed_findings":2},"policy":{"include_unknowns":false,"fail_on_nonzero":false},"warnings":[]}'
     ;;
   *"--format json"*)
-    printf '%s\n' '{"findings":[{"id":"probe:src_lib_rs:12:call_deletion","classification":"weakly_exposed","probe":{"family":"call_deletion","file":"src/lib.rs","line":12,"expression":"crate::value()"},"ripr":{"reach":{"summary":"test reaches changed owner"},"discriminate":{"summary":"oracle does not distinguish behavior"}}},{"id":"probe:src_lib_rs:18:error_path","classification":"reachable_unrevealed","suppressed":true,"probe":{"family":"error_path","file":"src/lib.rs","line":18,"expression":"crate::fallible()"},"ripr":{"reach":{"summary":"suppressed reach gap"},"discriminate":{"summary":"suppressed oracle gap"}}}]}'
+    printf '%s\n' '{"schema_version":"0.2","tool":"ripr","mode":"ready","summary":{"findings":2},"findings":[{"id":"probe:src_lib_rs:12:call_deletion","classification":"weakly_exposed","probe":{"family":"call_deletion","file":"src/lib.rs","line":12,"expression":"crate::value()"},"ripr":{"reach":{"summary":"test reaches changed owner"},"discriminate":{"summary":"oracle does not distinguish behavior"}}},{"id":"probe:src_lib_rs:18:error_path","classification":"reachable_unrevealed","probe":{"family":"error_path","file":"src/lib.rs","line":18,"expression":"crate::fallible()"},"ripr":{"reach":{"summary":"raw reach gap"},"discriminate":{"summary":"raw oracle gap"}}}]}'
     ;;
   *)
     echo "unexpected ripr args: $*" >&2

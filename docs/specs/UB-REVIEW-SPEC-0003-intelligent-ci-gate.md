@@ -102,8 +102,12 @@ this repository's own file is the production example):
   never-evaluated required tool gate raises a loud unevaluated-gate alarm
   in the running summary. Per-finding gap detail (id, classification, probe
   location/expression, reach/discriminate summaries) ships in
-  `sensors/ripr/exposure-gaps.json`, verifier-reconciled against the badge
-  counts (#347).
+  `sensors/ripr/exposure-gaps.json`. Its v2 contract is explicitly
+  `raw_pre_policy`: stable IDs and diagnostic fields come from pinned RIPR
+  0.10.0 detail, while the badge remains the sole suppression-partition and
+  strict-zero authority. The verifier reconciles the uncapped raw finding
+  total with `analyzed_findings` and the uncapped canonical-gap total with
+  badge suppressed plus unsuppressed counts (#347, #873).
   `cargo xtask ripr` is the local feedback adapter for this exact ready-mode
   badge-plus-detail contract. It runs against a materialized tracked working
   diff from the configured base's merge-base with `HEAD`, preserves raw tool
@@ -112,9 +116,9 @@ this repository's own file is the production example):
   remains authoritative, and the adapter owns no threshold, classification,
   or suppression semantics. Nonzero counts are advisory locally; malformed or
   inconsistent pinned-tool outputs fail closed (#856). RIPR 0.10.0 detail
-  findings omit suppression state, so the adapter independently reconciles
-  only the total canonical-gap count; the partition remains tool-reported
-  pending the upstream detail-schema parity work in #873.
+  findings omit suppression state, so neither adapter independently derives
+  the per-finding partition. The partition remains tool-reported; v2 raw
+  packet detail records this limitation in-band (#873).
 - `[gate]` — `required_check`, `target_minutes`, `hard_timeout_minutes`,
   `post_review_on` (default `["opened", "ready_for_review"]`), and
   `blocking` (src/config.rs `GateConfig`). Posting on quiet passes is
@@ -409,8 +413,10 @@ Honest current-state limits a consumer must know:
 - `[tools.ripr.gate]` enforces in production (#335) and a red is
   diagnosable from artifacts: `gate-decision.json` stays the verbatim
   badge-json the threshold evaluates, and `exposure-gaps.json` carries the
-  per-finding detail (#347). A failed detail pass writes a receipted
-  `detail_unavailable` artifact rather than nothing.
+  bounded raw, pre-policy per-finding detail (#347, #873). A failed detail
+  pass writes a receipted `detail_unavailable` artifact rather than nothing;
+  the artifact verifier rejects that packet explicitly after first validating
+  the badge envelope and counts.
 - ripr suppressions are line-keyed upstream (ripr-swarm#1053): an entry in
   `.ripr/suppressions.toml` can go dead or silently transfer to unrelated
   code when edits move declarations across lines. Re-verify suppression

@@ -1,7 +1,7 @@
 //! ripr gate-receipt detail: the second bounded pass and the pure
 //! projection behind sensors/ripr/exposure-gaps.json (#347).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
@@ -18,13 +18,21 @@ pub(crate) const RIPR_GAP_CLASSIFICATIONS: &[&str] =
 
 pub(crate) const RIPR_GAP_DETAIL_CAP: usize = 200;
 
-/// Project ripr's full `--format json` output into the bounded per-finding
-/// detail artifact (#347): gap-class findings only, capped, each entry
-/// carrying the id, classification, probe location/expression, suppression
-/// state, threshold contribution, an artifact pointer, and the
-/// reach/discriminate summaries a block diagnosis needs. Pure, so the
-/// projection is testable without the ripr binary.
-pub(crate) fn ripr_exposure_gap_details_from_value(value: &serde_json::Value) -> serde_json::Value {
+/// Project pinned ripr 0.10.0's full `--format json` output into bounded raw,
+/// pre-policy gap detail. The badge receipt remains the sole source of the
+/// suppression partition and strict-zero decision (#873).
+pub(crate) fn ripr_exposure_gap_details_from_value(
+    value: &serde_json::Value,
+) -> Result<serde_json::Value> {
+    if value
+        .get("schema_version")
+        .and_then(serde_json::Value::as_str)
+        != Some("0.2")
+        || value.get("tool").and_then(serde_json::Value::as_str) != Some("ripr")
+        || value.get("mode").and_then(serde_json::Value::as_str) != Some("ready")
+    {
+        bail!("ripr detail envelope is incompatible with pinned ripr 0.10.0");
+    }
     let clip = |text: &str, max: usize| -> String {
         if text.len() <= max {
             text.to_owned()
@@ -39,8 +47,50 @@ pub(crate) fn ripr_exposure_gap_details_from_value(value: &serde_json::Value) ->
     let findings = value
         .get("findings")
         .and_then(serde_json::Value::as_array)
-        .map(Vec::as_slice)
-        .unwrap_or_default();
+        .context("ripr detail omitted findings array")?;
+    let summary_count = value
+        .get("summary")
+        .and_then(|summary| summary.get("findings"))
+        .and_then(serde_json::Value::as_u64)
+        .context("ripr detail omitted summary.findings")?;
+    if summary_count != findings.len() as u64 {
+        bail!(
+            "ripr detail summary.findings={summary_count} does not match findings length {}",
+            findings.len()
+        );
+    }
+    let mut finding_ids = BTreeSet::new();
+    for (index, finding) in findings.iter().enumerate() {
+        let object = finding
+            .as_object()
+            .with_context(|| format!("ripr finding[{index}] must be an object"))?;
+        let id = object
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .filter(|id| !id.trim().is_empty())
+            .with_context(|| format!("ripr finding[{index}] omitted id"))?;
+        if !finding_ids.insert(id) {
+            bail!("ripr detail contains duplicate finding id `{id}`");
+        }
+        object
+            .get("classification")
+            .and_then(serde_json::Value::as_str)
+            .with_context(|| format!("ripr finding `{id}` omitted classification"))?;
+        let probe = object
+            .get("probe")
+            .and_then(serde_json::Value::as_object)
+            .with_context(|| format!("ripr finding `{id}` omitted probe object"))?;
+        probe
+            .get("file")
+            .and_then(serde_json::Value::as_str)
+            .filter(|path| !path.trim().is_empty())
+            .with_context(|| format!("ripr finding `{id}` omitted probe.file"))?;
+        probe
+            .get("line")
+            .and_then(serde_json::Value::as_u64)
+            .filter(|line| *line > 0)
+            .with_context(|| format!("ripr finding `{id}` has invalid probe.line"))?;
+    }
     let gaps: Vec<&serde_json::Value> = findings
         .iter()
         .filter(|finding| {
@@ -78,8 +128,6 @@ pub(crate) fn ripr_exposure_gap_details_from_value(value: &serde_json::Value) ->
             let line = probe
                 .and_then(|value| value.get("line"))
                 .and_then(serde_json::Value::as_u64);
-            let suppression_state = ripr_suppression_state(finding);
-            let threshold_contribution = ripr_threshold_contribution(suppression_state);
             let file = field(probe, "file");
             serde_json::json!({
                 "id": field(Some(finding), "id"),
@@ -94,57 +142,28 @@ pub(crate) fn ripr_exposure_gap_details_from_value(value: &serde_json::Value) ->
                     "end_line": line,
                 },
                 "expression": clip(&field(probe, "expression"), 200),
-                "suppression_state": suppression_state,
-                "threshold_contribution": threshold_contribution,
                 "artifact_pointer": format!("sensors/ripr/exposure-gaps.json#/entries/{index}"),
                 "reach": stage("reach"),
                 "discriminate": stage("discriminate"),
             })
         })
         .collect();
-    serde_json::json!({
-        "schema": RIPR_EXPOSURE_GAPS_SCHEMA,
+    Ok(serde_json::json!({
+        "schema": RIPR_EXPOSURE_GAPS_V2_SCHEMA,
         "status": "ok",
-        "total_gap_findings": total,
+        "semantics": "raw_pre_policy",
+        "policy_authority": "sensors/ripr/gate-decision.json",
+        "source": {
+            "tool": "ripr",
+            "schema_version": "0.2",
+            "mode": "ready",
+        },
+        "total_raw_findings": findings.len(),
+        "total_raw_gap_findings": total,
+        "entry_cap": RIPR_GAP_DETAIL_CAP,
         "truncated": total > RIPR_GAP_DETAIL_CAP,
         "entries": entries,
-    })
-}
-
-fn ripr_suppression_state(finding: &serde_json::Value) -> &'static str {
-    if finding
-        .get("suppressed")
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false)
-    {
-        return "suppressed";
-    }
-    for key in ["suppression_state", "suppressionState"] {
-        if finding
-            .get(key)
-            .and_then(serde_json::Value::as_str)
-            .is_some_and(|value| value == "suppressed")
-        {
-            return "suppressed";
-        }
-    }
-    if finding
-        .get("suppression")
-        .and_then(|value| value.get("state").or_else(|| value.get("status")))
-        .and_then(serde_json::Value::as_str)
-        .is_some_and(|value| value == "suppressed")
-    {
-        return "suppressed";
-    }
-    "unsuppressed"
-}
-
-fn ripr_threshold_contribution(suppression_state: &str) -> u64 {
-    if suppression_state == "suppressed" {
-        0
-    } else {
-        1
-    }
+    }))
 }
 
 /// Run the second, detail-producing ripr pass and persist
@@ -195,16 +214,15 @@ pub(crate) fn write_ripr_exposure_gap_details(
         let value: serde_json::Value =
             serde_json::from_slice(&fs::read(&stdout_path).with_context(|| "read detail stdout")?)
                 .with_context(|| "parse ripr --format json output")?;
-        Ok(ripr_exposure_gap_details_from_value(&value))
+        ripr_exposure_gap_details_from_value(&value)
     })()
     .unwrap_or_else(|err| {
         serde_json::json!({
-            "schema": RIPR_EXPOSURE_GAPS_SCHEMA,
+            "schema": RIPR_EXPOSURE_GAPS_V2_SCHEMA,
             "status": "detail_unavailable",
             "error": format!("{err:#}"),
-            "total_gap_findings": 0,
-            "truncated": false,
-            "entries": [],
+            "semantics": "raw_pre_policy",
+            "policy_authority": "sensors/ripr/gate-decision.json",
         })
     });
     let _ = fs::remove_file(&stdout_path);
@@ -243,7 +261,7 @@ mod tests {
         );
         let detail: serde_json::Value =
             serde_json::from_slice(&std::fs::read(dir.join("exposure-gaps.json"))?)?;
-        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v1");
+        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v2");
         assert_eq!(detail["status"], "detail_unavailable");
         assert!(
             detail["error"]
@@ -251,7 +269,8 @@ mod tests {
                 .is_some_and(|error| !error.is_empty()),
             "error names the failure: {detail}"
         );
-        assert_eq!(detail["total_gap_findings"], 0);
+        assert!(detail.get("total_raw_gap_findings").is_none());
+        assert!(detail.get("entries").is_none());
         assert!(!dir.join("exposure-gaps.stdout.tmp").exists());
         assert!(!dir.join("exposure-gaps.stderr.tmp").exists());
         Ok(())
@@ -259,11 +278,8 @@ mod tests {
 
     #[test]
     fn ripr_exposure_gap_details_project_filter_cap_and_unavailable_shape() -> Result<()> {
-        assert_eq!(super::ripr_threshold_contribution("unsuppressed"), 1);
-        assert_eq!(super::ripr_threshold_contribution("suppressed"), 0);
-
         let finding = |id: &str, class: &str| {
-            let mut value = serde_json::json!({
+            serde_json::json!({
                 "id": id,
                 "classification": class,
                 "probe": {
@@ -276,13 +292,13 @@ mod tests {
                     "reach": {"summary": "Related tests appear to reach changed owner"},
                     "discriminate": {"summary": "Only relational oracle found"},
                 },
-            });
-            if id.contains("suppressed") {
-                value["suppressed"] = serde_json::Value::Bool(true);
-            }
-            value
+            })
         };
         let value = serde_json::json!({
+            "schema_version": "0.2",
+            "tool": "ripr",
+            "mode": "ready",
+            "summary": {"findings": 4},
             "findings": [
                 finding("probe:a:1:call_deletion", "weakly_exposed"),
                 finding("probe:b:2:side_effect", "exposed"),
@@ -290,11 +306,18 @@ mod tests {
                 finding("probe:suppressed:4:error_path", "reachable_unrevealed"),
             ],
         });
-        let detail = super::ripr_exposure_gap_details_from_value(&value);
-        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v1");
+        let detail = super::ripr_exposure_gap_details_from_value(&value)?;
+        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v2");
         assert_eq!(detail["status"], "ok");
+        assert_eq!(detail["semantics"], "raw_pre_policy");
+        assert_eq!(
+            detail["policy_authority"],
+            "sensors/ripr/gate-decision.json"
+        );
+        assert_eq!(detail["source"]["schema_version"], "0.2");
         // `exposed` is not a gap class and is filtered out.
-        assert_eq!(detail["total_gap_findings"], 3);
+        assert_eq!(detail["total_raw_gap_findings"], 3);
+        assert_eq!(detail["entry_cap"], super::RIPR_GAP_DETAIL_CAP);
         assert_eq!(detail["truncated"], false);
         let entries = detail["entries"].as_array().context("entries")?;
         assert_eq!(entries.len(), 3);
@@ -308,14 +331,14 @@ mod tests {
         assert_eq!(entries[0]["range"]["start_line"], 40);
         assert_eq!(entries[0]["range"]["end_line"], 40);
         assert_eq!(entries[0]["expression"], "pub(crate) struct IssuesConfig {");
-        assert_eq!(entries[0]["suppression_state"], "unsuppressed");
-        assert_eq!(entries[0]["threshold_contribution"], 1);
+        assert!(entries[0].get("suppression_state").is_none());
+        assert!(entries[0].get("threshold_contribution").is_none());
         assert_eq!(
             entries[0]["artifact_pointer"],
             "sensors/ripr/exposure-gaps.json#/entries/0"
         );
-        assert_eq!(entries[2]["suppression_state"], "suppressed");
-        assert_eq!(entries[2]["threshold_contribution"], 0);
+        assert!(entries[2].get("suppression_state").is_none());
+        assert!(entries[2].get("threshold_contribution").is_none());
         assert_eq!(
             entries[2]["artifact_pointer"],
             "sensors/ripr/exposure-gaps.json#/entries/2"
@@ -335,9 +358,14 @@ mod tests {
         let many: Vec<serde_json::Value> = (0..250)
             .map(|i| finding(&format!("probe:x:{i}:call_deletion"), "no_static_path"))
             .collect();
-        let capped =
-            super::ripr_exposure_gap_details_from_value(&serde_json::json!({"findings": many}));
-        assert_eq!(capped["total_gap_findings"], 250);
+        let capped = super::ripr_exposure_gap_details_from_value(&serde_json::json!({
+            "schema_version": "0.2",
+            "tool": "ripr",
+            "mode": "ready",
+            "summary": {"findings": 250},
+            "findings": many,
+        }))?;
+        assert_eq!(capped["total_raw_gap_findings"], 250);
         assert_eq!(capped["truncated"], true);
         assert_eq!(
             capped["entries"]
@@ -347,19 +375,29 @@ mod tests {
             super::RIPR_GAP_DETAIL_CAP
         );
 
-        // Missing findings array projects to an empty ok artifact, not an
-        // error: an empty diff legitimately has zero findings.
-        let empty = super::ripr_exposure_gap_details_from_value(&serde_json::json!({}));
+        let empty = super::ripr_exposure_gap_details_from_value(&serde_json::json!({
+            "schema_version": "0.2",
+            "tool": "ripr",
+            "mode": "ready",
+            "summary": {"findings": 0},
+            "findings": [],
+        }))?;
         assert_eq!(empty["status"], "ok");
-        assert_eq!(empty["total_gap_findings"], 0);
+        assert_eq!(empty["total_raw_findings"], 0);
+        assert_eq!(empty["total_raw_gap_findings"], 0);
 
         // Long fields clip with an ellipsis: expression at 200 bytes, stage
         // summaries at 300; at exactly the limit nothing is clipped.
         let mut long = finding("probe:long:1:call_deletion", "weakly_exposed");
         long["probe"]["expression"] = serde_json::Value::String("x".repeat(201));
         long["ripr"]["reach"]["summary"] = serde_json::Value::String("r".repeat(301));
-        let clipped =
-            super::ripr_exposure_gap_details_from_value(&serde_json::json!({"findings": [long]}));
+        let clipped = super::ripr_exposure_gap_details_from_value(&serde_json::json!({
+            "schema_version": "0.2",
+            "tool": "ripr",
+            "mode": "ready",
+            "summary": {"findings": 1},
+            "findings": [long],
+        }))?;
         let entry = &clipped["entries"][0];
         assert_eq!(
             entry["expression"].as_str().context("expression")?,
@@ -371,12 +409,70 @@ mod tests {
         );
         let mut exact = finding("probe:exact:1:call_deletion", "weakly_exposed");
         exact["probe"]["expression"] = serde_json::Value::String("y".repeat(200));
-        let kept =
-            super::ripr_exposure_gap_details_from_value(&serde_json::json!({"findings": [exact]}));
+        let kept = super::ripr_exposure_gap_details_from_value(&serde_json::json!({
+            "schema_version": "0.2",
+            "tool": "ripr",
+            "mode": "ready",
+            "summary": {"findings": 1},
+            "findings": [exact],
+        }))?;
         assert_eq!(
             kept["entries"][0]["expression"].as_str().context("kept")?,
             "y".repeat(200)
         );
+        Ok(())
+    }
+
+    #[test]
+    fn ripr_exposure_gap_details_reject_malformed_pinned_input() -> Result<()> {
+        let valid = serde_json::json!({
+            "schema_version": "0.2",
+            "tool": "ripr",
+            "mode": "ready",
+            "summary": {"findings": 1},
+            "findings": [{
+                "id": "probe:src_x.rs:return_value:12345678",
+                "classification": "no_static_path",
+                "probe": {"file": "src/x.rs", "line": 1},
+            }],
+        });
+        for (name, malformed) in [
+            ("version", serde_json::json!({"schema_version": "0.1"})),
+            (
+                "findings",
+                serde_json::json!({
+                    "schema_version": "0.2", "tool": "ripr", "mode": "ready",
+                    "summary": {"findings": 0}
+                }),
+            ),
+            ("summary", {
+                let mut value = valid.clone();
+                value["summary"]["findings"] = serde_json::json!(2);
+                value
+            }),
+            ("duplicate-id", {
+                let mut value = valid.clone();
+                value["summary"]["findings"] = serde_json::json!(2);
+                value["findings"] =
+                    serde_json::json!([value["findings"][0].clone(), value["findings"][0].clone()]);
+                value
+            }),
+            ("path", {
+                let mut value = valid.clone();
+                value["findings"][0]["probe"]["file"] = serde_json::json!("");
+                value
+            }),
+            ("line", {
+                let mut value = valid.clone();
+                value["findings"][0]["probe"]["line"] = serde_json::json!(0);
+                value
+            }),
+        ] {
+            let error = super::ripr_exposure_gap_details_from_value(&malformed)
+                .err()
+                .with_context(|| format!("{name} unexpectedly accepted"))?;
+            assert!(!format!("{error:#}").is_empty());
+        }
         Ok(())
     }
 }
