@@ -20117,6 +20117,529 @@ finding_id = "probe:src_validate.rs:error_path:4d06f280"
 owner = "ub-review/core"
 reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/validate.rs for demoted-inline finding text #849: covered by validate_tests demotion/summary-only finding tests that assert the model body is retained. Re-verify after semantic edits to demotion paths."
 
+
+# Issue #871 / PR #874: exact merge-ref findings from hosted run 31620194115.
+# The former #858 block was removed; these entries name orchestration tests that
+# force startup, provider, parse, and persistence failures through production
+# authority composition. Repository-wide suppression-health is not renewed.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:2e0cd383"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:7ba6fe6e"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:da2b7992"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:8a75eedd"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:d8f288bb"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:error_path:dc4e6614.2"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:74372da3"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:ca350bac"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:488183b4"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:51404981"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:28cfba1f"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:e5cd6370"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:c4c35513"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:7cf348c8"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:19d19ea4"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:c48757bf"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:76e92e9e"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:9b16cc8b"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:f62171f2"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:00d29c3f"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:5cca3cb5"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:33e299fd"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:a1889663"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:2e58edb5"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:ece62094"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:7d6890a1"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:326052ad"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:7cf348c8.2"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:19d19ea4.2"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:error_path:dc4e6614"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:a2a3381c"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:2dcb6cc7"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:24c06fc0"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:1e20f79f"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:49d81583"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:24c06fc0.2"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:1e20f79f.2"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:220d08fc"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:error_path:0847fe82"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:c827214c"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:22ee0eb1"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:caaac488"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:error_path:0847fe82.2"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:b77f6f2b"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:76f6d034"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:3362923b"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:4a847de7"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:9b37e267"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:72aa9310"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:9597c054"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:3e542ecb"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:match_arm:ab114490"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:match_arm:5f46e1cb"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:3b0ac2f2"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:ab3338c1"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter re-distillation orchestration. `redistillation_provider_failure_withholds_turn_zero_authority`, `redistillation_parse_failure_withholds_turn_zero_authority`, and `turn_one_persistence_failure_composes_to_exact_inconclusive_gate` force provider, parse, and persistence failures after invalidation-before-call, asserting turn-000 is withheld and consumed calls remain counted. Re-verify after edits to reporter orchestration."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:409dd23a"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:error_path:5f641b2f"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:02efe4ce"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:ee52708f"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:7c6f39bf"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:1a8599ab"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:0c3a9113"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:fa93909d"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:9bb96cc4"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:391d9cd9"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:50e161aa"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:9bb96cc4.2"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:e09fa590"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:8d4dd32c"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:96a949cb"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:341dddea"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:0f1b4693"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:068009f9"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:80afddfb"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:070da79b"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:a41f3e8a"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:343b9ec6"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:3e636701"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:8a72bdd4"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:8271b6c3"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:6eccf603"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:48c5e856"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:660125da"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:match_arm:5dab34d5"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:d057bcd4"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:field_construction:913a5fde"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding on reporter authority invalidation/resolution. `startup_invalidation_failure_withholds_restored_disk_authority` proves in-memory failure dominates later-valid disk authority, while the production composition tests assert no public distillation and the exact inconclusive review-forward receipt. Re-verify after edits to reporter authority."
+
+
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_validate.rs:field_construction:e3efb45e"
@@ -20134,3 +20657,393 @@ kind = "exposure_gap"
 finding_id = "probe:src_validate.rs:return_value:72ff2d65"
 owner = "ub-review/core"
 reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/validate.rs for demoted-inline finding text #849: covered by validate_tests demotion/summary-only finding tests that assert the model body is retained. Re-verify after semantic edits to demotion paths."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:45418955"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on the production reporter composition seam. production_reporter_failure_composition_withholds_public_text_and_gates_inconclusive asserts failed-call accounting, no public distillation, and the exact inconclusive gate receipt from the same resolved turn. Re-verify after edits to final reporter composition."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:289d06b4"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on the production reporter composition seam. production_reporter_failure_composition_withholds_public_text_and_gates_inconclusive asserts failed-call accounting, no public distillation, and the exact inconclusive gate receipt from the same resolved turn. Re-verify after edits to final reporter composition."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:d848efeb"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on the production reporter composition seam. production_reporter_failure_composition_withholds_public_text_and_gates_inconclusive asserts failed-call accounting, no public distillation, and the exact inconclusive gate receipt from the same resolved turn. Re-verify after edits to final reporter composition."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:40f4b6e6"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on the production reporter composition seam. production_reporter_failure_composition_withholds_public_text_and_gates_inconclusive asserts failed-call accounting, no public distillation, and the exact inconclusive gate receipt from the same resolved turn. Re-verify after edits to final reporter composition."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:match_arm:d43fc6f8"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on the production reporter composition seam. production_reporter_failure_composition_withholds_public_text_and_gates_inconclusive asserts failed-call accounting, no public distillation, and the exact inconclusive gate receipt from the same resolved turn. Re-verify after edits to final reporter composition."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:match_arm:72cd1cb5"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on the production reporter composition seam. production_reporter_failure_composition_withholds_public_text_and_gates_inconclusive asserts failed-call accounting, no public distillation, and the exact inconclusive gate receipt from the same resolved turn. Re-verify after edits to final reporter composition."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:29991bb0"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on failed reporter call accounting. turn_one_persistence_failure_composes_to_exact_inconclusive_gate forces the real redistillation write error at the call-budget boundary and asserts the consumed count plus exact inconclusive production gate outcome. Re-verify after edits to reporter call accounting."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:6cea1772"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on failed reporter call accounting. turn_one_persistence_failure_composes_to_exact_inconclusive_gate forces the real redistillation write error at the call-budget boundary and asserts the consumed count plus exact inconclusive production gate outcome. Re-verify after edits to reporter call accounting."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:1d4ad6b1"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on failed reporter call accounting. turn_one_persistence_failure_composes_to_exact_inconclusive_gate forces the real redistillation write error at the call-budget boundary and asserts the consumed count plus exact inconclusive production gate outcome. Re-verify after edits to reporter call accounting."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:6cea1772.2"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on failed reporter call accounting. turn_one_persistence_failure_composes_to_exact_inconclusive_gate forces the real redistillation write error at the call-budget boundary and asserts the consumed count plus exact inconclusive production gate outcome. Re-verify after edits to reporter call accounting."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:6cea1772.3"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on failed reporter call accounting. turn_one_persistence_failure_composes_to_exact_inconclusive_gate forces the real redistillation write error at the call-budget boundary and asserts the consumed count plus exact inconclusive production gate outcome. Re-verify after edits to reporter call accounting."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:call_deletion:e860345c"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on failed reporter call accounting. turn_one_persistence_failure_composes_to_exact_inconclusive_gate forces the real redistillation write error at the call-budget boundary and asserts the consumed count plus exact inconclusive production gate outcome. Re-verify after edits to reporter call accounting."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:c1fe198e"
+owner = "ub-review/core"
+reason = "Hosted RIPR 0.10.0 merge-ref finding from run 31623379384 on failed reporter call accounting. turn_one_persistence_failure_composes_to_exact_inconclusive_gate forces the real redistillation write error at the call-budget boundary and asserts the consumed count plus exact inconclusive production gate outcome. Re-verify after edits to reporter call accounting."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:dfe67e51"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on the #856 command and option contract. local_ripr_options_and_rust_input_contract_are_explicit pins both supported arguments and Rust-input detection; the real cargo xtask ripr proof exercises command routing. Re-verify after command or option edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:8bda9fa7"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on the #856 command and option contract. local_ripr_options_and_rust_input_contract_are_explicit pins both supported arguments and Rust-input detection; the real cargo xtask ripr proof exercises command routing. Re-verify after command or option edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:ba530e86"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on the #856 command and option contract. local_ripr_options_and_rust_input_contract_are_explicit pins both supported arguments and Rust-input detection; the real cargo xtask ripr proof exercises command routing. Re-verify after command or option edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:5af5c18c"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on the #856 command and option contract. local_ripr_options_and_rust_input_contract_are_explicit pins both supported arguments and Rust-input detection; the real cargo xtask ripr proof exercises command routing. Re-verify after command or option edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:7ab7a0a0"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on the #856 command and option contract. local_ripr_options_and_rust_input_contract_are_explicit pins both supported arguments and Rust-input detection; the real cargo xtask ripr proof exercises command routing. Re-verify after command or option edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:cf3c1bed"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on the #856 command and option contract. local_ripr_options_and_rust_input_contract_are_explicit pins both supported arguments and Rust-input detection; the real cargo xtask ripr proof exercises command routing. Re-verify after command or option edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:95ecfe98"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on process invocation. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins exact argv/cwd/output, while local_ripr_missing_tool_is_loud_and_clears_stale_artifacts and local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails pin failure behavior. Re-verify after invocation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:623cb482"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on process invocation. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins exact argv/cwd/output, while local_ripr_missing_tool_is_loud_and_clears_stale_artifacts and local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails pin failure behavior. Re-verify after invocation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:15721a81"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on process invocation. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins exact argv/cwd/output, while local_ripr_missing_tool_is_loud_and_clears_stale_artifacts and local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails pin failure behavior. Re-verify after invocation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:7f0a4318"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on process invocation. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins exact argv/cwd/output, while local_ripr_missing_tool_is_loud_and_clears_stale_artifacts and local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails pin failure behavior. Re-verify after invocation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:59726765"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on process invocation. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins exact argv/cwd/output, while local_ripr_missing_tool_is_loud_and_clears_stale_artifacts and local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails pin failure behavior. Re-verify after invocation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:517904de"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on process invocation. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins exact argv/cwd/output, while local_ripr_missing_tool_is_loud_and_clears_stale_artifacts and local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails pin failure behavior. Re-verify after invocation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:c982bbdc"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:18a4e67a"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:08ef97cf"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:54474ae6"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:933e3b78"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:933e3b78.2"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:d9b5312b"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:25b9c021"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:168bfa08"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:3a42cad2"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:933e3b78.3"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:933e3b78.4"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on input freshness and fail-closed preflight. local_ripr_missing_tool_is_loud_and_clears_stale_artifacts, local_ripr_clean_and_non_rust_diffs_are_explicit_skips, local_ripr_rejects_untracked_rust_and_missing_merge_base, and local_ripr_wrong_version_and_malformed_badge_fail_closed discriminate the relevant branches. Re-verify after preflight edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:d9b5312b.2"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on raw output and advisory receipt composition. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins raw artifacts and completed receipt; local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails and local_ripr_wrong_version_and_malformed_badge_fail_closed pin tool and schema failures. Re-verify after receipt edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:35375289"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on raw output and advisory receipt composition. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins raw artifacts and completed receipt; local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails and local_ripr_wrong_version_and_malformed_badge_fail_closed pin tool and schema failures. Re-verify after receipt edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:cd462f99"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on raw output and advisory receipt composition. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins raw artifacts and completed receipt; local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails and local_ripr_wrong_version_and_malformed_badge_fail_closed pin tool and schema failures. Re-verify after receipt edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:0350485b"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on raw output and advisory receipt composition. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins raw artifacts and completed receipt; local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails and local_ripr_wrong_version_and_malformed_badge_fail_closed pin tool and schema failures. Re-verify after receipt edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:288c330c"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on raw output and advisory receipt composition. local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pins raw artifacts and completed receipt; local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails and local_ripr_wrong_version_and_malformed_badge_fail_closed pin tool and schema failures. Re-verify after receipt edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:aaa7683c"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on git output/error plumbing and test fixture setup. local_ripr_clean_and_non_rust_diffs_are_explicit_skips and local_ripr_rejects_untracked_rust_and_missing_merge_base execute successful and failed git paths with exact outcome assertions. Re-verify after git adapter edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:3b95163f"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on git output/error plumbing and test fixture setup. local_ripr_clean_and_non_rust_diffs_are_explicit_skips and local_ripr_rejects_untracked_rust_and_missing_merge_base execute successful and failed git paths with exact outcome assertions. Re-verify after git adapter edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:abbf2079"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on git output/error plumbing and test fixture setup. local_ripr_clean_and_non_rust_diffs_are_explicit_skips and local_ripr_rejects_untracked_rust_and_missing_merge_base execute successful and failed git paths with exact outcome assertions. Re-verify after git adapter edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:929093c6"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on git output/error plumbing and test fixture setup. local_ripr_clean_and_non_rust_diffs_are_explicit_skips and local_ripr_rejects_untracked_rust_and_missing_merge_base execute successful and failed git paths with exact outcome assertions. Re-verify after git adapter edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:bba4fc9a"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on git output/error plumbing and test fixture setup. local_ripr_clean_and_non_rust_diffs_are_explicit_skips and local_ripr_rejects_untracked_rust_and_missing_merge_base execute successful and failed git paths with exact outcome assertions. Re-verify after git adapter edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:31f99458"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on git output/error plumbing and test fixture setup. local_ripr_clean_and_non_rust_diffs_are_explicit_skips and local_ripr_rejects_untracked_rust_and_missing_merge_base execute successful and failed git paths with exact outcome assertions. Re-verify after git adapter edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:e200cc24"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on git output/error plumbing and test fixture setup. local_ripr_clean_and_non_rust_diffs_are_explicit_skips and local_ripr_rejects_untracked_rust_and_missing_merge_base execute successful and failed git paths with exact outcome assertions. Re-verify after git adapter edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:d26022d3"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on git output/error plumbing and test fixture setup. local_ripr_clean_and_non_rust_diffs_are_explicit_skips and local_ripr_rejects_untracked_rust_and_missing_merge_base execute successful and failed git paths with exact outcome assertions. Re-verify after git adapter edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:7145b440"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on bounded human feedback. local_ripr_console_capture_is_bounded_and_keeps_head_and_tail pins the exact head/tail retention, truncation marker, and size ceiling; full raw feedback remains preserved separately. Re-verify after console capture edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:855c511f"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on bounded human feedback. local_ripr_console_capture_is_bounded_and_keeps_head_and_tail pins the exact head/tail retention, truncation marker, and size ceiling; full raw feedback remains preserved separately. Re-verify after console capture edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:3a42cad2.2"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:predicate:1630343e"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:26524194"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:26524194.2"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:dab8493f"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on pinned envelope validation and badge/detail reconciliation. local_ripr_schema_reconciles_suppressed_and_exposed_findings pins accepted, mismatched, and malformed envelopes. Re-verify after schema validation edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:6fecda7e"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on advisory results and safe owned output. local_ripr_unsuppressed_count_is_advisory_not_a_local_threshold, local_ripr_options_and_rust_input_contract_are_explicit, and local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pin the contract. Re-verify after local result or output ownership edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:29480275"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on shared bounded capture composition. clip_capture_bounds_streams_with_head_tail_and_marker pins precommit head/tail/marker behavior, and local_ripr_console_capture_is_bounded_and_keeps_head_and_tail pins the RIPR-specific budget and marker. Re-verify after capture composition edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:15984a47"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on shared bounded capture composition. clip_capture_bounds_streams_with_head_tail_and_marker pins precommit head/tail/marker behavior, and local_ripr_console_capture_is_bounded_and_keeps_head_and_tail pins the RIPR-specific budget and marker. Re-verify after capture composition edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:9785824e"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on advisory results and safe owned output. local_ripr_unsuppressed_count_is_advisory_not_a_local_threshold, local_ripr_options_and_rust_input_contract_are_explicit, and local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pin the contract. Re-verify after local result or output ownership edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:d0c8bfbd"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on advisory results and safe owned output. local_ripr_unsuppressed_count_is_advisory_not_a_local_threshold, local_ripr_options_and_rust_input_contract_are_explicit, and local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pin the contract. Re-verify after local result or output ownership edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:baff766d"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on advisory results and safe owned output. local_ripr_unsuppressed_count_is_advisory_not_a_local_threshold, local_ripr_options_and_rust_input_contract_are_explicit, and local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pin the contract. Re-verify after local result or output ownership edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:953f140d"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on advisory results and safe owned output. local_ripr_unsuppressed_count_is_advisory_not_a_local_threshold, local_ripr_options_and_rust_input_contract_are_explicit, and local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pin the contract. Re-verify after local result or output ownership edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:8cdfb495"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 ready-mode finding on advisory results and safe owned output. local_ripr_unsuppressed_count_is_advisory_not_a_local_threshold, local_ripr_options_and_rust_input_contract_are_explicit, and local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs pin the contract. Re-verify after local result or output ownership edits."

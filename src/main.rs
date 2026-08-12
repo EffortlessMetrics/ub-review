@@ -4081,6 +4081,32 @@ fn route_follow_up_proof_receipts(
     }
 }
 
+struct ReporterCoordinationOutcome {
+    status: &'static str,
+    error: Option<String>,
+    resolution: ReporterTurnResolution,
+}
+
+fn finalize_reporter_coordination(
+    review_dir: &Path,
+    current_head: &str,
+    model_calls_used: &mut usize,
+    calls_attempted: usize,
+    result: Result<()>,
+) -> ReporterCoordinationOutcome {
+    *model_calls_used = model_calls_used.saturating_add(calls_attempted);
+    let error = result.err().map(|error| format!("{error:#}"));
+    ReporterCoordinationOutcome {
+        status: if error.is_some() {
+            "failed"
+        } else {
+            "completed"
+        },
+        resolution: resolve_reporter_after_coordination(review_dir, current_head, error.as_deref()),
+        error,
+    }
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
@@ -4266,13 +4292,13 @@ fn write_review_artifacts(
                     routed,
                     &receipt_ref,
                 );
-                let _ = write_lane_thread_turn(
+                write_lane_thread_turn(
                     &review_dir,
                     &receipt.lane,
                     &turn,
                     &receipt.cohort_id,
                     &receipt.status,
-                );
+                )?;
                 // Order 8 (#678): emit a lane_report message to the cross-lane
                 // queue so the reporter (Order 9) can consume the lane's
                 // conclusion. Also emit thread_terminal when the lane is done.
@@ -4532,7 +4558,8 @@ fn write_review_artifacts(
     // continuation (Order 9c proof-routing).
     let reporter_loop =
         start_run_loop(event_log, run_started, "model", "investigation", "reporter")?;
-    let reporter_status = match run_reporter_coordination(
+    let mut reporter_calls_attempted = 0;
+    let reporter_result = run_reporter_coordination(
         root,
         &review_dir,
         &shared_context,
@@ -4543,19 +4570,20 @@ fn write_review_artifacts(
         model_calls_used,
         event_log,
         &message_log,
-    ) {
-        Ok(calls) => {
-            model_calls_used = model_calls_used.saturating_add(calls);
-            "completed"
-        }
-        Err(e) => {
-            let _ = event_log.append(
-                "reporter_error",
-                serde_json::json!({"error": format!("{e:#}")}),
-            );
-            "failed"
-        }
-    };
+        &diff.head,
+        &mut reporter_calls_attempted,
+    );
+    let reporter_outcome = finalize_reporter_coordination(
+        &review_dir,
+        &diff.head,
+        &mut model_calls_used,
+        reporter_calls_attempted,
+        reporter_result,
+    );
+    let reporter_status = reporter_outcome.status;
+    if let Some(error) = &reporter_outcome.error {
+        let _ = event_log.append("reporter_error", serde_json::json!({"error": error}));
+    }
     finish_run_loop(
         event_log,
         run_started,
@@ -4921,10 +4949,11 @@ fn write_review_artifacts(
             proof_receipts: &review.proof_receipts,
         },
     )?;
-    // Order 10 (#678): read the reporter's distillation (Order 9 #696) to pass
-    // into the compiler as the review body's editorial summary. The compiler
-    // renders it verbatim (firewall, not truth reducer).
-    let reporter_distillation = read_reporter_distillation(&review_dir);
+    // Order 10 (#678) + #857: one current-head reporter resolution feeds the
+    // compiler distillation and (later) review-forward gate evidence. Stale or
+    // malformed turns stay out of the public body.
+    let reporter_resolution = reporter_outcome.resolution;
+    let reporter_distillation = reporter_resolution.public_distillation().map(str::to_owned);
     let final_surface = compile_review_surface(ReviewCompilerInput {
         shared_context_id: &review.shared_context_id,
         review_body_policy: &config.review_body,
@@ -5006,7 +5035,8 @@ fn write_review_artifacts(
     )?;
     // Order 11 (#678): read the reporter's verdict for review-forward gate
     // policy. Only affects the gate when config.gate.review_forward == true.
-    let reporter_verdict = read_reporter_verdict(&review_dir);
+    // Same resolution object as the compiler — no second latest-turn search.
+    let reporter_gate = reporter_resolution.gate_input();
     let gate_outcome = build_gate_outcome(GateOutcomeInput {
         args,
         config,
@@ -5017,7 +5047,7 @@ fn write_review_artifacts(
         tool_gate_outcomes,
         missing_or_failed_sensor_evidence: &review.missing_or_failed_sensor_evidence,
         missing_or_failed_model_evidence: &review.missing_or_failed_model_evidence,
-        reporter_verdict,
+        reporter_gate,
     });
     if (gate_outcome.conclusion == "fail" || gate_outcome.conclusion == "inconclusive")
         && review_payload_status == "skipped_empty_smoke"
@@ -14552,6 +14582,150 @@ required_proof_unprooven = true
         assert!(
             summary
                 .contains("- Gate: `pass` with `0` blocking reasons (`review/gate_outcome.json`)")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn production_reporter_failure_composition_withholds_public_text_and_gates_inconclusive()
+    -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        crate::write_reporter_thread(
+            &review_dir,
+            &crate::ReporterConclusion {
+                schema: crate::REPORTER_THREAD_SCHEMA.to_owned(),
+                distillation: "valid disk text that must remain private".to_owned(),
+                proposed_follow_ups: vec![],
+                verdict: crate::ReporterVerdict::Clear,
+                cohort_id: "cid".to_owned(),
+                thread_id: "tid".to_owned(),
+            },
+            "head-a",
+        )?;
+        let mut model_calls_used = 3;
+        let outcome = super::finalize_reporter_coordination(
+            &review_dir,
+            "head-a",
+            &mut model_calls_used,
+            4,
+            Err(anyhow::anyhow!("forced startup invalidation failure")),
+        );
+
+        assert_eq!(model_calls_used, 7);
+        assert_eq!(outcome.status, "failed");
+        assert!(outcome.resolution.public_distillation().is_none());
+
+        let mut args = test_run_args(temp.path().join("out"));
+        args.mode = RunMode::IntelligentCi;
+        let mut config = Config::default();
+        config.gate.review_forward = true;
+        let plan = test_plan(Vec::new());
+        let terminal_state = test_terminal_state("sufficient");
+        let gate = crate::build_gate_outcome(crate::GateOutcomeInput {
+            args: &args,
+            config: &config,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            tool_gate_outcomes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            reporter_gate: outcome.resolution.gate_input(),
+        });
+        assert_eq!(gate.conclusion, "inconclusive");
+        assert_eq!(gate.reasons.len(), 1);
+        assert_eq!(gate.reasons[0].kind, "reporter-evidence");
+        assert_eq!(gate.reasons[0].id, "reporter-malformed");
+        assert_eq!(
+            gate.reasons[0].receipt,
+            "review/threads/reporter/thread.json"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn turn_one_persistence_failure_composes_to_exact_inconclusive_gate() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        crate::write_reporter_thread(
+            &review_dir,
+            &crate::ReporterConclusion {
+                schema: crate::REPORTER_THREAD_SCHEMA.to_owned(),
+                distillation: "turn zero must be invalidated".to_owned(),
+                proposed_follow_ups: vec!["lane: reconsider".to_owned()],
+                verdict: crate::ReporterVerdict::Clear,
+                cohort_id: "cid".to_owned(),
+                thread_id: "tid".to_owned(),
+            },
+            "head-a",
+        )?;
+        std::fs::create_dir(review_dir.join("threads/reporter/turn-001.json"))?;
+        let refs = vec!["lane-answer:lane".to_owned()];
+        let redistillation = crate::run_reporter_redistillation(
+            crate::ReporterRedistillationContext {
+                review_dir: &review_dir,
+                current_head: "head-a",
+                cohort_id: "cid",
+                thread_id: "tid",
+                lane_answer_refs: &refs,
+            },
+            || {
+                Ok(crate::ModelPromptContent {
+                    json_payload: serde_json::json!({
+                        "distillation": "replacement",
+                        "verdict": "clear",
+                        "proposed_follow_ups": [],
+                    })
+                    .to_string(),
+                    parse_path: PathBuf::from("forced-response.json"),
+                    duration_ms: 1,
+                    http_status: Some(200),
+                    response_shape: "test".to_owned(),
+                    cache_usage: ModelCacheUsage::default(),
+                })
+            },
+        );
+        assert!(redistillation.is_err());
+
+        let max_model_calls = 7;
+        let mut model_calls_used = 3;
+        let outcome = super::finalize_reporter_coordination(
+            &review_dir,
+            "head-a",
+            &mut model_calls_used,
+            4,
+            redistillation.map(|_| ()),
+        );
+        assert_eq!(model_calls_used, max_model_calls);
+        assert!(model_calls_used >= max_model_calls);
+        assert!(outcome.resolution.public_distillation().is_none());
+
+        let mut args = test_run_args(temp.path().join("out"));
+        args.mode = RunMode::IntelligentCi;
+        let mut config = Config::default();
+        config.gate.review_forward = true;
+        let plan = test_plan(Vec::new());
+        let terminal_state = test_terminal_state("sufficient");
+        let gate = crate::build_gate_outcome(crate::GateOutcomeInput {
+            args: &args,
+            config: &config,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            tool_gate_outcomes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            reporter_gate: outcome.resolution.gate_input(),
+        });
+        assert_eq!(gate.conclusion, "inconclusive");
+        assert_eq!(gate.reasons.len(), 1);
+        assert_eq!(gate.reasons[0].id, "reporter-malformed");
+        assert_eq!(
+            gate.reasons[0].receipt,
+            "review/threads/reporter/thread.json"
         );
         Ok(())
     }

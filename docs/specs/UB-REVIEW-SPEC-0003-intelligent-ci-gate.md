@@ -104,6 +104,17 @@ this repository's own file is the production example):
   location/expression, reach/discriminate summaries) ships in
   `sensors/ripr/exposure-gaps.json`, verifier-reconciled against the badge
   counts (#347).
+  `cargo xtask ripr` is the local feedback adapter for this exact ready-mode
+  badge-plus-detail contract. It runs against a materialized tracked working
+  diff from the configured base's merge-base with `HEAD`, preserves raw tool
+  outputs under `target/xtask/ripr/`, and rejects
+  untracked Rust inputs. It is a preview only: the hosted merge-ref receipt
+  remains authoritative, and the adapter owns no threshold, classification,
+  or suppression semantics. Nonzero counts are advisory locally; malformed or
+  inconsistent pinned-tool outputs fail closed (#856). RIPR 0.10.0 detail
+  findings omit suppression state, so the adapter independently reconciles
+  only the total canonical-gap count; the partition remains tool-reported
+  pending the upstream detail-schema parity work in #873.
 - `[gate]` — `required_check`, `target_minutes`, `hard_timeout_minutes`,
   `post_review_on` (default `["opened", "ready_for_review"]`), and
   `blocking` (src/config.rs `GateConfig`). Posting on quiet passes is
