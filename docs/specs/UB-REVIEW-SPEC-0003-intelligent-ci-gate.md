@@ -110,7 +110,8 @@ this repository's own file is the production example):
   outputs under `target/xtask/ripr/`, and rejects
   untracked Rust inputs. It is a preview only: the hosted merge-ref receipt
   remains authoritative, and the adapter owns no threshold, classification,
-  or suppression semantics (#856).
+  or suppression semantics. Nonzero counts are advisory locally; malformed or
+  inconsistent pinned-tool outputs fail closed (#856).
 - `[gate]` — `required_check`, `target_minutes`, `hard_timeout_minutes`,
   `post_review_on` (default `["opened", "ready_for_review"]`), and
   `blocking` (src/config.rs `GateConfig`). Posting on quiet passes is

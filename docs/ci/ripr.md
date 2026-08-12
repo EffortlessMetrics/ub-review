@@ -26,8 +26,9 @@ current tracked working tree to that revision, writes the exact diff to
 `ripr 0.10.0` with `--mode ready` for the raw badge decision, JSON detail, and
 tool-native human feedback. It preserves those verbatim outputs as
 `gate-decision.json`, `exposure-gaps.json`, and `feedback.txt`, plus a bounded
-local `receipt.json`. Use `--base <rev>` when the PR targets another base and
-`--out-dir <path>` only when a separate receipt directory is useful.
+local `receipt.json`. Use `--base <rev>` when the PR targets another base. The
+output path is deliberately fixed under `target/xtask/ripr/`; the command does
+not accept arbitrary cleanup or overwrite targets.
 
 Clean diffs and diffs without Rust inputs are explicit `skipped` outcomes.
 Untracked Rust files are rejected because Git cannot include them in the diff;
@@ -45,4 +46,6 @@ snapshot, so the
 hosted gate and its artifact remain authoritative. The adapter does not change
 the strict-zero threshold, classify findings, edit suppressions, or replace
 `ripr`; address each reported finding with a discriminating test, an upstream
-tool issue where appropriate, or an owned exact suppression receipt.
+tool issue where appropriate, or an owned exact suppression receipt. A nonzero
+local count is advisory and does not change the command's exit status; only the
+repository's existing hosted gate policy owns the strict-zero decision.
