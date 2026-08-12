@@ -21365,3 +21365,63 @@ kind = "exposure_gap"
 finding_id = "probe:src_tests.rs:return_value:9b215a8d"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 ready-mode finding in the test-only GitHub review golden harness. review_goldens_match_the_exact_github_facing_surface validates production compiler, RIGHT-line post validation, and serialized pre-delivery payload values across six cases; proof_cases_use_production_red_green_receipts, snapshot_uses_the_production_inline_delivery_transform, clean_case_stays_silent, and golden_bless_is_fail_closed_without_exact_opt_in pin the focused invariants. Re-verify after golden harness edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:03e3ac6f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the bounded smoke-base selector. smoke_base_rejects_shallow_and_empty_history_with_actionable_errors uses a hermetic Git repository to discriminate unavailable parent history, an empty diff, and a valid non-empty HEAD~1 range, including the documented UB_REVIEW_SMOKE_BASE recovery route. Re-verify after smoke-base parsing or Git validation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:ec4e35d4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the bounded smoke-base selector. smoke_base_rejects_shallow_and_empty_history_with_actionable_errors uses a hermetic Git repository to discriminate unavailable parent history, an empty diff, and a valid non-empty HEAD~1 range, including the documented UB_REVIEW_SMOKE_BASE recovery route. Re-verify after smoke-base parsing or Git validation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:d9e6c39b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the bounded smoke-base selector. smoke_base_rejects_shallow_and_empty_history_with_actionable_errors uses a hermetic Git repository to discriminate unavailable parent history, an empty diff, and a valid non-empty HEAD~1 range, including the documented UB_REVIEW_SMOKE_BASE recovery route. Re-verify after smoke-base parsing or Git validation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:6f13aa9a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the bounded smoke-base selector. smoke_base_rejects_shallow_and_empty_history_with_actionable_errors uses a hermetic Git repository to discriminate unavailable parent history, an empty diff, and a valid non-empty HEAD~1 range, including the documented UB_REVIEW_SMOKE_BASE recovery route. Re-verify after smoke-base parsing or Git validation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:fbad66d3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the bounded smoke-base selector. smoke_base_rejects_shallow_and_empty_history_with_actionable_errors uses a hermetic Git repository to discriminate unavailable parent history, an empty diff, and a valid non-empty HEAD~1 range, including the documented UB_REVIEW_SMOKE_BASE recovery route. Re-verify after smoke-base parsing or Git validation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:fa0c7c7a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the bounded smoke-base selector. smoke_base_rejects_shallow_and_empty_history_with_actionable_errors uses a hermetic Git repository to discriminate unavailable parent history, an empty diff, and a valid non-empty HEAD~1 range, including the documented UB_REVIEW_SMOKE_BASE recovery route. Re-verify after smoke-base parsing or Git validation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:7da921b6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the bounded smoke-base selector. smoke_base_rejects_shallow_and_empty_history_with_actionable_errors uses a hermetic Git repository to discriminate unavailable parent history, an empty diff, and a valid non-empty HEAD~1 range, including the documented UB_REVIEW_SMOKE_BASE recovery route. Re-verify after smoke-base parsing or Git validation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:03a33e67"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the bounded smoke-base selector. smoke_base_rejects_shallow_and_empty_history_with_actionable_errors uses a hermetic Git repository to discriminate unavailable parent history, an empty diff, and a valid non-empty HEAD~1 range, including the documented UB_REVIEW_SMOKE_BASE recovery route. Re-verify after smoke-base parsing or Git validation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:65a8ad8b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the bounded smoke-base selector. smoke_base_rejects_shallow_and_empty_history_with_actionable_errors uses a hermetic Git repository to discriminate unavailable parent history, an empty diff, and a valid non-empty HEAD~1 range, including the documented UB_REVIEW_SMOKE_BASE recovery route. Re-verify after smoke-base parsing or Git validation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:131f8cb4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 ready-mode finding in the bounded smoke-base selector. smoke_base_rejects_shallow_and_empty_history_with_actionable_errors uses a hermetic Git repository to discriminate unavailable parent history, an empty diff, and a valid non-empty HEAD~1 range, including the documented UB_REVIEW_SMOKE_BASE recovery route. Re-verify after smoke-base parsing or Git validation changes."

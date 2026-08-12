@@ -62,6 +62,10 @@ fn run() -> Result<()> {
             let options = RiprOptions::parse(args)?;
             run_local_ripr(&root, options)?;
         }
+        "smoke-base" => {
+            let base = SmokeBaseOptions::parse(args)?;
+            println!("{}", resolve_smoke_base(&root, &base.base)?);
+        }
         "help" | "-h" | "--help" => {
             reject_extra_args(args)?;
             print_help();
@@ -74,7 +78,7 @@ fn run() -> Result<()> {
         }
         other => {
             bail!(
-                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, ripr, calibration-report, or help"
+                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, ripr, smoke-base, calibration-report, or help"
             )
         }
     }
@@ -99,6 +103,7 @@ cargo xtask commands
   cargo xtask audit             run cargo-audit for RUSTSEC advisories (advisory)
   cargo xtask precommit         run diff-scoped Rust precommit checks
   cargo xtask ripr              reproduce hosted ripr ready-mode feedback locally
+  cargo xtask smoke-base        select a non-empty local smoke diff base
   cargo xtask calibration-report <dir>  aggregate review/calibration.json files
 
 precommit options
@@ -108,8 +113,59 @@ precommit options
 ripr options
 
   --base <rev>                  compare against this revision (default: origin/main)
+
+smoke-base options
+
+  --base <rev>                  smoke diff base (default: HEAD~1)
 "
     );
+}
+
+#[derive(Debug)]
+struct SmokeBaseOptions {
+    base: String,
+}
+
+impl SmokeBaseOptions {
+    fn parse(mut args: impl Iterator<Item = String>) -> Result<Self> {
+        let mut base = "HEAD~1".to_owned();
+        while let Some(arg) = args.next() {
+            match arg.as_str() {
+                "--base" => base = args.next().context("--base requires a revision")?,
+                other => bail!("unexpected smoke-base argument `{other}`"),
+            }
+        }
+        if base.trim().is_empty() {
+            bail!("--base must not be empty");
+        }
+        Ok(Self { base })
+    }
+}
+
+fn resolve_smoke_base(root: &Path, base: &str) -> Result<String> {
+    let commit = format!("{base}^{{commit}}");
+    let available = Command::new("git")
+        .args(["rev-parse", "--verify", "--quiet", &commit])
+        .current_dir(root)
+        .status()
+        .context("check local smoke base")?;
+    if !available.success() {
+        bail!(
+            "smoke base `{base}` is unavailable; fetch/deepen history or pass `cargo xtask smoke-base --base <rev>` (UB_REVIEW_SMOKE_BASE for scripts/smoke-local.sh) with an available non-empty-diff base"
+        );
+    }
+    let diff = Command::new("git")
+        .args(["diff", "--quiet", base, "HEAD", "--"])
+        .current_dir(root)
+        .status()
+        .context("check local smoke diff")?;
+    match diff.code() {
+        Some(0) => bail!(
+            "smoke base `{base}` produces an empty diff; select an available revision with changes through HEAD"
+        ),
+        Some(1) => Ok(base.to_owned()),
+        _ => bail!("git diff failed while validating smoke base `{base}`"),
+    }
 }
 
 const LOCAL_RIPR_VERSION: &str = "0.10.0";
@@ -1684,6 +1740,35 @@ mod tests {
         let root = initialized_test_repo(name)?;
         fs::write(root.join("src/lib.rs"), "pub fn value() -> u8 { 2 }\n")?;
         Ok(root)
+    }
+
+    #[test]
+    fn smoke_base_rejects_shallow_and_empty_history_with_actionable_errors() -> Result<()> {
+        assert_eq!(SmokeBaseOptions::parse(std::iter::empty())?.base, "HEAD~1");
+        assert_eq!(
+            SmokeBaseOptions::parse(["--base", "origin/main"].into_iter().map(str::to_owned))?.base,
+            "origin/main"
+        );
+        let root = initialized_test_repo("smoke-base")?;
+        let shallow = match resolve_smoke_base(&root, "HEAD~1") {
+            Ok(base) => bail!("unavailable parent unexpectedly resolved as {base}"),
+            Err(error) => error.to_string(),
+        };
+        assert!(shallow.contains("fetch/deepen history"), "{shallow}");
+        assert!(shallow.contains("UB_REVIEW_SMOKE_BASE"), "{shallow}");
+
+        let empty = match resolve_smoke_base(&root, "HEAD") {
+            Ok(base) => bail!("empty smoke range unexpectedly resolved as {base}"),
+            Err(error) => error.to_string(),
+        };
+        assert!(empty.contains("produces an empty diff"), "{empty}");
+
+        fs::write(root.join("src/lib.rs"), "pub fn value() -> u8 { 2 }\n")?;
+        git_test(&root, &["add", "src/lib.rs"])?;
+        git_test(&root, &["commit", "-m", "change"])?;
+        assert_eq!(resolve_smoke_base(&root, "HEAD~1")?, "HEAD~1");
+        fs::remove_dir_all(root)?;
+        Ok(())
     }
 
     fn fake_badge(unsuppressed: u64, suppressed: u64, analyzed: u64) -> Vec<u8> {

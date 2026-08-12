@@ -596,6 +596,17 @@ fn init_writes_file_driven_setup_guide_from_repo_scan() -> Result<()> {
         config_text.contains("profile = \"gh-runner\""),
         "init should still write the starter config:\n{config_text}"
     );
+    for forbidden in [
+        "policy = \"\"",
+        "mode = \"\"",
+        "kind = \"bun\"",
+        "/home/steven",
+    ] {
+        assert!(
+            !config_text.contains(forbidden),
+            "init starter config retained `{forbidden}`:\n{config_text}"
+        );
+    }
     let guide_text = fs::read_to_string(&guide)?;
     for expected in [
         "# ub-review init guide",

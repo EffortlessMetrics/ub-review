@@ -46,10 +46,6 @@ pub(crate) struct Config {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub(crate) struct ProvidersConfig {
-    /// Empty means "unset"; the resolver then applies the built-in default.
-    /// Skipped on serialize so a rendered starter config never writes
-    /// `policy = ""`, which the policy validator rejects as an invalid value.
-    #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) policy: String,
     #[serde(skip_serializing_if = "ProviderRuntimeConfig::is_empty")]
     pub(crate) minimax: ProviderRuntimeConfig,
@@ -80,10 +76,7 @@ impl ProviderRuntimeConfig {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub(crate) struct ImpactConfig {
-    /// "shadow" (default) or "active". Empty means "unset"; skipped on
-    /// serialize so a rendered starter config never writes `mode = ""`, which
-    /// the policy validator rejects as an invalid value.
-    #[serde(skip_serializing_if = "String::is_empty")]
+    /// "shadow" (default) or "active".
     pub(crate) mode: String,
 }
 
@@ -666,15 +659,8 @@ impl Default for Config {
 impl Default for RepoConfig {
     fn default() -> Self {
         Self {
-            // The default repo is the one being reviewed, not the author's
-            // dogfood checkout. `init` renders this struct straight into a new
-            // user's starter config, so a hardcoded `bun` kind misclassified
-            // every non-Bun repo and the ledger path leaked a developer home
-            // directory into every generated file. `enable` already guards
-            // against both (see the `/home/steven` assertion in `enable.rs`);
-            // `init` is the command the README lists first and did not.
-            kind: String::new(),
-            ledger: String::new(),
+            kind: "bun".to_owned(),
+            ledger: "/home/steven/code/bun-ub-ledger".to_owned(),
             base: "origin/main".to_owned(),
             head: "HEAD".to_owned(),
         }
@@ -1761,14 +1747,17 @@ phase = "sometime"
     }
 
     /// The rendered starter config must survive its own policy validator.
-    /// `init` serializes `Config::default()` straight to disk, so an unset
-    /// `String` field that still serializes emits `key = ""` — which the
-    /// validator rejects. That made the documented first-run path
+    /// `init` starts from `Config::default()`, whose unset string fields would
+    /// otherwise serialize as `key = ""` and fail validation. The starter
+    /// renderer must omit those fields and the internal Bun dogfood defaults.
+    /// Their internal serialization remains unchanged for effective-config
+    /// receipts and profile hashes. The former output made a first-run path
     /// (`init` then `run`) fail the gate on policy errors the user never
     /// wrote, with nothing on stdout to explain it.
     #[test]
     fn rendered_default_config_has_no_policy_errors() -> anyhow::Result<()> {
-        let rendered = toml::to_string(&Config::default())?;
+        let config = crate::init::starter_config("gh-runner");
+        let rendered = crate::init::render_starter_config(&config)?;
         anyhow::ensure!(
             !rendered.contains("policy = \"\""),
             "starter config emits an empty [providers].policy: {rendered}"
@@ -1777,18 +1766,31 @@ phase = "sometime"
             !rendered.contains("mode = \"\""),
             "starter config emits an empty [impact].mode: {rendered}"
         );
-        // No developer home directory or Bun-specific default may leak into a
-        // config rendered for someone else's repository.
-        anyhow::ensure!(
-            !rendered.contains("/home/"),
-            "starter config leaks a home directory: {rendered}"
-        );
-
         let reloaded = Config::from_toml_with_policy_receipts(&rendered)?;
         anyhow::ensure!(
             reloaded.policy_errors.is_empty(),
             "rendered default config failed its own validator: {:?}",
             reloaded.policy_errors
+        );
+        anyhow::ensure!(
+            reloaded.repo.kind.is_empty(),
+            "starter config retained repository kind {:?}",
+            reloaded.repo.kind
+        );
+        anyhow::ensure!(
+            reloaded.repo.ledger.is_empty(),
+            "starter config retained repository ledger {:?}",
+            reloaded.repo.ledger
+        );
+        anyhow::ensure!(
+            reloaded.providers.policy.is_empty(),
+            "starter config retained provider policy {:?}",
+            reloaded.providers.policy
+        );
+        anyhow::ensure!(
+            reloaded.impact.mode.is_empty(),
+            "starter config retained impact mode {:?}",
+            reloaded.impact.mode
         );
         Ok(())
     }
