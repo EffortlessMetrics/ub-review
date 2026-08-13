@@ -640,9 +640,17 @@ runs:
           extra+=(--trusted-head "${{ inputs['trusted-head'] }}")
           extra+=(--trusted-changed-files "${{ inputs['trusted-changed-files'] }}")
           extra+=(--trusted-patch "${{ inputs['trusted-patch'] }}")
+          extra+=(--model-mode off)
+        elif [[ -n "${{ inputs['trusted-head'] }}" || -n "${{ inputs['trusted-changed-files'] }}" || -n "${{ inputs['trusted-patch'] }}" ]]; then
+          echo "trusted-base-tree, trusted-head, trusted-changed-files, and trusted-patch must be supplied together" >&2
+          exit 1
         fi
 
         config_path="${{ inputs.config }}"
+        if [[ -n "${{ inputs['trusted-base-tree'] }}" && -n "${{ inputs.config }}" ]]; then
+          echo "trusted-base mode does not accept caller-supplied config; use the action-pinned preset" >&2
+          exit 1
+        fi
         if [[ -z "$config_path" ]]; then
           config_path="$GITHUB_ACTION_PATH/profiles/bun-ub-v0.toml"
           case "${{ inputs.preset }}" in

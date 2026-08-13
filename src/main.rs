@@ -3528,6 +3528,20 @@ struct RunCompletion {
 fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
     let run_started = Instant::now();
     let mut args = normalize_run_args(args)?;
+    let trusted_mode = args.review.trusted_base_tree.is_some()
+        || args.review.trusted_head.is_some()
+        || args.review.trusted_changed_files.is_some()
+        || args.review.trusted_patch.is_some();
+    if trusted_mode {
+        if args.model_mode.key() != "off" {
+            bail!(
+                "trusted-base mode requires --model-mode off; secret-backed model execution is disabled"
+            )
+        }
+        if args.provider_policy.key() != "auto" {
+            bail!("trusted-base mode rejects provider policy overrides")
+        }
+    }
     let run_pass = resolved_run_pass(args.run_pass);
     let (mut config, diff, box_state, plan) =
         prepare_plan(&args.review, args.allow_heavy, &args.selectors)?;
