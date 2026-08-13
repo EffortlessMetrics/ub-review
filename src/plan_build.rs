@@ -264,6 +264,116 @@ impl DiffContext {
             diff_class,
         })
     }
+
+    /// Build a diff from workflow-supplied objects while the checkout remains
+    /// at the trusted base tree. This deliberately never resolves `head` as a
+    /// ref and never reads repository configuration.
+    pub(crate) fn from_trusted_inputs(
+        root: &Path,
+        base_tree: &str,
+        head: &str,
+        changed_files_path: &Path,
+        patch_path: &Path,
+    ) -> Result<Self> {
+        validate_git_object_id(base_tree, "trusted base tree")?;
+        validate_git_object_id(head, "trusted head")?;
+        let actual_tree = git_tree_sha(root, "HEAD")?;
+        let expected_tree = git_tree_sha(root, base_tree)?;
+        if expected_tree != base_tree || actual_tree != base_tree {
+            bail!(
+                "trusted-base admission rejected: checkout tree {actual_tree} does not match base tree {base_tree}"
+            );
+        }
+        let changed_files_raw = fs::read_to_string(changed_files_path).with_context(|| {
+            format!(
+                "read trusted changed-files object {}",
+                changed_files_path.display()
+            )
+        })?;
+        let changed_files = changed_files_raw
+            .lines()
+            .map(str::trim)
+            .filter(|path| !path.is_empty())
+            .map(|path| {
+                if path.starts_with('/')
+                    || path.contains('\\')
+                    || path.split('/').any(|part| part == "..")
+                    || path.as_bytes().contains(&0)
+                {
+                    bail!("trusted changed-files object contains unsafe path `{path}`")
+                }
+                Ok(path.to_owned())
+            })
+            .collect::<Result<Vec<_>>>()?;
+        if changed_files.is_empty() {
+            bail!("trusted changed-files object is empty");
+        }
+        let patch = fs::read_to_string(patch_path)
+            .with_context(|| format!("read trusted patch object {}", patch_path.display()))?;
+        if patch.as_bytes().contains(&0) {
+            bail!("trusted patch object contains NUL bytes");
+        }
+        let flags = classify_diff(&changed_files, &patch);
+        let diff_class = classify_diff_class(&changed_files, &flags);
+        Ok(Self {
+            base: base_tree.to_owned(),
+            head: head.to_owned(),
+            changed_files,
+            patch,
+            flags,
+            diff_class,
+        })
+    }
+}
+
+fn validate_git_object_id(value: &str, label: &str) -> Result<()> {
+    if value.len() != 40 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        bail!("invalid {label}: expected a 40-character hexadecimal object id")
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod trusted_base_tests {
+    use super::*;
+
+    #[test]
+    fn trusted_admission_rejects_non_object_ids_before_reading_checkout() -> Result<()> {
+        let result = DiffContext::from_trusted_inputs(
+            Path::new("does-not-exist"),
+            "head-controlled-config",
+            &"a".repeat(40),
+            Path::new("missing.changed-files"),
+            Path::new("missing.patch"),
+        );
+        let error = match result {
+            Ok(_) => bail!("invalid base object was accepted"),
+            Err(error) => error,
+        };
+        if !error.to_string().contains("invalid trusted base tree") {
+            bail!("unexpected rejection: {error:#}")
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn trusted_admission_rejects_invalid_head_identity() -> Result<()> {
+        let result = DiffContext::from_trusted_inputs(
+            Path::new("does-not-exist"),
+            &"b".repeat(40),
+            "head-controlled-tree",
+            Path::new("missing.changed-files"),
+            Path::new("missing.patch"),
+        );
+        let error = match result {
+            Ok(_) => bail!("invalid head object was accepted"),
+            Err(error) => error,
+        };
+        if !error.to_string().contains("invalid trusted head") {
+            bail!("unexpected rejection: {error:#}")
+        }
+        Ok(())
+    }
 }
 
 pub(crate) fn git_lines(root: &Path, args: &[&str]) -> Result<Vec<String>> {

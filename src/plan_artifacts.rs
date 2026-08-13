@@ -9,13 +9,62 @@ pub(crate) fn prepare_plan(
     selectors: &SelectorArgs,
 ) -> Result<(Config, DiffContext, BoxState, Plan)> {
     validate_selector_syntax(selectors)?;
+    let trusted_inputs = (
+        &args.trusted_base_tree,
+        &args.trusted_head,
+        &args.trusted_changed_files,
+        &args.trusted_patch,
+    );
+    let trusted_mode = trusted_inputs.0.is_some()
+        || trusted_inputs.1.is_some()
+        || trusted_inputs.2.is_some()
+        || trusted_inputs.3.is_some();
+    if trusted_mode
+        && (trusted_inputs.0.is_none()
+            || trusted_inputs.1.is_none()
+            || trusted_inputs.2.is_none()
+            || trusted_inputs.3.is_none())
+    {
+        bail!("trusted-base admission requires base tree, head, changed-files, and patch objects")
+    }
+    if trusted_mode {
+        let root = fs::canonicalize(&args.root)
+            .with_context(|| format!("canonicalize trusted root {}", args.root.display()))?;
+        let config = fs::canonicalize(&args.config)
+            .with_context(|| format!("canonicalize trusted config {}", args.config.display()))?;
+        if config.starts_with(&root) {
+            bail!("trusted-base admission rejects configuration loaded from the repository root")
+        }
+    }
     let config = Config::load_or_default(
         &args.config,
         runtime_profile_override(args.profile.as_ref(), args.runtime_profile.as_ref()),
     )?;
     let profile = config.selected_profile()?;
     let box_state = BoxState::detect()?;
-    let diff = DiffContext::from_git(&args.root, &args.base, &args.head)?;
+    let diff = if trusted_mode {
+        DiffContext::from_trusted_inputs(
+            &args.root,
+            trusted_inputs
+                .0
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("missing trusted base tree"))?,
+            trusted_inputs
+                .1
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("missing trusted head"))?,
+            trusted_inputs
+                .2
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("missing trusted changed-files"))?,
+            trusted_inputs
+                .3
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("missing trusted patch"))?,
+        )?
+    } else {
+        DiffContext::from_git(&args.root, &args.base, &args.head)?
+    };
     let mut plan = build_plan(&config, profile, &box_state, &diff, &args.root, allow_heavy);
     apply_plan_selectors(&mut plan, selectors)?;
     Ok((config, diff, box_state, plan))
@@ -66,6 +115,26 @@ pub(crate) fn write_plan_artifacts(
         diff.changed_files.join("\n"),
     )?;
     fs::write(out.join("input/diff.patch"), &diff.patch)?;
+    if let Some(run_args) = selectors.run_args
+        && let Some(base_tree) = run_args.review.trusted_base_tree.as_deref()
+    {
+        let receipt = serde_json::json!({
+                "schema_version": 1,
+                "admission": "trusted-base-explicit-diff",
+                "base_tree_sha": base_tree,
+                "head_sha": run_args.review.trusted_head.as_deref().unwrap_or("") ,
+                "changed_files_sha256": sha256_hex(diff.changed_files.join("\n").as_bytes()),
+                "patch_sha256": sha256_hex(diff.patch.as_bytes()),
+                "config_source": "trusted-action-input",
+                "head_tree_loaded": false,
+                "head_config_loaded": false,
+                "secret_backed_mode": "disabled-by-parent-policy",
+        });
+        fs::write(
+            out.join("input/trusted-base-receipt.json"),
+            serde_json::to_vec_pretty(&receipt)?,
+        )?;
+    }
     fs::write(out.join("input/pr.md"), render_pr_packet(diff))?;
     fs::write(out.join("input/claims.md"), render_claim_prompt(diff))?;
     Ok(())
