@@ -1065,4 +1065,134 @@ mod tests {
         )?;
         Ok(())
     }
+
+    #[test]
+    fn perl_lsp_3627_replay_deduplicates_public_claims_and_keeps_diagnostics_artifact_only()
+    -> Result<(), String> {
+        let fixture = fixture()?;
+        let temp = tempfile::tempdir().map_err(|error| error.to_string())?;
+        let out = temp.path().join("review");
+        fs::create_dir_all(&out).map_err(|error| error.to_string())?;
+        let reply_thread = fixture
+            .threads
+            .iter()
+            .find(|thread| thread.id == "3558771748")
+            .ok_or_else(|| "fixture reply thread is missing".to_owned())?;
+
+        let material_claim = reply_thread.body.clone();
+        let inline = fixture_comment(reply_thread, &material_claim);
+        let summary = SummaryOnlyFinding {
+            lane: "fixture".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            reason: material_claim.clone(),
+            evidence: "duplicate summary rendering of the inline claim".to_owned(),
+        };
+        let homework_summary = SummaryOnlyFinding {
+            lane: "proof-planner".to_owned(),
+            severity: "low".to_owned(),
+            confidence: "medium".to_owned(),
+            reason: "Proof homework: rerun the unrelated workspace test before posting.".to_owned(),
+            evidence: "skipped proof request retained for diagnostics".to_owned(),
+        };
+        let mut observations = production_observations(&fixture);
+        observations
+            .retain(|observation| observation.id == "fixture-parser:later-variable-subscript");
+        let duplicate = observations
+            .first()
+            .cloned()
+            .ok_or_else(|| "fixture material observation is missing".to_owned())?;
+        observations.push(duplicate);
+        let mut skipped_homework = observations
+            .first()
+            .cloned()
+            .ok_or_else(|| "fixture material observation was removed".to_owned())?;
+        skipped_homework.id = "fixture-skipped-proof-homework".to_owned();
+        skipped_homework.kind = "test-gap".to_owned();
+        skipped_homework.status = "open".to_owned();
+        skipped_homework.claim =
+            "Proof homework: rerun the unrelated workspace test before posting.".to_owned();
+        skipped_homework.dedupe_key = "unrelated-proof-gap".to_owned();
+        skipped_homework.fingerprint = "unrelated-proof-gap".to_owned();
+        observations.push(skipped_homework);
+        let skipped_receipt = ProofReceipt {
+            schema: "ub-review.proof_receipt.v1".to_owned(),
+            id: "fixture-unrelated-skipped-proof".to_owned(),
+            kind: "focused-test".to_owned(),
+            base: fixture.base_sha.clone(),
+            head: fixture.buggy_head_sha.clone(),
+            test_patch_mode: "none".to_owned(),
+            requested_by: vec!["unrelated-proof-gap".to_owned()],
+            request_ids: vec!["unrelated-proof-gap".to_owned()],
+            commands: vec![],
+            result: "skipped".to_owned(),
+            reason: "unrelated proof gap retained for diagnostics only".to_owned(),
+        };
+        let plan = fixture_plan(&fixture);
+        let diff = fixture_diff(&fixture, &fixture.buggy_head_sha);
+        let args = fixture_run_args(temp.path(), &out, &fixture.buggy_head_sha)?;
+        let body_policy = ReviewBodyPolicy::default();
+        let post_review_on = vec!["pull_request".to_owned()];
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "fixture-dedup-context",
+            review_body_policy: &body_policy,
+            run_pass: RunPass::Manual,
+            post_review_on: &post_review_on,
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &[inline],
+            summary_only_findings: &[summary, homework_summary],
+            observations: &observations,
+            proof_receipts: &[skipped_receipt],
+            suggested_issues: &[],
+            final_follow_up_tasks: 0,
+            reporter_distillation: None,
+        })
+        .map_err(|error| error.to_string())?;
+
+        let public_body = &surface.github_review.body;
+        require(
+            surface.github_review.comments.len() == 1,
+            format!(
+                "expected one retained inline claim, got {}",
+                surface.github_review.comments.len()
+            ),
+        )?;
+        let retained = surface
+            .github_review
+            .comments
+            .first()
+            .ok_or_else(|| "retained inline claim is missing".to_owned())?;
+        require(
+            retained.path == reply_thread.path
+                && retained.line == reply_thread.anchor.unwrap_or_default()
+                && retained.body.contains(&material_claim),
+            "retained public claim identity did not preserve the validated inline anchor",
+        )?;
+        require(
+            public_body.matches(&material_claim).count() == 1,
+            format!("material claim was not retained exactly once: {public_body}"),
+        )?;
+        require(
+            !public_body.contains("duplicate summary rendering")
+                && !public_body.contains("Proof homework")
+                && !public_body.contains("unrelated proof gap"),
+            format!("internal duplicate/homework text reached public body: {public_body}"),
+        )?;
+        require(
+            surface
+                .artifact_body
+                .contains("duplicate summary rendering")
+                && surface.artifact_body.contains("Proof homework"),
+            format!(
+                "artifact body did not retain diagnostic-only replay inputs: {}",
+                surface.artifact_body
+            ),
+        )?;
+        Ok(())
+    }
 }
