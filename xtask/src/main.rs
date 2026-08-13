@@ -26,6 +26,61 @@ fn ripr_install_hint_uses_the_content_addressed_identity_contract() {
     );
 }
 
+#[cfg(test)]
+#[test]
+fn ripr_inventory_separates_duplicates_and_current_diff_matches() -> Result<()> {
+    let ledger = r#"
+schema_version = 1
+[[suppressions]]
+finding_id = "probe:a"
+[[suppressions]]
+finding_id = "probe:a"
+[[suppressions]]
+finding_id = "probe:b"
+[[suppressions]]
+owner = "ub-review/core"
+"#;
+    let detail = serde_json::json!({"findings": [{"id": "probe:a"}]});
+    let report = classify_suppressions(ledger, Some(&detail))?;
+    let summary = report
+        .get("summary")
+        .and_then(JsonValue::as_object)
+        .context("inventory summary missing")?;
+    if summary
+        .get("matched_current_diff")
+        .and_then(JsonValue::as_u64)
+        != Some(1)
+        || summary.get("duplicate").and_then(JsonValue::as_u64) != Some(1)
+        || summary
+            .get("unmatched_by_current_diff")
+            .and_then(JsonValue::as_u64)
+            != Some(1)
+        || summary.get("malformed").and_then(JsonValue::as_u64) != Some(1)
+    {
+        bail!("unexpected suppression inventory summary: {summary:?}");
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[test]
+fn ripr_inventory_reports_unknown_currentness_without_detail() -> Result<()> {
+    let ledger = "schema_version = 1\n[[suppressions]]\nfinding_id = \"probe:a\"\n";
+    let report = classify_suppressions(ledger, None)?;
+    let summary = report
+        .get("summary")
+        .and_then(JsonValue::as_object)
+        .context("inventory summary missing")?;
+    if summary
+        .get("unknown_currentness")
+        .and_then(JsonValue::as_u64)
+        != Some(1)
+    {
+        bail!("expected unknown currentness: {summary:?}");
+    }
+    Ok(())
+}
+
 fn run() -> Result<()> {
     let mut args = env::args().skip(1);
     let command = args.next().unwrap_or_else(|| "help".to_owned());
@@ -61,6 +116,10 @@ fn run() -> Result<()> {
         "ripr" => {
             let options = RiprOptions::parse(args)?;
             run_local_ripr(&root, options)?;
+        }
+        "ripr-inventory" => {
+            let options = RiprInventoryOptions::parse(args)?;
+            run_ripr_inventory(&root, options)?;
         }
         "smoke-base" => {
             let base = parse_smoke_base_options(args)?;
@@ -103,6 +162,7 @@ cargo xtask commands
   cargo xtask audit             run cargo-audit for RUSTSEC advisories (advisory)
   cargo xtask precommit         run diff-scoped Rust precommit checks
   cargo xtask ripr              reproduce hosted ripr ready-mode feedback locally
+  cargo xtask ripr-inventory    classify suppression entries against a RIPR artifact
   cargo xtask smoke-base        select a non-empty local smoke diff base
   cargo xtask calibration-report <dir>  aggregate review/calibration.json files
 
@@ -184,6 +244,167 @@ const LOCAL_RIPR_CONSOLE_TAIL_BYTES: usize = 4 * 1024;
 #[derive(Clone, Debug)]
 struct RiprOptions {
     base: String,
+}
+
+#[derive(Clone, Debug)]
+struct RiprInventoryOptions {
+    artifact_dir: PathBuf,
+}
+
+impl Default for RiprInventoryOptions {
+    fn default() -> Self {
+        Self {
+            artifact_dir: PathBuf::from("target/xtask/ripr"),
+        }
+    }
+}
+
+impl RiprInventoryOptions {
+    fn parse(mut args: impl Iterator<Item = String>) -> Result<Self> {
+        let mut options = Self::default();
+        while let Some(arg) = args.next() {
+            match arg.as_str() {
+                "--artifact-dir" => {
+                    options.artifact_dir =
+                        PathBuf::from(args.next().context("--artifact-dir requires a directory")?)
+                }
+                other => bail!("unexpected ripr-inventory argument `{other}`"),
+            }
+        }
+        Ok(options)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum SuppressionClass {
+    Duplicate,
+    Malformed,
+    MatchedCurrentDiff,
+    UnmatchedCurrentDiff,
+    UnknownCurrentness,
+}
+
+impl SuppressionClass {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Duplicate => "duplicate",
+            Self::Malformed => "malformed",
+            Self::MatchedCurrentDiff => "matched_current_diff",
+            Self::UnmatchedCurrentDiff => "unmatched_by_current_diff",
+            Self::UnknownCurrentness => "unknown_currentness",
+        }
+    }
+}
+
+fn run_ripr_inventory(root: &Path, options: RiprInventoryOptions) -> Result<()> {
+    let ledger_path = root.join(".ripr/suppressions.toml");
+    let ledger = fs::read_to_string(&ledger_path)
+        .with_context(|| format!("read suppression ledger {}", ledger_path.display()))?;
+    let detail_path = options.artifact_dir.join("exposure-gaps.json");
+    let detail = match fs::read_to_string(&detail_path) {
+        Ok(text) => Some(
+            serde_json::from_str::<JsonValue>(&text)
+                .with_context(|| format!("parse RIPR detail artifact {}", detail_path.display()))?,
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error).with_context(|| format!("read {}", detail_path.display())),
+    };
+    let report = classify_suppressions(&ledger, detail.as_ref())?;
+    let out_dir = root.join("target/xtask/ripr");
+    fs::create_dir_all(&out_dir).with_context(|| format!("create {}", out_dir.display()))?;
+    let report_path = out_dir.join("suppression-inventory.json");
+    fs::write(&report_path, serde_json::to_vec_pretty(&report)?)
+        .with_context(|| format!("write {}", report_path.display()))?;
+    println!("suppression inventory: {}", report_path.display());
+    println!("{}", report["summary"]);
+    Ok(())
+}
+
+fn classify_suppressions(ledger: &str, detail: Option<&JsonValue>) -> Result<JsonValue> {
+    let rows = suppression_rows(ledger)?;
+    let finding_ids: Option<BTreeSet<String>> = detail.map(|value| {
+        value
+            .get("findings")
+            .and_then(JsonValue::as_array)
+            .map(|findings| {
+                findings
+                    .iter()
+                    .filter_map(|finding| finding.get("id").and_then(JsonValue::as_str))
+                    .map(ToOwned::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default()
+    });
+    let mut seen = BTreeSet::new();
+    let mut entries = Vec::new();
+    let mut counts = BTreeMap::<&str, u64>::new();
+    for (index, row) in rows.iter().enumerate() {
+        let object = row.as_ref().and_then(Value::as_table);
+        let id = object
+            .and_then(|table| table.get("finding_id"))
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty());
+        let class = if id.is_none() {
+            SuppressionClass::Malformed
+        } else if !seen.insert(id.unwrap_or_default().to_owned()) {
+            SuppressionClass::Duplicate
+        } else if finding_ids.is_none() {
+            SuppressionClass::UnknownCurrentness
+        } else if finding_ids
+            .as_ref()
+            .is_some_and(|ids| ids.contains(id.unwrap_or_default()))
+        {
+            SuppressionClass::MatchedCurrentDiff
+        } else {
+            SuppressionClass::UnmatchedCurrentDiff
+        };
+        *counts.entry(class.as_str()).or_default() += 1;
+        entries.push(json!({
+            "index": index,
+            "finding_id": id,
+            "classification": class.as_str(),
+        }));
+    }
+    Ok(json!({
+        "schema": "ub-review.ripr_suppression_inventory.v1",
+        "ripr_version": LOCAL_RIPR_VERSION,
+        "currentness_basis": if finding_ids.is_some() { "detail_artifact" } else { "no_detail_artifact" },
+        "summary": counts,
+        "entries": entries,
+    }))
+}
+
+fn suppression_rows(ledger: &str) -> Result<Vec<Option<Value>>> {
+    let mut rows = Vec::new();
+    let mut current = None::<String>;
+    let mut saw_marker = false;
+    for line in ledger.lines() {
+        if line.trim() == "[[suppressions]]" {
+            if let Some(chunk) = current.take() {
+                rows.push(parse_suppression_row(&chunk));
+            }
+            saw_marker = true;
+            current = Some(String::new());
+        } else if let Some(chunk) = current.as_mut() {
+            chunk.push_str(line);
+            chunk.push('\n');
+        }
+    }
+    if let Some(chunk) = current {
+        rows.push(parse_suppression_row(&chunk));
+    }
+    if !saw_marker {
+        bail!("suppression ledger omitted [[suppressions]] entries");
+    }
+    Ok(rows)
+}
+
+fn parse_suppression_row(chunk: &str) -> Option<Value> {
+    let wrapped = format!("[[suppressions]]\n{chunk}");
+    toml::from_str::<Value>(&wrapped)
+        .ok()
+        .and_then(|value| value.get("suppressions").and_then(Value::as_array).cloned())
+        .and_then(|rows| rows.into_iter().next())
 }
 
 impl Default for RiprOptions {
