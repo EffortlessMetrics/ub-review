@@ -40,7 +40,12 @@ finding_id = "probe:b"
 [[suppressions]]
 owner = "ub-review/core"
 "#;
-    let detail = serde_json::json!({"findings": [{"id": "probe:a"}]});
+    let detail = serde_json::json!({
+        "schema_version": "0.2",
+        "tool": "ripr",
+        "mode": "ready",
+        "findings": [{"id": "probe:a"}],
+    });
     let report = classify_suppressions(ledger, Some(&detail))?;
     let summary = report
         .get("summary")
@@ -79,6 +84,19 @@ fn ripr_inventory_reports_unknown_currentness_without_detail() -> Result<()> {
         bail!("expected unknown currentness: {summary:?}");
     }
     Ok(())
+}
+
+#[cfg(test)]
+#[test]
+fn ripr_inventory_rejects_unvalidated_detail_artifacts() {
+    for detail in [
+        serde_json::json!({}),
+        serde_json::json!({"schema_version": "0.1", "tool": "ripr", "mode": "ready", "findings": []}),
+        serde_json::json!({"schema_version": "0.2", "tool": "ripr", "mode": "ready", "findings": {}}),
+        serde_json::json!({"schema_version": "0.2", "tool": "ripr", "mode": "ready", "findings": [{"id": ""}]}),
+    ] {
+        assert!(validated_ripr_finding_ids(&detail).is_none());
+    }
 }
 
 fn run() -> Result<()> {
@@ -302,10 +320,7 @@ fn run_ripr_inventory(root: &Path, options: RiprInventoryOptions) -> Result<()> 
         .with_context(|| format!("read suppression ledger {}", ledger_path.display()))?;
     let detail_path = options.artifact_dir.join("exposure-gaps.json");
     let detail = match fs::read_to_string(&detail_path) {
-        Ok(text) => Some(
-            serde_json::from_str::<JsonValue>(&text)
-                .with_context(|| format!("parse RIPR detail artifact {}", detail_path.display()))?,
-        ),
+        Ok(text) => serde_json::from_str::<JsonValue>(&text).ok(),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
         Err(error) => return Err(error).with_context(|| format!("read {}", detail_path.display())),
     };
@@ -322,19 +337,7 @@ fn run_ripr_inventory(root: &Path, options: RiprInventoryOptions) -> Result<()> 
 
 fn classify_suppressions(ledger: &str, detail: Option<&JsonValue>) -> Result<JsonValue> {
     let rows = suppression_rows(ledger)?;
-    let finding_ids: Option<BTreeSet<String>> = detail.map(|value| {
-        value
-            .get("findings")
-            .and_then(JsonValue::as_array)
-            .map(|findings| {
-                findings
-                    .iter()
-                    .filter_map(|finding| finding.get("id").and_then(JsonValue::as_str))
-                    .map(ToOwned::to_owned)
-                    .collect()
-            })
-            .unwrap_or_default()
-    });
+    let finding_ids = detail.and_then(validated_ripr_finding_ids);
     let mut seen = BTreeSet::new();
     let mut entries = Vec::new();
     let mut counts = BTreeMap::<&str, u64>::new();
@@ -368,10 +371,33 @@ fn classify_suppressions(ledger: &str, detail: Option<&JsonValue>) -> Result<Jso
     Ok(json!({
         "schema": "ub-review.ripr_suppression_inventory.v1",
         "ripr_version": LOCAL_RIPR_VERSION,
-        "currentness_basis": if finding_ids.is_some() { "detail_artifact" } else { "no_detail_artifact" },
+        "currentness_basis": if finding_ids.is_some() { "validated_detail_artifact" } else { "missing_or_invalid_detail_artifact" },
         "summary": counts,
         "entries": entries,
     }))
+}
+
+fn validated_ripr_finding_ids(detail: &JsonValue) -> Option<BTreeSet<String>> {
+    if detail.get("schema_version").and_then(JsonValue::as_str) != Some("0.2")
+        || detail.get("tool").and_then(JsonValue::as_str) != Some("ripr")
+        || detail.get("mode").and_then(JsonValue::as_str) != Some("ready")
+    {
+        return None;
+    }
+    let findings = detail.get("findings")?.as_array()?;
+    if findings.is_empty() {
+        return None;
+    }
+    findings
+        .iter()
+        .map(|finding| {
+            finding
+                .get("id")
+                .and_then(JsonValue::as_str)
+                .filter(|id| !id.trim().is_empty())
+                .map(ToOwned::to_owned)
+        })
+        .collect()
 }
 
 fn suppression_rows(ledger: &str) -> Result<Vec<Option<Value>>> {
