@@ -19,11 +19,13 @@ Observed counts (2026-08-13):
 | malformed | 1 | 1 | one ledger record could not be parsed as an independent suppression row |
 | duplicate | 0 | 0 | no mechanically proven duplicate row was removed |
 | matched_current_diff | 0 | 0 | no valid ledger ID appeared in this current detail artifact |
-| unmatched_by_current_diff | 3639 | 3639 | valid IDs absent from this diff's detail; not evidence of staleness |
-| unknown_currentness | 0 | 0 | no unknown entries when the detail artifact was available |
+| unmatched_by_current_diff | 0 | 0 | invalid local/raw detail is never treated as evidence of absence |
+| unknown_currentness | 3639 | 3639 | local raw output is not the production detail contract |
 
 The inventory made no ledger edits and did not renew the overdue
 `non-rust-ripr-suppressions` policy receipt. The malformed count requires a
 separate review of the surrounding ledger text; it is intentionally not
 auto-repaired. Content-addressed unmatched IDs require semantic evidence or a
-representative-diff procedure before removal or renewal.
+representative-diff procedure before removal or renewal. A validated
+production-form `sensors/ripr/exposure-gaps.json` artifact is required before
+any current-diff match claim.
