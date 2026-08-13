@@ -224,7 +224,7 @@ pub(crate) fn run_sensor(
     }
     let stdout_path = dir.join("stdout.txt");
     let stderr_path = dir.join("stderr.txt");
-    let result = run_command_to_files(
+    let result = run_sensor_command_to_files(
         root,
         &argv,
         &BTreeMap::new(),
@@ -325,7 +325,7 @@ pub(crate) fn run_tokmd_sensor(
         "sensor_subcommand_started",
         serde_json::json!({"sensor": sensor.id, "label": preflight.label, "argv": preflight.argv}),
     )?;
-    match run_command_to_files(
+    match run_sensor_command_to_files(
         root,
         &preflight.argv,
         &BTreeMap::new(),
@@ -424,7 +424,7 @@ pub(crate) fn run_tokmd_sensor(
             "sensor_subcommand_started",
             serde_json::json!({"sensor": sensor.id, "label": command.label, "argv": command.argv}),
         )?;
-        let result = run_command_to_files(
+        let result = run_sensor_command_to_files(
             root,
             &command.argv,
             &BTreeMap::new(),
@@ -1643,7 +1643,7 @@ esac
         let stderr_path = temp.path().join("stderr.txt");
         let argv = sleeper_argv();
 
-        let status = run_command_to_files(
+        let status = run_sensor_command_to_files(
             temp.path(),
             &argv,
             &BTreeMap::new(),

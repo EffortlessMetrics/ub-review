@@ -226,6 +226,63 @@ pub(crate) fn run_command_to_files(
     stdout_path: &Path,
     stderr_path: &Path,
 ) -> Result<CommandStatus> {
+    let ambient = BTreeMap::new();
+    run_command_to_files_inner(CommandRun {
+        root,
+        argv,
+        env,
+        ambient: &ambient,
+        timeout_sec,
+        stdout_path,
+        stderr_path,
+        quarantine_environment: false,
+    })
+}
+
+/// Run a sensor subprocess with the deny-by-default environment contract.
+pub(crate) fn run_sensor_command_to_files(
+    root: &Path,
+    argv: &[String],
+    env: &BTreeMap<String, String>,
+    timeout_sec: u64,
+    stdout_path: &Path,
+    stderr_path: &Path,
+) -> Result<CommandStatus> {
+    let ambient = std::env::vars().collect();
+    run_command_to_files_inner(CommandRun {
+        root,
+        argv,
+        env,
+        ambient: &ambient,
+        timeout_sec,
+        stdout_path,
+        stderr_path,
+        quarantine_environment: true,
+    })
+}
+
+struct CommandRun<'a> {
+    root: &'a Path,
+    argv: &'a [String],
+    env: &'a BTreeMap<String, String>,
+    ambient: &'a BTreeMap<String, String>,
+    timeout_sec: u64,
+    stdout_path: &'a Path,
+    stderr_path: &'a Path,
+    quarantine_environment: bool,
+}
+
+fn run_command_to_files_inner(run: CommandRun<'_>) -> Result<CommandStatus> {
+    let CommandRun {
+        root,
+        argv,
+        env,
+        ambient,
+        timeout_sec,
+        stdout_path,
+        stderr_path,
+        quarantine_environment,
+    } = run;
     let Some((program, args)) = argv.split_first() else {
         bail!("empty command");
     };
@@ -234,12 +291,22 @@ pub(crate) fn run_command_to_files(
     let stderr =
         File::create(stderr_path).with_context(|| format!("create {}", stderr_path.display()))?;
     let started = Instant::now();
-    let mut child = ProcessCommand::new(program)
+    let mut command = ProcessCommand::new(program);
+    command
         .args(args)
-        .envs(env)
         .current_dir(root)
         .stdout(Stdio::from(stdout))
-        .stderr(Stdio::from(stderr))
+        .stderr(Stdio::from(stderr));
+    if quarantine_environment {
+        // Sensors are advisory child processes. They must never inherit the
+        // action's provider, GitHub, OIDC, or unrelated runner environment.
+        command
+            .env_clear()
+            .envs(sensor_child_environment_from(ambient, env));
+    } else {
+        command.envs(env);
+    }
+    let mut child = command
         .spawn()
         .with_context(|| format!("spawn {program}"))?;
     let status = match child.wait_timeout(Duration::from_secs(timeout_sec))? {
@@ -267,6 +334,41 @@ pub(crate) fn run_command_to_files(
         },
         duration_ms: started.elapsed().as_millis(),
     })
+}
+
+/// Keep only the non-secret execution metadata needed by sensor tools.
+fn sensor_child_environment_from(
+    ambient: &BTreeMap<String, String>,
+    overrides: &BTreeMap<String, String>,
+) -> BTreeMap<String, String> {
+    const ALLOWED: [&str; 10] = [
+        "PATH",
+        "TEMP",
+        "TMP",
+        "TMPDIR",
+        "SystemRoot",
+        "WINDIR",
+        "COMSPEC",
+        "PATHEXT",
+        "LANG",
+        "LC_ALL",
+    ];
+    let is_allowed = |key: &str| {
+        ALLOWED
+            .iter()
+            .any(|allowed| key.eq_ignore_ascii_case(allowed))
+    };
+    let mut result = ambient
+        .iter()
+        .filter(|(key, _)| is_allowed(key))
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect::<BTreeMap<_, _>>();
+    for (key, value) in overrides {
+        if is_allowed(key) {
+            result.insert(key.clone(), value.clone());
+        }
+    }
+    result
 }
 
 pub(crate) fn parse_lcov_count(value: &str) -> u64 {
@@ -441,4 +543,67 @@ pub(crate) fn render_claim_prompt(diff: &DiffContext) -> String {
         text.push_str(&format!("- `{file}`\n"));
     }
     text
+}
+
+#[cfg(test)]
+mod tests {
+    use super::run_sensor_command_to_files;
+    use anyhow::{Result, ensure};
+    use std::{collections::BTreeMap, fs};
+
+    #[test]
+    fn sensor_environment_excludes_credentials_and_keeps_execution_metadata() -> Result<()> {
+        let exe = std::env::current_exe()?;
+        let status = std::process::Command::new(exe)
+            .arg("--exact")
+            .arg("lane_packets::tests::fake_sensor_cannot_read_actual_parent_credentials")
+            .arg("--nocapture")
+            .env("UB_REVIEW_ENV_PROBE_CHILD", "1")
+            .env("UB_REVIEW_MINIMAX_API_KEY", "sentinel-minimax")
+            .env("UB_REVIEW_GITHUB_TOKEN", "sentinel-github")
+            .env("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "sentinel-oidc")
+            .env("ACTIONS_RUNTIME_TOKEN", "sentinel-runner")
+            .env("PATH", "sentinel-path")
+            .status()?;
+        ensure!(
+            status.success(),
+            "actual-parent probe process failed: {status}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn fake_sensor_cannot_read_actual_parent_credentials() -> Result<()> {
+        if std::env::var_os("UB_REVIEW_ENV_PROBE_CHILD").is_none() {
+            return Ok(());
+        }
+        let temp = tempfile::tempdir()?;
+        let stdout = temp.path().join("stdout.txt");
+        let stderr = temp.path().join("stderr.txt");
+        #[cfg(unix)]
+        let argv = vec![
+            "sh".to_owned(),
+            "-c".to_owned(),
+            "printf '%s|%s|%s|%s|%s' \"${PATH:-missing}\" \"${UB_REVIEW_MINIMAX_API_KEY:-missing}\" \"${UB_REVIEW_GITHUB_TOKEN:-missing}\" \"${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-missing}\" \"${ACTIONS_RUNTIME_TOKEN:-missing}\"".to_owned(),
+        ];
+        #[cfg(windows)]
+        let argv = vec![
+            "cmd".to_owned(),
+            "/C".to_owned(),
+            "echo %PATH% & if defined UB_REVIEW_MINIMAX_API_KEY (echo %UB_REVIEW_MINIMAX_API_KEY%) else (echo missing) & if defined UB_REVIEW_GITHUB_TOKEN (echo %UB_REVIEW_GITHUB_TOKEN%) else (echo missing) & if defined ACTIONS_ID_TOKEN_REQUEST_TOKEN (echo %ACTIONS_ID_TOKEN_REQUEST_TOKEN%) else (echo missing) & if defined ACTIONS_RUNTIME_TOKEN (echo %ACTIONS_RUNTIME_TOKEN%) else (echo missing)".to_owned(),
+        ];
+        let status =
+            run_sensor_command_to_files(temp.path(), &argv, &BTreeMap::new(), 5, &stdout, &stderr)?;
+        ensure!(status.success, "fake sensor failed: {}", status.reason);
+        let observed = fs::read_to_string(stdout)?;
+        ensure!(
+            observed.contains("sentinel-path"),
+            "fake sensor did not observe the allowlisted PATH: {observed:?}"
+        );
+        ensure!(!observed.contains("sentinel-minimax"));
+        ensure!(!observed.contains("sentinel-github"));
+        ensure!(!observed.contains("sentinel-oidc"));
+        ensure!(!observed.contains("sentinel-runner"));
+        Ok(())
+    }
 }

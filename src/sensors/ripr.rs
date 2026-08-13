@@ -192,7 +192,7 @@ pub(crate) fn write_ripr_exposure_gap_details(
         "json".to_owned(),
     ];
     let detail = (|| -> Result<serde_json::Value> {
-        let result = run_command_to_files(
+        let result = run_sensor_command_to_files(
             root,
             &argv,
             &BTreeMap::new(),
