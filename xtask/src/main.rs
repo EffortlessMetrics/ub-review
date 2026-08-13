@@ -41,10 +41,10 @@ finding_id = "probe:b"
 owner = "ub-review/core"
 "#;
     let detail = serde_json::json!({
-        "schema_version": "0.2",
-        "tool": "ripr",
-        "mode": "ready",
-        "findings": [{"id": "probe:a"}],
+        "schema": "ub-review.ripr_exposure_gaps.v2",
+        "status": "ok",
+        "semantics": "raw_pre_policy",
+        "entries": [{"id": "probe:a"}],
     });
     let report = classify_suppressions(ledger, Some(&detail))?;
     let summary = report
@@ -91,12 +91,31 @@ fn ripr_inventory_reports_unknown_currentness_without_detail() -> Result<()> {
 fn ripr_inventory_rejects_unvalidated_detail_artifacts() {
     for detail in [
         serde_json::json!({}),
-        serde_json::json!({"schema_version": "0.1", "tool": "ripr", "mode": "ready", "findings": []}),
-        serde_json::json!({"schema_version": "0.2", "tool": "ripr", "mode": "ready", "findings": {}}),
-        serde_json::json!({"schema_version": "0.2", "tool": "ripr", "mode": "ready", "findings": [{"id": ""}]}),
+        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v2", "status": "detail_unavailable"}),
+        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v1", "status": "ok", "semantics": "raw_pre_policy", "entries": []}),
+        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v2", "status": "ok", "semantics": "raw_pre_policy", "entries": {}}),
+        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v2", "status": "ok", "semantics": "raw_pre_policy", "entries": [{"id": ""}]}),
     ] {
         assert!(validated_ripr_finding_ids(&detail).is_none());
     }
+}
+
+#[cfg(test)]
+#[test]
+fn ripr_inventory_accepts_commented_suppression_headers() -> Result<()> {
+    let ledger =
+        "schema_version = 1\n[[suppressions]] # generated group\nfinding_id = \"probe:a\"\n";
+    let detail = serde_json::json!({
+        "schema": "ub-review.ripr_exposure_gaps.v2",
+        "status": "ok",
+        "semantics": "raw_pre_policy",
+        "entries": [{"id": "probe:a"}],
+    });
+    let report = classify_suppressions(ledger, Some(&detail))?;
+    if report["summary"]["matched_current_diff"] != 1 {
+        bail!("commented header was not inventoried: {report}");
+    }
+    Ok(())
 }
 
 fn run() -> Result<()> {
@@ -179,8 +198,8 @@ cargo xtask commands
   cargo xtask policy-inventory  print receipt and CI policy counts
   cargo xtask audit             run cargo-audit for RUSTSEC advisories (advisory)
   cargo xtask precommit         run diff-scoped Rust precommit checks
-  cargo xtask ripr              reproduce hosted ripr ready-mode feedback locally
-  cargo xtask ripr-inventory    classify suppression entries against a RIPR artifact
+  cargo --locked xtask ripr              reproduce hosted ripr ready-mode feedback locally
+  cargo --locked xtask ripr-inventory    classify suppression entries against a RIPR artifact
   cargo xtask smoke-base        select a non-empty local smoke diff base
   cargo xtask calibration-report <dir>  aggregate review/calibration.json files
 
@@ -378,17 +397,17 @@ fn classify_suppressions(ledger: &str, detail: Option<&JsonValue>) -> Result<Jso
 }
 
 fn validated_ripr_finding_ids(detail: &JsonValue) -> Option<BTreeSet<String>> {
-    if detail.get("schema_version").and_then(JsonValue::as_str) != Some("0.2")
-        || detail.get("tool").and_then(JsonValue::as_str) != Some("ripr")
-        || detail.get("mode").and_then(JsonValue::as_str) != Some("ready")
+    if detail.get("schema").and_then(JsonValue::as_str) != Some("ub-review.ripr_exposure_gaps.v2")
+        || detail.get("status").and_then(JsonValue::as_str) != Some("ok")
+        || detail.get("semantics").and_then(JsonValue::as_str) != Some("raw_pre_policy")
     {
         return None;
     }
-    let findings = detail.get("findings")?.as_array()?;
-    if findings.is_empty() {
+    let entries = detail.get("entries")?.as_array()?;
+    if entries.is_empty() {
         return None;
     }
-    findings
+    entries
         .iter()
         .map(|finding| {
             finding
@@ -405,7 +424,11 @@ fn suppression_rows(ledger: &str) -> Result<Vec<Option<Value>>> {
     let mut current = None::<String>;
     let mut saw_marker = false;
     for line in ledger.lines() {
-        if line.trim() == "[[suppressions]]" {
+        let header = line
+            .split_once('#')
+            .map_or(line, |(before_comment, _)| before_comment)
+            .trim();
+        if header == "[[suppressions]]" {
             if let Some(chunk) = current.take() {
                 rows.push(parse_suppression_row(&chunk));
             }
