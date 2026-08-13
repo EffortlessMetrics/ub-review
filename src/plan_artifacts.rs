@@ -3,6 +3,27 @@
 
 use crate::*;
 
+pub(crate) fn trusted_admission_requested(args: &ReviewArgs) -> bool {
+    args.trusted_base_tree.is_some()
+        || args.trusted_head.is_some()
+        || args.trusted_changed_files.is_some()
+        || args.trusted_patch.is_some()
+}
+
+pub(crate) fn trusted_admission_complete(args: &ReviewArgs) -> Result<bool> {
+    if !trusted_admission_requested(args) {
+        return Ok(false);
+    }
+    if args.trusted_base_tree.is_none()
+        || args.trusted_head.as_deref().is_none_or(str::is_empty)
+        || args.trusted_changed_files.is_none()
+        || args.trusted_patch.is_none()
+    {
+        bail!("trusted-base admission requires nonempty base tree/head and both diff objects")
+    }
+    Ok(true)
+}
+
 pub(crate) fn prepare_plan(
     args: &ReviewArgs,
     allow_heavy: bool,
@@ -15,18 +36,7 @@ pub(crate) fn prepare_plan(
         &args.trusted_changed_files,
         &args.trusted_patch,
     );
-    let trusted_mode = trusted_inputs.0.is_some()
-        || trusted_inputs.1.is_some()
-        || trusted_inputs.2.is_some()
-        || trusted_inputs.3.is_some();
-    if trusted_mode
-        && (trusted_inputs.0.is_none()
-            || trusted_inputs.1.is_none()
-            || trusted_inputs.2.is_none()
-            || trusted_inputs.3.is_none())
-    {
-        bail!("trusted-base admission requires base tree, head, changed-files, and patch objects")
-    }
+    let trusted_mode = trusted_admission_complete(args)?;
     if trusted_mode {
         let root = fs::canonicalize(&args.root)
             .with_context(|| format!("canonicalize trusted root {}", args.root.display()))?;
@@ -34,6 +44,13 @@ pub(crate) fn prepare_plan(
             .with_context(|| format!("canonicalize trusted config {}", args.config.display()))?;
         if config.starts_with(&root) {
             bail!("trusted-base admission rejects configuration loaded from the repository root")
+        }
+        let action_path = std::env::var_os("GITHUB_ACTION_PATH").ok_or_else(|| {
+            anyhow::anyhow!("trusted-base admission requires action-pinned GITHUB_ACTION_PATH")
+        })?;
+        let action_path = fs::canonicalize(action_path)?;
+        if !config.starts_with(action_path) {
+            bail!("trusted-base admission rejects config outside the action-pinned path")
         }
     }
     let config = Config::load_or_default(
@@ -117,6 +134,7 @@ pub(crate) fn write_plan_artifacts(
     fs::write(out.join("input/diff.patch"), &diff.patch)?;
     if let Some(run_args) = selectors.run_args
         && let Some(base_tree) = run_args.review.trusted_base_tree.as_deref()
+        && trusted_admission_complete(&run_args.review)?
     {
         let receipt = serde_json::json!({
                 "schema_version": 1,

@@ -278,8 +278,7 @@ impl DiffContext {
         validate_git_object_id(base_tree, "trusted base tree")?;
         validate_git_object_id(head, "trusted head")?;
         let actual_tree = git_tree_sha(root, "HEAD")?;
-        let expected_tree = git_tree_sha(root, base_tree)?;
-        if expected_tree != base_tree || actual_tree != base_tree {
+        if actual_tree != base_tree {
             bail!(
                 "trusted-base admission rejected: checkout tree {actual_tree} does not match base tree {base_tree}"
             );
@@ -337,6 +336,28 @@ fn validate_git_object_id(value: &str, label: &str) -> Result<()> {
 mod trusted_base_tests {
     use super::*;
 
+    fn fixture() -> Result<(tempfile::TempDir, String)> {
+        let dir = tempfile::tempdir()?;
+        fs::write(dir.path().join("trusted.txt"), "trusted\n")?;
+        for args in [
+            &["init"][..],
+            &["config", "user.email", "test@example.invalid"][..],
+            &["config", "user.name", "test"][..],
+            &["add", "trusted.txt"][..],
+            &["commit", "-m", "fixture"][..],
+        ] {
+            let status = ProcessCommand::new("git")
+                .args(args)
+                .current_dir(dir.path())
+                .status()?;
+            if !status.success() {
+                bail!("fixture git command failed: {args:?}")
+            }
+        }
+        let tree = git_tree_sha(dir.path(), "HEAD")?;
+        Ok((dir, tree))
+    }
+
     #[test]
     fn trusted_admission_rejects_non_object_ids_before_reading_checkout() -> Result<()> {
         let result = DiffContext::from_trusted_inputs(
@@ -371,6 +392,72 @@ mod trusted_base_tests {
         };
         if !error.to_string().contains("invalid trusted head") {
             bail!("unexpected rejection: {error:#}")
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn trusted_admission_rejects_empty_paths_and_nul_patch() -> Result<()> {
+        let (dir, tree) = fixture()?;
+        let changed = dir.path().join("changed.txt");
+        let patch = dir.path().join("patch.diff");
+        fs::write(&changed, "\n")?;
+        fs::write(&patch, "diff --git a/x b/x\0")?;
+        let result =
+            DiffContext::from_trusted_inputs(dir.path(), &tree, &"c".repeat(40), &changed, &patch);
+        let error = match result {
+            Ok(_) => bail!("empty changed-files object was accepted"),
+            Err(error) => error,
+        };
+        if !error.to_string().contains("empty") {
+            bail!("unexpected rejection: {error:#}")
+        }
+        fs::write(&changed, "trusted.txt\n")?;
+        let error =
+            DiffContext::from_trusted_inputs(dir.path(), &tree, &"c".repeat(40), &changed, &patch)
+                .err()
+                .ok_or_else(|| anyhow::anyhow!("NUL patch was accepted"))?;
+        if !error.to_string().contains("NUL") {
+            bail!("unexpected rejection: {error:#}")
+        }
+        fs::write(&changed, "../hostile.rs\n")?;
+        fs::write(&patch, "diff --git a/x b/x")?;
+        let error =
+            DiffContext::from_trusted_inputs(dir.path(), &tree, &"c".repeat(40), &changed, &patch)
+                .err()
+                .ok_or_else(|| anyhow::anyhow!("unsafe path was accepted"))?;
+        if !error.to_string().contains("unsafe path") {
+            bail!("unexpected rejection: {error:#}")
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn trusted_admission_rejects_tree_mismatch_and_accepts_explicit_objects() -> Result<()> {
+        let (dir, tree) = fixture()?;
+        let changed = dir.path().join("changed.txt");
+        let patch = dir.path().join("patch.diff");
+        fs::write(&changed, "trusted.txt\n")?;
+        fs::write(&patch, "diff --git a/trusted.txt b/trusted.txt\n")?;
+        let accepted =
+            DiffContext::from_trusted_inputs(dir.path(), &tree, &"d".repeat(40), &changed, &patch)?;
+        if accepted.head != "d".repeat(40) || accepted.changed_files != ["trusted.txt"] {
+            bail!("explicit trusted objects were not preserved")
+        }
+        let mismatch = DiffContext::from_trusted_inputs(
+            dir.path(),
+            &"e".repeat(40),
+            &"d".repeat(40),
+            &changed,
+            &patch,
+        )
+        .err()
+        .ok_or_else(|| anyhow::anyhow!("tree mismatch was accepted"))?;
+        if !mismatch
+            .to_string()
+            .contains("trusted-base admission rejected")
+        {
+            bail!("unexpected rejection: {mismatch:#}")
         }
         Ok(())
     }

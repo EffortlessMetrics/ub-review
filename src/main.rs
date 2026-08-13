@@ -161,7 +161,8 @@ mod github_delivery;
 pub(crate) use github_delivery::*;
 mod plan_artifacts;
 use plan_artifacts::{
-    PlanArtifactSelectors, RepairQueueEntry, RepairQueueFile, prepare_plan, write_plan_artifacts,
+    PlanArtifactSelectors, RepairQueueEntry, RepairQueueFile, prepare_plan,
+    trusted_admission_complete, write_plan_artifacts,
 };
 mod ci_audit;
 pub(crate) use ci_audit::*;
@@ -3528,10 +3529,7 @@ struct RunCompletion {
 fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
     let run_started = Instant::now();
     let mut args = normalize_run_args(args)?;
-    let trusted_mode = args.review.trusted_base_tree.is_some()
-        || args.review.trusted_head.is_some()
-        || args.review.trusted_changed_files.is_some()
-        || args.review.trusted_patch.is_some();
+    let trusted_mode = trusted_admission_complete(&args.review)?;
     if trusted_mode {
         if args.model_mode.key() != "off" {
             bail!(
