@@ -98,6 +98,13 @@ fn ripr_inventory_rejects_unvalidated_detail_artifacts() {
     ] {
         assert!(validated_ripr_finding_ids(&detail).is_none());
     }
+    let empty = serde_json::json!({
+        "schema": "ub-review.ripr_exposure_gaps.v2",
+        "status": "ok",
+        "semantics": "raw_pre_policy",
+        "entries": [],
+    });
+    assert_eq!(validated_ripr_finding_ids(&empty), Some(BTreeSet::new()));
 }
 
 #[cfg(test)]
@@ -404,9 +411,6 @@ fn validated_ripr_finding_ids(detail: &JsonValue) -> Option<BTreeSet<String>> {
         return None;
     }
     let entries = detail.get("entries")?.as_array()?;
-    if entries.is_empty() {
-        return None;
-    }
     entries
         .iter()
         .map(|finding| {
