@@ -14,14 +14,61 @@ pub(crate) fn trusted_admission_complete(args: &ReviewArgs) -> Result<bool> {
     if !trusted_admission_requested(args) {
         return Ok(false);
     }
-    if args.trusted_base_tree.is_none()
+    if args.trusted_base_tree.as_deref().is_none_or(str::is_empty)
         || args.trusted_head.as_deref().is_none_or(str::is_empty)
-        || args.trusted_changed_files.is_none()
-        || args.trusted_patch.is_none()
+        || args
+            .trusted_changed_files
+            .as_deref()
+            .is_none_or(|path| path.as_os_str().is_empty())
+        || args
+            .trusted_patch
+            .as_deref()
+            .is_none_or(|path| path.as_os_str().is_empty())
     {
         bail!("trusted-base admission requires nonempty base tree/head and both diff objects")
     }
     Ok(true)
+}
+
+#[cfg(test)]
+mod trusted_admission_tests {
+    use super::*;
+
+    fn args() -> ReviewArgs {
+        ReviewArgs {
+            root: PathBuf::from("."),
+            base: "origin/main".to_owned(),
+            head: "HEAD".to_owned(),
+            trusted_base_tree: None,
+            trusted_head: None,
+            trusted_changed_files: None,
+            trusted_patch: None,
+            config: PathBuf::from(".ub-review.toml"),
+            out: PathBuf::from("target/ub-review"),
+            profile: None,
+            runtime_profile: None,
+        }
+    }
+
+    #[test]
+    fn partial_and_empty_trusted_inputs_fail_closed() -> Result<()> {
+        let mut review = args();
+        review.trusted_base_tree = Some(String::new());
+        let error = trusted_admission_complete(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("empty trusted base was accepted"))?;
+        if !error.to_string().contains("nonempty") {
+            bail!("unexpected rejection: {error:#}")
+        }
+        review.trusted_base_tree = Some("a".repeat(40));
+        let error = trusted_admission_complete(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("partial trusted inputs were accepted"))?;
+        if !error.to_string().contains("nonempty") {
+            bail!("unexpected rejection: {error:#}")
+        }
+        Ok(())
+    }
 }
 
 pub(crate) fn prepare_plan(
