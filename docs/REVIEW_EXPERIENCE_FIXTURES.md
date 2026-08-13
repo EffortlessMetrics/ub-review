@@ -16,6 +16,13 @@ It is a contract test for the boundaries that must survive implementation:
 - planner, lane, skipped-proof, and unrelated workspace language stays out of
   public finding text.
 
+The replay acceptance case also feeds the production compiler one material
+claim through inline, summary-only, and duplicate observation inputs. Its
+assertions pin the retained path/line identity and public count, give the
+validated inline claim precedence, and keep skipped homework and unrelated
+proof-gap detail artifact-only. This is a deterministic claim-boundary test;
+it does not change the renderer's delivery transport.
+
 Run the focused proof with:
 
 ```text
