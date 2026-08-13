@@ -21439,6 +21439,221 @@ finding_id = "probe:src_sensors_mod.rs:return_value:bcab99ad"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 weak-oracle residual in the Unix fake-RIPR truncated-JSON fixture branch. ripr_sensor_keeps_primary_receipts_when_successful_detail_output_is_truncated executes the fake process successfully, forces this exact malformed output, asserts v2 detail_unavailable without counts/entries, preserves the primary sensor status and verbatim gate receipt, and proves temporary captures are removed. Re-verify after the fake sensor or detail failure contract changes."
 
+# PR #879: content-addressed probes for the CommandRun extraction and sensor
+# dispatch wiring. The focused fake-sensor regression observes the production
+# spawn status, captured output, allowlisted PATH, and credential exclusion;
+# these entries are individual plumbing probes rather than a blanket ceiling.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:7c991d2f"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on the CommandRun extraction. The fake sensor regression executes the production runner and asserts successful status, exact allowlisted PATH output, and credential absence; this call-deletion probe does not identify an independent behavior. Re-verify after run_command_to_files_inner or its sensor fixture changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:return_value:1debd8d0"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on the CommandRun extraction. The fake sensor regression asserts the returned CommandStatus is successful and observes captured output; this return-value probe is the extracted plumbing path. Re-verify after run_command_to_files_inner or its sensor fixture changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:c039dbe9"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on forwarding the caller environment into CommandRun. The existing command-runner tests cover supplied environment behavior and the fake sensor test covers filtered environment behavior; this field probe is extraction plumbing. Re-verify after the environment contract changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:d686979b"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on timeout forwarding into CommandRun. The production runner still returns the observed timeout/status through the existing command tests; this probe is extraction plumbing. Re-verify after timeout handling changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:6c082f86"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on timeout construction in CommandRun. Existing command-runner coverage observes timeout outcomes; this probe does not add a distinct behavior obligation. Re-verify after timeout handling changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:2eba8ed9"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on stdout-path forwarding in CommandRun. The fake sensor regression reads the production-captured stdout and asserts its exact PATH/credential content; this is extracted plumbing. Re-verify after output capture changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:cb12625c"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on stdout-path construction in CommandRun. The fake sensor regression reads the resulting file and asserts its exact content; this is extracted plumbing. Re-verify after output capture changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:b97298aa"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on stderr-path forwarding in CommandRun. Existing runner tests observe captured stderr and failure status; this is extracted plumbing. Re-verify after output capture changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:2b93d1b6"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on stderr-path construction in CommandRun. Existing runner tests observe captured stderr; this is extracted plumbing. Re-verify after output capture changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:9a4aefec"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on current-directory forwarding in CommandRun. Existing command tests execute with the requested root and observe the resulting status/output; this is extracted plumbing. Re-verify after root handling changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:3867b50b"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on current-directory construction in CommandRun. Existing command tests execute with the requested root; this is extracted plumbing. Re-verify after root handling changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:425bd31a"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on process spawn forwarding after the runner extraction. The fake sensor regression proves the spawned process status and output; this probe does not identify an independent behavior. Re-verify after spawn construction changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:c39b4332"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on CommandRun root construction. Existing command tests observe execution in the requested root; this is extraction plumbing. Re-verify after root handling changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:48c689a1"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on CommandRun argv construction. The fake sensor regression executes the exact argv and observes its output; this is extraction plumbing. Re-verify after command argument handling changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:434b238d"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on CommandRun environment construction. The fake sensor regression observes the filtered environment and exact PATH/credential result; this is the environment-contract seam. Re-verify after allowlist changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:2bb5cecc"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on normal-command dispatch. Existing non-sensor command tests cover the preserved envs path; this probe is the shared-runner extraction seam. Re-verify after normal command dispatch changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:return_value:164919b5"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on normal-command return forwarding. Existing command tests observe success and failure statuses; this probe is shared-runner extraction plumbing. Re-verify after return mapping changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:d001c7ae"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on normal-command quarantine flag construction. The sensor regression exercises the true branch and existing command tests exercise the preserved normal branch; this is a two-mode dispatch seam. Re-verify after dispatch changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:2473890b"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on sensor-command dispatch into the shared runner. The fake sensor regression executes this production path and observes status/output; this is wiring, not an untested behavior branch. Re-verify after sensor dispatch changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:c6a2f29d"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on sensor CommandRun construction. The fake sensor regression observes filtered PATH and credential exclusion from the constructed run; this is wiring. Re-verify after the sensor environment contract changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:4c62bd7c"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on sensor spawn invocation. The fake sensor regression proves the process starts and returns success with exact output; this is dispatch plumbing. Re-verify after sensor spawn changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:6de4515c"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on sensor argv forwarding. The fake sensor regression executes the absolute shell fixture and observes its output; this is dispatch plumbing. Re-verify after sensor argv changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:d63e1b9e"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on sensor status forwarding. The fake sensor regression asserts status.success and captures output; this is dispatch plumbing. Re-verify after sensor status mapping changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:4c2e1d2d"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on sensor timeout forwarding. The fake sensor regression uses the production timeout argument and observes completion status; this is dispatch plumbing. Re-verify after timeout changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:94dd1ec0"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on sensor file-run invocation. The fake sensor regression reads the production stdout file and asserts exact content; this is dispatch plumbing. Re-verify after file capture changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:379231a1"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on sensor stdout file construction. The fake sensor regression reads that file and asserts exact PATH/credential output; this is the environment-contract fixture. Re-verify after file capture changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:c6ef8283"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on sensor stderr file-run invocation. Existing sensor failure tests observe stderr/status while the fake sensor regression covers stdout; this is dispatch plumbing. Re-verify after sensor file capture changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:467c3b00"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on ambient environment collection. The fake sensor regression supplies sentinel credentials in the parent and proves they are absent after env_clear plus allowlist filtering; this is the security seam. Re-verify after ambient collection or allowlist changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:d6239818"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on environment-clear dispatch. The fake sensor regression proves sentinel provider, GitHub, OIDC, and runner values do not reach the child while PATH does; this is the security seam. Re-verify after quarantine changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:8dfd6aa8"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on filtered child-environment construction. The fake sensor regression observes exact PATH retention and credential exclusion; this is the security seam. Re-verify after allowlist changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:9a0cc3ae"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on filtered child-environment insertion. The fake sensor regression observes the resulting PATH and absent credentials; this is the security seam. Re-verify after allowlist changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:bed19a7f"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on allowlisted environment override construction. The current sensor callers pass no overrides and the fake sensor regression proves ambient filtering; this probe is policy plumbing. Re-verify after override semantics change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:85052925"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on child process spawn after quarantine. The fake sensor regression starts the absolute shell path and asserts success/output; this is the security dispatch seam. Re-verify after spawn or environment changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:f6a993ef"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on sensor status matching after switching to the quarantined runner. Existing sensor tests observe success/failure status and the fake sensor regression observes successful output; this is integration wiring. Re-verify after sensor status handling changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:error_path:a4c3fa1c"
+owner = "ub-review/core"
+reason = "PR #879 exact-head RIPR probe on the detail-command error path after switching to the quarantined runner. Existing RIPR fixture tests assert malformed-detail fallback receipts and preserved primary status; this is integration wiring. Re-verify after RIPR detail failure handling changes."
+
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_sensors_mod.rs:return_value:e510c495"

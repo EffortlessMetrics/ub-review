@@ -582,13 +582,13 @@ mod tests {
         let stderr = temp.path().join("stderr.txt");
         #[cfg(unix)]
         let argv = vec![
-            "sh".to_owned(),
+            "/bin/sh".to_owned(),
             "-c".to_owned(),
             "printf '%s|%s|%s|%s|%s' \"${PATH:-missing}\" \"${UB_REVIEW_MINIMAX_API_KEY:-missing}\" \"${UB_REVIEW_GITHUB_TOKEN:-missing}\" \"${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-missing}\" \"${ACTIONS_RUNTIME_TOKEN:-missing}\"".to_owned(),
         ];
         #[cfg(windows)]
         let argv = vec![
-            "cmd".to_owned(),
+            std::env::var("COMSPEC")?,
             "/C".to_owned(),
             "echo %PATH% & if defined UB_REVIEW_MINIMAX_API_KEY (echo %UB_REVIEW_MINIMAX_API_KEY%) else (echo missing) & if defined UB_REVIEW_GITHUB_TOKEN (echo %UB_REVIEW_GITHUB_TOKEN%) else (echo missing) & if defined ACTIONS_ID_TOKEN_REQUEST_TOKEN (echo %ACTIONS_ID_TOKEN_REQUEST_TOKEN%) else (echo missing) & if defined ACTIONS_RUNTIME_TOKEN (echo %ACTIONS_RUNTIME_TOKEN%) else (echo missing)".to_owned(),
         ];
