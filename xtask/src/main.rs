@@ -140,10 +140,28 @@ fn ripr_inventory_requires_both_raw_sidecars() -> Result<()> {
         }
     });
     assert!(!raw_ripr_sidecars_present(&artifact_dir, &detail));
-    fs::write(artifact_dir.join("exposure-gaps.ripr.stdout"), "{}")?;
+    fs::write(
+        artifact_dir.join("exposure-gaps.ripr.stdout"),
+        r#"{"schema_version":"0.2","tool":"ripr","mode":"ready","summary":{"findings":0},"findings":[]}"#,
+    )?;
     assert!(!raw_ripr_sidecars_present(&artifact_dir, &detail));
     fs::write(artifact_dir.join("exposure-gaps.ripr.stderr"), "")?;
-    assert!(raw_ripr_sidecars_present(&artifact_dir, &detail));
+    let valid_detail = serde_json::json!({
+        "total_raw_findings": 0,
+        "entries": [],
+        "raw_outputs": detail["raw_outputs"].clone(),
+    });
+    assert!(raw_ripr_sidecars_present(&artifact_dir, &valid_detail));
+    fs::write(
+        artifact_dir.join("exposure-gaps.ripr.stdout"),
+        r#"{"schema_version":"0.2","tool":"ripr","mode":"ready","summary":{"findings":1},"findings":[]}"#,
+    )?;
+    assert!(!raw_ripr_sidecars_present(&artifact_dir, &valid_detail));
+    fs::write(
+        artifact_dir.join("exposure-gaps.ripr.stdout"),
+        r#"{"schema_version":"0.2","tool":"ripr","mode":"ready","summary":{"findings":1},"findings":[{"id":"stale"}]}"#,
+    )?;
+    assert!(!raw_ripr_sidecars_present(&artifact_dir, &valid_detail));
     fs::remove_dir_all(root)?;
     Ok(())
 }
@@ -305,7 +323,7 @@ fn run() -> Result<()> {
         }
         other => {
             bail!(
-                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, ripr, smoke-base, calibration-report, or help"
+                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, ripr, ripr-inventory, smoke-base, calibration-report, or help"
             )
         }
     }
@@ -493,7 +511,7 @@ fn raw_ripr_sidecars_present(artifact_dir: &Path, detail: &JsonValue) -> bool {
     let Some(raw_outputs) = detail.get("raw_outputs").and_then(JsonValue::as_object) else {
         return false;
     };
-    ["stdout", "stderr"].into_iter().all(|name| {
+    let present = ["stdout", "stderr"].into_iter().all(|name| {
         raw_outputs
             .get(name)
             .and_then(JsonValue::as_str)
@@ -503,7 +521,70 @@ fn raw_ripr_sidecars_present(artifact_dir: &Path, detail: &JsonValue) -> bool {
                     .join(format!("exposure-gaps.ripr.{name}"))
                     .is_file()
             })
-    })
+    });
+    if !present {
+        return false;
+    }
+    let Ok(stdout) = fs::read_to_string(artifact_dir.join("exposure-gaps.ripr.stdout")) else {
+        return false;
+    };
+    let Ok(raw) = serde_json::from_str::<JsonValue>(&stdout) else {
+        return false;
+    };
+    if raw.get("schema_version").and_then(JsonValue::as_str) != Some("0.2")
+        || raw.get("tool").and_then(JsonValue::as_str) != Some("ripr")
+        || raw.get("mode").and_then(JsonValue::as_str) != Some("ready")
+    {
+        return false;
+    }
+    let Some(findings) = raw.get("findings").and_then(JsonValue::as_array) else {
+        return false;
+    };
+    let Some(summary_count) = raw
+        .get("summary")
+        .and_then(JsonValue::as_object)
+        .and_then(|summary| summary.get("findings"))
+        .and_then(JsonValue::as_u64)
+    else {
+        return false;
+    };
+    let Some(total_raw) = detail.get("total_raw_findings").and_then(JsonValue::as_u64) else {
+        return false;
+    };
+    if summary_count != findings.len() as u64 || total_raw != findings.len() as u64 {
+        return false;
+    }
+    let raw_ids: Option<Vec<String>> = findings
+        .iter()
+        .map(|finding| {
+            finding
+                .get("id")
+                .and_then(JsonValue::as_str)
+                .filter(|id| !id.trim().is_empty())
+                .map(ToOwned::to_owned)
+        })
+        .collect();
+    let Some(raw_ids) = raw_ids else {
+        return false;
+    };
+    let raw_ids: BTreeSet<_> = raw_ids.into_iter().collect();
+    let Some(entries) = detail.get("entries").and_then(JsonValue::as_array) else {
+        return false;
+    };
+    let entry_ids: Option<Vec<String>> = entries
+        .iter()
+        .map(|entry| {
+            entry
+                .get("id")
+                .and_then(JsonValue::as_str)
+                .map(ToOwned::to_owned)
+        })
+        .collect();
+    let Some(entry_ids) = entry_ids else {
+        return false;
+    };
+    let gap_ids: BTreeSet<_> = entry_ids.into_iter().collect();
+    raw_ids.is_superset(&gap_ids) && gap_ids.len() == entries.len()
 }
 
 fn classify_suppressions(ledger: &str, detail: Option<&JsonValue>) -> Result<JsonValue> {

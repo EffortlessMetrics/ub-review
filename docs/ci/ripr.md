@@ -37,7 +37,7 @@ establish; it does not reimplement RIPR suppression semantics or edit the
 ledger:
 
 ```text
-cargo xtask ripr-inventory
+cargo --locked xtask ripr-inventory
 ```
 
 It reads `.ripr/suppressions.toml` and, when present,

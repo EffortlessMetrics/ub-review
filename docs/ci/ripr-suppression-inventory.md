@@ -8,8 +8,8 @@ Run from clean main `26b1094c2268ae10f2c73463e9c71d78664afae0` plus the
 inventory change, using:
 
 ```text
-cargo xtask ripr --base 26b1094
-cargo xtask ripr-inventory --artifact-dir target/xtask/ripr
+cargo --locked xtask ripr --base 26b1094
+cargo --locked xtask ripr-inventory --artifact-dir target/xtask/ripr
 ```
 
 For hosted currentness, retrieve the exact artifact for the reviewed head and
@@ -21,7 +21,7 @@ gh run view <run-id> --json headSha --jq .headSha
 gh run download <run-id> --name ub-review-gate --dir target/hosted-ripr
 python scripts/verify-bun-review-artifacts.py target/hosted-ripr \
   --expected-review-profile ub-review-self --expected-repo-kind ub-review
-cargo xtask ripr-inventory --artifact-dir target/hosted-ripr/sensors/ripr
+cargo --locked xtask ripr-inventory --artifact-dir target/hosted-ripr/sensors/ripr
 ```
 
 The command must find both `exposure-gaps.ripr.stdout` and
