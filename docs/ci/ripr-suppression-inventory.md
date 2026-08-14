@@ -12,6 +12,22 @@ cargo xtask ripr --base 26b1094
 cargo xtask ripr-inventory --artifact-dir target/xtask/ripr
 ```
 
+For hosted currentness, retrieve the exact artifact for the reviewed head and
+run the inventory against the extracted `sensors/ripr` directory:
+
+```text
+gh run view <run-id> --json headSha --jq .headSha
+# Require the output to equal the reviewed PR head SHA.
+gh run download <run-id> --name ub-review-gate --dir target/hosted-ripr
+python scripts/verify-bun-review-artifacts.py target/hosted-ripr \
+  --expected-review-profile ub-review-self --expected-repo-kind ub-review
+cargo xtask ripr-inventory --artifact-dir target/hosted-ripr/sensors/ripr
+```
+
+The command must find both `exposure-gaps.ripr.stdout` and
+`exposure-gaps.ripr.stderr` beside `exposure-gaps.json`; a missing sidecar or
+head-SHA mismatch makes currentness unknown.
+
 The detail input must be the complete `ub-review.ripr_exposure_gaps.v3`
 artifact from the exact hosted head. v2, truncated, malformed, or
 detail-unavailable artifacts are classified as unknown currentness rather than
