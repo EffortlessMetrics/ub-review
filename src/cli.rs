@@ -450,6 +450,21 @@ pub(crate) struct ReviewArgs {
     /// Head ref.
     #[arg(long, default_value = "HEAD", env = "UB_REVIEW_HEAD")]
     pub(crate) head: String,
+    /// Trusted-base admission: exact base tree object supplied by a trusted workflow.
+    #[arg(long = "trusted-base-tree", env = "UB_REVIEW_TRUSTED_BASE_TREE")]
+    pub(crate) trusted_base_tree: Option<String>,
+    /// Trusted-base admission: exact head object identity (metadata only; never checked out).
+    #[arg(long = "trusted-head", env = "UB_REVIEW_TRUSTED_HEAD")]
+    pub(crate) trusted_head: Option<String>,
+    /// Trusted-base admission: newline-delimited changed-path object.
+    #[arg(
+        long = "trusted-changed-files",
+        env = "UB_REVIEW_TRUSTED_CHANGED_FILES"
+    )]
+    pub(crate) trusted_changed_files: Option<PathBuf>,
+    /// Trusted-base admission: explicit patch object.
+    #[arg(long = "trusted-patch", env = "UB_REVIEW_TRUSTED_PATCH")]
+    pub(crate) trusted_patch: Option<PathBuf>,
     /// Config path.
     #[arg(long, default_value = ".ub-review.toml", env = "UB_REVIEW_CONFIG")]
     pub(crate) config: PathBuf,

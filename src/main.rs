@@ -161,7 +161,8 @@ mod github_delivery;
 pub(crate) use github_delivery::*;
 mod plan_artifacts;
 use plan_artifacts::{
-    PlanArtifactSelectors, RepairQueueEntry, RepairQueueFile, prepare_plan, write_plan_artifacts,
+    PlanArtifactSelectors, RepairQueueEntry, RepairQueueFile, prepare_plan,
+    trusted_admission_complete, trusted_admission_requested, write_plan_artifacts,
 };
 mod ci_audit;
 pub(crate) use ci_audit::*;
@@ -3528,6 +3529,17 @@ struct RunCompletion {
 fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
     let run_started = Instant::now();
     let mut args = normalize_run_args(args)?;
+    if trusted_admission_requested(&args.review) {
+        if !trusted_admission_complete(&args.review)? {
+            bail!("trusted-base admission inputs are incomplete");
+        }
+        if !matches!(args.model_mode, ModelMode::Off) {
+            bail!("trusted-base mode requires --model-mode off; model execution is disabled");
+        }
+        if !matches!(args.provider_policy, ModelProviderPolicy::Auto) {
+            bail!("trusted-base mode requires --provider-policy auto");
+        }
+    }
     let run_pass = resolved_run_pass(args.run_pass);
     let (mut config, diff, box_state, plan) =
         prepare_plan(&args.review, args.allow_heavy, &args.selectors)?;
@@ -23016,6 +23028,10 @@ index 1111111..2222222 100644
                 root: Path::new(".").to_path_buf(),
                 base: "HEAD~1".to_owned(),
                 head: "HEAD".to_owned(),
+                trusted_base_tree: None,
+                trusted_head: None,
+                trusted_changed_files: None,
+                trusted_patch: None,
                 config: Path::new(".ub-review.toml").to_path_buf(),
                 out,
                 profile: None,
