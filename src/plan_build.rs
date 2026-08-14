@@ -295,7 +295,9 @@ impl DiffContext {
         if patch_bytes.contains(&0) {
             bail!("trusted patch object contains NUL bytes");
         }
-        let patch = String::from_utf8_lossy(&patch_bytes).into_owned();
+        let patch = std::str::from_utf8(&patch_bytes)
+            .context("trusted patch object must be valid UTF-8")?
+            .to_owned();
         let flags = classify_diff(&changed_files, &patch);
         let diff_class = classify_diff_class(&changed_files, &flags);
         Ok(Self {
@@ -742,6 +744,18 @@ mod trusted_input_tests {
         .is_ok()
         {
             bail!("accepted NUL patch");
+        }
+        fs::write(&patch, [0xff, 0xfe])?;
+        if DiffContext::from_trusted_inputs(
+            Path::new("."),
+            &base,
+            &"b".repeat(40),
+            &changed,
+            &patch,
+        )
+        .is_ok()
+        {
+            bail!("accepted invalid UTF-8 patch");
         }
         Ok(())
     }

@@ -84,6 +84,23 @@ pub(crate) fn trusted_admission_complete(args: &ReviewArgs) -> Result<bool> {
     Ok(true)
 }
 
+pub(crate) fn validate_trusted_execution_settings(
+    trusted: bool,
+    model_mode: ModelMode,
+    provider_policy: ModelProviderPolicy,
+) -> Result<()> {
+    if !trusted {
+        return Ok(());
+    }
+    if !matches!(model_mode, ModelMode::Off) {
+        bail!("trusted-base mode requires --model-mode off; model execution is disabled");
+    }
+    if !matches!(provider_policy, ModelProviderPolicy::Auto) {
+        bail!("trusted-base mode requires --provider-policy auto");
+    }
+    Ok(())
+}
+
 fn reject_repo_controlled_config(args: &ReviewArgs) -> Result<()> {
     let root = fs::canonicalize(&args.root).with_context(|| {
         format!(
@@ -91,13 +108,30 @@ fn reject_repo_controlled_config(args: &ReviewArgs) -> Result<()> {
             args.root.display()
         )
     })?;
-    if !args.config.is_absolute() {
+    validate_trusted_config_path(&root, &args.config)
+}
+
+pub(crate) fn validate_trusted_config_path(root: &Path, config: &Path) -> Result<()> {
+    if !config.is_absolute() {
         bail!("trusted-base admission rejects repository-relative config paths");
     }
-    if let Ok(config) = fs::canonicalize(&args.config)
-        && config.starts_with(&root)
+    if config
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+        || config
+            .to_string_lossy()
+            .split(['/', '\\'])
+            .any(|component| component == "..")
     {
+        bail!("trusted-base admission rejects lexical parent traversal in config path");
+    }
+    if config.starts_with(root) {
         bail!("trusted-base admission rejects configuration controlled by the repository");
+    }
+    if let Ok(canonical_config) = fs::canonicalize(config)
+        && canonical_config.starts_with(root)
+    {
+        bail!("trusted-base admission rejects configuration reached through a repository symlink");
     }
     Ok(())
 }
@@ -187,8 +221,8 @@ pub(crate) fn write_plan_artifacts(
                 "head_tree_loaded": false,
                 "head_config_loaded": false,
                 "repository_config_loaded": false,
-                "model_mode": "off",
-                "provider_policy": "auto",
+                    "model_mode": run_args.model_mode.key(),
+                    "provider_policy": run_args.provider_policy.key(),
             }))?,
         )?;
     }
@@ -325,4 +359,48 @@ pub(crate) struct RepairQueueFile {
     /// `requires_witness_receipt`, `requires_human_review`, `do_not_auto_repair`.
     #[serde(default)]
     pub(crate) buckets: std::collections::BTreeMap<String, Vec<RepairQueueEntry>>,
+}
+
+#[cfg(test)]
+mod trusted_config_tests {
+    use super::*;
+
+    #[test]
+    fn trusted_config_rejects_relative_and_repository_paths() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().canonicalize()?;
+        if validate_trusted_config_path(&root, Path::new(".ub-review.toml")).is_ok() {
+            bail!("accepted relative repository config path");
+        }
+        let repository_config = root.join("malicious.toml");
+        fs::write(&repository_config, "[providers]\npolicy='minimax-only'\n")?;
+        if validate_trusted_config_path(&root, &repository_config).is_ok() {
+            bail!("accepted repository-controlled config path");
+        }
+        let parent_path = PathBuf::from(format!("{}\\..\\outside.toml", root.display()));
+        if validate_trusted_config_path(&root, &parent_path).is_ok() {
+            bail!("accepted lexical parent traversal config path");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn trusted_execution_rejects_model_or_provider_overrides() -> Result<()> {
+        validate_trusted_execution_settings(true, ModelMode::Off, ModelProviderPolicy::Auto)?;
+        if validate_trusted_execution_settings(true, ModelMode::Auto, ModelProviderPolicy::Auto)
+            .is_ok()
+        {
+            bail!("accepted trusted model execution");
+        }
+        if validate_trusted_execution_settings(
+            true,
+            ModelMode::Off,
+            ModelProviderPolicy::MinimaxOnly,
+        )
+        .is_ok()
+        {
+            bail!("accepted trusted provider override");
+        }
+        Ok(())
+    }
 }
