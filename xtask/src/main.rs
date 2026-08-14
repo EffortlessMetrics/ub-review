@@ -420,11 +420,10 @@ fn raw_ripr_sidecars_present(artifact_dir: &Path, detail: &JsonValue) -> bool {
             .get(name)
             .and_then(JsonValue::as_str)
             .filter(|path| *path == format!("sensors/ripr/exposure-gaps.ripr.{name}"))
-            .is_some_and(|path| {
-                let Some(root) = artifact_dir.parent().and_then(Path::parent) else {
-                    return false;
-                };
-                root.join(path).is_file()
+            .is_some_and(|_| {
+                artifact_dir
+                    .join(format!("exposure-gaps.ripr.{name}"))
+                    .is_file()
             })
     })
 }
