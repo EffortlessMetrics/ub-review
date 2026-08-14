@@ -1047,16 +1047,30 @@ mod tests {
         assert_eq!(gate["counts"]["suppressed_exposure_gaps"], 1);
         let detail: serde_json::Value =
             serde_json::from_slice(&fs::read(sensor_dir.join("exposure-gaps.json"))?)?;
-        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v2");
+        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v3");
         assert_eq!(detail["status"], "ok");
         assert_eq!(detail["semantics"], "raw_pre_policy");
+        assert_eq!(
+            detail["raw_outputs"],
+            serde_json::json!({
+                "stdout": "sensors/ripr/exposure-gaps.ripr.stdout",
+                "stderr": "sensors/ripr/exposure-gaps.ripr.stderr",
+            })
+        );
         assert_eq!(detail["total_raw_findings"], 2);
         assert_eq!(detail["total_raw_gap_findings"], 2);
-        assert_eq!(detail["truncated"], false);
         let entries = detail["entries"]
             .as_array()
             .context("ripr detail entries")?;
         assert_eq!(entries.len(), 2);
+        assert_eq!(
+            entries.len(),
+            detail["total_raw_gap_findings"]
+                .as_u64()
+                .context("total raw gap findings")? as usize
+        );
+        assert!(detail.get("entry_cap").is_none());
+        assert!(detail.get("truncated").is_none());
         assert_eq!(entries[0]["id"], "probe:src_lib_rs:12:call_deletion");
         assert_eq!(entries[0]["path"], "src/lib.rs");
         assert_eq!(entries[0]["range"]["start_line"], 12);
@@ -1074,14 +1088,15 @@ mod tests {
             entries[1]["artifact_pointer"],
             "sensors/ripr/exposure-gaps.json#/entries/1"
         );
+        assert!(sensor_dir.join("exposure-gaps.ripr.stdout").is_file());
+        assert!(sensor_dir.join("exposure-gaps.ripr.stderr").is_file());
         assert!(!sensor_dir.join("exposure-gaps.stdout.tmp").exists());
         assert!(!sensor_dir.join("exposure-gaps.stderr.tmp").exists());
         Ok(())
     }
 
     #[test]
-    fn ripr_sensor_keeps_primary_receipts_when_successful_detail_output_is_truncated() -> Result<()>
-    {
+    fn ripr_sensor_keeps_primary_receipts_when_detail_output_is_unavailable() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let root = temp.path().join("repo");
         let out = temp.path().join("out");
@@ -1115,7 +1130,7 @@ mod tests {
         assert_eq!(gate["counts"]["suppressed_exposure_gaps"], 1);
         let detail: serde_json::Value =
             serde_json::from_slice(&fs::read(sensor_dir.join("exposure-gaps.json"))?)?;
-        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v2");
+        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v3");
         assert_eq!(detail["status"], "detail_unavailable");
         assert!(
             detail["error"]

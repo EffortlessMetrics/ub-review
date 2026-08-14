@@ -16,9 +16,7 @@ use crate::*;
 pub(crate) const RIPR_GAP_CLASSIFICATIONS: &[&str] =
     &["weakly_exposed", "reachable_unrevealed", "no_static_path"];
 
-pub(crate) const RIPR_GAP_DETAIL_CAP: usize = 200;
-
-/// Project pinned ripr 0.10.0's full `--format json` output into bounded raw,
+/// Project pinned ripr 0.10.0's full `--format json` output into complete raw,
 /// pre-policy gap detail. The badge receipt remains the sole source of the
 /// suppression partition and strict-zero decision (#873).
 pub(crate) fn ripr_exposure_gap_details_from_value(
@@ -104,7 +102,6 @@ pub(crate) fn ripr_exposure_gap_details_from_value(
     let entries: Vec<serde_json::Value> = gaps
         .iter()
         .enumerate()
-        .take(RIPR_GAP_DETAIL_CAP)
         .map(|(index, finding)| {
             let probe = finding.get("probe");
             let field = |outer: Option<&serde_json::Value>, key: &str| -> String {
@@ -149,10 +146,14 @@ pub(crate) fn ripr_exposure_gap_details_from_value(
         })
         .collect();
     Ok(serde_json::json!({
-        "schema": RIPR_EXPOSURE_GAPS_V2_SCHEMA,
+        "schema": RIPR_EXPOSURE_GAPS_V3_SCHEMA,
         "status": "ok",
         "semantics": "raw_pre_policy",
         "policy_authority": "sensors/ripr/gate-decision.json",
+        "raw_outputs": {
+            "stdout": "sensors/ripr/exposure-gaps.ripr.stdout",
+            "stderr": "sensors/ripr/exposure-gaps.ripr.stderr",
+        },
         "source": {
             "tool": "ripr",
             "schema_version": "0.2",
@@ -160,8 +161,6 @@ pub(crate) fn ripr_exposure_gap_details_from_value(
         },
         "total_raw_findings": findings.len(),
         "total_raw_gap_findings": total,
-        "entry_cap": RIPR_GAP_DETAIL_CAP,
-        "truncated": total > RIPR_GAP_DETAIL_CAP,
         "entries": entries,
     }))
 }
@@ -177,6 +176,12 @@ pub(crate) fn write_ripr_exposure_gap_details(
     timeout_sec: u64,
 ) {
     let artifact_path = dir.join("exposure-gaps.json");
+    let raw_stdout_path = dir.join("exposure-gaps.ripr.stdout");
+    let raw_stderr_path = dir.join("exposure-gaps.ripr.stderr");
+    // Sidecars are part of the v3 contract even when detail fails before
+    // producing output; empty files preserve that absence explicitly.
+    let _ = fs::write(&raw_stdout_path, []);
+    let _ = fs::write(&raw_stderr_path, []);
     let stdout_path = dir.join("exposure-gaps.stdout.tmp");
     let stderr_path = dir.join("exposure-gaps.stderr.tmp");
     let argv = vec![
@@ -200,6 +205,10 @@ pub(crate) fn write_ripr_exposure_gap_details(
             &stdout_path,
             &stderr_path,
         )?;
+        let stdout = fs::read(&stdout_path).with_context(|| "read detail stdout")?;
+        fs::write(&raw_stdout_path, &stdout).with_context(|| "write raw detail stdout")?;
+        let stderr = fs::read(&stderr_path).with_context(|| "read detail stderr")?;
+        fs::write(&raw_stderr_path, &stderr).with_context(|| "write raw detail stderr")?;
         if result.timed_out || !result.success {
             bail!(
                 "detail pass {}: {}",
@@ -212,17 +221,20 @@ pub(crate) fn write_ripr_exposure_gap_details(
             );
         }
         let value: serde_json::Value =
-            serde_json::from_slice(&fs::read(&stdout_path).with_context(|| "read detail stdout")?)
-                .with_context(|| "parse ripr --format json output")?;
+            serde_json::from_slice(&stdout).with_context(|| "parse ripr --format json output")?;
         ripr_exposure_gap_details_from_value(&value)
     })()
     .unwrap_or_else(|err| {
         serde_json::json!({
-            "schema": RIPR_EXPOSURE_GAPS_V2_SCHEMA,
+            "schema": RIPR_EXPOSURE_GAPS_V3_SCHEMA,
             "status": "detail_unavailable",
             "error": format!("{err:#}"),
             "semantics": "raw_pre_policy",
             "policy_authority": "sensors/ripr/gate-decision.json",
+            "raw_outputs": {
+                "stdout": "sensors/ripr/exposure-gaps.ripr.stdout",
+                "stderr": "sensors/ripr/exposure-gaps.ripr.stderr",
+            },
         })
     });
     let _ = fs::remove_file(&stdout_path);
@@ -260,7 +272,7 @@ mod tests {
         );
         let detail: serde_json::Value =
             serde_json::from_slice(&std::fs::read(dir.join("exposure-gaps.json"))?)?;
-        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v2");
+        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v3");
         assert_eq!(detail["status"], "detail_unavailable");
         assert!(
             detail["error"]
@@ -311,20 +323,33 @@ mod tests {
             super::ripr_exposure_gap_details_from_value(&value)?,
             "stable raw IDs and entry order must reproduce byte-equivalent values"
         );
-        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v2");
+        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v3");
         assert_eq!(detail["status"], "ok");
         assert_eq!(detail["semantics"], "raw_pre_policy");
         assert_eq!(
             detail["policy_authority"],
             "sensors/ripr/gate-decision.json"
         );
+        assert_eq!(
+            detail["raw_outputs"],
+            serde_json::json!({
+                "stdout": "sensors/ripr/exposure-gaps.ripr.stdout",
+                "stderr": "sensors/ripr/exposure-gaps.ripr.stderr",
+            })
+        );
         assert_eq!(detail["source"]["schema_version"], "0.2");
         // `exposed` is not a gap class and is filtered out.
         assert_eq!(detail["total_raw_gap_findings"], 3);
-        assert_eq!(detail["entry_cap"], super::RIPR_GAP_DETAIL_CAP);
-        assert_eq!(detail["truncated"], false);
         let entries = detail["entries"].as_array().context("entries")?;
         assert_eq!(entries.len(), 3);
+        assert_eq!(
+            entries.len(),
+            detail["total_raw_gap_findings"]
+                .as_u64()
+                .context("total raw gap findings")? as usize
+        );
+        assert!(detail.get("entry_cap").is_none());
+        assert!(detail.get("truncated").is_none());
         assert_eq!(entries[0]["id"], "probe:a:1:call_deletion");
         assert_eq!(entries[0]["classification"], "weakly_exposed");
         assert_eq!(entries[0]["exposure_gap_class"], "weakly_exposed");
@@ -358,8 +383,8 @@ mod tests {
                 .is_some_and(|s| s.contains("relational oracle"))
         );
 
-        // Exact boundary fixtures pin 200 as complete, 201 as truncated, and
-        // a larger input as still bounded to the presentation cap.
+        // The receipt must retain every gap, including inputs larger than the
+        // former 200-entry presentation cap.
         for total in [200, 201, 250] {
             let many: Vec<serde_json::Value> = (0..total)
                 .map(|i| finding(&format!("probe:x:{i}:call_deletion"), "no_static_path"))
@@ -372,13 +397,12 @@ mod tests {
                 "findings": many,
             }))?;
             assert_eq!(capped["total_raw_gap_findings"], total);
-            assert_eq!(capped["truncated"], total > super::RIPR_GAP_DETAIL_CAP);
             assert_eq!(
                 capped["entries"]
                     .as_array()
-                    .context("capped entries")?
+                    .context("complete entries")?
                     .len(),
-                total.min(super::RIPR_GAP_DETAIL_CAP)
+                total
             );
         }
 
@@ -494,10 +518,10 @@ mod tests {
             assert!(!format!("{error:#}").is_empty());
         }
 
-        let mut after_cap = valid.clone();
+        let mut after_many = valid.clone();
         let first = valid["findings"][0].clone();
-        after_cap["findings"] = serde_json::Value::Array(
-            (0..=super::RIPR_GAP_DETAIL_CAP)
+        after_many["findings"] = serde_json::Value::Array(
+            (0..201)
                 .map(|index| {
                     let mut finding = valid["findings"][0].clone();
                     finding["id"] = serde_json::json!(format!("finding-{index}"));
@@ -505,17 +529,17 @@ mod tests {
                 })
                 .chain(std::iter::once({
                     let mut malformed = first;
-                    malformed["id"] = serde_json::json!("finding-after-cap");
+                    malformed["id"] = serde_json::json!("finding-after-many");
                     malformed["probe"]["line"] = serde_json::json!(0);
                     malformed
                 }))
                 .collect(),
         );
-        after_cap["summary"]["findings"] = serde_json::json!(202);
-        let error = super::ripr_exposure_gap_details_from_value(&after_cap)
+        after_many["summary"]["findings"] = serde_json::json!(202);
+        let error = super::ripr_exposure_gap_details_from_value(&after_many)
             .err()
             .context("malformed finding after the presentation cap was accepted")?;
-        assert!(format!("{error:#}").contains("finding-after-cap"));
+        assert!(format!("{error:#}").contains("finding-after-many"));
         Ok(())
     }
 }
