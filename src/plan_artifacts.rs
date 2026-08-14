@@ -9,16 +9,97 @@ pub(crate) fn prepare_plan(
     selectors: &SelectorArgs,
 ) -> Result<(Config, DiffContext, BoxState, Plan)> {
     validate_selector_syntax(selectors)?;
+    let trusted_mode = trusted_admission_complete(args)?;
+    if trusted_mode {
+        reject_repo_controlled_config(args)?;
+    }
     let config = Config::load_or_default(
         &args.config,
         runtime_profile_override(args.profile.as_ref(), args.runtime_profile.as_ref()),
     )?;
     let profile = config.selected_profile()?;
     let box_state = BoxState::detect()?;
-    let diff = DiffContext::from_git(&args.root, &args.base, &args.head)?;
+    let diff = if trusted_mode {
+        DiffContext::from_trusted_inputs(
+            &args.root,
+            args.trusted_base_tree
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("trusted base tree missing"))?,
+            args.trusted_head
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("trusted head missing"))?,
+            args.trusted_changed_files
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("trusted changed-files object missing"))?,
+            args.trusted_patch
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("trusted patch object missing"))?,
+        )?
+    } else {
+        DiffContext::from_git(&args.root, &args.base, &args.head)?
+    };
     let mut plan = build_plan(&config, profile, &box_state, &diff, &args.root, allow_heavy);
     apply_plan_selectors(&mut plan, selectors)?;
     Ok((config, diff, box_state, plan))
+}
+
+pub(crate) fn trusted_admission_requested(args: &ReviewArgs) -> bool {
+    args.trusted_base_tree.is_some()
+        || args.trusted_head.is_some()
+        || args.trusted_changed_files.is_some()
+        || args.trusted_patch.is_some()
+}
+
+pub(crate) fn trusted_admission_complete(args: &ReviewArgs) -> Result<bool> {
+    if !trusted_admission_requested(args) {
+        return Ok(false);
+    }
+    if args
+        .trusted_base_tree
+        .as_deref()
+        .is_none_or(|value| value.trim().is_empty())
+        || args
+            .trusted_head
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        || args
+            .trusted_changed_files
+            .as_deref()
+            .is_none_or(|path| path.as_os_str().is_empty())
+        || args
+            .trusted_patch
+            .as_deref()
+            .is_none_or(|path| path.as_os_str().is_empty())
+    {
+        bail!("trusted-base admission requires all four nonempty explicit inputs");
+    }
+    validate_git_object_id(
+        args.trusted_base_tree.as_deref().unwrap_or_default(),
+        "trusted base tree",
+    )?;
+    validate_git_object_id(
+        args.trusted_head.as_deref().unwrap_or_default(),
+        "trusted head",
+    )?;
+    Ok(true)
+}
+
+fn reject_repo_controlled_config(args: &ReviewArgs) -> Result<()> {
+    let root = fs::canonicalize(&args.root).with_context(|| {
+        format!(
+            "canonicalize trusted repository root {}",
+            args.root.display()
+        )
+    })?;
+    if !args.config.is_absolute() {
+        bail!("trusted-base admission rejects repository-relative config paths");
+    }
+    if let Ok(config) = fs::canonicalize(&args.config)
+        && config.starts_with(&root)
+    {
+        bail!("trusted-base admission rejects configuration controlled by the repository");
+    }
+    Ok(())
 }
 
 pub(crate) fn write_plan_artifacts(
@@ -66,6 +147,51 @@ pub(crate) fn write_plan_artifacts(
         diff.changed_files.join("\n"),
     )?;
     fs::write(out.join("input/diff.patch"), &diff.patch)?;
+    if let Some(run_args) = selectors.run_args
+        && trusted_admission_complete(&run_args.review)?
+    {
+        let base_tree = run_args
+            .review
+            .trusted_base_tree
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("trusted base tree missing"))?;
+        let head = run_args
+            .review
+            .trusted_head
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("trusted head missing"))?;
+        let changed_path = run_args
+            .review
+            .trusted_changed_files
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("trusted changed-files object missing"))?;
+        let patch_path = run_args
+            .review
+            .trusted_patch
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("trusted patch object missing"))?;
+        let changed_bytes = fs::read(changed_path)?;
+        let patch_bytes = fs::read(patch_path)?;
+        fs::write(
+            out.join("input/trusted-base-receipt.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema_version": 1,
+                "admission": "trusted-base-explicit-diff",
+                "base_tree_sha": base_tree,
+                "observed_checkout_tree_sha": git_tree_sha(&run_args.review.root, "HEAD")?,
+                "head_sha": head,
+                "changed_files_object_sha256": sha256_hex(&changed_bytes),
+                "patch_object_sha256": sha256_hex(&patch_bytes),
+                "changed_files_sha256": sha256_hex(diff.changed_files.join("\n").as_bytes()),
+                "patch_sha256": sha256_hex(diff.patch.as_bytes()),
+                "head_tree_loaded": false,
+                "head_config_loaded": false,
+                "repository_config_loaded": false,
+                "model_mode": "off",
+                "provider_policy": "auto",
+            }))?,
+        )?;
+    }
     fs::write(out.join("input/pr.md"), render_pr_packet(diff))?;
     fs::write(out.join("input/claims.md"), render_claim_prompt(diff))?;
     Ok(())

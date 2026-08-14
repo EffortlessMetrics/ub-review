@@ -264,6 +264,87 @@ impl DiffContext {
             diff_class,
         })
     }
+
+    /// Build a diff exclusively from workflow-supplied objects while the
+    /// checkout remains at the trusted base tree. The head is metadata only:
+    /// it is validated as an object id, never resolved as a ref or checked out.
+    pub(crate) fn from_trusted_inputs(
+        root: &Path,
+        base_tree: &str,
+        head: &str,
+        changed_files_path: &Path,
+        patch_path: &Path,
+    ) -> Result<Self> {
+        validate_git_object_id(base_tree, "trusted base tree")?;
+        validate_git_object_id(head, "trusted head")?;
+        let observed_tree = git_tree_sha(root, "HEAD")?;
+        if observed_tree != base_tree {
+            bail!(
+                "trusted-base admission rejected: checkout tree {observed_tree} does not match base tree {base_tree}"
+            );
+        }
+        let changed_files_bytes = fs::read(changed_files_path).with_context(|| {
+            format!(
+                "read trusted changed-files object {}",
+                changed_files_path.display()
+            )
+        })?;
+        let changed_files = parse_trusted_changed_files(&changed_files_bytes)?;
+        let patch_bytes = fs::read(patch_path)
+            .with_context(|| format!("read trusted patch object {}", patch_path.display()))?;
+        if patch_bytes.contains(&0) {
+            bail!("trusted patch object contains NUL bytes");
+        }
+        let patch = String::from_utf8_lossy(&patch_bytes).into_owned();
+        let flags = classify_diff(&changed_files, &patch);
+        let diff_class = classify_diff_class(&changed_files, &flags);
+        Ok(Self {
+            base: base_tree.to_owned(),
+            head: head.to_owned(),
+            changed_files,
+            patch,
+            flags,
+            diff_class,
+        })
+    }
+}
+
+pub(crate) fn validate_git_object_id(value: &str, label: &str) -> Result<()> {
+    if value.len() != 40 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        bail!("{label} must be exactly 40 hexadecimal characters");
+    }
+    Ok(())
+}
+
+fn parse_trusted_changed_files(bytes: &[u8]) -> Result<Vec<String>> {
+    if bytes.is_empty() || bytes.contains(&0) {
+        bail!("trusted changed-files object must be nonempty and contain no NUL bytes");
+    }
+    let text =
+        std::str::from_utf8(bytes).context("trusted changed-files object must be valid UTF-8")?;
+    let mut files = Vec::new();
+    for raw in text.lines() {
+        let file = raw.strip_suffix('\r').unwrap_or(raw);
+        if file.is_empty() {
+            bail!("trusted changed-files object contains an empty path");
+        }
+        let path = Path::new(file);
+        if path.is_absolute()
+            || path.components().any(|component| {
+                matches!(
+                    component,
+                    Component::ParentDir | Component::RootDir | Component::Prefix(_)
+                )
+            })
+        {
+            bail!("trusted changed-files object contains unsafe path `{file}`");
+        }
+        files.push(file.to_owned());
+    }
+    if files.is_empty() {
+        bail!("trusted changed-files object must contain at least one path");
+    }
+    Ok(files)
 }
 
 pub(crate) fn git_lines(root: &Path, args: &[&str]) -> Result<Vec<String>> {
@@ -588,5 +669,101 @@ pub(crate) fn skipped(tool: &ToolPolicy, reason: &str, required: bool) -> Sensor
         requires_lease: tool.requires_lease,
         phase: tool.effective_phase(),
         gate: tool.gate.clone(),
+    }
+}
+
+#[cfg(test)]
+mod trusted_input_tests {
+    use super::*;
+
+    #[test]
+    fn trusted_object_ids_require_full_sha_values() -> Result<()> {
+        validate_git_object_id(&"a".repeat(40), "base")?;
+        for value in ["", "a", &"g".repeat(40), &format!("{}0", "a".repeat(40))] {
+            if validate_git_object_id(value, "base").is_ok() {
+                bail!("accepted invalid git object id `{value}`");
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn trusted_inputs_use_objects_and_reject_nul_or_unsafe_paths() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let changed = temp.path().join("changed-files.txt");
+        let patch = temp.path().join("patch.diff");
+        let base = git_tree_sha(Path::new("."), "HEAD")?;
+        fs::write(&changed, b"src/main.rs\n")?;
+        fs::write(&patch, b"diff --git a/src/main.rs b/src/main.rs\n")?;
+        let diff = DiffContext::from_trusted_inputs(
+            Path::new("."),
+            &base,
+            &"b".repeat(40),
+            &changed,
+            &patch,
+        )?;
+        if diff.changed_files != vec!["src/main.rs"] || diff.head != "b".repeat(40) {
+            bail!("trusted objects were not used verbatim");
+        }
+
+        fs::write(&changed, b"..\\secret.txt\n")?;
+        if DiffContext::from_trusted_inputs(
+            Path::new("."),
+            &base,
+            &"b".repeat(40),
+            &changed,
+            &patch,
+        )
+        .is_ok()
+        {
+            bail!("accepted parent-traversal changed path");
+        }
+        fs::write(&changed, b"src/main.rs\0\n")?;
+        if DiffContext::from_trusted_inputs(
+            Path::new("."),
+            &base,
+            &"b".repeat(40),
+            &changed,
+            &patch,
+        )
+        .is_ok()
+        {
+            bail!("accepted NUL changed path");
+        }
+        fs::write(&changed, b"src/main.rs\n")?;
+        fs::write(&patch, b"diff\0")?;
+        if DiffContext::from_trusted_inputs(
+            Path::new("."),
+            &base,
+            &"b".repeat(40),
+            &changed,
+            &patch,
+        )
+        .is_ok()
+        {
+            bail!("accepted NUL patch");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn trusted_inputs_reject_checkout_tree_mismatch() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let changed = temp.path().join("changed-files.txt");
+        let patch = temp.path().join("patch.diff");
+        fs::write(&changed, b"src/main.rs\n")?;
+        fs::write(&patch, b"diff\n")?;
+        if DiffContext::from_trusted_inputs(
+            Path::new("."),
+            &"c".repeat(40),
+            &"b".repeat(40),
+            &changed,
+            &patch,
+        )
+        .is_ok()
+        {
+            bail!("accepted checkout tree mismatch");
+        }
+        Ok(())
     }
 }
