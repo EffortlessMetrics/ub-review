@@ -780,4 +780,34 @@ mod trusted_input_tests {
         }
         Ok(())
     }
+
+    #[test]
+    fn trusted_inputs_treat_hostile_head_files_as_data_only() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let changed = temp.path().join("changed-files.txt");
+        let patch = temp.path().join("patch.diff");
+        let base = git_tree_sha(Path::new("."), "HEAD")?;
+        fs::write(
+            &changed,
+            b".ub-review.toml\nplugin.toml\nscripts/evil.sh\nconfig/tree.toml\n",
+        )?;
+        fs::write(
+            &patch,
+            b"diff --git a/.ub-review.toml b/.ub-review.toml\n\n\
+diff --git a/plugin.toml b/plugin.toml\n\n\
+diff --git a/scripts/evil.sh b/scripts/evil.sh\n\n\
+diff --git a/config/tree.toml b/config/tree.toml\n",
+        )?;
+        let diff = DiffContext::from_trusted_inputs(
+            Path::new("."),
+            &base,
+            &"c".repeat(40),
+            &changed,
+            &patch,
+        )?;
+        if diff.changed_files.len() != 4 || diff.head != "c".repeat(40) {
+            bail!("trusted hostile-head fixture was not retained as data");
+        }
+        Ok(())
+    }
 }

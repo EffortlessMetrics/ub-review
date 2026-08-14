@@ -128,9 +128,13 @@ pub(crate) fn validate_trusted_config_path(root: &Path, config: &Path) -> Result
     if config.starts_with(root) {
         bail!("trusted-base admission rejects configuration controlled by the repository");
     }
-    if let Ok(canonical_config) = fs::canonicalize(config)
-        && canonical_config.starts_with(root)
-    {
+    let canonical_config = fs::canonicalize(config).with_context(|| {
+        format!(
+            "canonicalize trusted configuration path {}",
+            config.display()
+        )
+    })?;
+    if canonical_config.starts_with(root) {
         bail!("trusted-base admission rejects configuration reached through a repository symlink");
     }
     Ok(())
@@ -194,35 +198,24 @@ pub(crate) fn write_plan_artifacts(
             .trusted_head
             .as_deref()
             .ok_or_else(|| anyhow::anyhow!("trusted head missing"))?;
-        let changed_path = run_args
-            .review
-            .trusted_changed_files
-            .as_deref()
-            .ok_or_else(|| anyhow::anyhow!("trusted changed-files object missing"))?;
-        let patch_path = run_args
-            .review
-            .trusted_patch
-            .as_deref()
-            .ok_or_else(|| anyhow::anyhow!("trusted patch object missing"))?;
-        let changed_bytes = fs::read(changed_path)?;
-        let patch_bytes = fs::read(patch_path)?;
+        let observed_checkout_tree_sha = base_tree;
         fs::write(
             out.join("input/trusted-base-receipt.json"),
             serde_json::to_vec_pretty(&serde_json::json!({
                 "schema_version": 1,
                 "admission": "trusted-base-explicit-diff",
                 "base_tree_sha": base_tree,
-                "observed_checkout_tree_sha": git_tree_sha(&run_args.review.root, "HEAD")?,
+                "observed_checkout_tree_sha": observed_checkout_tree_sha,
                 "head_sha": head,
-                "changed_files_object_sha256": sha256_hex(&changed_bytes),
-                "patch_object_sha256": sha256_hex(&patch_bytes),
+                "changed_files_object_sha256": sha256_hex(diff.changed_files.join("\n").as_bytes()),
+                "patch_object_sha256": sha256_hex(diff.patch.as_bytes()),
                 "changed_files_sha256": sha256_hex(diff.changed_files.join("\n").as_bytes()),
                 "patch_sha256": sha256_hex(diff.patch.as_bytes()),
                 "head_tree_loaded": false,
                 "head_config_loaded": false,
                 "repository_config_loaded": false,
-                    "model_mode": run_args.model_mode.key(),
-                    "provider_policy": run_args.provider_policy.key(),
+                "model_mode": run_args.model_mode.key(),
+                "provider_policy": run_args.provider_policy.key(),
             }))?,
         )?;
     }
@@ -380,6 +373,18 @@ mod trusted_config_tests {
         let parent_path = PathBuf::from(format!("{}\\..\\outside.toml", root.display()));
         if validate_trusted_config_path(&root, &parent_path).is_ok() {
             bail!("accepted lexical parent traversal config path");
+        }
+        let outside = temp.path().join("outside.toml");
+        fs::write(&outside, "[providers]\npolicy='auto'\n")?;
+        let link = root.join("linked-config.toml");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&outside, &link)?;
+        #[cfg(windows)]
+        if std::os::windows::fs::symlink_file(&outside, &link).is_err() {
+            return Ok(());
+        }
+        if validate_trusted_config_path(&root, &link).is_ok() {
+            bail!("accepted repository symlink to configuration");
         }
         Ok(())
     }
