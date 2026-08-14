@@ -30,6 +30,26 @@ local `receipt.json`. Use `--base <rev>` when the PR targets another base. The
 output path is deliberately fixed under `target/xtask/ripr/`; the command does
 not accept arbitrary cleanup or overwrite targets.
 
+## Suppression inventory (issue #872)
+
+The bounded inventory command reports only what the available artifacts can
+establish; it does not reimplement RIPR suppression semantics or edit the
+ledger:
+
+```text
+cargo --locked xtask ripr-inventory
+```
+
+It reads `.ripr/suppressions.toml` and, when present,
+`target/xtask/ripr/exposure-gaps.json`, then writes
+`target/xtask/ripr/suppression-inventory.json`. Entries are classified as
+`duplicate`, `malformed`, `matched_current_diff`,
+`unmatched_by_current_diff`, or `unknown_currentness`. Without a detail
+artifact, valid entries are explicitly `unknown_currentness`; an unmatched
+content-addressed ID is not evidence that the suppression is stale. This
+report is inventory evidence only and does not justify renewing the overdue
+policy umbrella by itself.
+
 Clean diffs and diffs without Rust inputs are explicit `skipped` outcomes.
 Untracked Rust files are rejected because Git cannot include them in the diff;
 add or stage them before rerunning. A missing or wrong-version tool fails with
