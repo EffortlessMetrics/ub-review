@@ -162,7 +162,8 @@ pub(crate) use github_delivery::*;
 mod plan_artifacts;
 use plan_artifacts::{
     PlanArtifactSelectors, RepairQueueEntry, RepairQueueFile, prepare_plan,
-    trusted_admission_complete, trusted_admission_requested, write_plan_artifacts,
+    trusted_admission_complete, trusted_admission_requested, validate_trusted_execution_settings,
+    write_plan_artifacts,
 };
 mod ci_audit;
 pub(crate) use ci_audit::*;
@@ -3533,12 +3534,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         if !trusted_admission_complete(&args.review)? {
             bail!("trusted-base admission inputs are incomplete");
         }
-        if !matches!(args.model_mode, ModelMode::Off) {
-            bail!("trusted-base mode requires --model-mode off; model execution is disabled");
-        }
-        if !matches!(args.provider_policy, ModelProviderPolicy::Auto) {
-            bail!("trusted-base mode requires --provider-policy auto");
-        }
+        validate_trusted_execution_settings(true, args.model_mode, args.provider_policy)?;
     }
     let run_pass = resolved_run_pass(args.run_pass);
     let (mut config, diff, box_state, plan) =
@@ -3552,6 +3548,10 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
     // wins; `auto` defers to the repo's [providers].policy; with neither,
     // `auto` keeps its built-in minimax-primary semantics.
     args.provider_policy = resolved_provider_policy(&config, args.provider_policy);
+    if trusted_admission_requested(&args.review) {
+        args.model_mode = ModelMode::Off;
+        args.provider_policy = ModelProviderPolicy::Auto;
+    }
     args.minimax_prompt_cache = resolved_minimax_prompt_cache(&config);
     let profile = config.selected_profile()?;
     apply_runtime_profile_limits(&mut args, profile)?;
