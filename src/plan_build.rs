@@ -318,7 +318,7 @@ pub(crate) fn validate_git_object_id(value: &str, label: &str) -> Result<()> {
     Ok(())
 }
 
-fn parse_trusted_changed_files(bytes: &[u8]) -> Result<Vec<String>> {
+pub(crate) fn parse_trusted_changed_files(bytes: &[u8]) -> Result<Vec<String>> {
     if bytes.is_empty() || bytes.contains(&0) {
         bail!("trusted changed-files object must be nonempty and contain no NUL bytes");
     }
