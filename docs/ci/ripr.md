@@ -40,6 +40,12 @@ ledger:
 cargo --locked xtask ripr-inventory
 ```
 
+Current-diff classification requires `--artifact-dir`, `--provenance`, and
+`--reviewed-head`. The manifest must contain matching `reviewed_head`, a
+non-empty `run_id`, and `diff`; without those inputs valid rows remain
+`unknown_currentness`. An explicitly supplied unreadable or malformed
+provenance file is an error.
+
 It reads `.ripr/suppressions.toml` and, when present,
 `target/xtask/ripr/exposure-gaps.json`, then writes
 `target/xtask/ripr/suppression-inventory.json`. Entries are classified as

@@ -34,6 +34,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -61,6 +62,7 @@ jobs:
           allow-heavy: 'true'
           root: .
           base: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.event.pull_request.base.ref) || 'origin/main' }}
+          head: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           out: target/ub-review
           github-token: ${{ github.token }}
           posting: ${{ github.event_name == 'pull_request' && 'review' || 'artifact-only' }}
@@ -90,7 +92,7 @@ jobs:
           REVIEWED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           RUN_ID: ${{ github.run_id }}
         run: >
-          python -c "import json, os; json.dump({'reviewed_head': os.environ['REVIEWED_HEAD'], 'run_id': os.environ['RUN_ID'], 'diff': 'sensors/ripr/diff.patch'}, open('target/ub-review/ripr-provenance.json','w'), indent=2)"
+          python -c "import json, os; os.makedirs('target/ub-review', exist_ok=True); json.dump({'reviewed_head': os.environ['REVIEWED_HEAD'], 'run_id': os.environ['RUN_ID'], 'diff': 'sensors/ripr/diff.patch'}, open('target/ub-review/ripr-provenance.json','w'), indent=2)"
 
       # Folded from the standalone coverage workflow: same OIDC upload, now
       # pointed at the coverage sensor's lcov receipt under target/ub-review.

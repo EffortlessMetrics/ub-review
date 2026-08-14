@@ -10,6 +10,7 @@ inventory change, using:
 ```text
 cargo --locked xtask ripr --base 26b1094
 cargo --locked xtask ripr-inventory --artifact-dir target/xtask/ripr
+# Without --provenance/--reviewed-head, valid rows remain unknown_currentness.
 ```
 
 For hosted currentness, retrieve the exact artifact for the reviewed head and
@@ -38,8 +39,9 @@ artifact from the exact hosted head. v2, truncated, malformed, or
 detail-unavailable artifacts are classified as unknown currentness rather than
 evidence that a suppression is unmatched.
 
-Observed counts from hosted run `31822364107` at exact head
-`9c26591bfa6d70b02fa68d1a47213ef747257010` (2026-08-14):
+Historical evidence from hosted run `31842460778` at exact head
+`4d6707334c4753aa42420df18a431405747373ec` (2026-08-14) recorded 54 RIPR
+new-unsuppressed findings; the gate was red, so this is not current merge proof.
 
 | classification | before | after | meaning |
 |---|---:|---:|---|
@@ -55,7 +57,6 @@ separate review of the surrounding ledger text; it is intentionally not
 auto-repaired. Content-addressed unmatched IDs require semantic evidence or a
 representative-diff procedure before removal or renewal. A validated
 production-form `sensors/ripr/exposure-gaps.json` artifact is required before
-any current-diff match claim. The hosted detail contained 31 complete stable
-IDs, with gate counts `unsuppressed_exposure_gaps = 31` and
-`suppressed_exposure_gaps = 0`; the gate was red, so these are diagnostic
-currentness evidence rather than a merge or suppression approval.
+any current-diff match claim. The historical packet recorded 54
+new-unsuppressed findings; historical results are diagnostic evidence only, not
+a merge or suppression approval. No current hosted proof is claimed.

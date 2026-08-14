@@ -534,12 +534,16 @@ fn run_ripr_inventory(root: &Path, options: RiprInventoryOptions) -> Result<()> 
     // A v3 detail envelope is not currentness evidence unless both raw RIPR
     // sidecars it names are present.  Keep malformed or incomplete artifacts
     // on the unknown-currentness path rather than inventorying stale IDs.
-    let provenance_ok = options
-        .provenance
-        .as_deref()
-        .and_then(|path| fs::read_to_string(path).ok())
-        .and_then(|text| serde_json::from_str::<JsonValue>(&text).ok())
-        .is_some_and(|manifest| valid_ripr_provenance(&manifest, options.reviewed_head.as_deref()));
+    let provenance_ok = match options.provenance.as_deref() {
+        Some(path) => {
+            let text = fs::read_to_string(path)
+                .with_context(|| format!("read RIPR provenance manifest {}", path.display()))?;
+            let manifest = serde_json::from_str::<JsonValue>(&text)
+                .with_context(|| format!("parse RIPR provenance manifest {}", path.display()))?;
+            valid_ripr_provenance(&manifest, options.reviewed_head.as_deref())
+        }
+        None => false,
+    };
     let detail = detail
         .filter(|value| provenance_ok && raw_ripr_sidecars_present(&options.artifact_dir, value));
     let report = classify_suppressions(&ledger, detail.as_ref())?;
@@ -683,7 +687,13 @@ fn classify_suppressions(ledger: &str, detail: Option<&JsonValue>) -> Result<Jso
     let finding_ids = detail.and_then(validated_ripr_finding_ids);
     let mut seen = BTreeSet::new();
     let mut entries = Vec::new();
-    let mut counts = BTreeMap::<&str, u64>::new();
+    let mut counts = BTreeMap::from([
+        ("duplicate", 0),
+        ("malformed", 0),
+        ("matched_current_diff", 0),
+        ("unmatched_by_current_diff", 0),
+        ("unknown_currentness", 0),
+    ]);
     for (index, row) in rows.iter().enumerate() {
         let object = row.as_ref().and_then(Value::as_table);
         let id = object
