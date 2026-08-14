@@ -585,7 +585,7 @@ Honest current-state limits a consumer must know:
   on `counts.unsuppressed_exposure_gaps`, two real blocks (PR #342, #346).
   Bounded per-finding detail ships next to it in
   `sensors/ripr/exposure-gaps.json` (#347, #873). Schema
-  `ripr_exposure_gaps.v2` declares `raw_pre_policy`; entries carry stable raw
+  `ripr_exposure_gaps.v3` declares `raw_pre_policy`; entries carry stable raw
   finding IDs, path/range, exposure-gap class, summaries, and artifact
   pointers, but never infer suppression state or threshold contribution that
   RIPR 0.10.0 detail does not expose. The verifier checks the pinned source
@@ -689,7 +689,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/suggested_issues.md | experimental | none (rendered issue drafts) | humans (PR body links here since #346) | required (require_issue_capture_artifacts, existence) |
 | review/issue_broker_plan.json + issue_broker_plan.ndjson (root twin) | experimental | issue_broker_plan.v1 records | the broker (run decides and renders; post reads the plan) | conditional (require_issue_broker_artifacts; written only when [issues] mode=open-high-confidence, #348) |
 | review/issue_broker_results.json + issue_broker_results.ndjson (root twin) | experimental | issue_broker_result.v1 records | humans; downstream automation (the broker's receipts) | conditional (require_issue_broker_artifacts; post-side, checked when present; results without a plan fail) |
-| sensors/ripr/exposure-gaps.json | experimental | ripr_exposure_gaps.v2 (`raw_pre_policy`) | humans; downstream automation (tool-gate red diagnosis) | conditional (require_ripr_exposure_gap_details; required whenever gate-decision.json exists; pinned badge/detail envelopes, uncapped raw totals, capped entries, unique IDs, and absence of inferred policy fields verified; detail_unavailable is explicit and fails verification) |
+| sensors/ripr/exposure-gaps.json | experimental | ripr_exposure_gaps.v3 (`raw_pre_policy`) | humans; downstream automation (tool-gate red diagnosis) | conditional (require_ripr_exposure_gap_details; required whenever gate-decision.json exists; pinned badge/detail envelopes, complete raw gap entries, preserved exact RIPR stdout/stderr, unique IDs, and absence of inferred policy fields verified; detail_unavailable is explicit and fails verification) |
 | sensors/coverage/status.json (+ coverage-summary.json, changed-lines.json, upload.json, lcov.info) | experimental | coverage_status.v1, coverage_summary.v1 | gate-check (coverage tool gate); downstream automation | conditional (require_coverage_status_artifact; runs when tool-status carries the coverage tool) |
 | ci-audit/inventory.json, history.json, costs.json, correlation.json, recommendations.json | experimental | ci_inventory.v1, ci_history.v1, ci_costs.v1, ci_correlation.v1, ci_recommendations.v1 | setup-ci; humans; detailed semantics in spec 0007 | conditional (require_ci_audit_core_artifacts; required under --ci-audit-only, conditional when present in a full run root; schema/job/receipt checks) |
 | ci-audit/runner-cancellations.json | experimental | ci_runner_cancellations.v1 | humans; setup-ci validates when present; runner cancellation runbook | conditional (require_ci_audit_runner_cancellations; --ci-audit-only for audit roots) |

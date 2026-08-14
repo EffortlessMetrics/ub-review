@@ -1047,12 +1047,15 @@ mod tests {
         assert_eq!(gate["counts"]["suppressed_exposure_gaps"], 1);
         let detail: serde_json::Value =
             serde_json::from_slice(&fs::read(sensor_dir.join("exposure-gaps.json"))?)?;
-        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v2");
+        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v3");
         assert_eq!(detail["status"], "ok");
         assert_eq!(detail["semantics"], "raw_pre_policy");
+        assert_eq!(
+            detail["raw_outputs"]["stdout"],
+            "sensors/ripr/exposure-gaps.ripr.stdout"
+        );
         assert_eq!(detail["total_raw_findings"], 2);
         assert_eq!(detail["total_raw_gap_findings"], 2);
-        assert_eq!(detail["truncated"], false);
         let entries = detail["entries"]
             .as_array()
             .context("ripr detail entries")?;
@@ -1074,14 +1077,15 @@ mod tests {
             entries[1]["artifact_pointer"],
             "sensors/ripr/exposure-gaps.json#/entries/1"
         );
+        assert!(sensor_dir.join("exposure-gaps.ripr.stdout").is_file());
+        assert!(sensor_dir.join("exposure-gaps.ripr.stderr").is_file());
         assert!(!sensor_dir.join("exposure-gaps.stdout.tmp").exists());
         assert!(!sensor_dir.join("exposure-gaps.stderr.tmp").exists());
         Ok(())
     }
 
     #[test]
-    fn ripr_sensor_keeps_primary_receipts_when_successful_detail_output_is_truncated() -> Result<()>
-    {
+    fn ripr_sensor_keeps_primary_receipts_when_detail_output_is_unavailable() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let root = temp.path().join("repo");
         let out = temp.path().join("out");
@@ -1115,7 +1119,7 @@ mod tests {
         assert_eq!(gate["counts"]["suppressed_exposure_gaps"], 1);
         let detail: serde_json::Value =
             serde_json::from_slice(&fs::read(sensor_dir.join("exposure-gaps.json"))?)?;
-        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v2");
+        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v3");
         assert_eq!(detail["status"], "detail_unavailable");
         assert!(
             detail["error"]

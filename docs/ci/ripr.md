@@ -55,9 +55,29 @@ therefore reconciles the total canonical-gap count while treating the badge's
 suppressed/unsuppressed partition as tool-reported rather than independently
 derived. The production packet makes the same boundary explicit:
 `sensors/ripr/exposure-gaps.json` uses
-`ub-review.ripr_exposure_gaps.v2`, declares `raw_pre_policy`, and omits
-per-entry suppression and threshold fields. Its full raw finding and canonical
-gap totals reconcile with the pinned badge envelope; its stable IDs are raw
-diagnostic identities, not a per-ID join to the aggregate-only badge. The
+`ub-review.ripr_exposure_gaps.v3`, declares `raw_pre_policy`, and omits
+per-entry suppression and threshold fields. Its complete raw finding and
+canonical gap totals reconcile with the pinned badge envelope; its stable IDs
+are raw diagnostic identities, not a per-ID join to the aggregate-only badge.
+The exact RIPR stdout and stderr are preserved beside the projection as
+`exposure-gaps.ripr.stdout` and `exposure-gaps.ripr.stderr`; use those files
+when a full tool-native record is required. The
 badge at `sensors/ripr/gate-decision.json` remains the sole strict-zero and
 suppression-partition authority (#873).
+
+## Hosted retrieval
+
+For a specific `ub-review/gate` run, download the named workflow artifact
+without relying on the PR comment or aggregate check summary:
+
+```text
+gh run download <run-id> --name ub-review-gate --dir target/hosted-ripr
+```
+
+The downloaded tree contains
+`sensors/ripr/exposure-gaps.json` (complete stable-ID projection),
+`sensors/ripr/exposure-gaps.ripr.stdout` (exact RIPR JSON stdout), and
+`sensors/ripr/exposure-gaps.ripr.stderr` (exact RIPR stderr). Verify the
+artifact with `python scripts/verify-bun-review-artifacts.py target/hosted-ripr`
+using the same review-profile and repository-kind arguments recorded by the
+run.
