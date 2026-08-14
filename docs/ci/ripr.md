@@ -65,6 +65,11 @@ when a full tool-native record is required. The
 badge at `sensors/ripr/gate-decision.json` remains the sole strict-zero and
 suppression-partition authority (#873).
 
+Schema migration is fail-closed: the verifier accepts v3 only and rejects
+v2 artifacts because their capped entries cannot establish complete
+per-finding coverage. Re-run the producer on the exact hosted head to migrate;
+there is no safe mechanical conversion from a truncated v2 receipt.
+
 ## Hosted retrieval
 
 For a specific `ub-review/gate` run, download the named workflow artifact

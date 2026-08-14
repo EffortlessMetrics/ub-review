@@ -178,6 +178,10 @@ pub(crate) fn write_ripr_exposure_gap_details(
     let artifact_path = dir.join("exposure-gaps.json");
     let raw_stdout_path = dir.join("exposure-gaps.ripr.stdout");
     let raw_stderr_path = dir.join("exposure-gaps.ripr.stderr");
+    // Sidecars are part of the v3 contract even when detail fails before
+    // producing output; empty files preserve that absence explicitly.
+    let _ = fs::write(&raw_stdout_path, []);
+    let _ = fs::write(&raw_stderr_path, []);
     let stdout_path = dir.join("exposure-gaps.stdout.tmp");
     let stderr_path = dir.join("exposure-gaps.stderr.tmp");
     let argv = vec![

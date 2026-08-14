@@ -96,7 +96,7 @@ For a copyable adoption guide, use [PORTING_BASELINE.md](PORTING_BASELINE.md).
   receipts; `review/receipt_routes.json` route entries cite exact
   `review/proof_receipts.json#<receipt-id>` and matching
   `review/resource_leases.json#<lease-id>` anchors; and
-  `sensors/ripr/exposure-gaps.json` carries bounded raw/pre-policy RIPR
+  `sensors/ripr/exposure-gaps.json` carries complete raw/pre-policy RIPR
   exposure-gap detail so a red tool gate is diagnosable without a local
   rerun; `gate-decision.json` remains the sole suppression and threshold
   authority because pinned RIPR detail has no per-finding policy state.
