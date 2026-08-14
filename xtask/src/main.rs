@@ -171,6 +171,84 @@ fn ripr_inventory_accepts_commented_suppression_headers() -> Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
+#[test]
+fn ripr_inventory_discriminates_every_classification_and_dispatch_branch() -> Result<()> {
+    let options = RiprInventoryOptions::parse(
+        ["--artifact-dir", "hosted/sensors/ripr"]
+            .into_iter()
+            .map(str::to_owned),
+    )?;
+    assert_eq!(options.artifact_dir, PathBuf::from("hosted/sensors/ripr"));
+    let missing = RiprInventoryOptions::parse(["--artifact-dir"].into_iter().map(str::to_owned))
+        .err()
+        .context("missing artifact directory must be rejected")?;
+    assert!(
+        missing
+            .to_string()
+            .contains("--artifact-dir requires a directory")
+    );
+    let unexpected = RiprInventoryOptions::parse(["--head"].into_iter().map(str::to_owned))
+        .err()
+        .context("unknown inventory arguments must be rejected")?;
+    assert!(
+        unexpected
+            .to_string()
+            .contains("unexpected ripr-inventory argument `--head`")
+    );
+
+    assert_eq!(SuppressionClass::Duplicate.as_str(), "duplicate");
+    assert_eq!(SuppressionClass::Malformed.as_str(), "malformed");
+    assert_eq!(
+        SuppressionClass::MatchedCurrentDiff.as_str(),
+        "matched_current_diff"
+    );
+    assert_eq!(
+        SuppressionClass::UnmatchedCurrentDiff.as_str(),
+        "unmatched_by_current_diff"
+    );
+    assert_eq!(
+        SuppressionClass::UnknownCurrentness.as_str(),
+        "unknown_currentness"
+    );
+
+    let ledger = r#"
+schema_version = 1
+[[suppressions]]
+finding_id = "probe:matched"
+[[suppressions]]
+finding_id = "probe:matched"
+[[suppressions]]
+finding_id = "probe:unmatched"
+[[suppressions]]
+owner = "ub-review/core"
+[[suppressions]]
+finding_id = "probe:unknown"
+"#;
+    let detail = serde_json::json!({
+        "schema": "ub-review.ripr_exposure_gaps.v3",
+        "status": "ok",
+        "semantics": "raw_pre_policy",
+        "policy_authority": "sensors/ripr/gate-decision.json",
+        "raw_outputs": {
+            "stdout": "sensors/ripr/exposure-gaps.ripr.stdout",
+            "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"
+        },
+        "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"},
+        "total_raw_findings": 2,
+        "total_raw_gap_findings": 2,
+        "entries": [{"id": "probe:matched"}, {"id": "probe:other"}]
+    });
+    let report = classify_suppressions(ledger, Some(&detail))?;
+    assert_eq!(report["summary"]["matched_current_diff"], 1);
+    assert_eq!(report["summary"]["duplicate"], 1);
+    assert_eq!(report["summary"]["unmatched_by_current_diff"], 2);
+    assert_eq!(report["summary"]["malformed"], 1);
+    let unknown_report = classify_suppressions(ledger, None)?;
+    assert_eq!(unknown_report["summary"]["unknown_currentness"], 3);
+    Ok(())
+}
+
 fn run() -> Result<()> {
     let mut args = env::args().skip(1);
     let command = args.next().unwrap_or_else(|| "help".to_owned());
