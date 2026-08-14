@@ -84,6 +84,14 @@ jobs:
           --expected-review-profile ub-review-self
           --expected-repo-kind ub-review
 
+      - name: Record RIPR provenance
+        if: always()
+        env:
+          REVIEWED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: >
+          python -c "import json, os; json.dump({'reviewed_head': os.environ['REVIEWED_HEAD'], 'run_id': os.environ['RUN_ID'], 'diff': 'sensors/ripr/diff.patch'}, open('target/ub-review/ripr-provenance.json','w'), indent=2)"
+
       # Folded from the standalone coverage workflow: same OIDC upload, now
       # pointed at the coverage sensor's lcov receipt under target/ub-review.
       # fail_ci_if_error stays false: with ub-review/gate as the only required
