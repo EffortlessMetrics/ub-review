@@ -44,6 +44,10 @@ owner = "ub-review/core"
         "schema": "ub-review.ripr_exposure_gaps.v3",
         "status": "ok",
         "semantics": "raw_pre_policy",
+        "policy_authority": "sensors/ripr/gate-decision.json",
+        "raw_outputs": {"stdout": "sensors/ripr/exposure-gaps.ripr.stdout", "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"},
+        "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"},
+        "total_raw_findings": 1,
         "total_raw_gap_findings": 1,
         "entries": [{"id": "probe:a"}],
     });
@@ -96,6 +100,9 @@ fn ripr_inventory_rejects_unvalidated_detail_artifacts() {
         serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v2", "status": "ok", "semantics": "raw_pre_policy", "entries": []}),
         serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "ok", "semantics": "raw_pre_policy", "entries": {}}),
         serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "ok", "semantics": "raw_pre_policy", "entries": [{"id": ""}]}),
+        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "ok", "semantics": "raw_pre_policy", "entries": [], "total_raw_findings": 0, "total_raw_gap_findings": 0}),
+        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "ok", "semantics": "raw_pre_policy", "policy_authority": "sensors/ripr/gate-decision.json", "raw_outputs": {"stdout": "sensors/ripr/exposure-gaps.ripr.stdout", "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"}, "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"}, "total_raw_findings": 2, "total_raw_gap_findings": 2, "entries": [{"id": "probe:a"}]}),
+        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "ok", "semantics": "raw_pre_policy", "policy_authority": "sensors/ripr/gate-decision.json", "raw_outputs": {"stdout": "sensors/ripr/exposure-gaps.ripr.stdout", "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"}, "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"}, "total_raw_findings": 2, "total_raw_gap_findings": 2, "entries": [{"id": "probe:a"}, {"id": "probe:a"}]}),
     ] {
         assert!(validated_ripr_finding_ids(&detail).is_none());
     }
@@ -103,6 +110,10 @@ fn ripr_inventory_rejects_unvalidated_detail_artifacts() {
         "schema": "ub-review.ripr_exposure_gaps.v3",
         "status": "ok",
         "semantics": "raw_pre_policy",
+        "policy_authority": "sensors/ripr/gate-decision.json",
+        "raw_outputs": {"stdout": "sensors/ripr/exposure-gaps.ripr.stdout", "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"},
+        "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"},
+        "total_raw_findings": 0,
         "total_raw_gap_findings": 0,
         "entries": [],
     });
@@ -118,6 +129,10 @@ fn ripr_inventory_accepts_commented_suppression_headers() -> Result<()> {
         "schema": "ub-review.ripr_exposure_gaps.v3",
         "status": "ok",
         "semantics": "raw_pre_policy",
+        "policy_authority": "sensors/ripr/gate-decision.json",
+        "raw_outputs": {"stdout": "sensors/ripr/exposure-gaps.ripr.stdout", "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"},
+        "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"},
+        "total_raw_findings": 1,
         "total_raw_gap_findings": 1,
         "entries": [{"id": "probe:a"}],
     });
@@ -413,15 +428,37 @@ fn validated_ripr_finding_ids(detail: &JsonValue) -> Option<BTreeSet<String>> {
     {
         return None;
     }
+    if detail.get("policy_authority").and_then(JsonValue::as_str)
+        != Some("sensors/ripr/gate-decision.json")
+    {
+        return None;
+    }
+    let raw_outputs = detail.get("raw_outputs")?.as_object()?;
+    if raw_outputs.get("stdout").and_then(JsonValue::as_str)
+        != Some("sensors/ripr/exposure-gaps.ripr.stdout")
+        || raw_outputs.get("stderr").and_then(JsonValue::as_str)
+            != Some("sensors/ripr/exposure-gaps.ripr.stderr")
+    {
+        return None;
+    }
+    let source = detail.get("source")?.as_object()?;
+    if source.get("tool").and_then(JsonValue::as_str) != Some("ripr")
+        || source.get("schema_version").and_then(JsonValue::as_str) != Some("0.2")
+        || source.get("mode").and_then(JsonValue::as_str) != Some("ready")
+    {
+        return None;
+    }
     let entries = detail.get("entries")?.as_array()?;
+    let total_findings = detail.get("total_raw_findings")?.as_u64()? as usize;
     let total = detail.get("total_raw_gap_findings")?.as_u64()? as usize;
-    if entries.len() != total
+    if total > total_findings
+        || entries.len() != total
         || detail.get("entry_cap").is_some()
         || detail.get("truncated").is_some()
     {
         return None;
     }
-    entries
+    let ids: Option<Vec<String>> = entries
         .iter()
         .map(|finding| {
             finding
@@ -430,7 +467,10 @@ fn validated_ripr_finding_ids(detail: &JsonValue) -> Option<BTreeSet<String>> {
                 .filter(|id| !id.trim().is_empty())
                 .map(ToOwned::to_owned)
         })
-        .collect()
+        .collect();
+    let ids = ids?;
+    let unique: BTreeSet<String> = ids.iter().cloned().collect();
+    (unique.len() == ids.len()).then_some(unique)
 }
 
 fn suppression_rows(ledger: &str) -> Result<Vec<Option<Value>>> {
