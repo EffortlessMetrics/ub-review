@@ -1051,8 +1051,11 @@ mod tests {
         assert_eq!(detail["status"], "ok");
         assert_eq!(detail["semantics"], "raw_pre_policy");
         assert_eq!(
-            detail["raw_outputs"]["stdout"],
-            "sensors/ripr/exposure-gaps.ripr.stdout"
+            detail["raw_outputs"],
+            serde_json::json!({
+                "stdout": "sensors/ripr/exposure-gaps.ripr.stdout",
+                "stderr": "sensors/ripr/exposure-gaps.ripr.stderr",
+            })
         );
         assert_eq!(detail["total_raw_findings"], 2);
         assert_eq!(detail["total_raw_gap_findings"], 2);
@@ -1060,6 +1063,14 @@ mod tests {
             .as_array()
             .context("ripr detail entries")?;
         assert_eq!(entries.len(), 2);
+        assert_eq!(
+            entries.len(),
+            detail["total_raw_gap_findings"]
+                .as_u64()
+                .context("total raw gap findings")? as usize
+        );
+        assert!(detail.get("entry_cap").is_none());
+        assert!(detail.get("truncated").is_none());
         assert_eq!(entries[0]["id"], "probe:src_lib_rs:12:call_deletion");
         assert_eq!(entries[0]["path"], "src/lib.rs");
         assert_eq!(entries[0]["range"]["start_line"], 12);

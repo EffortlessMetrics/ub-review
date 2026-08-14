@@ -330,11 +330,26 @@ mod tests {
             detail["policy_authority"],
             "sensors/ripr/gate-decision.json"
         );
+        assert_eq!(
+            detail["raw_outputs"],
+            serde_json::json!({
+                "stdout": "sensors/ripr/exposure-gaps.ripr.stdout",
+                "stderr": "sensors/ripr/exposure-gaps.ripr.stderr",
+            })
+        );
         assert_eq!(detail["source"]["schema_version"], "0.2");
         // `exposed` is not a gap class and is filtered out.
         assert_eq!(detail["total_raw_gap_findings"], 3);
         let entries = detail["entries"].as_array().context("entries")?;
         assert_eq!(entries.len(), 3);
+        assert_eq!(
+            entries.len(),
+            detail["total_raw_gap_findings"]
+                .as_u64()
+                .context("total raw gap findings")? as usize
+        );
+        assert!(detail.get("entry_cap").is_none());
+        assert!(detail.get("truncated").is_none());
         assert_eq!(entries[0]["id"], "probe:a:1:call_deletion");
         assert_eq!(entries[0]["classification"], "weakly_exposed");
         assert_eq!(entries[0]["exposure_gap_class"], "weakly_exposed");
