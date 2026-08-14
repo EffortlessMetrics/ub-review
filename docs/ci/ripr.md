@@ -76,6 +76,8 @@ For a specific `ub-review/gate` run, download the named workflow artifact
 without relying on the PR comment or aggregate check summary:
 
 ```text
+gh run view <run-id> --json headSha --jq .headSha
+# Compare that SHA with the reviewed commit before continuing.
 gh run download <run-id> --name ub-review-gate --dir target/hosted-ripr
 ```
 
@@ -85,4 +87,6 @@ The downloaded tree contains
 `sensors/ripr/exposure-gaps.ripr.stderr` (exact RIPR stderr). Verify the
 artifact with `python scripts/verify-bun-review-artifacts.py target/hosted-ripr`
 using the same review-profile and repository-kind arguments recorded by the
-run.
+run. Reject the artifact if the run `headSha` does not equal the reviewed
+commit; the verifier validates the receipt schema and complete raw-ID join but
+cannot infer which commit a manually selected download represented.

@@ -583,16 +583,16 @@ Honest current-state limits a consumer must know:
   `sensors/<tool>/gate-decision.json`, which the ripr sensor produces in
   production since #335 (#316 closed): verbatim badge-json stdout, threshold
   on `counts.unsuppressed_exposure_gaps`, two real blocks (PR #342, #346).
-  Bounded per-finding detail ships next to it in
+  Complete per-finding detail ships next to it in
   `sensors/ripr/exposure-gaps.json` (#347, #873). Schema
   `ripr_exposure_gaps.v3` declares `raw_pre_policy`; entries carry stable raw
   finding IDs, path/range, exposure-gap class, summaries, and artifact
   pointers, but never infer suppression state or threshold contribution that
   RIPR 0.10.0 detail does not expose. The verifier checks the pinned source
-  envelopes, unique retained IDs, the uncapped raw finding total against badge
-  `analyzed_findings`, and the uncapped canonical-gap total against badge
-  suppressed plus unsuppressed counts. The capped entry list is diagnostic,
-  not a claim that the aggregate-only badge can be joined per finding.
+  envelopes, exact raw stdout envelope, complete unique gap IDs, the raw
+  finding total against badge `analyzed_findings`, and the canonical-gap total
+  against badge suppressed plus unsuppressed counts. The aggregate-only badge
+  remains the policy authority and is not joined to per-finding suppression.
 - Proof receipt and resource lease edge statuses are stable in shape but rare
   in production. Lease `absent` is verifier-covered as a skipped proof edge,
   `base_patch_failed` routes as missing evidence, and manual-cost/shell-token

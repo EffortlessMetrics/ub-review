@@ -8204,6 +8204,15 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
         "mode": "ready",
     }:
         fail("exposure-gaps.json has incompatible pinned RIPR detail source")
+    raw_stdout = load_json(root / raw_outputs["stdout"])
+    if raw_stdout.get("schema_version") != "0.2" or raw_stdout.get("tool") != "ripr" or raw_stdout.get("mode") != "ready":
+        fail("preserved RIPR stdout has an incompatible detail envelope")
+    raw_findings = raw_stdout.get("findings")
+    raw_summary = raw_stdout.get("summary")
+    if not isinstance(raw_findings, list) or not isinstance(raw_summary, dict):
+        fail("preserved RIPR stdout is missing findings or summary")
+    if raw_summary.get("findings") != len(raw_findings):
+        fail("preserved RIPR stdout summary.findings does not match findings length")
     raw_total = detail.get("total_raw_findings")
     total = detail.get("total_raw_gap_findings")
     entries = detail.get("entries")
@@ -8221,6 +8230,20 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
         fail("exposure-gaps.json entries is not an array")
     if len(entries) != total:
         fail("exposure-gaps.json entries length does not match total_raw_gap_findings")
+    raw_gap_ids = []
+    for index, finding in enumerate(raw_findings):
+        if not isinstance(finding, dict):
+            fail(f"preserved RIPR stdout finding {index + 1} is not an object")
+        finding_id = require_string(finding, f"raw finding {index + 1}", "id", nonempty=True)
+        classification = require_string(
+            finding, f"raw finding {index + 1}", "classification", nonempty=True
+        )
+        if classification in {"weakly_exposed", "reachable_unrevealed", "no_static_path"}:
+            raw_gap_ids.append(finding_id)
+    if len(raw_findings) != raw_total:
+        fail("exposure-gaps.json total_raw_findings does not match preserved RIPR stdout")
+    if len(raw_gap_ids) != total:
+        fail("exposure-gaps.json total_raw_gap_findings does not match preserved RIPR stdout")
     entry_ids: set[str] = set()
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict) or not entry.get("id") or not entry.get("classification"):
@@ -8268,6 +8291,8 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
                 f"{label} artifact_pointer {artifact_pointer!r} "
                 f"does not match {expected_pointer!r}"
             )
+    if set(raw_gap_ids) != entry_ids:
+        fail("exposure-gaps.json gap IDs do not match preserved RIPR stdout")
     if raw_total != analyzed:
         fail(
             "exposure-gaps.json total_raw_findings "
@@ -9828,7 +9853,35 @@ def self_test_ripr_exposure_gap_contract() -> None:
             )
             if "raw_outputs" in detail:
                 (sensor_dir / "exposure-gaps.ripr.stdout").write_text(
-                    '{"schema_version":"0.2","tool":"ripr","mode":"ready"}',
+                    json.dumps(
+                        {
+                            "schema_version": "0.2",
+                            "tool": "ripr",
+                            "mode": "ready",
+                            "summary": {
+                                "findings": detail.get("total_raw_findings", 0)
+                            },
+                            "findings": [
+                                {
+                                    "id": entry["id"],
+                                    "classification": entry["classification"],
+                                    "probe": {"file": entry["path"], "line": entry["range"]["start_line"]},
+                                }
+                                for entry in detail.get("entries", [])
+                            ]
+                            + [
+                                {
+                                    "id": f"exposed:{index}",
+                                    "classification": "exposed",
+                                    "probe": {"file": "src/other.rs", "line": index + 1},
+                                }
+                                for index in range(
+                                    detail.get("total_raw_findings", 0)
+                                    - detail.get("total_raw_gap_findings", 0)
+                                )
+                            ],
+                        }
+                    ),
                     encoding="utf-8",
                 )
                 (sensor_dir / "exposure-gaps.ripr.stderr").write_text(
