@@ -18,18 +18,21 @@ fn main() {
 }
 
 #[cfg(test)]
-#[test]
-fn ripr_install_hint_uses_the_content_addressed_identity_contract() {
-    assert_eq!(
-        install_hint("ripr"),
-        "cargo install ripr --locked --version 0.10.0 --force"
-    );
-}
+mod ripr_inventory_tests {
+    use super::*;
 
-#[cfg(test)]
-#[test]
-fn ripr_inventory_separates_duplicates_and_current_diff_matches() -> Result<()> {
-    let ledger = r#"
+    #[test]
+    fn ripr_install_hint_uses_the_content_addressed_identity_contract() {
+        assert_eq!(
+            install_hint("ripr"),
+            "cargo install ripr --locked --version 0.10.0 --force"
+        );
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn ripr_inventory_separates_duplicates_and_current_diff_matches() -> Result<()> {
+        let ledger = r#"
 schema_version = 1
 [[suppressions]]
 finding_id = "probe:a"
@@ -40,197 +43,198 @@ finding_id = "probe:b"
 [[suppressions]]
 owner = "ub-review/core"
 "#;
-    let detail = serde_json::json!({
-        "schema": "ub-review.ripr_exposure_gaps.v3",
-        "status": "ok",
-        "semantics": "raw_pre_policy",
-        "policy_authority": "sensors/ripr/gate-decision.json",
-        "raw_outputs": {"stdout": "sensors/ripr/exposure-gaps.ripr.stdout", "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"},
-        "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"},
-        "total_raw_findings": 1,
-        "total_raw_gap_findings": 1,
-        "entries": [{"id": "probe:a"}],
-    });
-    let report = classify_suppressions(ledger, Some(&detail))?;
-    let summary = report
-        .get("summary")
-        .and_then(JsonValue::as_object)
-        .context("inventory summary missing")?;
-    if summary
-        .get("matched_current_diff")
-        .and_then(JsonValue::as_u64)
-        != Some(1)
-        || summary.get("duplicate").and_then(JsonValue::as_u64) != Some(1)
-        || summary
-            .get("unmatched_by_current_diff")
+        let detail = serde_json::json!({
+            "schema": "ub-review.ripr_exposure_gaps.v3",
+            "status": "ok",
+            "semantics": "raw_pre_policy",
+            "policy_authority": "sensors/ripr/gate-decision.json",
+            "raw_outputs": {"stdout": "sensors/ripr/exposure-gaps.ripr.stdout", "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"},
+            "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"},
+            "total_raw_findings": 1,
+            "total_raw_gap_findings": 1,
+            "entries": [{"id": "probe:a"}],
+        });
+        let report = classify_suppressions(ledger, Some(&detail))?;
+        let summary = report
+            .get("summary")
+            .and_then(JsonValue::as_object)
+            .context("inventory summary missing")?;
+        if summary
+            .get("matched_current_diff")
             .and_then(JsonValue::as_u64)
             != Some(1)
-        || summary.get("malformed").and_then(JsonValue::as_u64) != Some(1)
-    {
-        bail!("unexpected suppression inventory summary: {summary:?}");
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-#[test]
-fn ripr_inventory_reports_unknown_currentness_without_detail() -> Result<()> {
-    let ledger = "schema_version = 1\n[[suppressions]]\nfinding_id = \"probe:a\"\n";
-    let report = classify_suppressions(ledger, None)?;
-    let summary = report
-        .get("summary")
-        .and_then(JsonValue::as_object)
-        .context("inventory summary missing")?;
-    if summary
-        .get("unknown_currentness")
-        .and_then(JsonValue::as_u64)
-        != Some(1)
-    {
-        bail!("expected unknown currentness: {summary:?}");
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-#[test]
-fn ripr_inventory_rejects_unvalidated_detail_artifacts() {
-    for detail in [
-        serde_json::json!({}),
-        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "detail_unavailable"}),
-        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v2", "status": "ok", "semantics": "raw_pre_policy", "entries": []}),
-        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "ok", "semantics": "raw_pre_policy", "entries": {}}),
-        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "ok", "semantics": "raw_pre_policy", "entries": [{"id": ""}]}),
-        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "ok", "semantics": "raw_pre_policy", "entries": [], "total_raw_findings": 0, "total_raw_gap_findings": 0}),
-        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "ok", "semantics": "raw_pre_policy", "policy_authority": "sensors/ripr/gate-decision.json", "raw_outputs": {"stdout": "sensors/ripr/exposure-gaps.ripr.stdout", "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"}, "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"}, "total_raw_findings": 2, "total_raw_gap_findings": 2, "entries": [{"id": "probe:a"}]}),
-        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "ok", "semantics": "raw_pre_policy", "policy_authority": "sensors/ripr/gate-decision.json", "raw_outputs": {"stdout": "sensors/ripr/exposure-gaps.ripr.stdout", "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"}, "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"}, "total_raw_findings": 2, "total_raw_gap_findings": 2, "entries": [{"id": "probe:a"}, {"id": "probe:a"}]}),
-    ] {
-        assert!(validated_ripr_finding_ids(&detail).is_none());
-    }
-    let empty = serde_json::json!({
-        "schema": "ub-review.ripr_exposure_gaps.v3",
-        "status": "ok",
-        "semantics": "raw_pre_policy",
-        "policy_authority": "sensors/ripr/gate-decision.json",
-        "raw_outputs": {"stdout": "sensors/ripr/exposure-gaps.ripr.stdout", "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"},
-        "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"},
-        "total_raw_findings": 0,
-        "total_raw_gap_findings": 0,
-        "entries": [],
-    });
-    assert_eq!(validated_ripr_finding_ids(&empty), Some(BTreeSet::new()));
-}
-
-#[cfg(test)]
-#[test]
-fn ripr_inventory_requires_both_raw_sidecars() -> Result<()> {
-    let root = std::env::temp_dir().join(format!(
-        "ub-review-ripr-sidecars-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .context("system time before unix epoch")?
-            .as_nanos()
-    ));
-    let artifact_dir = root.join("sensors/ripr");
-    fs::create_dir_all(&artifact_dir)?;
-    let detail = serde_json::json!({
-        "raw_outputs": {
-            "stdout": "sensors/ripr/exposure-gaps.ripr.stdout",
-            "stderr": "sensors/ripr/exposure-gaps.ripr.stderr",
+            || summary.get("duplicate").and_then(JsonValue::as_u64) != Some(1)
+            || summary
+                .get("unmatched_by_current_diff")
+                .and_then(JsonValue::as_u64)
+                != Some(1)
+            || summary.get("malformed").and_then(JsonValue::as_u64) != Some(1)
+        {
+            bail!("unexpected suppression inventory summary: {summary:?}");
         }
-    });
-    assert!(!raw_ripr_sidecars_present(&artifact_dir, &detail));
-    fs::write(
-        artifact_dir.join("exposure-gaps.ripr.stdout"),
-        r#"{"schema_version":"0.2","tool":"ripr","mode":"ready","summary":{"findings":0},"findings":[]}"#,
-    )?;
-    assert!(!raw_ripr_sidecars_present(&artifact_dir, &detail));
-    fs::write(artifact_dir.join("exposure-gaps.ripr.stderr"), "")?;
-    let valid_detail = serde_json::json!({
-        "total_raw_findings": 0,
-        "entries": [],
-        "raw_outputs": detail["raw_outputs"].clone(),
-    });
-    assert!(raw_ripr_sidecars_present(&artifact_dir, &valid_detail));
-    fs::write(
-        artifact_dir.join("exposure-gaps.ripr.stdout"),
-        r#"{"schema_version":"0.2","tool":"ripr","mode":"ready","summary":{"findings":1},"findings":[]}"#,
-    )?;
-    assert!(!raw_ripr_sidecars_present(&artifact_dir, &valid_detail));
-    fs::write(
-        artifact_dir.join("exposure-gaps.ripr.stdout"),
-        r#"{"schema_version":"0.2","tool":"ripr","mode":"ready","summary":{"findings":1},"findings":[{"id":"stale"}]}"#,
-    )?;
-    assert!(!raw_ripr_sidecars_present(&artifact_dir, &valid_detail));
-    fs::remove_dir_all(root)?;
-    Ok(())
-}
-
-#[cfg(test)]
-#[test]
-fn ripr_inventory_accepts_commented_suppression_headers() -> Result<()> {
-    let ledger =
-        "schema_version = 1\n[[suppressions]] # generated group\nfinding_id = \"probe:a\"\n";
-    let detail = serde_json::json!({
-        "schema": "ub-review.ripr_exposure_gaps.v3",
-        "status": "ok",
-        "semantics": "raw_pre_policy",
-        "policy_authority": "sensors/ripr/gate-decision.json",
-        "raw_outputs": {"stdout": "sensors/ripr/exposure-gaps.ripr.stdout", "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"},
-        "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"},
-        "total_raw_findings": 1,
-        "total_raw_gap_findings": 1,
-        "entries": [{"id": "probe:a"}],
-    });
-    let report = classify_suppressions(ledger, Some(&detail))?;
-    if report["summary"]["matched_current_diff"] != 1 {
-        bail!("commented header was not inventoried: {report}");
+        Ok(())
     }
-    Ok(())
-}
 
-#[cfg(test)]
-#[test]
-fn ripr_inventory_discriminates_every_classification_and_dispatch_branch() -> Result<()> {
-    let options = RiprInventoryOptions::parse(
-        ["--artifact-dir", "hosted/sensors/ripr"]
-            .into_iter()
-            .map(str::to_owned),
-    )?;
-    assert_eq!(options.artifact_dir, PathBuf::from("hosted/sensors/ripr"));
-    let missing = RiprInventoryOptions::parse(["--artifact-dir"].into_iter().map(str::to_owned))
-        .err()
-        .context("missing artifact directory must be rejected")?;
-    assert!(
-        missing
-            .to_string()
-            .contains("--artifact-dir requires a directory")
-    );
-    let unexpected = RiprInventoryOptions::parse(["--head"].into_iter().map(str::to_owned))
-        .err()
-        .context("unknown inventory arguments must be rejected")?;
-    assert!(
-        unexpected
-            .to_string()
-            .contains("unexpected ripr-inventory argument `--head`")
-    );
+    #[cfg(test)]
+    #[test]
+    fn ripr_inventory_reports_unknown_currentness_without_detail() -> Result<()> {
+        let ledger = "schema_version = 1\n[[suppressions]]\nfinding_id = \"probe:a\"\n";
+        let report = classify_suppressions(ledger, None)?;
+        let summary = report
+            .get("summary")
+            .and_then(JsonValue::as_object)
+            .context("inventory summary missing")?;
+        if summary
+            .get("unknown_currentness")
+            .and_then(JsonValue::as_u64)
+            != Some(1)
+        {
+            bail!("expected unknown currentness: {summary:?}");
+        }
+        Ok(())
+    }
 
-    assert_eq!(SuppressionClass::Duplicate.as_str(), "duplicate");
-    assert_eq!(SuppressionClass::Malformed.as_str(), "malformed");
-    assert_eq!(
-        SuppressionClass::MatchedCurrentDiff.as_str(),
-        "matched_current_diff"
-    );
-    assert_eq!(
-        SuppressionClass::UnmatchedCurrentDiff.as_str(),
-        "unmatched_by_current_diff"
-    );
-    assert_eq!(
-        SuppressionClass::UnknownCurrentness.as_str(),
-        "unknown_currentness"
-    );
+    #[cfg(test)]
+    #[test]
+    fn ripr_inventory_rejects_unvalidated_detail_artifacts() {
+        for detail in [
+            serde_json::json!({}),
+            serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "detail_unavailable"}),
+            serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v2", "status": "ok", "semantics": "raw_pre_policy", "entries": []}),
+            serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "ok", "semantics": "raw_pre_policy", "entries": {}}),
+            serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "ok", "semantics": "raw_pre_policy", "entries": [{"id": ""}]}),
+            serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "ok", "semantics": "raw_pre_policy", "entries": [], "total_raw_findings": 0, "total_raw_gap_findings": 0}),
+            serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "ok", "semantics": "raw_pre_policy", "policy_authority": "sensors/ripr/gate-decision.json", "raw_outputs": {"stdout": "sensors/ripr/exposure-gaps.ripr.stdout", "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"}, "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"}, "total_raw_findings": 2, "total_raw_gap_findings": 2, "entries": [{"id": "probe:a"}]}),
+            serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "ok", "semantics": "raw_pre_policy", "policy_authority": "sensors/ripr/gate-decision.json", "raw_outputs": {"stdout": "sensors/ripr/exposure-gaps.ripr.stdout", "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"}, "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"}, "total_raw_findings": 2, "total_raw_gap_findings": 2, "entries": [{"id": "probe:a"}, {"id": "probe:a"}]}),
+        ] {
+            assert!(validated_ripr_finding_ids(&detail).is_none());
+        }
+        let empty = serde_json::json!({
+            "schema": "ub-review.ripr_exposure_gaps.v3",
+            "status": "ok",
+            "semantics": "raw_pre_policy",
+            "policy_authority": "sensors/ripr/gate-decision.json",
+            "raw_outputs": {"stdout": "sensors/ripr/exposure-gaps.ripr.stdout", "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"},
+            "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"},
+            "total_raw_findings": 0,
+            "total_raw_gap_findings": 0,
+            "entries": [],
+        });
+        assert_eq!(validated_ripr_finding_ids(&empty), Some(BTreeSet::new()));
+    }
 
-    let ledger = r#"
+    #[cfg(test)]
+    #[test]
+    fn ripr_inventory_requires_both_raw_sidecars() -> Result<()> {
+        let root = std::env::temp_dir().join(format!(
+            "ub-review-ripr-sidecars-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .context("system time before unix epoch")?
+                .as_nanos()
+        ));
+        let artifact_dir = root.join("sensors/ripr");
+        fs::create_dir_all(&artifact_dir)?;
+        let detail = serde_json::json!({
+            "raw_outputs": {
+                "stdout": "sensors/ripr/exposure-gaps.ripr.stdout",
+                "stderr": "sensors/ripr/exposure-gaps.ripr.stderr",
+            }
+        });
+        assert!(!raw_ripr_sidecars_present(&artifact_dir, &detail));
+        fs::write(
+            artifact_dir.join("exposure-gaps.ripr.stdout"),
+            r#"{"schema_version":"0.2","tool":"ripr","mode":"ready","summary":{"findings":0},"findings":[]}"#,
+        )?;
+        assert!(!raw_ripr_sidecars_present(&artifact_dir, &detail));
+        fs::write(artifact_dir.join("exposure-gaps.ripr.stderr"), "")?;
+        let valid_detail = serde_json::json!({
+            "total_raw_findings": 0,
+            "entries": [],
+            "raw_outputs": detail["raw_outputs"].clone(),
+        });
+        assert!(raw_ripr_sidecars_present(&artifact_dir, &valid_detail));
+        fs::write(
+            artifact_dir.join("exposure-gaps.ripr.stdout"),
+            r#"{"schema_version":"0.2","tool":"ripr","mode":"ready","summary":{"findings":1},"findings":[]}"#,
+        )?;
+        assert!(!raw_ripr_sidecars_present(&artifact_dir, &valid_detail));
+        fs::write(
+            artifact_dir.join("exposure-gaps.ripr.stdout"),
+            r#"{"schema_version":"0.2","tool":"ripr","mode":"ready","summary":{"findings":1},"findings":[{"id":"stale"}]}"#,
+        )?;
+        assert!(!raw_ripr_sidecars_present(&artifact_dir, &valid_detail));
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn ripr_inventory_accepts_commented_suppression_headers() -> Result<()> {
+        let ledger =
+            "schema_version = 1\n[[suppressions]] # generated group\nfinding_id = \"probe:a\"\n";
+        let detail = serde_json::json!({
+            "schema": "ub-review.ripr_exposure_gaps.v3",
+            "status": "ok",
+            "semantics": "raw_pre_policy",
+            "policy_authority": "sensors/ripr/gate-decision.json",
+            "raw_outputs": {"stdout": "sensors/ripr/exposure-gaps.ripr.stdout", "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"},
+            "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"},
+            "total_raw_findings": 1,
+            "total_raw_gap_findings": 1,
+            "entries": [{"id": "probe:a"}],
+        });
+        let report = classify_suppressions(ledger, Some(&detail))?;
+        if report["summary"]["matched_current_diff"] != 1 {
+            bail!("commented header was not inventoried: {report}");
+        }
+        Ok(())
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn ripr_inventory_discriminates_every_classification_and_dispatch_branch() -> Result<()> {
+        let options = RiprInventoryOptions::parse(
+            ["--artifact-dir", "hosted/sensors/ripr"]
+                .into_iter()
+                .map(str::to_owned),
+        )?;
+        assert_eq!(options.artifact_dir, PathBuf::from("hosted/sensors/ripr"));
+        let missing =
+            RiprInventoryOptions::parse(["--artifact-dir"].into_iter().map(str::to_owned))
+                .err()
+                .context("missing artifact directory must be rejected")?;
+        assert!(
+            missing
+                .to_string()
+                .contains("--artifact-dir requires a directory")
+        );
+        let unexpected = RiprInventoryOptions::parse(["--head"].into_iter().map(str::to_owned))
+            .err()
+            .context("unknown inventory arguments must be rejected")?;
+        assert!(
+            unexpected
+                .to_string()
+                .contains("unexpected ripr-inventory argument `--head`")
+        );
+
+        assert_eq!(SuppressionClass::Duplicate.as_str(), "duplicate");
+        assert_eq!(SuppressionClass::Malformed.as_str(), "malformed");
+        assert_eq!(
+            SuppressionClass::MatchedCurrentDiff.as_str(),
+            "matched_current_diff"
+        );
+        assert_eq!(
+            SuppressionClass::UnmatchedCurrentDiff.as_str(),
+            "unmatched_by_current_diff"
+        );
+        assert_eq!(
+            SuppressionClass::UnknownCurrentness.as_str(),
+            "unknown_currentness"
+        );
+
+        let ledger = r#"
 schema_version = 1
 [[suppressions]]
 finding_id = "probe:matched"
@@ -243,45 +247,46 @@ owner = "ub-review/core"
 [[suppressions]]
 finding_id = "probe:unknown"
 "#;
-    let detail = serde_json::json!({
-        "schema": "ub-review.ripr_exposure_gaps.v3",
-        "status": "ok",
-        "semantics": "raw_pre_policy",
-        "policy_authority": "sensors/ripr/gate-decision.json",
-        "raw_outputs": {
-            "stdout": "sensors/ripr/exposure-gaps.ripr.stdout",
-            "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"
-        },
-        "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"},
-        "total_raw_findings": 2,
-        "total_raw_gap_findings": 2,
-        "entries": [{"id": "probe:matched"}, {"id": "probe:other"}]
-    });
-    let report = classify_suppressions(ledger, Some(&detail))?;
-    assert_eq!(report["summary"]["matched_current_diff"], 1);
-    assert_eq!(report["summary"]["duplicate"], 1);
-    assert_eq!(report["summary"]["unmatched_by_current_diff"], 2);
-    assert_eq!(report["summary"]["malformed"], 1);
-    let unknown_report = classify_suppressions(ledger, None)?;
-    assert_eq!(unknown_report["summary"]["unknown_currentness"], 3);
-    Ok(())
-}
+        let detail = serde_json::json!({
+            "schema": "ub-review.ripr_exposure_gaps.v3",
+            "status": "ok",
+            "semantics": "raw_pre_policy",
+            "policy_authority": "sensors/ripr/gate-decision.json",
+            "raw_outputs": {
+                "stdout": "sensors/ripr/exposure-gaps.ripr.stdout",
+                "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"
+            },
+            "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"},
+            "total_raw_findings": 2,
+            "total_raw_gap_findings": 2,
+            "entries": [{"id": "probe:matched"}, {"id": "probe:other"}]
+        });
+        let report = classify_suppressions(ledger, Some(&detail))?;
+        assert_eq!(report["summary"]["matched_current_diff"], 1);
+        assert_eq!(report["summary"]["duplicate"], 1);
+        assert_eq!(report["summary"]["unmatched_by_current_diff"], 2);
+        assert_eq!(report["summary"]["malformed"], 1);
+        let unknown_report = classify_suppressions(ledger, None)?;
+        assert_eq!(unknown_report["summary"]["unknown_currentness"], 3);
+        Ok(())
+    }
 
-#[cfg(test)]
-#[test]
-fn ripr_inventory_requires_matching_provenance() {
-    let valid = serde_json::json!({
-        "reviewed_head": "abc123",
-        "run_id": "31822364107",
-        "diff": "sensors/ripr/diff.patch",
-    });
-    assert!(valid_ripr_provenance(&valid, Some("abc123")));
-    assert!(!valid_ripr_provenance(&valid, Some("stale")));
-    assert!(!valid_ripr_provenance(&valid, None));
-    assert!(!valid_ripr_provenance(
-        &serde_json::json!({"reviewed_head":"abc123", "run_id":"31822364107"}),
-        Some("abc123")
-    ));
+    #[cfg(test)]
+    #[test]
+    fn ripr_inventory_requires_matching_provenance() {
+        let valid = serde_json::json!({
+            "reviewed_head": "abc123",
+            "run_id": "31822364107",
+            "diff": "sensors/ripr/diff.patch",
+        });
+        assert!(valid_ripr_provenance(&valid, Some("abc123")));
+        assert!(!valid_ripr_provenance(&valid, Some("stale")));
+        assert!(!valid_ripr_provenance(&valid, None));
+        assert!(!valid_ripr_provenance(
+            &serde_json::json!({"reviewed_head":"abc123", "run_id":"31822364107"}),
+            Some("abc123")
+        ));
+    }
 }
 
 fn run() -> Result<()> {
