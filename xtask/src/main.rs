@@ -29,7 +29,6 @@ mod tests {
         );
     }
 
-    #[cfg(test)]
     #[test]
     fn ripr_inventory_separates_duplicates_and_current_diff_matches() -> Result<()> {
         let ledger = r#"
@@ -75,7 +74,6 @@ owner = "ub-review/core"
         Ok(())
     }
 
-    #[cfg(test)]
     #[test]
     fn ripr_inventory_reports_unknown_currentness_without_detail() -> Result<()> {
         let ledger = "schema_version = 1\n[[suppressions]]\nfinding_id = \"probe:a\"\n";
@@ -94,7 +92,6 @@ owner = "ub-review/core"
         Ok(())
     }
 
-    #[cfg(test)]
     #[test]
     fn ripr_inventory_rejects_unvalidated_detail_artifacts() {
         for detail in [
@@ -123,7 +120,6 @@ owner = "ub-review/core"
         assert_eq!(validated_ripr_finding_ids(&empty), Some(BTreeSet::new()));
     }
 
-    #[cfg(test)]
     #[test]
     fn ripr_inventory_requires_both_raw_sidecars() -> Result<()> {
         let root = std::env::temp_dir().join(format!(
@@ -169,7 +165,6 @@ owner = "ub-review/core"
         Ok(())
     }
 
-    #[cfg(test)]
     #[test]
     fn ripr_inventory_accepts_commented_suppression_headers() -> Result<()> {
         let ledger =
@@ -192,7 +187,6 @@ owner = "ub-review/core"
         Ok(())
     }
 
-    #[cfg(test)]
     #[test]
     fn ripr_inventory_discriminates_every_classification_and_dispatch_branch() -> Result<()> {
         let options = RiprInventoryOptions::parse(
@@ -271,7 +265,6 @@ finding_id = "probe:unknown"
         Ok(())
     }
 
-    #[cfg(test)]
     #[test]
     fn ripr_inventory_requires_matching_provenance() {
         let valid = serde_json::json!({
