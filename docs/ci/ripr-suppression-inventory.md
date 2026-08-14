@@ -21,12 +21,17 @@ gh run view <run-id> --json headSha --jq .headSha
 gh run download <run-id> --name ub-review-gate --dir target/hosted-ripr
 python scripts/verify-bun-review-artifacts.py target/hosted-ripr \
   --expected-review-profile ub-review-self --expected-repo-kind ub-review
-cargo --locked xtask ripr-inventory --artifact-dir target/hosted-ripr/sensors/ripr
+cargo --locked xtask ripr-inventory --artifact-dir target/hosted-ripr/sensors/ripr \
+  --provenance target/hosted-ripr/ripr-provenance.json \
+  --reviewed-head <reviewed-head-sha>
 ```
 
 The command must find both `exposure-gaps.ripr.stdout` and
 `exposure-gaps.ripr.stderr` beside `exposure-gaps.json`; a missing sidecar or
 head-SHA mismatch makes currentness unknown.
+The provenance manifest must contain non-empty `reviewed_head`, `run_id`, and
+`diff` fields; `reviewed_head` must equal `--reviewed-head`. Missing or stale
+provenance is classified as unknown currentness.
 
 The detail input must be the complete `ub-review.ripr_exposure_gaps.v3`
 artifact from the exact hosted head. v2, truncated, malformed, or

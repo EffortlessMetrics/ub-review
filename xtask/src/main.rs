@@ -267,6 +267,23 @@ finding_id = "probe:unknown"
     Ok(())
 }
 
+#[cfg(test)]
+#[test]
+fn ripr_inventory_requires_matching_provenance() {
+    let valid = serde_json::json!({
+        "reviewed_head": "abc123",
+        "run_id": "31822364107",
+        "diff": "sensors/ripr/diff.patch",
+    });
+    assert!(valid_ripr_provenance(&valid, Some("abc123")));
+    assert!(!valid_ripr_provenance(&valid, Some("stale")));
+    assert!(!valid_ripr_provenance(&valid, None));
+    assert!(!valid_ripr_provenance(
+        &serde_json::json!({"reviewed_head":"abc123", "run_id":"31822364107"}),
+        Some("abc123")
+    ));
+}
+
 fn run() -> Result<()> {
     let mut args = env::args().skip(1);
     let command = args.next().unwrap_or_else(|| "help".to_owned());
@@ -360,6 +377,12 @@ ripr options
 
   --base <rev>                  compare against this revision (default: origin/main)
 
+ripr-inventory options
+
+  --artifact-dir <dir>          directory containing the v3 detail and raw sidecars
+  --provenance <file>            reviewed-head/run/diff provenance manifest
+  --reviewed-head <sha>          expected reviewed commit SHA
+
 smoke-base options
 
   --base <rev>                  smoke diff base (default: HEAD~1)
@@ -435,12 +458,16 @@ struct RiprOptions {
 #[derive(Clone, Debug)]
 struct RiprInventoryOptions {
     artifact_dir: PathBuf,
+    provenance: Option<PathBuf>,
+    reviewed_head: Option<String>,
 }
 
 impl Default for RiprInventoryOptions {
     fn default() -> Self {
         Self {
             artifact_dir: PathBuf::from("target/xtask/ripr"),
+            provenance: None,
+            reviewed_head: None,
         }
     }
 }
@@ -453,6 +480,18 @@ impl RiprInventoryOptions {
                 "--artifact-dir" => {
                     options.artifact_dir =
                         PathBuf::from(args.next().context("--artifact-dir requires a directory")?)
+                }
+                "--provenance" => {
+                    options.provenance = Some(PathBuf::from(
+                        args.next()
+                            .context("--provenance requires a manifest path")?,
+                    ));
+                }
+                "--reviewed-head" => {
+                    options.reviewed_head = Some(
+                        args.next()
+                            .context("--reviewed-head requires a commit SHA")?,
+                    );
                 }
                 other => bail!("unexpected ripr-inventory argument `{other}`"),
             }
@@ -495,7 +534,14 @@ fn run_ripr_inventory(root: &Path, options: RiprInventoryOptions) -> Result<()> 
     // A v3 detail envelope is not currentness evidence unless both raw RIPR
     // sidecars it names are present.  Keep malformed or incomplete artifacts
     // on the unknown-currentness path rather than inventorying stale IDs.
-    let detail = detail.filter(|value| raw_ripr_sidecars_present(&options.artifact_dir, value));
+    let provenance_ok = options
+        .provenance
+        .as_deref()
+        .and_then(|path| fs::read_to_string(path).ok())
+        .and_then(|text| serde_json::from_str::<JsonValue>(&text).ok())
+        .is_some_and(|manifest| valid_ripr_provenance(&manifest, options.reviewed_head.as_deref()));
+    let detail = detail
+        .filter(|value| provenance_ok && raw_ripr_sidecars_present(&options.artifact_dir, value));
     let report = classify_suppressions(&ledger, detail.as_ref())?;
     let out_dir = root.join("target/xtask/ripr");
     fs::create_dir_all(&out_dir).with_context(|| format!("create {}", out_dir.display()))?;
@@ -505,6 +551,25 @@ fn run_ripr_inventory(root: &Path, options: RiprInventoryOptions) -> Result<()> 
     println!("suppression inventory: {}", report_path.display());
     println!("{}", report["summary"]);
     Ok(())
+}
+
+fn valid_ripr_provenance(manifest: &JsonValue, reviewed_head: Option<&str>) -> bool {
+    let Some(object) = manifest.as_object() else {
+        return false;
+    };
+    let Some(head) = object.get("reviewed_head").and_then(JsonValue::as_str) else {
+        return false;
+    };
+    let Some(run_id) = object.get("run_id").and_then(JsonValue::as_str) else {
+        return false;
+    };
+    let Some(diff) = object.get("diff").and_then(JsonValue::as_str) else {
+        return false;
+    };
+    !head.trim().is_empty()
+        && !run_id.trim().is_empty()
+        && !diff.trim().is_empty()
+        && reviewed_head.is_some_and(|expected| expected == head)
 }
 
 fn raw_ripr_sidecars_present(artifact_dir: &Path, detail: &JsonValue) -> bool {
