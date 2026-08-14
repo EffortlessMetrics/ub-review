@@ -338,6 +338,7 @@ pub(crate) fn parse_trusted_changed_files(bytes: &[u8]) -> Result<Vec<String>> {
                     Component::ParentDir | Component::RootDir | Component::Prefix(_)
                 )
             })
+            || file.split(['/', '\\']).any(|component| component == "..")
         {
             bail!("trusted changed-files object contains unsafe path `{file}`");
         }
@@ -708,17 +709,24 @@ mod trusted_input_tests {
             bail!("trusted objects were not used verbatim");
         }
 
-        fs::write(&changed, b"..\\secret.txt\n")?;
-        if DiffContext::from_trusted_inputs(
-            Path::new("."),
-            &base,
-            &"b".repeat(40),
-            &changed,
-            &patch,
-        )
-        .is_ok()
-        {
-            bail!("accepted parent-traversal changed path");
+        for unsafe_path in [
+            "../secret.txt",
+            "..\\secret.txt",
+            "src/../secret.txt",
+            "src\\..\\secret.txt",
+        ] {
+            fs::write(&changed, format!("{unsafe_path}\n"))?;
+            if DiffContext::from_trusted_inputs(
+                Path::new("."),
+                &base,
+                &"b".repeat(40),
+                &changed,
+                &patch,
+            )
+            .is_ok()
+            {
+                bail!("accepted parent-traversal changed path {unsafe_path}");
+            }
         }
         fs::write(&changed, b"src/main.rs\0\n")?;
         if DiffContext::from_trusted_inputs(
