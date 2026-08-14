@@ -18,7 +18,7 @@ fn main() {
 }
 
 #[cfg(test)]
-mod ripr_inventory_tests {
+mod tests {
     use super::*;
 
     #[test]
@@ -2352,7 +2352,7 @@ fn path_to_slash_string(path: &Path) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+mod tests_support {
     use super::*;
     use std::cell::RefCell;
     use std::io;
