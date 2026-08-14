@@ -122,6 +122,34 @@ fn ripr_inventory_rejects_unvalidated_detail_artifacts() {
 
 #[cfg(test)]
 #[test]
+fn ripr_inventory_requires_both_raw_sidecars() -> Result<()> {
+    let root = std::env::temp_dir().join(format!(
+        "ub-review-ripr-sidecars-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .context("system time before unix epoch")?
+            .as_nanos()
+    ));
+    let artifact_dir = root.join("sensors/ripr");
+    fs::create_dir_all(&artifact_dir)?;
+    let detail = serde_json::json!({
+        "raw_outputs": {
+            "stdout": "sensors/ripr/exposure-gaps.ripr.stdout",
+            "stderr": "sensors/ripr/exposure-gaps.ripr.stderr",
+        }
+    });
+    assert!(!raw_ripr_sidecars_present(&artifact_dir, &detail));
+    fs::write(artifact_dir.join("exposure-gaps.ripr.stdout"), "{}")?;
+    assert!(!raw_ripr_sidecars_present(&artifact_dir, &detail));
+    fs::write(artifact_dir.join("exposure-gaps.ripr.stderr"), "")?;
+    assert!(raw_ripr_sidecars_present(&artifact_dir, &detail));
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[cfg(test)]
+#[test]
 fn ripr_inventory_accepts_commented_suppression_headers() -> Result<()> {
     let ledger =
         "schema_version = 1\n[[suppressions]] # generated group\nfinding_id = \"probe:a\"\n";
@@ -368,6 +396,10 @@ fn run_ripr_inventory(root: &Path, options: RiprInventoryOptions) -> Result<()> 
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
         Err(error) => return Err(error).with_context(|| format!("read {}", detail_path.display())),
     };
+    // A v3 detail envelope is not currentness evidence unless both raw RIPR
+    // sidecars it names are present.  Keep malformed or incomplete artifacts
+    // on the unknown-currentness path rather than inventorying stale IDs.
+    let detail = detail.filter(|value| raw_ripr_sidecars_present(&options.artifact_dir, value));
     let report = classify_suppressions(&ledger, detail.as_ref())?;
     let out_dir = root.join("target/xtask/ripr");
     fs::create_dir_all(&out_dir).with_context(|| format!("create {}", out_dir.display()))?;
@@ -377,6 +409,24 @@ fn run_ripr_inventory(root: &Path, options: RiprInventoryOptions) -> Result<()> 
     println!("suppression inventory: {}", report_path.display());
     println!("{}", report["summary"]);
     Ok(())
+}
+
+fn raw_ripr_sidecars_present(artifact_dir: &Path, detail: &JsonValue) -> bool {
+    let Some(raw_outputs) = detail.get("raw_outputs").and_then(JsonValue::as_object) else {
+        return false;
+    };
+    ["stdout", "stderr"].into_iter().all(|name| {
+        raw_outputs
+            .get(name)
+            .and_then(JsonValue::as_str)
+            .filter(|path| *path == format!("sensors/ripr/exposure-gaps.ripr.{name}"))
+            .is_some_and(|path| {
+                let Some(root) = artifact_dir.parent().and_then(Path::parent) else {
+                    return false;
+                };
+                root.join(path).is_file()
+            })
+    })
 }
 
 fn classify_suppressions(ledger: &str, detail: Option<&JsonValue>) -> Result<JsonValue> {
