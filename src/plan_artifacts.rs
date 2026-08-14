@@ -198,7 +198,30 @@ pub(crate) fn write_plan_artifacts(
             .trusted_head
             .as_deref()
             .ok_or_else(|| anyhow::anyhow!("trusted head missing"))?;
-        let observed_checkout_tree_sha = base_tree;
+        let observed_checkout_tree_sha = git_tree_sha(&run_args.review.root, "HEAD")?;
+        if observed_checkout_tree_sha != base_tree {
+            bail!(
+                "trusted-base receipt rejected: checkout tree changed from {base_tree} to {observed_checkout_tree_sha}"
+            );
+        }
+        let changed_path = run_args
+            .review
+            .trusted_changed_files
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("trusted changed-files object missing"))?;
+        let patch_path = run_args
+            .review
+            .trusted_patch
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("trusted patch object missing"))?;
+        let changed_bytes = fs::read(changed_path)?;
+        let patch_bytes = fs::read(patch_path)?;
+        let changed_files = parse_trusted_changed_files(&changed_bytes)?;
+        let patch = std::str::from_utf8(&patch_bytes)
+            .context("trusted patch object must be valid UTF-8")?;
+        if changed_files != diff.changed_files || patch != diff.patch {
+            bail!("trusted-base receipt inputs changed after admission");
+        }
         fs::write(
             out.join("input/trusted-base-receipt.json"),
             serde_json::to_vec_pretty(&serde_json::json!({
@@ -207,8 +230,8 @@ pub(crate) fn write_plan_artifacts(
                 "base_tree_sha": base_tree,
                 "observed_checkout_tree_sha": observed_checkout_tree_sha,
                 "head_sha": head,
-                "changed_files_object_sha256": sha256_hex(diff.changed_files.join("\n").as_bytes()),
-                "patch_object_sha256": sha256_hex(diff.patch.as_bytes()),
+                "changed_files_object_sha256": sha256_hex(&changed_bytes),
+                "patch_object_sha256": sha256_hex(&patch_bytes),
                 "changed_files_sha256": sha256_hex(diff.changed_files.join("\n").as_bytes()),
                 "patch_sha256": sha256_hex(diff.patch.as_bytes()),
                 "head_tree_loaded": false,
