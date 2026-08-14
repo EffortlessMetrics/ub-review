@@ -619,37 +619,63 @@ fn raw_ripr_sidecars_present(artifact_dir: &Path, detail: &JsonValue) -> bool {
     if summary_count != findings.len() as u64 || total_raw != findings.len() as u64 {
         return false;
     }
-    let raw_ids: Option<Vec<String>> = findings
+    let raw_ids: Option<Vec<(String, String)>> = findings
         .iter()
         .map(|finding| {
-            finding
-                .get("id")
-                .and_then(JsonValue::as_str)
-                .filter(|id| !id.trim().is_empty())
-                .map(ToOwned::to_owned)
+            Some((
+                finding.get("id")?.as_str()?.to_owned(),
+                finding.get("classification")?.as_str()?.to_owned(),
+            ))
         })
         .collect();
     let Some(raw_ids) = raw_ids else {
         return false;
     };
-    let raw_ids: BTreeSet<_> = raw_ids.into_iter().collect();
+    if raw_ids
+        .iter()
+        .any(|(id, class)| id.trim().is_empty() || class.trim().is_empty())
+    {
+        return false;
+    }
+    let raw_gap_ids: BTreeSet<_> = raw_ids
+        .iter()
+        .filter(|(_, class)| {
+            matches!(
+                class.as_str(),
+                "weakly_exposed" | "reachable_unrevealed" | "no_static_path"
+            )
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
     let Some(entries) = detail.get("entries").and_then(JsonValue::as_array) else {
         return false;
     };
-    let entry_ids: Option<Vec<String>> = entries
+    let entry_ids: Option<Vec<(String, String)>> = entries
         .iter()
         .map(|entry| {
-            entry
-                .get("id")
-                .and_then(JsonValue::as_str)
-                .map(ToOwned::to_owned)
+            Some((
+                entry.get("id")?.as_str()?.to_owned(),
+                entry.get("classification")?.as_str()?.to_owned(),
+            ))
         })
         .collect();
     let Some(entry_ids) = entry_ids else {
         return false;
     };
-    let gap_ids: BTreeSet<_> = entry_ids.into_iter().collect();
-    raw_ids.is_superset(&gap_ids) && gap_ids.len() == entries.len()
+    if entry_ids
+        .iter()
+        .any(|(id, class)| id.trim().is_empty() || class.trim().is_empty())
+    {
+        return false;
+    }
+    let gap_ids: BTreeSet<_> = entry_ids.iter().map(|(id, _)| id.clone()).collect();
+    gap_ids == raw_gap_ids
+        && gap_ids.len() == entries.len()
+        && entry_ids.iter().all(|(id, class)| {
+            raw_ids
+                .iter()
+                .any(|(raw_id, raw_class)| raw_id == id && raw_class == class)
+        })
 }
 
 fn classify_suppressions(ledger: &str, detail: Option<&JsonValue>) -> Result<JsonValue> {
