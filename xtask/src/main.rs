@@ -41,9 +41,10 @@ finding_id = "probe:b"
 owner = "ub-review/core"
 "#;
     let detail = serde_json::json!({
-        "schema": "ub-review.ripr_exposure_gaps.v2",
+        "schema": "ub-review.ripr_exposure_gaps.v3",
         "status": "ok",
         "semantics": "raw_pre_policy",
+        "total_raw_gap_findings": 1,
         "entries": [{"id": "probe:a"}],
     });
     let report = classify_suppressions(ledger, Some(&detail))?;
@@ -91,17 +92,18 @@ fn ripr_inventory_reports_unknown_currentness_without_detail() -> Result<()> {
 fn ripr_inventory_rejects_unvalidated_detail_artifacts() {
     for detail in [
         serde_json::json!({}),
-        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v2", "status": "detail_unavailable"}),
-        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v1", "status": "ok", "semantics": "raw_pre_policy", "entries": []}),
-        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v2", "status": "ok", "semantics": "raw_pre_policy", "entries": {}}),
-        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v2", "status": "ok", "semantics": "raw_pre_policy", "entries": [{"id": ""}]}),
+        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "detail_unavailable"}),
+        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v2", "status": "ok", "semantics": "raw_pre_policy", "entries": []}),
+        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "ok", "semantics": "raw_pre_policy", "entries": {}}),
+        serde_json::json!({"schema": "ub-review.ripr_exposure_gaps.v3", "status": "ok", "semantics": "raw_pre_policy", "entries": [{"id": ""}]}),
     ] {
         assert!(validated_ripr_finding_ids(&detail).is_none());
     }
     let empty = serde_json::json!({
-        "schema": "ub-review.ripr_exposure_gaps.v2",
+        "schema": "ub-review.ripr_exposure_gaps.v3",
         "status": "ok",
         "semantics": "raw_pre_policy",
+        "total_raw_gap_findings": 0,
         "entries": [],
     });
     assert_eq!(validated_ripr_finding_ids(&empty), Some(BTreeSet::new()));
@@ -113,9 +115,10 @@ fn ripr_inventory_accepts_commented_suppression_headers() -> Result<()> {
     let ledger =
         "schema_version = 1\n[[suppressions]] # generated group\nfinding_id = \"probe:a\"\n";
     let detail = serde_json::json!({
-        "schema": "ub-review.ripr_exposure_gaps.v2",
+        "schema": "ub-review.ripr_exposure_gaps.v3",
         "status": "ok",
         "semantics": "raw_pre_policy",
+        "total_raw_gap_findings": 1,
         "entries": [{"id": "probe:a"}],
     });
     let report = classify_suppressions(ledger, Some(&detail))?;
@@ -404,13 +407,20 @@ fn classify_suppressions(ledger: &str, detail: Option<&JsonValue>) -> Result<Jso
 }
 
 fn validated_ripr_finding_ids(detail: &JsonValue) -> Option<BTreeSet<String>> {
-    if detail.get("schema").and_then(JsonValue::as_str) != Some("ub-review.ripr_exposure_gaps.v2")
+    if detail.get("schema").and_then(JsonValue::as_str) != Some("ub-review.ripr_exposure_gaps.v3")
         || detail.get("status").and_then(JsonValue::as_str) != Some("ok")
         || detail.get("semantics").and_then(JsonValue::as_str) != Some("raw_pre_policy")
     {
         return None;
     }
     let entries = detail.get("entries")?.as_array()?;
+    let total = detail.get("total_raw_gap_findings")?.as_u64()? as usize;
+    if entries.len() != total
+        || detail.get("entry_cap").is_some()
+        || detail.get("truncated").is_some()
+    {
+        return None;
+    }
     entries
         .iter()
         .map(|finding| {
