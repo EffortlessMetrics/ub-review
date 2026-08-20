@@ -292,6 +292,26 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
             .status()
             .context("create release fixture archive")?;
         anyhow::ensure!(archive_status.success(), "tar failed for fixture {name}");
+        if layout == "root-and-directory" {
+            let listing = Command::new("tar")
+                .args([
+                    "-tzf",
+                    archive
+                        .to_str()
+                        .ok_or_else(|| anyhow::anyhow!("archive path is not UTF-8"))?,
+                ])
+                .output()
+                .context("list root-directory release fixture archive")?;
+            anyhow::ensure!(
+                listing.status.success(),
+                "tar listing failed for fixture {name}"
+            );
+            let listing = String::from_utf8_lossy(&listing.stdout);
+            anyhow::ensure!(
+                listing.lines().any(|path| path.trim_end() == "ub-review/"),
+                "root-directory fixture must contain ub-review/: {listing}"
+            );
+        }
         let checksum = temp.path().join(format!("{name}.sha256"));
         let checksum_output = Command::new("sha256sum")
             .arg(&archive)
