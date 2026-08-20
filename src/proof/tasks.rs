@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 
+use crate::proof::identity::{ProofExecutionIdentity, ProofSubsumption, identity_for_focused_task};
 use crate::test_parse::{
     command_display, command_display_with_env, focused_test_names_for_file, push_unique,
 };
@@ -108,6 +109,12 @@ pub(crate) fn focused_proof_plans_from_diff(
     focused_test_tasks_from_diff(diff, proof_requests, budget)
         .into_iter()
         .map(|task| {
+            let execution_identity = identity_for_focused_task(
+                diff,
+                &task,
+                "target/ub-review/proof-worktrees/head",
+            )
+            .ok();
             focused_proof_plan_for_task(
                 task,
                 budget,
@@ -119,6 +126,7 @@ pub(crate) fn focused_proof_plans_from_diff(
                     budget.per_command_timeout_sec,
                     budget.max_total_seconds
                 ),
+                execution_identity,
             )
         })
         .collect()
@@ -137,11 +145,14 @@ pub(crate) fn focused_proof_candidate_plans_from_diff(
     let mut plans = Vec::with_capacity(candidate_tasks.len());
     for task in candidate_tasks {
         let status = candidate_plan_status(planned_ids.contains(&task.id));
+        let execution_identity =
+            identity_for_focused_task(diff, &task, "target/ub-review/proof-worktrees/head").ok();
         plans.extend(std::iter::once(focused_proof_plan_for_task(
             task,
             budget,
             status,
             "candidate recorded for portfolio accounting; execution is budget-gated".to_owned(),
+            execution_identity,
         )));
     }
     plans
@@ -160,7 +171,15 @@ fn focused_proof_plan_for_task(
     budget: ProofBudget,
     status: &str,
     reason: String,
+    execution_identity: Option<ProofExecutionIdentity>,
 ) -> FocusedProofPlan {
+    let reason = match execution_identity.as_ref() {
+        Some(identity) if matches!(identity.subsumption(identity), ProofSubsumption::Identical) => {
+            reason
+        }
+        Some(_) => format!("{reason}; canonical execution identity rejected"),
+        None => format!("{reason}; canonical execution identity unavailable"),
+    };
     let timeout_sec = focused_test_task_command_timeout(&task, budget);
     let head_command = proof_task_plan_command(&task, "head", "head");
     let base_plus_tests_command = if task.mode == FocusedProofMode::RedGreen {
@@ -1010,6 +1029,7 @@ mod tests {
             budget,
             "deferred_by_budget",
             "candidate recorded for portfolio accounting; execution is budget-gated".to_owned(),
+            None,
         );
         assert_eq!(
             focused_proof_plan_for_task(
@@ -1017,6 +1037,7 @@ mod tests {
                 budget,
                 "deferred_by_budget",
                 "candidate recorded for portfolio accounting; execution is budget-gated".to_owned(),
+                None,
             )
             .status,
             "deferred_by_budget",
