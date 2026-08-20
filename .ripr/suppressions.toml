@@ -21923,6 +21923,36 @@ reason = "Proof-planner failure receipt: proof_planner_audit_write_failure_becom
 
 [[suppressions]]
 kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:b4532341"
+owner = "ub-review/core"
+reason = "Classification contract receipt: lane_model_output_deserialize_records_audit_classification directly deserializes a valid audit and asserts InternalAuditClassification::ValidNonEmpty. Re-verify after LaneModelOutput field changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:field_construction:e6e78dc0"
+owner = "ub-review/core"
+reason = "Typed observation receipt: internal_audit_classifies_empty_as_degraded_typed_outcome asserts the exact empty-internal-audit status, severity, confidence, and claim. Re-verify after classification observation construction changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:match_arm:be0c9392"
+owner = "ub-review/core"
+reason = "Typed observation receipt: internal_audit_classifies_empty_as_degraded_typed_outcome observes the empty classification branch and exact typed observation kind. Re-verify after classification branch changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:return_value:aa049388"
+owner = "ub-review/core"
+reason = "Typed observation receipt: internal_audit_classifies_malformed_schema_distinctly asserts the malformed branch's exact failed observation claim and result. Re-verify after malformed classification changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:return_value:35d9545a"
+owner = "ub-review/core"
+reason = "Typed observation receipt: internal_audit_classifies_malformed_schema_distinctly asserts the malformed classification observation is returned with stable typed fields. Re-verify after observation result changes."
+
+[[suppressions]]
+kind = "exposure_gap"
 finding_id = "probe:src_observations.rs:return_value:8468d28b"
 owner = "ub-review/core"
 reason = "Foundation writer receipt: internal_audit_artifact_is_lane_scoped_and_not_public_surface asserts successful artifact completion and no public review directory. Re-verify after writer result changes."

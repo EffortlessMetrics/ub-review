@@ -155,6 +155,13 @@ findings. It records bounded surfaces checked and rejected hypotheses in the
 per-lane model artifact for calibration; it is not routed to the reporter,
 compiler, review summary, or GitHub.
 
+The parser classifies specialist audit input explicitly: a valid non-empty
+`surfaces_checked` audit is private artifact evidence; an empty audit is a
+degraded `empty-internal-audit` observation; malformed audit data is a failed
+`malformed-internal-audit` observation; and an absent audit retains the existing
+no-provider-content semantics. These classifications never become public
+review prose or a clean/pass claim.
+
 ## Economics
 
 The scarce resource is the runner lease. Trusted repos default to two useful

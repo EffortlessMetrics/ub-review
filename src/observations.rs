@@ -344,6 +344,18 @@ mod tests {
     }
 
     #[test]
+    fn lane_model_output_deserialize_records_audit_classification() -> Result<()> {
+        let output: LaneModelOutput = serde_json::from_str(
+            r#"{"internal_audit":{"surfaces_checked":["src/lib.rs"]},"findings":[]}"#,
+        )?;
+        assert_eq!(
+            output.internal_audit_classification,
+            InternalAuditClassification::ValidNonEmpty
+        );
+        Ok(())
+    }
+
+    #[test]
     fn internal_audit_classifies_empty_as_degraded_typed_outcome() -> Result<()> {
         let (output, degraded) =
             parse_fixture(r#"{"internal_audit":{"surfaces_checked":[]},"findings":[]}"#)?;
@@ -355,6 +367,13 @@ mod tests {
         assert_eq!(
             output.observations[0].kind.as_deref(),
             Some("empty-internal-audit")
+        );
+        assert_eq!(output.observations[0].status.as_deref(), Some("degraded"));
+        assert_eq!(output.observations[0].severity.as_deref(), Some("medium"));
+        assert_eq!(output.observations[0].confidence.as_deref(), Some("high"));
+        assert_eq!(
+            output.observations[0].claim,
+            "Specialist internal audit was explicitly empty; specialist coverage is degraded."
         );
         assert!(!output.observations[0].claim.contains("surfaces_checked"));
         Ok(())
@@ -372,6 +391,13 @@ mod tests {
         assert_eq!(
             output.observations[0].kind.as_deref(),
             Some("malformed-internal-audit")
+        );
+        assert_eq!(output.observations[0].status.as_deref(), Some("failed"));
+        assert_eq!(output.observations[0].severity.as_deref(), Some("medium"));
+        assert_eq!(output.observations[0].confidence.as_deref(), Some("high"));
+        assert_eq!(
+            output.observations[0].claim,
+            "Specialist internal audit was malformed; specialist coverage is degraded."
         );
         assert!(output.internal_audit.is_none());
         Ok(())
