@@ -15,7 +15,7 @@ pub(crate) fn write_internal_audit_artifact(
     lane: &str,
     audit: &InternalAudit,
 ) -> Result<()> {
-    let lane_dir = model_dir.join(sanitize_artifact_name(lane));
+    let lane_dir = model_dir.join(sanitize_lane_artifact_name(lane)?);
     fs::create_dir_all(&lane_dir)
         .with_context(|| format!("create internal audit lane {}", lane_dir.display()))?;
     let mut artifact = serde_json::to_value(audit)?;
@@ -277,6 +277,28 @@ mod tests {
             temp.path()
                 .join("source-route/internal_audit.json")
                 .exists()
+        );
+        write_internal_audit_artifact(
+            temp.path(),
+            "foo.bar",
+            &InternalAudit {
+                surfaces_checked: vec!["src/dot.rs".to_owned()],
+                strongest_rejected_hypothesis: None,
+                remaining_local_uncertainty: None,
+            },
+        )?;
+        write_internal_audit_artifact(
+            temp.path(),
+            "foo/bar",
+            &InternalAudit {
+                surfaces_checked: vec!["src/slash.rs".to_owned()],
+                strongest_rejected_hypothesis: None,
+                remaining_local_uncertainty: None,
+            },
+        )?;
+        assert_ne!(
+            sanitize_lane_artifact_name("foo.bar")?,
+            sanitize_lane_artifact_name("foo/bar")?
         );
         assert!(!temp.path().join("review").exists());
         Ok(())
