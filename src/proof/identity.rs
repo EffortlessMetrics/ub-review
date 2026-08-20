@@ -157,12 +157,6 @@ fn validate_approved_input(input: &ApprovedProofExecution) -> Result<()> {
     if input.argv.is_empty() {
         bail!("approved proof argv cannot be empty");
     }
-    if !matches!(
-        input.argv.first().map(String::as_str),
-        Some("cargo" | "bun")
-    ) {
-        bail!("proof identity accepts only an approved cargo or bun executable");
-    }
     if input.working_root.trim().is_empty() {
         bail!("proof execution working root is required");
     }
@@ -183,15 +177,17 @@ fn normalize_argv(argv: Vec<String>) -> Result<Vec<String>> {
 }
 
 fn normalize_env(env: BTreeMap<String, String>) -> Result<BTreeMap<String, String>> {
-    env.into_iter()
-        .map(|(key, value)| {
-            let key = normalize_token(&key, "environment key")?;
-            if value.contains('\0') || value.chars().any(char::is_control) {
-                bail!("invalid environment value");
-            }
-            Ok((key, value))
-        })
-        .collect()
+    let mut normalized = BTreeMap::new();
+    for (key, value) in env {
+        let key = normalize_token(&key, "environment key")?;
+        if value.contains('\0') || value.chars().any(char::is_control) {
+            bail!("invalid environment value");
+        }
+        if normalized.insert(key.clone(), value).is_some() {
+            bail!("environment keys collide after normalization: {key}");
+        }
+    }
+    Ok(normalized)
 }
 
 fn normalize_features(features: Vec<String>) -> Result<Vec<String>> {
@@ -205,14 +201,15 @@ fn normalize_features(features: Vec<String>) -> Result<Vec<String>> {
 }
 
 fn normalize_tool_versions(versions: BTreeMap<String, String>) -> Result<BTreeMap<String, String>> {
-    versions
-        .into_iter()
-        .map(|(tool, version)| {
-            let tool = normalize_token(&tool, "tool name")?;
-            let version = normalize_token(&version, "tool version")?;
-            Ok((tool, version))
-        })
-        .collect()
+    let mut normalized = BTreeMap::new();
+    for (tool, version) in versions {
+        let tool = normalize_token(&tool, "tool name")?;
+        let version = normalize_token(&version, "tool version")?;
+        if normalized.insert(tool.clone(), version).is_some() {
+            bail!("tool-version keys collide after normalization: {tool}");
+        }
+    }
+    Ok(normalized)
 }
 
 fn normalize_root(root: &str) -> Result<String> {
@@ -233,7 +230,11 @@ fn normalize_root(root: &str) -> Result<String> {
         ("//", root.trim_start_matches('/'))
     } else if root.len() >= 2 && root.as_bytes()[1] == b':' {
         let drive = &root[..2];
-        (drive, root[2..].trim_start_matches('/'))
+        let suffix = &root[2..];
+        if suffix.is_empty() || !suffix.starts_with('/') {
+            bail!("drive-relative working roots are not supported");
+        }
+        (drive, suffix.trim_start_matches('/'))
     } else {
         ("", root.as_str())
     };
@@ -381,12 +382,22 @@ mod tests {
     }
 
     #[test]
+    fn drive_relative_roots_are_rejected() -> Result<()> {
+        for raw in ["C:", "C:repo", r"C:repo\nested"] {
+            let mut value = input();
+            value.working_root = raw.to_owned();
+            assert!(ProofExecutionIdentity::from_approved(value).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
     fn malformed_and_forged_values_fail_closed() -> Result<()> {
         let mut identity = ProofExecutionIdentity::from_approved(input())?;
         identity.head = "forged-head".to_owned();
         assert!(identity.validate().is_err());
         for mutate in [
-            |value: &mut ApprovedProofExecution| value.argv = vec!["sh".to_owned()],
+            |value: &mut ApprovedProofExecution| value.argv = Vec::new(),
             |value: &mut ApprovedProofExecution| value.argv = vec!["cargo\0".to_owned()],
             |value: &mut ApprovedProofExecution| value.test_filter = Some("bad\0filter".to_owned()),
             |value: &mut ApprovedProofExecution| value.working_root = "  ".to_owned(),
@@ -395,6 +406,32 @@ mod tests {
             mutate(&mut value);
             assert!(ProofExecutionIdentity::from_approved(value).is_err());
         }
+        Ok(())
+    }
+
+    #[test]
+    fn executable_name_is_value_data_not_approval_policy() -> Result<()> {
+        let mut value = input();
+        value.argv[0] = "custom-approved-tool".to_owned();
+        assert!(ProofExecutionIdentity::from_approved(value).is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn normalized_map_key_collisions_fail_closed() -> Result<()> {
+        let mut value = input();
+        value.env = BTreeMap::from([
+            ("RUSTFLAGS".to_owned(), "one".to_owned()),
+            (" RUSTFLAGS ".to_owned(), "two".to_owned()),
+        ]);
+        assert!(ProofExecutionIdentity::from_approved(value).is_err());
+
+        let mut value = input();
+        value.tool_versions = BTreeMap::from([
+            ("cargo".to_owned(), "1".to_owned()),
+            (" cargo ".to_owned(), "2".to_owned()),
+        ]);
+        assert!(ProofExecutionIdentity::from_approved(value).is_err());
         Ok(())
     }
 
