@@ -127,6 +127,20 @@ pub(crate) fn parse_lane_model_output_or_degrade(
 ) -> Result<(LaneModelOutput, bool)> {
     match serde_json::from_str::<LaneModelOutput>(json_payload) {
         Ok(output) => {
+            let classification = output.internal_audit_classification;
+            let mut output = output;
+            if matches!(
+                classification,
+                InternalAuditClassification::Empty | InternalAuditClassification::Malformed
+            ) {
+                output
+                    .observations
+                    .push(internal_audit_classification_observation(
+                        classification,
+                        parse_path,
+                    ));
+                output.degraded = true;
+            }
             let degraded = output.degraded;
             if degraded || lane_model_output_has_value(&output) {
                 Ok((output, degraded))
@@ -201,6 +215,7 @@ pub(crate) fn degraded_lane_model_output(
     LaneModelOutput {
         summary: None,
         internal_audit: None,
+        internal_audit_classification: InternalAuditClassification::Absent,
         inline_comments: Vec::new(),
         candidate_findings: Vec::new(),
         summary_only_findings: Vec::new(),
@@ -212,6 +227,50 @@ pub(crate) fn degraded_lane_model_output(
         proof_intents: Vec::new(),
         issue_candidates: Vec::new(),
         degraded: true,
+    }
+}
+
+fn internal_audit_classification_observation(
+    classification: InternalAuditClassification,
+    parse_path: &Path,
+) -> ModelCandidateObservation {
+    let (kind, claim, status) = match classification {
+        InternalAuditClassification::Empty => (
+            "empty-internal-audit",
+            "Specialist internal audit was explicitly empty; specialist coverage is degraded.",
+            "degraded",
+        ),
+        InternalAuditClassification::Malformed => (
+            "malformed-internal-audit",
+            "Specialist internal audit was malformed; specialist coverage is degraded.",
+            "failed",
+        ),
+        InternalAuditClassification::ValidNonEmpty | InternalAuditClassification::Absent => {
+            return ModelCandidateObservation {
+                claim: "Internal audit classification did not require an observation.".to_owned(),
+                question: None,
+                kind: Some("internal-audit-classification".to_owned()),
+                status: Some("ok".to_owned()),
+                severity: None,
+                confidence: None,
+                path: None,
+                line: None,
+                evidence: vec![format!("Parser artifact: {}", parse_path.display())],
+                dedupe_key: Some("internal-audit-classification".to_owned()),
+            };
+        }
+    };
+    ModelCandidateObservation {
+        claim: claim.to_owned(),
+        question: None,
+        kind: Some(kind.to_owned()),
+        status: Some(status.to_owned()),
+        severity: Some("medium".to_owned()),
+        confidence: Some("high".to_owned()),
+        path: None,
+        line: None,
+        evidence: vec![format!("Parser artifact: {}", parse_path.display())],
+        dedupe_key: Some(kind.to_owned()),
     }
 }
 
@@ -246,6 +305,69 @@ pub(crate) fn lane_output_malformed_content_observation(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn parse_fixture(raw: &str) -> Result<(LaneModelOutput, bool)> {
+        let temp = tempfile::tempdir()?;
+        parse_lane_model_output_or_degrade(raw, &temp.path().join("content.json"))
+    }
+
+    #[test]
+    fn internal_audit_classifies_valid_non_empty_without_public_echo() -> Result<()> {
+        let (output, degraded) = parse_fixture(
+            r#"{"internal_audit":{"surfaces_checked":["src/lib.rs"],"strongest_rejected_hypothesis":"spoof"},"findings":[]}"#,
+        )?;
+        assert!(!degraded);
+        assert_eq!(
+            output.internal_audit_classification,
+            InternalAuditClassification::ValidNonEmpty
+        );
+        assert!(output.observations.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn internal_audit_classifies_empty_as_degraded_typed_outcome() -> Result<()> {
+        let (output, degraded) =
+            parse_fixture(r#"{"internal_audit":{"surfaces_checked":[]},"findings":[]}"#)?;
+        assert!(degraded);
+        assert_eq!(
+            output.internal_audit_classification,
+            InternalAuditClassification::Empty
+        );
+        assert_eq!(
+            output.observations[0].kind.as_deref(),
+            Some("empty-internal-audit")
+        );
+        assert!(!output.observations[0].claim.contains("surfaces_checked"));
+        Ok(())
+    }
+
+    #[test]
+    fn internal_audit_classifies_malformed_schema_distinctly() -> Result<()> {
+        let (output, degraded) =
+            parse_fixture(r#"{"internal_audit":{"surfaces_checked":"src/lib.rs"},"findings":[]}"#)?;
+        assert!(degraded);
+        assert_eq!(
+            output.internal_audit_classification,
+            InternalAuditClassification::Malformed
+        );
+        assert_eq!(
+            output.observations[0].kind.as_deref(),
+            Some("malformed-internal-audit")
+        );
+        assert!(output.internal_audit.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn absent_internal_audit_retains_no_evidence_semantics() -> Result<()> {
+        let result = parse_fixture(r#"{"findings":[],"observations":[]}"#);
+        match result {
+            Ok(_) => anyhow::bail!("absent audit with no provider content unexpectedly succeeded"),
+            Err(error) => assert!(!error.to_string().trim().is_empty()),
+        }
+        Ok(())
+    }
 
     #[test]
     fn internal_audit_artifact_is_lane_scoped_and_not_public_surface() -> Result<()> {

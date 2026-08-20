@@ -2417,6 +2417,7 @@ struct GitHubReviewPostComment {
 struct LaneModelOutput {
     summary: Option<String>,
     internal_audit: Option<InternalAudit>,
+    internal_audit_classification: InternalAuditClassification,
     inline_comments: Vec<ModelCandidateComment>,
     candidate_findings: Vec<ModelCandidateComment>,
     summary_only_findings: Vec<ModelCandidateFinding>,
@@ -2457,6 +2458,12 @@ impl<'de> Deserialize<'de> for LaneModelOutput {
         D: serde::Deserializer<'de>,
     {
         let mut value = serde_json::Value::deserialize(deserializer)?;
+        let internal_audit_classification = classify_internal_audit_value(&value);
+        if internal_audit_classification == InternalAuditClassification::Malformed
+            && let Some(object) = value.as_object_mut()
+        {
+            object.remove("internal_audit");
+        }
         let normalization = normalize_lane_model_output_value(&mut value);
         let wire: LaneModelOutputWire =
             serde_json::from_value(value).map_err(serde::de::Error::custom)?;
@@ -2465,6 +2472,7 @@ impl<'de> Deserialize<'de> for LaneModelOutput {
         Ok(Self {
             summary: wire.summary,
             internal_audit: wire.internal_audit,
+            internal_audit_classification,
             inline_comments: wire.inline_comments,
             candidate_findings: wire.candidate_findings,
             summary_only_findings: wire.summary_only_findings,
@@ -2490,6 +2498,52 @@ struct InternalAudit {
     pub(crate) strongest_rejected_hypothesis: Option<String>,
     #[serde(default)]
     pub(crate) remaining_local_uncertainty: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InternalAuditClassification {
+    ValidNonEmpty,
+    Empty,
+    Malformed,
+    Absent,
+}
+
+fn classify_internal_audit_value(value: &serde_json::Value) -> InternalAuditClassification {
+    let Some(audit) = value.get("internal_audit") else {
+        return InternalAuditClassification::Absent;
+    };
+    let Some(object) = audit.as_object() else {
+        return InternalAuditClassification::Malformed;
+    };
+    if object.is_empty() {
+        return InternalAuditClassification::Empty;
+    }
+    let Some(surfaces) = object.get("surfaces_checked") else {
+        return InternalAuditClassification::Malformed;
+    };
+    let Some(surfaces) = surfaces.as_array() else {
+        return InternalAuditClassification::Malformed;
+    };
+    if surfaces.iter().any(|surface| !surface.is_string())
+        || object.iter().any(|(key, value)| {
+            matches!(
+                key.as_str(),
+                "strongest_rejected_hypothesis" | "remaining_local_uncertainty"
+            ) && !value.is_null()
+                && !value.is_string()
+        })
+    {
+        return InternalAuditClassification::Malformed;
+    }
+    if surfaces
+        .iter()
+        .filter_map(serde_json::Value::as_str)
+        .any(|surface| !surface.trim().is_empty())
+    {
+        InternalAuditClassification::ValidNonEmpty
+    } else {
+        InternalAuditClassification::Empty
+    }
 }
 
 impl InternalAudit {
@@ -4078,6 +4132,7 @@ fn apply_unsafe_review_comment_plan_candidates(
     let output = LaneModelOutput {
         summary: None,
         internal_audit: None,
+        internal_audit_classification: InternalAuditClassification::Absent,
         inline_comments: Vec::new(),
         candidate_findings: candidates,
         summary_only_findings: Vec::new(),
@@ -5807,6 +5862,7 @@ fn load_previous_quality_backfill(
 
 #[cfg(test)]
 mod tests {
+    use crate::InternalAuditClassification;
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
     use std::io::{BufRead, BufReader, Write as _};
@@ -7940,6 +7996,7 @@ max_new_unsuppressed_findings = 0
                     .to_owned(),
             ),
             internal_audit: None,
+            internal_audit_classification: InternalAuditClassification::Absent,
             inline_comments: Vec::new(),
             candidate_findings: Vec::new(),
             summary_only_findings: Vec::new(),
@@ -8206,6 +8263,7 @@ index 1111111..2222222 100644
         let output = LaneModelOutput {
             summary: None,
             internal_audit: None,
+            internal_audit_classification: InternalAuditClassification::Absent,
             inline_comments: vec![ModelCandidateComment {
                 severity: "medium".to_owned(),
                 confidence: "medium-high".to_owned(),
@@ -10580,6 +10638,7 @@ index 1111111..2222222 100644
             let output = LaneModelOutput {
                 summary: Some(summary.to_owned()),
                 internal_audit: None,
+                internal_audit_classification: InternalAuditClassification::Absent,
                 inline_comments: Vec::new(),
                 candidate_findings: Vec::new(),
                 summary_only_findings: Vec::new(),
@@ -11286,6 +11345,7 @@ index 1111111..2222222 100644
         LaneModelOutput {
             summary: None,
             internal_audit: None,
+            internal_audit_classification: InternalAuditClassification::Absent,
             inline_comments: Vec::new(),
             candidate_findings: Vec::new(),
             summary_only_findings: Vec::new(),
@@ -13604,7 +13664,7 @@ index 1111111..2222222 100644
                 assert_eq!(output.observations.len(), 1);
                 assert_eq!(
                     output.observations[0].kind.as_deref(),
-                    Some("missing-evidence")
+                    Some("empty-internal-audit")
                 );
             }
             Err(error) => assert!(!error.to_string().trim().is_empty()),

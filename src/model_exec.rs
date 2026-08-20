@@ -1461,6 +1461,7 @@ pub(crate) fn apply_proof_planner_model_output(
     proof_intents: &mut Vec<ProofIntent>,
 ) {
     let advisory_output = LaneModelOutput {
+        internal_audit_classification: InternalAuditClassification::Absent,
         summary: None,
         internal_audit: output.internal_audit,
         inline_comments: Vec::new(),

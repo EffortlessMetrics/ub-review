@@ -47,7 +47,7 @@ pub(crate) fn run_provider_preflights(
             continue;
         }
         let spec = provider_spec_from_preflight(receipt)?;
-        let lane_dir = preflight_dir.join(sanitize_artifact_name(&spec.label()));
+        let lane_dir = preflight_dir.join(legacy_provider_preflight_name(&spec.label()));
         fs::create_dir_all(&lane_dir)?;
         let prompt = "Return strict JSON only: {\"summary\":\"preflight ok\",\"inline_comments\":[],\"summary_only_findings\":[]}";
         let outcome = match provider_preflight_cacheable_prefix(&spec, shared_context, args) {
@@ -81,6 +81,29 @@ pub(crate) fn provider_preflight_cacheable_prefix<'a>(
     args: &RunArgs,
 ) -> Option<&'a str> {
     model_cacheable_prefix(spec, shared_context, args)
+}
+
+fn legacy_provider_preflight_name(value: &str) -> String {
+    let sanitized: String = value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
+                ch
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    if sanitized.len() <= ARTIFACT_NAME_MAX_CHARS {
+        return sanitized;
+    }
+    let digest = sha256_hex(value.as_bytes());
+    let prefix_len = ARTIFACT_NAME_MAX_CHARS - ARTIFACT_NAME_HASH_CHARS - 1;
+    format!(
+        "{}-{}",
+        sanitized.chars().take(prefix_len).collect::<String>(),
+        &digest[..ARTIFACT_NAME_HASH_CHARS]
+    )
 }
 
 pub(crate) const ARTIFACT_NAME_MAX_CHARS: usize = 96;
