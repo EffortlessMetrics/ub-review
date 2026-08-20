@@ -475,7 +475,7 @@ runs:
             report_release_unavailable warning "release binary --version execution failed"
             return 1
           fi
-          actual_identity="$(printf '%s\n' "$version_output" | sed -n '1p' | awk '{print $1 " " $2}')"
+          actual_identity="$(printf '%s\n' "$version_output" | sed -n '1p')"
           expected_identity="ub-review $expected_version"
           if [[ "$actual_identity" != "$expected_identity" ]]; then
             report_release_unavailable warning "release binary version mismatch (expected $expected_identity, got ${actual_identity:-no output})"
