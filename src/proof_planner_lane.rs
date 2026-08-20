@@ -107,10 +107,7 @@ pub(crate) fn run_proof_planner_model_lane(
         return Ok(0);
     }
 
-    let lane_dir = context
-        .review_dir
-        .join("model")
-        .join(sanitize_artifact_name(&lane.id));
+    let lane_dir = model_lane_artifact_dir(&context.review_dir.join("model"), &lane.id)?;
     fs::create_dir_all(&lane_dir)?;
     receipt.status = "running".to_owned();
     match call_model_proof_planner(
@@ -178,6 +175,26 @@ pub(crate) fn run_proof_planner_model_lane(
     }
     model_lanes.push(receipt);
     Ok(1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn proof_planner_hostile_lane_uses_canonical_model_directory() -> Result<()> {
+        let root = tempfile::tempdir()?;
+        let lane = "../proof planner/é";
+        let path = model_lane_artifact_dir(&root.path().join("model"), lane)?;
+        let legacy = root.path().join("model").join(sanitize_artifact_name(lane));
+        assert!(!path.to_string_lossy().contains("..\\"));
+        assert_ne!(
+            path, legacy,
+            "proof-planner must not use the legacy sanitizer"
+        );
+        assert!(path.to_string_lossy().contains('-'));
+        Ok(())
+    }
 }
 
 pub(crate) fn run_follow_up_model_pass(
