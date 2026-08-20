@@ -96,7 +96,7 @@ fn release_resolver_validates_binary_version_before_acceptance() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::fs::{PermissionsExt, symlink};
 
     let action_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("action.yml");
     let action = fs::read_to_string(&action_path)?;
@@ -186,6 +186,20 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
             false,
             "archive must contain exactly one root-level ub-review executable",
         ),
+        (
+            "root-symlink",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "root-symlink",
+            false,
+            "archive must contain exactly one root-level ub-review executable",
+        ),
+        (
+            "root-hard-link",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "root-hard-link",
+            false,
+            "archive must contain exactly one root-level ub-review executable",
+        ),
     ];
 
     for (name, version_body, layout, expected_success, expected_error) in cases {
@@ -198,6 +212,17 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
             let nested = candidate_dir.join("nested");
             fs::create_dir(&nested)?;
             fs::copy(&candidate, nested.join("ub-review"))?;
+        }
+        if layout == "root-symlink" {
+            let nested = candidate_dir.join("nested");
+            fs::create_dir(&nested)?;
+            let target = nested.join("ub-review-target");
+            fs::rename(&candidate, &target)?;
+            symlink("nested/ub-review-target", &candidate)?;
+        }
+        if layout == "root-hard-link" {
+            let alias = candidate_dir.join("ub-review-alias");
+            fs::hard_link(&candidate, &alias)?;
         }
         let archive = temp.path().join(format!("{name}.tar.gz"));
         let mut archive_command = Command::new("tar");
@@ -224,6 +249,12 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
             }
             "duplicate-root" => {
                 archive_command.args(["ub-review", "./ub-review"]);
+            }
+            "root-symlink" => {
+                archive_command.args(["ub-review", "nested/ub-review-target"]);
+            }
+            "root-hard-link" => {
+                archive_command.args(["ub-review-alias", "ub-review"]);
             }
             _ => bail!("unknown fixture layout {layout}"),
         }
