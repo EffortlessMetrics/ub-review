@@ -7,6 +7,36 @@
 
 use crate::*;
 
+/// Preserve a successful specialist's private coverage audit beside the raw
+/// model content.  This intentionally has no public-review or observation
+/// sink: the audit is calibration context, not a finding.
+pub(crate) fn write_internal_audit_artifact(
+    model_dir: &Path,
+    lane: &str,
+    audit: &InternalAudit,
+) -> Result<()> {
+    let lane_dir = model_dir.join(sanitize_artifact_name(lane));
+    fs::create_dir_all(&lane_dir)
+        .with_context(|| format!("create internal audit lane {}", lane_dir.display()))?;
+    let mut artifact = serde_json::to_value(audit)?;
+    let object = artifact
+        .as_object_mut()
+        .context("internal audit serialized as non-object")?;
+    object.insert(
+        "schema".to_owned(),
+        serde_json::Value::String(INTERNAL_AUDIT_SCHEMA.to_owned()),
+    );
+    object.insert(
+        "lane".to_owned(),
+        serde_json::Value::String(lane.to_owned()),
+    );
+    fs::write(
+        lane_dir.join("internal_audit.json"),
+        serde_json::to_vec_pretty(&artifact)?,
+    )?;
+    Ok(())
+}
+
 pub(crate) fn write_observation_artifacts(out: &Path, observations: &[Observation]) -> Result<()> {
     let observations_dir = out.join("observations");
     if observations_dir.exists() {
@@ -129,6 +159,10 @@ pub(crate) fn lane_model_output_has_value(output: &LaneModelOutput) -> bool {
         .summary
         .as_deref()
         .is_some_and(|summary| !summary.trim().is_empty())
+        || output
+            .internal_audit
+            .as_ref()
+            .is_some_and(InternalAudit::has_value)
         || !output.inline_comments.is_empty()
         || !output.candidate_findings.is_empty()
         || !output.summary_only_findings.is_empty()
@@ -166,6 +200,7 @@ pub(crate) fn degraded_lane_model_output(
 ) -> LaneModelOutput {
     LaneModelOutput {
         summary: None,
+        internal_audit: None,
         inline_comments: Vec::new(),
         candidate_findings: Vec::new(),
         summary_only_findings: Vec::new(),
@@ -205,5 +240,45 @@ pub(crate) fn lane_output_malformed_content_observation(
             format!("Raw content artifact: {}", parse_path.display()),
         ],
         dedupe_key: Some("lane-output-malformed-content".to_owned()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn internal_audit_artifact_is_lane_scoped_and_not_public_surface() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let audit = InternalAudit {
+            surfaces_checked: vec!["src/parser.rs".to_owned()],
+            strongest_rejected_hypothesis: Some("route skips validation".to_owned()),
+            remaining_local_uncertainty: None,
+        };
+        write_internal_audit_artifact(temp.path(), "tests-oracle", &audit)?;
+        write_internal_audit_artifact(
+            temp.path(),
+            "source-route",
+            &InternalAudit {
+                surfaces_checked: vec!["src/routes.rs".to_owned()],
+                strongest_rejected_hypothesis: None,
+                remaining_local_uncertainty: Some(
+                    "generated route aliases were not changed".to_owned(),
+                ),
+            },
+        )?;
+        let artifact = temp.path().join("tests-oracle/internal_audit.json");
+        assert!(artifact.exists());
+        let value: serde_json::Value = serde_json::from_slice(&fs::read(&artifact)?)?;
+        assert_eq!(value["schema"], INTERNAL_AUDIT_SCHEMA);
+        assert_eq!(value["lane"], "tests-oracle");
+        assert_eq!(value["surfaces_checked"][0], "src/parser.rs");
+        assert!(
+            temp.path()
+                .join("source-route/internal_audit.json")
+                .exists()
+        );
+        assert!(!temp.path().join("review").exists());
+        Ok(())
     }
 }

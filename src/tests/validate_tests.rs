@@ -65,6 +65,7 @@ fn sibling_summary_completeness_claim_becomes_verification_observation() -> Resu
                 "No analogous sibling panic paths were found, so the fix is correctly scoped and need not be broadened."
                     .to_owned(),
             ),
+            internal_audit: None,
             inline_comments: Vec::new(),
             candidate_findings: Vec::new(),
             summary_only_findings: Vec::new(),
@@ -330,6 +331,7 @@ index 1111111..2222222 100644
     );
     let output = LaneModelOutput {
         summary: None,
+        internal_audit: None,
         inline_comments: vec![ModelCandidateComment {
             severity: "medium".to_owned(),
             confidence: "medium-high".to_owned(),
