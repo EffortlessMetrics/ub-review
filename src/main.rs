@@ -13665,18 +13665,18 @@ index 1111111..2222222 100644
             r#"{"findings":[],"observations":[],"proof_intents":[],"internal_audit":{}}"#,
             &temp.path().join("content.json"),
         );
-        match result {
-            Ok((output, degraded)) => {
-                assert!(degraded);
-                assert!(output.degraded);
-                assert_eq!(output.observations.len(), 1);
-                assert_eq!(
-                    output.observations[0].kind.as_deref(),
-                    Some("empty-internal-audit")
-                );
-            }
-            Err(error) => assert!(!error.to_string().trim().is_empty()),
-        }
+        let (output, degraded) = result?;
+        assert!(degraded);
+        assert!(output.degraded);
+        assert_eq!(output.observations.len(), 1);
+        assert_eq!(
+            output.observations[0].kind.as_deref(),
+            Some("empty-internal-audit")
+        );
+        assert_eq!(
+            output.internal_audit_classification,
+            InternalAuditClassification::Empty
+        );
         Ok(())
     }
 
