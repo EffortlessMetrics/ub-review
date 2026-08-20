@@ -159,23 +159,9 @@ pub(crate) fn reporter_prompt(
             "### `{}` (status: `{}`)\n{}\n\n",
             d.lane, d.status, conclusion
         ));
-        if let Some(audit) = &d.internal_audit {
-            prompt.push_str(
-                "Private internal audit (use only to check coverage and contradictions; ",
-            );
-            prompt.push_str("do not quote or emit this artifact-only context):\n");
-            prompt.push_str(&format!(
-                "- surfaces checked: {}\n",
-                audit.surfaces_checked.join(", ")
-            ));
-            if let Some(hypothesis) = &audit.strongest_rejected_hypothesis {
-                prompt.push_str(&format!("- rejected hypothesis: {hypothesis}\n"));
-            }
-            if let Some(uncertainty) = &audit.remaining_local_uncertainty {
-                prompt.push_str(&format!("- remaining uncertainty: {uncertainty}\n"));
-            }
-            prompt.push('\n');
-        }
+        // Internal audits remain artifact-only calibration data. Do not place
+        // their contents in the reporter prompt: a model cannot echo context
+        // it never receives, and the production boundary stays deterministic.
     }
     // #325 stream-as-it-lands: late-phase deterministic evidence landed after
     // the lanes launched, so the lanes have not seen it. The reporter weighs
@@ -892,7 +878,7 @@ mod tests {
     }
 
     #[test]
-    fn reporter_consumes_lane_audit_as_private_prompt_context() -> Result<()> {
+    fn reporter_withholds_lane_audit_from_prompt() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let review_dir = temp.path().join("review");
         let model_dir = review_dir.join("model");
@@ -925,9 +911,9 @@ mod tests {
         };
         let digests = lane_digests_from_receipts(&review_dir, &[receipt]);
         let prompt = reporter_prompt(&digests, &[]);
-        assert!(prompt.contains("src/parser.rs"));
-        assert!(prompt.contains("parser bypasses guard"));
-        assert!(prompt.contains("do not quote or emit"));
+        assert!(!prompt.contains("src/parser.rs"));
+        assert!(!prompt.contains("parser bypasses guard"));
+        assert!(!prompt.contains("internal audit"));
         Ok(())
     }
 
