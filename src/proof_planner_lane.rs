@@ -152,6 +152,14 @@ pub(crate) fn run_proof_planner_model_lane(
             receipt.http_status = outcome.http_status;
             receipt.response_shape = Some(outcome.response_shape);
             receipt.cache_usage = outcome.cache_usage;
+            if let Some(audit) = outcome
+                .output
+                .internal_audit
+                .as_ref()
+                .filter(|audit| audit.has_value())
+            {
+                write_internal_audit_artifact(&context.review_dir.join("model"), &lane.id, audit)?;
+            }
             apply_proof_planner_model_output(
                 &lane,
                 outcome.output,
