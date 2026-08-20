@@ -38,9 +38,11 @@ pub(crate) fn write_internal_audit_artifact(
 }
 
 pub(crate) fn internal_audit_artifact_path(model_dir: &Path, lane: &str) -> Result<PathBuf> {
-    Ok(model_dir
-        .join(sanitize_lane_artifact_name(lane)?)
-        .join("internal_audit.json"))
+    Ok(model_lane_artifact_dir(model_dir, lane)?.join("internal_audit.json"))
+}
+
+pub(crate) fn model_lane_artifact_dir(model_dir: &Path, lane: &str) -> Result<PathBuf> {
+    Ok(model_dir.join(sanitize_lane_artifact_name(lane)?))
 }
 
 pub(crate) fn write_observation_artifacts(out: &Path, observations: &[Observation]) -> Result<()> {
@@ -447,6 +449,32 @@ mod tests {
             sanitize_lane_artifact_name("foo/bar")?
         );
         assert!(!temp.path().join("review").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn hostile_lane_production_directory_matches_audit_writer_and_reader() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        let model_dir = review_dir.join("model");
+        let lane = "../foo/bar é";
+        let dir = model_lane_artifact_dir(&model_dir, lane)?;
+        write_internal_audit_artifact(
+            &model_dir,
+            lane,
+            &InternalAudit {
+                surfaces_checked: vec!["PRIVATE_SURFACE".to_owned()],
+                strongest_rejected_hypothesis: None,
+                remaining_local_uncertainty: None,
+            },
+        )?;
+        assert!(dir.join("internal_audit.json").exists());
+        assert_eq!(
+            crate::reporter::read_internal_audit(&review_dir, lane)
+                .and_then(|audit| audit.surfaces_checked.into_iter().next())
+                .as_deref(),
+            Some("PRIVATE_SURFACE")
+        );
         Ok(())
     }
 }

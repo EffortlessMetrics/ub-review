@@ -28,18 +28,20 @@ pub(crate) fn run_model_lane_tasks(
                     let Some(task) = task else {
                         break;
                     };
-                    let lane_dir = model_dir.join(sanitize_artifact_name(&task.lane.id));
-                    let result = fs::create_dir_all(&lane_dir)
-                        .with_context(|| format!("create {}", lane_dir.display()))
-                        .and_then(|()| {
-                            call_model_lane(
-                                context.root,
-                                &lane_dir,
-                                &task.lane,
-                                &task.spec,
-                                context.shared_context,
-                                context.args,
-                            )
+                    let result =
+                        model_lane_artifact_dir(model_dir, &task.lane.id).and_then(|lane_dir| {
+                            fs::create_dir_all(&lane_dir)
+                                .with_context(|| format!("create {}", lane_dir.display()))
+                                .and_then(|()| {
+                                    call_model_lane(
+                                        context.root,
+                                        &lane_dir,
+                                        &task.lane,
+                                        &task.spec,
+                                        context.shared_context,
+                                        context.args,
+                                    )
+                                })
                         });
                     let _ = tx.send(ModelLaneTaskResult {
                         index: task.index,
