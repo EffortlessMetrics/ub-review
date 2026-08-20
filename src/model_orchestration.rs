@@ -207,6 +207,15 @@ mod artifact_identity_tests {
     }
 
     #[test]
+    fn long_provider_preflight_labels_are_bounded_and_hash_suffixed() {
+        let label = "provider:".to_owned() + &"x".repeat(128);
+        let component = legacy_provider_preflight_name(&label);
+        assert_eq!(component.len(), ARTIFACT_NAME_MAX_CHARS);
+        assert!(component.starts_with("provider-"));
+        assert!(component.contains('-'));
+    }
+
+    #[test]
     fn long_artifact_ids_use_input_hash_to_disambiguate_shared_prefixes() {
         let left = format!("{}-left", "x".repeat(128));
         let right = format!("{}-right", "x".repeat(128));

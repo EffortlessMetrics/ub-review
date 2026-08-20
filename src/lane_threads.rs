@@ -250,6 +250,7 @@ mod tests {
         let turn = primary_turn("tid", lane, "conclusion", vec![], "receipt");
         write_lane_thread_turn(&review_dir, lane, &turn, "cid", "completed")?;
         let encoded = "~2E~2E~2Ffoo~2Fbar~20~C3~A9";
+        assert_eq!(sanitize_artifact_name(lane), encoded);
         let encoded_dir = review_dir.join("threads").join(encoded);
         assert!(encoded_dir.join("turn-000.json").is_file());
         assert!(encoded_dir.join("thread.json").is_file());

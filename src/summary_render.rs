@@ -641,4 +641,11 @@ mod tests {
         assert_eq!(lane_packet_model_display(out, "missing/lane"), None);
         Ok(())
     }
+
+    #[test]
+    fn lane_packet_model_display_returns_none_for_missing_packet() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        assert_eq!(lane_packet_model_display(temp.path(), "missing/lane"), None);
+        Ok(())
+    }
 }

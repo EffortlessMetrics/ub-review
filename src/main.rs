@@ -6740,6 +6740,31 @@ mod tests {
     }
 
     #[test]
+    fn lane_packet_write_reports_unwritable_lane_directory() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        fs::create_dir_all(&out)?;
+        fs::write(out.join("lanes"), b"not a directory")?;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let err = match super::write_lane_packets(
+            &out,
+            &test_diff(),
+            &test_plan(Vec::new()),
+            &[],
+            &test_pr_thread_context(),
+            &event_log,
+        ) {
+            Ok(()) => anyhow::bail!("a file at lanes/ must reject packet writes"),
+            Err(err) => err,
+        };
+        anyhow::ensure!(
+            !err.to_string().is_empty(),
+            "packet write error must retain context"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn evidence_sections_surface_unevaluated_required_tool_gates() -> Result<()> {
         // #316's alarm class: repo policy configured a required tool gate and
         // the run produced no verdict for it. The running summary must say so
