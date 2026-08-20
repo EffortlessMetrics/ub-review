@@ -392,9 +392,13 @@ pub(crate) fn parse_cargo_workspace(root: &Path) -> Option<CargoWorkspaceGraph> 
 /// Convert an absolute path to a repo-relative path. If the path is not under
 /// the repo root, returns the original (best-effort).
 fn relative_to_repo(root: &Path, abs: &str) -> String {
+    let normalized_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
     let abs_path = std::path::Path::new(abs);
-    abs_path
-        .strip_prefix(root)
+    let normalized_abs = abs_path
+        .canonicalize()
+        .unwrap_or_else(|_| abs_path.to_path_buf());
+    normalized_abs
+        .strip_prefix(&normalized_root)
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .unwrap_or_else(|_| abs.replace('\\', "/"))
 }
@@ -693,6 +697,55 @@ mod tests {
             relative_to_repo(root, "/code/repo/Cargo.toml"),
             "Cargo.toml"
         );
+    }
+
+    #[test]
+    fn relative_to_repo_resolves_non_empty_relative_root() -> anyhow::Result<()> {
+        let absolute_root = std::env::current_dir()?;
+        let source_path = absolute_root.join("src/main.rs");
+
+        assert_eq!(
+            relative_to_repo(&absolute_root, &source_path.to_string_lossy()),
+            "src/main.rs"
+        );
+        assert_eq!(
+            relative_to_repo(std::path::Path::new("."), &source_path.to_string_lossy()),
+            "src/main.rs"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn relative_to_repo_preserves_separator_normalization_for_fallback() {
+        assert_eq!(
+            relative_to_repo(std::path::Path::new("/code/repo"), r"C:\outside\file.rs"),
+            "C:/outside/file.rs"
+        );
+    }
+
+    #[test]
+    fn cargo_metadata_relative_and_absolute_roots_have_same_paths() -> anyhow::Result<()> {
+        let absolute_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let absolute_graph = parse_cargo_workspace(absolute_root)
+            .ok_or_else(|| anyhow::anyhow!("absolute cargo metadata should succeed"))?;
+        let relative_graph = parse_cargo_workspace(std::path::Path::new("."))
+            .ok_or_else(|| anyhow::anyhow!("relative cargo metadata should succeed"))?;
+
+        assert_eq!(absolute_graph.workspace_root, relative_graph.workspace_root);
+        assert_eq!(absolute_graph.packages.len(), relative_graph.packages.len());
+        for (absolute, relative) in absolute_graph.packages.iter().zip(&relative_graph.packages) {
+            assert_eq!(absolute.name, relative.name);
+            assert_eq!(absolute.manifest_path, relative.manifest_path);
+            assert_eq!(absolute.directory, relative.directory);
+            assert_eq!(absolute.targets.len(), relative.targets.len());
+            for (absolute_target, relative_target) in absolute.targets.iter().zip(&relative.targets)
+            {
+                assert_eq!(absolute_target.name, relative_target.name);
+                assert_eq!(absolute_target.kind, relative_target.kind);
+                assert_eq!(absolute_target.src_path, relative_target.src_path);
+            }
+        }
+        Ok(())
     }
 
     #[test]
