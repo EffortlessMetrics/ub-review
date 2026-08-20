@@ -203,7 +203,7 @@ pub(crate) fn focused_test_tasks_from_diff(
             task.mode.command_count(),
             budget,
         ) {
-            return tasks;
+            continue;
         }
         files.insert(task.file.clone());
         estimated_seconds = estimated_seconds
@@ -749,6 +749,186 @@ mod tests {
             base: String::new(),
             head: String::new(),
         }
+    }
+
+    fn focused_test_request(id: &str, command: &str, timeout_sec: u64) -> ProofRequest {
+        ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: id.to_owned(),
+            lane: "tests-oracle".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned()],
+            command: command.to_owned(),
+            reason: "exercise focused proof admission".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec,
+            required: true,
+            status: "requested".to_owned(),
+        }
+    }
+
+    fn focused_test_diff(changed_files: &[&str]) -> DiffContext {
+        DiffContext {
+            base: "base".to_owned(),
+            head: "head".to_owned(),
+            changed_files: changed_files
+                .iter()
+                .map(|file| (*file).to_owned())
+                .collect(),
+            patch: String::new(),
+            flags: DiffFlags::default(),
+            diff_class: DiffClass::TestsOnly,
+        }
+    }
+
+    #[test]
+    fn focused_test_tasks_from_diff_continues_after_time_rejection() -> Result<()> {
+        let diff = focused_test_diff(&[]);
+        let requests = [
+            focused_test_request(
+                "request-a",
+                "bun test test/js/bun/a.test.ts -t accepted-first",
+                20,
+            ),
+            focused_test_request(
+                "request-b",
+                "bun test test/js/bun/b.test.ts -t rejected-expensive",
+                30,
+            ),
+            focused_test_request(
+                "request-c",
+                "bun test test/js/bun/c.test.ts -t accepted-cheap",
+                10,
+            ),
+        ];
+        let budget = ProofBudget {
+            max_focused_test_files: 3,
+            max_focused_tests: 3,
+            per_command_timeout_sec: 60,
+            max_total_seconds: 60,
+        };
+
+        let tasks = focused_test_tasks_from_diff(&diff, &requests, budget);
+        anyhow::ensure!(
+            tasks
+                .iter()
+                .map(|task| (task.file.as_str(), task.test_name.as_deref()))
+                .collect::<Vec<_>>()
+                == vec![
+                    ("test/js/bun/a.test.ts", Some("accepted-first")),
+                    ("test/js/bun/c.test.ts", Some("accepted-cheap")),
+                ],
+            "a time-rejected candidate must not hide a later cheaper candidate"
+        );
+
+        let plans = focused_proof_candidate_plans_from_diff(&diff, &requests, budget);
+        anyhow::ensure!(
+            plans
+                .iter()
+                .map(|plan| (
+                    plan.test_file.as_str(),
+                    plan.test_name.as_deref(),
+                    plan.status.as_str(),
+                ))
+                .collect::<Vec<_>>()
+                == vec![
+                    ("test/js/bun/a.test.ts", Some("accepted-first"), "planned",),
+                    (
+                        "test/js/bun/b.test.ts",
+                        Some("rejected-expensive"),
+                        "deferred_by_budget",
+                    ),
+                    ("test/js/bun/c.test.ts", Some("accepted-cheap"), "planned",),
+                ],
+            "mixed time-budget dispositions must preserve candidate order"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn focused_test_tasks_from_diff_continues_after_new_file_rejection() -> Result<()> {
+        let diff = focused_test_diff(&["test/js/bun/a.test.ts", "test/js/bun/b.test.ts"]);
+        let requests = [focused_test_request(
+            "request-a-later",
+            "bun test test/js/bun/a.test.ts -t later-same-file",
+            10,
+        )];
+        let budget = ProofBudget {
+            max_focused_test_files: 1,
+            max_focused_tests: 2,
+            per_command_timeout_sec: 60,
+            max_total_seconds: 240,
+        };
+
+        let plans = focused_proof_candidate_plans_from_diff(&diff, &requests, budget);
+        anyhow::ensure!(
+            plans
+                .iter()
+                .map(|plan| (
+                    plan.test_file.as_str(),
+                    plan.test_name.as_deref(),
+                    plan.status.as_str(),
+                ))
+                .collect::<Vec<_>>()
+                == vec![
+                    ("test/js/bun/a.test.ts", None, "planned"),
+                    ("test/js/bun/b.test.ts", None, "deferred_by_budget",),
+                    ("test/js/bun/a.test.ts", Some("later-same-file"), "planned",),
+                ],
+            "a new-file rejection must not hide a later candidate in an admitted file"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn focused_test_tasks_from_diff_count_cap_defers_all_later_candidates() -> Result<()> {
+        let diff = focused_test_diff(&[]);
+        let requests = [
+            focused_test_request(
+                "request-a",
+                "bun test test/js/bun/a.test.ts -t selected",
+                10,
+            ),
+            focused_test_request(
+                "request-b",
+                "bun test test/js/bun/b.test.ts -t deferred-one",
+                10,
+            ),
+            focused_test_request(
+                "request-c",
+                "bun test test/js/bun/c.test.ts -t deferred-two",
+                10,
+            ),
+        ];
+        let budget = ProofBudget {
+            max_focused_test_files: 3,
+            max_focused_tests: 1,
+            per_command_timeout_sec: 60,
+            max_total_seconds: 240,
+        };
+
+        let plans = focused_proof_candidate_plans_from_diff(&diff, &requests, budget);
+        let identities_and_statuses = plans
+            .iter()
+            .map(|plan| (plan.id.as_str(), plan.status.as_str()))
+            .collect::<Vec<_>>();
+        let repeated = focused_proof_candidate_plans_from_diff(&diff, &requests, budget);
+        anyhow::ensure!(
+            identities_and_statuses
+                == repeated
+                    .iter()
+                    .map(|plan| (plan.id.as_str(), plan.status.as_str()))
+                    .collect::<Vec<_>>(),
+            "candidate identity, ordering, and disposition must be deterministic"
+        );
+        anyhow::ensure!(
+            plans
+                .iter()
+                .map(|plan| plan.status.as_str())
+                .collect::<Vec<_>>()
+                == vec!["planned", "deferred_by_budget", "deferred_by_budget"],
+            "the count cap must explicitly defer every later candidate"
+        );
+        Ok(())
     }
 
     /// Native v2 flow (Order 4b): a v2 `FocusedTest` request yields the SAME
