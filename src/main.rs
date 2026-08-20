@@ -2523,6 +2523,14 @@ fn classify_internal_audit_value(value: &serde_json::Value) -> InternalAuditClas
     if object.is_empty() {
         return InternalAuditClassification::Empty;
     }
+    if object.keys().any(|key| {
+        !matches!(
+            key.as_str(),
+            "surfaces_checked" | "strongest_rejected_hypothesis" | "remaining_local_uncertainty"
+        )
+    }) {
+        return InternalAuditClassification::Malformed;
+    }
     let Some(surfaces) = object.get("surfaces_checked") else {
         return InternalAuditClassification::Malformed;
     };

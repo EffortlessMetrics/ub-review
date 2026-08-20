@@ -404,6 +404,33 @@ mod tests {
     }
 
     #[test]
+    fn unknown_internal_audit_field_is_malformed_and_not_retained() -> Result<()> {
+        let (output, degraded) = parse_fixture(
+            r#"{
+                "internal_audit": {
+                    "surfaces_checked": ["src/lib.rs"],
+                    "secret_summary": "exfiltrate"
+                },
+                "findings": []
+            }"#,
+        )?;
+
+        assert!(degraded);
+        assert_eq!(
+            output.internal_audit_classification,
+            InternalAuditClassification::Malformed
+        );
+        assert_eq!(
+            output.observations[0].kind.as_deref(),
+            Some("malformed-internal-audit")
+        );
+        assert!(output.internal_audit.is_none());
+        let observations = format!("{:?}", output.observations);
+        assert!(!observations.contains("exfiltrate"));
+        Ok(())
+    }
+
+    #[test]
     fn absent_internal_audit_retains_no_evidence_semantics() -> Result<()> {
         let result = parse_fixture(r#"{"findings":[],"observations":[]}"#);
         match result {
