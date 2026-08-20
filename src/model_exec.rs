@@ -363,16 +363,13 @@ fn run_lane_continuation_turn(
         thread_id: lane_receipt.thread_id.clone(),
         turn: 1,
         stage: "follow-up".to_owned(),
-        prompt_packet_path: format!(
-            "review/threads/{}/continuation-prompt-001.md",
-            sanitize_artifact_name(&lane_receipt.lane)
+        prompt_packet_path: lane_thread_artifact_ref(
+            &lane_receipt.lane,
+            "continuation-prompt-001.md",
         ),
         response_summary: revised.clone(),
         routed_evidence_refs: vec![format!("reporter-question:{question}")],
-        receipt_ref: format!(
-            "review/threads/{}/turn-001.json",
-            sanitize_artifact_name(&lane_receipt.lane)
-        ),
+        receipt_ref: lane_thread_artifact_ref(&lane_receipt.lane, "turn-001.json"),
         head_sha: None,
         verdict: None,
     };
@@ -388,9 +385,9 @@ fn run_lane_continuation_turn(
         &lane_receipt.lane,
         "reporter",
         1,
-        vec![format!(
-            "review/threads/{}/turn-001.json",
-            lane_receipt.lane
+        vec![lane_thread_artifact_ref(
+            &lane_receipt.lane,
+            "turn-001.json",
         )],
         serde_json::json!({"answer": revised, "question": question}),
     );
@@ -399,6 +396,37 @@ fn run_lane_continuation_turn(
         serde_json::json!({"lane": lane_receipt.lane, "turn": 1}),
     );
     Ok(revised)
+}
+
+/// Return a repository-relative reference to a lane-thread artifact. Logical
+/// lane IDs are untrusted model/config input and must use the same encoded
+/// component as the on-disk thread directory.
+fn lane_thread_artifact_ref(lane: &str, file_name: &str) -> String {
+    format!(
+        "review/threads/{}/{}",
+        sanitize_artifact_name(lane),
+        file_name
+    )
+}
+
+#[cfg(test)]
+mod lane_thread_reference_tests {
+    use super::*;
+
+    #[test]
+    fn continuation_receipt_reference_encodes_hostile_lane_id() {
+        let lane = "../foo/bar é";
+        let reference = lane_thread_artifact_ref(lane, "turn-001.json");
+        assert_eq!(
+            reference,
+            format!(
+                "review/threads/{}/turn-001.json",
+                sanitize_artifact_name(lane)
+            )
+        );
+        assert!(!reference.contains("../"));
+        assert!(!reference.contains("/foo"));
+    }
 }
 
 /// Order 9 (#678): the live reporter — same-model coordinator. Runs after the

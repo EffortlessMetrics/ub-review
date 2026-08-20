@@ -67,7 +67,11 @@ pub(crate) fn resolved_effective_model_lane_ids(out: &Path) -> Option<Vec<String
 }
 
 pub(crate) fn lane_packet_model_display(out: &Path, lane_id: &str) -> Option<String> {
-    let text = fs::read_to_string(out.join("lanes").join(format!("{lane_id}.md"))).ok()?;
+    let text = fs::read_to_string(
+        out.join("lanes")
+            .join(format!("{}.md", sanitize_artifact_name(lane_id))),
+    )
+    .ok()?;
     text.lines().find_map(|line| {
         line.strip_prefix("Model: `")
             .and_then(|rest| rest.strip_suffix('`'))
@@ -606,5 +610,30 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
         for item in scheduled_late {
             text.push_str(&format!("- {}\n", escape_md(&item)));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lane_packet_model_display_resolves_encoded_hostile_lane_id() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        fs::create_dir_all(out.join("lanes"))?;
+        let lane = "../foo/bar é";
+        let encoded = sanitize_artifact_name(lane);
+        fs::write(
+            out.join("lanes").join(format!("{encoded}.md")),
+            "# Lane: hostile\n\nModel: `test-model`\n",
+        )?;
+
+        assert_eq!(
+            lane_packet_model_display(out, lane).as_deref(),
+            Some("test-model")
+        );
+        assert!(!out.join("foo").exists());
+        Ok(())
     }
 }

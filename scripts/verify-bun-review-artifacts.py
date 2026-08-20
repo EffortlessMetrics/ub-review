@@ -7964,7 +7964,7 @@ def require_proof_command_receipt_schema(
         if path.is_absolute() or ".." in path.parts:
             fail(f"proof command {field} path is not repo-relative: {command!r}")
         expected = pathlib.PurePosixPath(
-            f"proof/{sanitize_artifact_name(receipt_id)}/{command['side']}/{field}.txt"
+            f"proof/{receipt_id}/{command['side']}/{field}.txt"
         )
         if path != expected:
             fail(
@@ -13841,7 +13841,6 @@ def run_self_tests() -> None:
     self_test_quality_backfill_contract()
     self_test_noise_rule_phrase_parity_with_rust()
     self_test_sanitize_artifact_name_matches_rust_contract()
-    self_test_sanitize_artifact_name_bounds_long_values()
     self_test_late_phase_sensor_work_queue_task_stays_pending()
     expect_self_test_failure(
         "tool status metadata mismatch",
@@ -13869,6 +13868,7 @@ def run_self_tests() -> None:
         "sensor without verdict must produce missing_evidence outcome",
         self_test_crashed_sensor_claiming_failed_outcome_fails,
     )
+    self_test_sanitize_artifact_name_bounds_long_values()
     require_proof_request_files(pathlib.Path("__missing_empty_artifact_dir__"), [])
     require_skipped_payload_contract(
         {"github_review_json": None},
