@@ -15,7 +15,10 @@ pub(crate) fn write_internal_audit_artifact(
     lane: &str,
     audit: &InternalAudit,
 ) -> Result<()> {
-    let lane_dir = model_dir.join(sanitize_lane_artifact_name(lane)?);
+    let artifact_path = internal_audit_artifact_path(model_dir, lane)?;
+    let lane_dir = artifact_path
+        .parent()
+        .context("internal audit artifact path has no lane directory")?;
     fs::create_dir_all(&lane_dir)
         .with_context(|| format!("create internal audit lane {}", lane_dir.display()))?;
     let mut artifact = serde_json::to_value(audit)?;
@@ -30,10 +33,7 @@ pub(crate) fn write_internal_audit_artifact(
         "lane".to_owned(),
         serde_json::Value::String(lane.to_owned()),
     );
-    fs::write(
-        lane_dir.join("internal_audit.json"),
-        serde_json::to_vec_pretty(&artifact)?,
-    )?;
+    fs::write(artifact_path, serde_json::to_vec_pretty(&artifact)?)?;
     Ok(())
 }
 
