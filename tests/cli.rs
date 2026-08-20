@@ -187,6 +187,13 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
             "archive must contain exactly one root-level ub-review executable",
         ),
         (
+            "root-and-nested-space",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "root-and-nested-space",
+            false,
+            "archive must contain exactly one root-level ub-review executable",
+        ),
+        (
             "root-and-directory",
             "printf '%s\\n' 'ub-review 0.1.0'",
             "root-and-directory",
@@ -224,6 +231,11 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
         fs::set_permissions(&candidate, fs::Permissions::from_mode(0o755))?;
         if matches!(layout, "nested" | "root-and-nested") {
             let nested = candidate_dir.join("nested");
+            fs::create_dir(&nested)?;
+            fs::copy(&candidate, nested.join("ub-review"))?;
+        }
+        if layout == "root-and-nested-space" {
+            let nested = candidate_dir.join("nested dir");
             fs::create_dir(&nested)?;
             fs::copy(&candidate, nested.join("ub-review"))?;
         }
@@ -266,6 +278,9 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
             }
             "root-and-nested" => {
                 archive_command.args(["ub-review", "nested/ub-review"]);
+            }
+            "root-and-nested-space" => {
+                archive_command.args(["ub-review", "nested dir/ub-review"]);
             }
             "root-and-directory" => {
                 archive_command.args([

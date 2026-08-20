@@ -448,20 +448,14 @@ runs:
           case "$release_asset" in
             *.tar.gz|*.tgz)
               layout_counts="$(tar -tvzf "$archive" | awk '
-                function clean(path) {
-                  sub(/^(\.\/)+/, "", path)
-                  sub(/\/+$/, "", path)
-                  return path
-                }
                 {
-                  path = clean($6)
-                  if (path == "ub-review") {
+                  if ($0 ~ /(^|[[:space:]])(\.\/)*ub-review(\/|[[:space:]]|$)/) {
                     if (substr($1, 1, 1) == "-") {
                       root_regular++
                     } else {
                       root_nonregular++
                     }
-                  } else if (path ~ /\/ub-review$/) {
+                  } else if ($0 ~ /\/ub-review(\/|[[:space:]]|$)/) {
                     nested++
                   }
                 }
