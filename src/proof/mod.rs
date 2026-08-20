@@ -35,6 +35,7 @@ pub(crate) mod worktree;
 pub(crate) use worktree::*;
 pub(crate) mod intent;
 pub(crate) use intent::*;
+pub(crate) mod identity;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct ProofRequest {
