@@ -211,8 +211,13 @@ mod artifact_identity_tests {
         let label = "provider:".to_owned() + &"x".repeat(128);
         let component = legacy_provider_preflight_name(&label);
         assert_eq!(component.len(), ARTIFACT_NAME_MAX_CHARS);
-        assert!(component.starts_with("provider-"));
-        assert!(component.contains('-'));
+        assert_eq!(
+            component,
+            format!(
+                "{}-dbf1a5a0af723b96",
+                "provider-".to_owned() + &"x".repeat(70)
+            )
+        );
     }
 
     #[test]

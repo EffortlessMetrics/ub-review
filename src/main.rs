@@ -6757,9 +6757,11 @@ mod tests {
             Ok(()) => anyhow::bail!("a file at lanes/ must reject packet writes"),
             Err(err) => err,
         };
+        let detail = err.to_string();
         anyhow::ensure!(
-            !err.to_string().is_empty(),
-            "packet write error must retain context"
+            detail.contains("create lane packet directory")
+                && detail.contains(out.join("lanes").to_string_lossy().as_ref()),
+            "packet write error must identify the blocked lane directory: {detail}"
         );
         Ok(())
     }
