@@ -71,6 +71,190 @@ fn action_forwards_prior_resolved_candidates_input() -> Result<()> {
 }
 
 #[test]
+fn release_resolver_validates_binary_version_before_acceptance() -> Result<()> {
+    let action = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("action.yml"))?;
+    let candidate = action
+        .find("expected_version=\"${release_version#v}\"")
+        .ok_or_else(|| anyhow::anyhow!("release resolver must derive the expected version"))?;
+    let resolver = &action[candidate..];
+    anyhow::ensure!(resolver.contains("\"$candidate\" --version"));
+    anyhow::ensure!(resolver.contains("release binary --version execution failed"));
+    anyhow::ensure!(resolver.contains("release binary version mismatch"));
+    anyhow::ensure!(resolver.contains("expected_identity=\"ub-review $expected_version\""));
+    anyhow::ensure!(
+        resolver
+            .find("echo \"release-url=$url\"")
+            .is_some_and(|output| {
+                resolver
+                    .find("release binary version mismatch")
+                    .is_some_and(|mismatch| mismatch < output)
+            })
+    );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let action_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("action.yml");
+    let action = fs::read_to_string(&action_path)?;
+    let runner_start = action
+        .find("        set -euo pipefail\n\n        mode=")
+        .ok_or_else(|| anyhow::anyhow!("release runner block start is missing"))?;
+    let runner_end = action[runner_start..]
+        .find("\n    - name: Install advisory sensors")
+        .ok_or_else(|| anyhow::anyhow!("release runner block end is missing"))?
+        + runner_start;
+    let runner = action[runner_start..runner_end]
+        .lines()
+        .map(|line| line.strip_prefix("        ").unwrap_or(line))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let temp = tempfile::tempdir()?;
+    let fake_bin = temp.path().join("fake-bin");
+    fs::create_dir(&fake_bin)?;
+    let curl = fake_bin.join("curl");
+    fs::write(
+        &curl,
+        "#!/bin/sh\nset -eu\nout=\"\"\nurl=\"\"\nwhile [ \"$#\" -gt 0 ]; do\n  case \"$1\" in\n    -o) out=\"$2\"; shift 2 ;;\n    http*) url=\"$1\"; shift ;;\n    *) shift ;;\n  esac\ndone\ncase \"$url\" in\n  *.sha256) cp \"$FIXTURE_CHECKSUM\" \"$out\" ;;\n  *) cp \"$FIXTURE_ARCHIVE\" \"$out\" ;;\nesac\n",
+    )?;
+    fs::set_permissions(&curl, fs::Permissions::from_mode(0o755))?;
+
+    let cases = [
+        ("valid", "printf '%s\\n' 'ub-review 0.1.0'", true, ""),
+        (
+            "wrong-version",
+            "printf '%s\\n' 'ub-review 9.9.9'",
+            false,
+            "release binary version mismatch",
+        ),
+        (
+            "trailing-token",
+            "printf '%s\\n' 'ub-review 0.1.0 unexpected'",
+            false,
+            "release binary version mismatch",
+        ),
+        (
+            "extra-line",
+            "printf '%s\\n%s\\n' 'ub-review 0.1.0' 'unexpected diagnostic'",
+            false,
+            "release binary version mismatch",
+        ),
+        (
+            "empty-output",
+            ":",
+            false,
+            "release binary version mismatch",
+        ),
+        (
+            "execution-failure",
+            "exit 1",
+            false,
+            "release binary --version execution failed",
+        ),
+    ];
+
+    for (name, version_body, expected_success, expected_error) in cases {
+        let candidate_dir = temp.path().join(format!("candidate-{name}"));
+        fs::create_dir(&candidate_dir)?;
+        let candidate = candidate_dir.join("ub-review");
+        fs::write(&candidate, format!("#!/bin/sh\n{version_body}\n"))?;
+        fs::set_permissions(&candidate, fs::Permissions::from_mode(0o755))?;
+        let archive = temp.path().join(format!("{name}.tar.gz"));
+        let archive_status = Command::new("tar")
+            .args([
+                "-czf",
+                archive
+                    .to_str()
+                    .ok_or_else(|| anyhow::anyhow!("archive path is not UTF-8"))?,
+                "-C",
+                candidate_dir
+                    .to_str()
+                    .ok_or_else(|| anyhow::anyhow!("candidate path is not UTF-8"))?,
+                "ub-review",
+            ])
+            .status()
+            .context("create release fixture archive")?;
+        anyhow::ensure!(archive_status.success(), "tar failed for fixture {name}");
+        let checksum = temp.path().join(format!("{name}.sha256"));
+        let checksum_output = Command::new("sha256sum")
+            .arg(&archive)
+            .output()
+            .context("hash release fixture archive")?;
+        anyhow::ensure!(
+            checksum_output.status.success(),
+            "sha256sum failed for {name}"
+        );
+        fs::write(&checksum, checksum_output.stdout)?;
+
+        let runner_path = temp.path().join(format!("runner-{name}.sh"));
+        fs::write(&runner_path, format!("set -euo pipefail\n{runner}\n"))?;
+        fs::set_permissions(&runner_path, fs::Permissions::from_mode(0o755))?;
+        let runner_temp = temp.path().join(format!("runner-temp-{name}"));
+        fs::create_dir(&runner_temp)?;
+        let output_path = runner_temp.join("output");
+        let output = Command::new("bash")
+            .arg(&runner_path)
+            .env("PATH", format!("{}:/usr/bin:/bin", fake_bin.display()))
+            .env("RUNNER_TEMP", &runner_temp)
+            .env("GITHUB_OUTPUT", &output_path)
+            .env("GITHUB_ACTION_PATH", env!("CARGO_MANIFEST_DIR"))
+            .env("UB_REVIEW_INSTALL_MODE", "release")
+            .env("UB_REVIEW_BINARY_PATH", "")
+            .env("UB_REVIEW_RELEASE_VERSION", "v0.1.0")
+            .env(
+                "UB_REVIEW_RELEASE_ASSET",
+                "ub-review-x86_64-unknown-linux-gnu.tar.gz",
+            )
+            .env("UB_REVIEW_ACTION_REPOSITORY", "EffortlessMetrics/ub-review")
+            .env("UB_REVIEW_ACTION_REF", "v0.1.0")
+            .env("UB_REVIEW_SERVER_URL", "https://fixture.invalid")
+            .env("FIXTURE_ARCHIVE", &archive)
+            .env("FIXTURE_CHECKSUM", &checksum)
+            .output()
+            .context("run production release resolver fixture")?;
+        let log = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if expected_success {
+            anyhow::ensure!(
+                output.status.success(),
+                "valid fixture must be accepted: {log}"
+            );
+            anyhow::ensure!(
+                log.contains("actual=ub-review 0.1.0"),
+                "valid fixture must log its identity: {log}"
+            );
+            let outputs = fs::read_to_string(&output_path)?;
+            for key in ["release-url=", "release-dir=", "bin="] {
+                anyhow::ensure!(
+                    outputs.contains(key),
+                    "valid fixture missing {key}: {outputs}"
+                );
+            }
+        } else {
+            anyhow::ensure!(!output.status.success(), "fixture {name} must fail: {log}");
+            anyhow::ensure!(
+                log.contains(expected_error),
+                "fixture {name} missing `{expected_error}`: {log}"
+            );
+            let outputs = fs::read_to_string(&output_path).unwrap_or_default();
+            for key in ["release-url=", "release-dir=", "bin="] {
+                anyhow::ensure!(
+                    !outputs.contains(key),
+                    "negative fixture {name} emitted {key}: {outputs}"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn gate_workflow_grants_actions_read_for_prior_resolved_candidates_lookup() -> Result<()> {
     let workflow = include_str!("../.github/workflows/ub-review-gate.yml");
     assert!(workflow.contains("actions: read"));
