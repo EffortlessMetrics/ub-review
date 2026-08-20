@@ -13597,14 +13597,17 @@ index 1111111..2222222 100644
             r#"{"findings":[],"observations":[],"proof_intents":[],"internal_audit":{}}"#,
             &temp.path().join("content.json"),
         );
-        if let Ok((output, degraded)) = result {
-            assert!(degraded);
-            assert!(output.degraded);
-            assert_eq!(output.observations.len(), 1);
-            assert_eq!(
-                output.observations[0].kind.as_deref(),
-                Some("missing-evidence")
-            );
+        match result {
+            Ok((output, degraded)) => {
+                assert!(degraded);
+                assert!(output.degraded);
+                assert_eq!(output.observations.len(), 1);
+                assert_eq!(
+                    output.observations[0].kind.as_deref(),
+                    Some("missing-evidence")
+                );
+            }
+            Err(error) => assert!(!error.to_string().trim().is_empty()),
         }
         Ok(())
     }
