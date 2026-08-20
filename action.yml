@@ -447,12 +447,35 @@ runs:
 
           case "$release_asset" in
             *.tar.gz|*.tgz)
+              layout_counts="$(tar -tzf "$archive" | awk '
+                function clean(path) {
+                  sub(/^(\.\/)+/, "", path)
+                  return path
+                }
+                {
+                  path = clean($0)
+                  if (path == "ub-review") {
+                    root++
+                  } else if (path ~ /\/ub-review$/) {
+                    nested++
+                  }
+                }
+                END { printf "%d %d\n", root + 0, nested + 0 }
+              ')" || {
+                report_release_unavailable warning "release binary archive listing failed"
+                return 1
+              }
+              read -r root_count nested_count <<< "$layout_counts"
+              if [[ "$root_count" != "1" || "$nested_count" != "0" ]]; then
+                report_release_unavailable warning "release binary archive must contain exactly one root-level ub-review executable"
+                return 1
+              fi
               if ! tar -xzf "$archive" -C "$release_dir"; then
                 echo "::endgroup::"
                 report_release_unavailable warning "release binary archive extraction failed"
                 return 1
               fi
-              candidate="$(find "$release_dir" -type f -name ub-review | head -n 1 || true)"
+              candidate="$release_dir/ub-review"
               ;;
             *)
               candidate="$release_dir/ub-review"

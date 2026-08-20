@@ -123,58 +123,111 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
     fs::set_permissions(&curl, fs::Permissions::from_mode(0o755))?;
 
     let cases = [
-        ("valid", "printf '%s\\n' 'ub-review 0.1.0'", true, ""),
+        (
+            "valid",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "root",
+            true,
+            "",
+        ),
         (
             "wrong-version",
             "printf '%s\\n' 'ub-review 9.9.9'",
+            "root",
             false,
             "release binary version mismatch",
         ),
         (
             "trailing-token",
             "printf '%s\\n' 'ub-review 0.1.0 unexpected'",
+            "root",
             false,
             "release binary version mismatch",
         ),
         (
             "extra-line",
             "printf '%s\\n%s\\n' 'ub-review 0.1.0' 'unexpected diagnostic'",
+            "root",
             false,
             "release binary version mismatch",
         ),
         (
             "empty-output",
             ":",
+            "root",
             false,
             "release binary version mismatch",
         ),
         (
             "execution-failure",
             "exit 1",
+            "root",
             false,
             "release binary --version execution failed",
         ),
+        (
+            "nested-only",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "nested",
+            false,
+            "archive must contain exactly one root-level ub-review executable",
+        ),
+        (
+            "root-and-nested",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "root-and-nested",
+            false,
+            "archive must contain exactly one root-level ub-review executable",
+        ),
+        (
+            "duplicate-root",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "duplicate-root",
+            false,
+            "archive must contain exactly one root-level ub-review executable",
+        ),
     ];
 
-    for (name, version_body, expected_success, expected_error) in cases {
+    for (name, version_body, layout, expected_success, expected_error) in cases {
         let candidate_dir = temp.path().join(format!("candidate-{name}"));
         fs::create_dir(&candidate_dir)?;
         let candidate = candidate_dir.join("ub-review");
         fs::write(&candidate, format!("#!/bin/sh\n{version_body}\n"))?;
         fs::set_permissions(&candidate, fs::Permissions::from_mode(0o755))?;
+        if matches!(layout, "nested" | "root-and-nested") {
+            let nested = candidate_dir.join("nested");
+            fs::create_dir(&nested)?;
+            fs::copy(&candidate, nested.join("ub-review"))?;
+        }
         let archive = temp.path().join(format!("{name}.tar.gz"));
-        let archive_status = Command::new("tar")
-            .args([
-                "-czf",
-                archive
-                    .to_str()
-                    .ok_or_else(|| anyhow::anyhow!("archive path is not UTF-8"))?,
-                "-C",
-                candidate_dir
-                    .to_str()
-                    .ok_or_else(|| anyhow::anyhow!("candidate path is not UTF-8"))?,
-                "ub-review",
-            ])
+        let mut archive_command = Command::new("tar");
+        archive_command.args([
+            "-czf",
+            archive
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("archive path is not UTF-8"))?,
+            "-C",
+            candidate_dir
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("candidate path is not UTF-8"))?,
+        ]);
+        match layout {
+            "root" | "nested" => {
+                archive_command.arg(if layout == "root" {
+                    "ub-review"
+                } else {
+                    "nested/ub-review"
+                });
+            }
+            "root-and-nested" => {
+                archive_command.args(["ub-review", "nested/ub-review"]);
+            }
+            "duplicate-root" => {
+                archive_command.args(["ub-review", "./ub-review"]);
+            }
+            _ => bail!("unknown fixture layout {layout}"),
+        }
+        let archive_status = archive_command
             .status()
             .context("create release fixture archive")?;
         anyhow::ensure!(archive_status.success(), "tar failed for fixture {name}");
