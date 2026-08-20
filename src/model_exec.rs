@@ -28,18 +28,20 @@ pub(crate) fn run_model_lane_tasks(
                     let Some(task) = task else {
                         break;
                     };
-                    let lane_dir = model_dir.join(sanitize_artifact_name(&task.lane.id));
-                    let result = fs::create_dir_all(&lane_dir)
-                        .with_context(|| format!("create {}", lane_dir.display()))
-                        .and_then(|()| {
-                            call_model_lane(
-                                context.root,
-                                &lane_dir,
-                                &task.lane,
-                                &task.spec,
-                                context.shared_context,
-                                context.args,
-                            )
+                    let result =
+                        model_lane_artifact_dir(model_dir, &task.lane.id).and_then(|lane_dir| {
+                            fs::create_dir_all(&lane_dir)
+                                .with_context(|| format!("create {}", lane_dir.display()))
+                                .and_then(|()| {
+                                    call_model_lane(
+                                        context.root,
+                                        &lane_dir,
+                                        &task.lane,
+                                        &task.spec,
+                                        context.shared_context,
+                                        context.args,
+                                    )
+                                })
                         });
                     let _ = tx.send(ModelLaneTaskResult {
                         index: task.index,
@@ -471,7 +473,7 @@ pub(crate) fn run_reporter_coordination(
     // before deciding whether this invocation can run, so skipped or failed
     // reporter work cannot inherit an older decision.
     prepare_reporter_run(review_dir)?;
-    let digests = lane_digests_from_receipts(model_lanes);
+    let digests = lane_digests_from_receipts(review_dir, model_lanes);
     if digests.is_empty() || model_calls_used >= args.max_model_calls {
         let reason = if digests.is_empty() {
             "no lane digests"
@@ -643,6 +645,7 @@ pub(crate) fn run_reporter_coordination(
                     status: r.status.clone(),
                     conclusion: revised.unwrap_or(&r.reason).to_owned(),
                     thread_id: r.thread_id.clone(),
+                    internal_audit: read_internal_audit(review_dir, &r.lane),
                 }
             })
             .collect();
@@ -1461,6 +1464,7 @@ pub(crate) fn apply_proof_planner_model_output(
 ) {
     let advisory_output = LaneModelOutput {
         summary: None,
+        internal_audit: output.internal_audit,
         inline_comments: Vec::new(),
         candidate_findings: Vec::new(),
         summary_only_findings: Vec::new(),
@@ -1701,6 +1705,11 @@ Focus: {focus}
 Use the cached shared context. Return only one strict JSON object:
 {{
   "summary": "short lane summary, 300 chars max",
+  "internal_audit": {{
+    "surfaces_checked": ["repo-relative surface or bounded review scope"],
+    "strongest_rejected_hypothesis": "the strongest concrete concern checked and rejected, or null",
+    "remaining_local_uncertainty": null
+  }},
   "observations": [
     {{
       "claim": "terse unique observation, 300 chars max",
@@ -1765,7 +1774,7 @@ Use the cached shared context. Return only one strict JSON object:
 }}
 
 Hard caps: at most 3 observations, 2 candidate_findings, 1 summary_only_findings item, 2 failed_objections, 1 proof_request, and 2 proof_intents.
-If there is no blocker/high/medium actionable issue, use empty arrays and put the failed-objection audit in summary.
+If the assigned surface was meaningfully checked and no public issue remains, return empty public arrays and preserve the bounded coverage/rejection account in internal_audit. Internal audit is artifact-only context: never copy it into observations, findings, summary prose, proof requests, or GitHub output. Empty or malformed output is still degraded; an internal audit must contain at least one non-empty surfaces_checked entry.
 Only propose candidate_findings for valid RIGHT-side changed or context lines in the PR diff.
 Legacy `inline_comments` is accepted as an alias for `candidate_findings`, but prefer `candidate_findings`.
 Do not post, mutate files, or run shell commands. Request executable proof through `proof_requests` or `proof_intents`.

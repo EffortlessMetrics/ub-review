@@ -107,11 +107,8 @@ pub(crate) fn run_proof_planner_model_lane(
         return Ok(0);
     }
 
-    let lane_dir = context
-        .review_dir
-        .join("model")
-        .join(sanitize_artifact_name(&lane.id));
-    fs::create_dir_all(&lane_dir)?;
+    let model_dir = context.review_dir.join("model");
+    let lane_dir = prepare_proof_planner_lane_artifacts(&model_dir, &lane.id)?;
     receipt.status = "running".to_owned();
     match call_model_proof_planner(
         context.root,
@@ -152,6 +149,13 @@ pub(crate) fn run_proof_planner_model_lane(
             receipt.http_status = outcome.http_status;
             receipt.response_shape = Some(outcome.response_shape);
             receipt.cache_usage = outcome.cache_usage;
+            record_proof_planner_internal_audit(
+                &model_dir,
+                &lane.id,
+                outcome.output.internal_audit.as_ref(),
+                &mut receipt,
+                missing_or_failed_model_evidence,
+            );
             apply_proof_planner_model_output(
                 &lane,
                 outcome.output,
@@ -170,6 +174,111 @@ pub(crate) fn run_proof_planner_model_lane(
     }
     model_lanes.push(receipt);
     Ok(1)
+}
+
+fn prepare_proof_planner_lane_artifacts(model_dir: &Path, lane: &str) -> Result<PathBuf> {
+    remove_internal_audit_artifact(model_dir, lane)?;
+    let lane_dir = model_lane_artifact_dir(model_dir, lane)?;
+    fs::create_dir_all(&lane_dir)?;
+    Ok(lane_dir)
+}
+
+fn record_proof_planner_internal_audit(
+    model_dir: &Path,
+    lane: &str,
+    audit: Option<&InternalAudit>,
+    receipt: &mut ModelLaneReceipt,
+    missing_or_failed_model_evidence: &mut Vec<ModelEvidenceIssue>,
+) {
+    let Some(audit) = audit.filter(|audit| audit.has_value()) else {
+        return;
+    };
+    if let Err(error) = write_internal_audit_artifact(model_dir, lane, audit) {
+        receipt.status = "degraded".to_owned();
+        receipt.reason = format!(
+            "{}; internal audit artifact write failed: {error:#}",
+            receipt.reason
+        );
+        missing_or_failed_model_evidence.push(model_issue_from_receipt(receipt));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn proof_planner_hostile_lane_uses_canonical_model_directory() -> Result<()> {
+        let root = tempfile::tempdir()?;
+        let lane = "../proof planner/é";
+        let path = model_lane_artifact_dir(&root.path().join("model"), lane)?;
+        let legacy = root.path().join("model").join(sanitize_artifact_name(lane));
+        assert!(!path.to_string_lossy().contains("..\\"));
+        assert_ne!(
+            path, legacy,
+            "proof-planner must not use the legacy sanitizer"
+        );
+        assert!(path.to_string_lossy().contains('-'));
+        Ok(())
+    }
+
+    #[test]
+    fn proof_planner_removes_stale_internal_audit_before_attempt() -> Result<()> {
+        let root = tempfile::tempdir()?;
+        let lane = "proof planner/stale";
+        let stale = internal_audit_artifact_path(&root.path().join("model"), lane)?;
+        if let Some(parent) = stale.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&stale, "stale")?;
+
+        let lane_dir = prepare_proof_planner_lane_artifacts(&root.path().join("model"), lane)?;
+        anyhow::ensure!(lane_dir.is_dir());
+        anyhow::ensure!(!stale.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn proof_planner_audit_write_failure_becomes_degraded_evidence() -> Result<()> {
+        let root = tempfile::tempdir()?;
+        let model_dir = root.path().join("model");
+        std::fs::write(&model_dir, "directory collision")?;
+        let mut receipt = ModelLaneReceipt {
+            lane: "proof-planner".to_owned(),
+            provider: "test".to_owned(),
+            model: "test".to_owned(),
+            endpoint_kind: "test".to_owned(),
+            status: "ok".to_owned(),
+            reason: "completed".to_owned(),
+            duration_ms: None,
+            http_status: None,
+            response_shape: None,
+            fallback_from: None,
+            cache_usage: ModelCacheUsage::default(),
+            cohort_id: String::new(),
+            shared_prefix_hash: String::new(),
+            thread_id: String::new(),
+            turn: 0,
+            cohort_broken: false,
+        };
+        let mut evidence = Vec::new();
+        let lane = receipt.lane.clone();
+        record_proof_planner_internal_audit(
+            &model_dir,
+            &lane,
+            Some(&InternalAudit {
+                surfaces_checked: vec!["src/proof_planner_lane.rs".to_owned()],
+                strongest_rejected_hypothesis: None,
+                remaining_local_uncertainty: None,
+            }),
+            &mut receipt,
+            &mut evidence,
+        );
+        anyhow::ensure!(receipt.status == "degraded");
+        anyhow::ensure!(receipt.reason.contains("write failed"));
+        anyhow::ensure!(evidence.len() == 1);
+        Ok(())
+    }
 }
 
 pub(crate) fn run_follow_up_model_pass(

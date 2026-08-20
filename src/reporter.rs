@@ -15,7 +15,7 @@
 //! The reporter's output is advisory: it feeds the compiler and the message
 //! queue; it does not itself post or gate (Orders 10/11).
 
-use std::path::Path;
+use std::{fs, path::Path};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -30,6 +30,11 @@ pub(crate) struct LaneDigest {
     pub(crate) status: String,
     pub(crate) conclusion: String,
     pub(crate) thread_id: String,
+    /// Private calibration context loaded from the lane model artifact. This
+    /// is available to the reporter for contradiction/gap analysis but is
+    /// never copied into public review sinks.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) internal_audit: Option<crate::InternalAudit>,
 }
 
 /// Digest of a late-phase sensor receipt (#325 stream-as-it-lands). Late
@@ -154,6 +159,9 @@ pub(crate) fn reporter_prompt(
             "### `{}` (status: `{}`)\n{}\n\n",
             d.lane, d.status, conclusion
         ));
+        // Internal audits remain artifact-only calibration data. Do not place
+        // their contents in the reporter prompt: a model cannot echo context
+        // it never receives, and the production boundary stays deterministic.
     }
     // #325 stream-as-it-lands: late-phase deterministic evidence landed after
     // the lanes launched, so the lanes have not seen it. The reporter weighs
@@ -186,7 +194,10 @@ pub(crate) fn reporter_prompt(
 
 /// Build a lane digest from the executed receipts (only lanes with a
 /// non-empty thread_id — i.e., that actually investigated).
-pub(crate) fn lane_digests_from_receipts(receipts: &[crate::ModelLaneReceipt]) -> Vec<LaneDigest> {
+pub(crate) fn lane_digests_from_receipts(
+    review_dir: &Path,
+    receipts: &[crate::ModelLaneReceipt],
+) -> Vec<LaneDigest> {
     receipts
         .iter()
         .filter(|r| !r.thread_id.is_empty())
@@ -195,8 +206,26 @@ pub(crate) fn lane_digests_from_receipts(receipts: &[crate::ModelLaneReceipt]) -
             status: r.status.clone(),
             conclusion: r.reason.clone(),
             thread_id: r.thread_id.clone(),
+            internal_audit: read_internal_audit(review_dir, &r.lane),
         })
         .collect()
+}
+
+pub(crate) fn read_internal_audit(review_dir: &Path, lane: &str) -> Option<crate::InternalAudit> {
+    let lane_dir = crate::sanitize_lane_artifact_name(lane).ok()?;
+    let path = review_dir
+        .join("model")
+        .join(lane_dir)
+        .join("internal_audit.json");
+    let bytes = fs::read(path).ok()?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    if value.get("schema")?.as_str()? != crate::artifacts::INTERNAL_AUDIT_SCHEMA
+        || value.get("lane")?.as_str()? != lane
+    {
+        return None;
+    }
+    let audit: crate::InternalAudit = serde_json::from_value(value).ok()?;
+    audit.has_value().then_some(audit)
 }
 
 /// Parse the reporter's model response into a ReporterConclusion. Tolerant of
@@ -712,12 +741,14 @@ mod tests {
                 status: "ok".to_owned(),
                 conclusion: "test discriminates the patch".to_owned(),
                 thread_id: "tid1".to_owned(),
+                internal_audit: None,
             },
             LaneDigest {
                 lane: "opposition".to_owned(),
                 status: "degraded".to_owned(),
                 conclusion: "strongest objection: missing error path".to_owned(),
                 thread_id: "tid2".to_owned(),
+                internal_audit: None,
             },
         ];
         let prompt = reporter_prompt(&digests, &[]);
@@ -746,6 +777,7 @@ mod tests {
             status: "ok".to_owned(),
             conclusion: "coverage gap suspected".to_owned(),
             thread_id: "tid1".to_owned(),
+            internal_audit: None,
         }];
         let late = vec![LateSensorDigest {
             sensor: "cargo-test".to_owned(),
@@ -816,7 +848,7 @@ mod tests {
     }
 
     #[test]
-    fn lane_digests_skip_unexecuted_lanes() {
+    fn lane_digests_skip_unexecuted_lanes() -> Result<()> {
         let mut receipt = crate::ModelLaneReceipt {
             lane: "x".to_owned(),
             provider: "minimax".to_owned(),
@@ -835,12 +867,54 @@ mod tests {
             turn: 0,
             cohort_broken: false,
         };
-        let digests = lane_digests_from_receipts(std::slice::from_ref(&receipt));
+        let temp = tempfile::tempdir()?;
+        let digests = lane_digests_from_receipts(temp.path(), std::slice::from_ref(&receipt));
         assert_eq!(digests.len(), 1);
         // A preflight-only receipt (empty thread_id) is skipped.
         receipt.thread_id = String::new();
-        let digests = lane_digests_from_receipts(std::slice::from_ref(&receipt));
+        let digests = lane_digests_from_receipts(temp.path(), std::slice::from_ref(&receipt));
         assert!(digests.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn reporter_withholds_lane_audit_from_prompt() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        let model_dir = review_dir.join("model");
+        crate::write_internal_audit_artifact(
+            &model_dir,
+            "foo.bar",
+            &crate::InternalAudit {
+                surfaces_checked: vec!["src/parser.rs".to_owned()],
+                strongest_rejected_hypothesis: Some("parser bypasses guard".to_owned()),
+                remaining_local_uncertainty: None,
+            },
+        )?;
+        let receipt = crate::ModelLaneReceipt {
+            lane: "foo.bar".to_owned(),
+            provider: "minimax".to_owned(),
+            model: "M3".to_owned(),
+            endpoint_kind: "anthropic-messages".to_owned(),
+            status: "ok".to_owned(),
+            reason: "completed".to_owned(),
+            duration_ms: None,
+            http_status: None,
+            response_shape: None,
+            fallback_from: None,
+            cache_usage: crate::ModelCacheUsage::default(),
+            cohort_id: "cid".to_owned(),
+            shared_prefix_hash: "h".to_owned(),
+            thread_id: "tid".to_owned(),
+            turn: 0,
+            cohort_broken: false,
+        };
+        let digests = lane_digests_from_receipts(&review_dir, &[receipt]);
+        let prompt = reporter_prompt(&digests, &[]);
+        assert!(!prompt.contains("src/parser.rs"));
+        assert!(!prompt.contains("parser bypasses guard"));
+        assert!(!prompt.contains("internal audit"));
+        Ok(())
     }
 
     #[test]

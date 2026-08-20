@@ -49,8 +49,7 @@ pub(crate) fn run_provider_preflights(
         let spec = provider_spec_from_preflight(receipt)?;
         // Provider preflight directories predate the lane-artifact identity
         // contract and are keyed by a provider label, not a logical lane ID.
-        // Preserve their established component mapping for compatibility;
-        // lane paths use `sanitize_artifact_name` at their own boundaries.
+        // Preserve their established component mapping for compatibility.
         let lane_dir = preflight_dir.join(legacy_provider_preflight_name(&spec.label()));
         fs::create_dir_all(&lane_dir)?;
         let prompt = "Return strict JSON only: {\"summary\":\"preflight ok\",\"inline_comments\":[],\"summary_only_findings\":[]}";
@@ -114,10 +113,6 @@ pub(crate) const ARTIFACT_NAME_MAX_CHARS: usize = 96;
 const ARTIFACT_NAME_HASH_CHARS: usize = 16;
 
 /// Encode a logical artifact identity into one portable filesystem component.
-///
-/// Only ASCII alphanumerics, `-`, and `_` are preserved. Every other UTF-8 byte
-/// is escaped, so values such as `foo.bar` and `foo/bar` cannot collapse onto
-/// the same artifact path. The Python verifier mirrors this byte-level mapping.
 pub(crate) fn sanitize_artifact_name(value: &str) -> String {
     let sanitized = if value.is_empty() {
         "~EMPTY".to_owned()
@@ -146,9 +141,40 @@ pub(crate) fn sanitize_artifact_name(value: &str) -> String {
     )
 }
 
+/// Map a lane identity to a filesystem component without collapsing distinct
+/// custom IDs such as `foo.bar` and `foo/bar` onto the same artifact path.
+pub(crate) fn sanitize_lane_artifact_name(value: &str) -> Result<String> {
+    if value.trim().is_empty() {
+        bail!("lane artifact identity must not be empty")
+    }
+    let sanitized = sanitize_artifact_name(value);
+    let is_safe_identity = value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'));
+    if is_safe_identity {
+        return Ok(sanitized);
+    }
+    let digest = sha256_hex(value.as_bytes());
+    let suffix = &digest[..ARTIFACT_NAME_HASH_CHARS];
+    let prefix_len = ARTIFACT_NAME_MAX_CHARS - ARTIFACT_NAME_HASH_CHARS - 1;
+    Ok(format!(
+        "{}-{}",
+        sanitized.chars().take(prefix_len).collect::<String>(),
+        suffix
+    ))
+}
+
 #[cfg(test)]
-mod artifact_identity_tests {
+mod preflight_identity_tests {
     use super::*;
+
+    #[test]
+    fn provider_preflight_labels_keep_legacy_component_mapping() {
+        assert_eq!(
+            legacy_provider_preflight_name("minimax:MiniMax-M3:openai-chat"),
+            "minimax-MiniMax-M3-openai-chat"
+        );
+    }
 
     #[test]
     fn hostile_logical_ids_have_distinct_portable_components() -> Result<()> {
@@ -167,10 +193,7 @@ mod artifact_identity_tests {
             .map(|value| sanitize_artifact_name(value))
             .collect::<Vec<_>>();
         let unique = components.iter().collect::<std::collections::BTreeSet<_>>();
-        anyhow::ensure!(
-            unique.len() == components.len(),
-            "hostile logical IDs must not collapse: {components:?}"
-        );
+        anyhow::ensure!(unique.len() == components.len());
         anyhow::ensure!(
             components
                 == vec![
@@ -182,8 +205,7 @@ mod artifact_identity_tests {
                     "a~5Cb",
                     "~EMPTY",
                     "safe_lane-01",
-                ],
-            "hostile corpus mapping drifted: {components:?}"
+                ]
         );
         for component in components {
             anyhow::ensure!(
@@ -191,19 +213,23 @@ mod artifact_identity_tests {
                     && component
                         .bytes()
                         .all(|byte| byte.is_ascii_alphanumeric()
-                            || matches!(byte, b'-' | b'_' | b'~')),
-                "component is not portable: {component:?}"
+                            || matches!(byte, b'-' | b'_' | b'~'))
             );
         }
         Ok(())
     }
 
     #[test]
-    fn provider_preflight_labels_keep_legacy_component_mapping() {
-        assert_eq!(
-            legacy_provider_preflight_name("minimax:MiniMax-M3:openai-chat"),
-            "minimax-MiniMax-M3-openai-chat"
+    fn lane_identity_rejects_empty_and_whitespace_but_raw_artifact_encoding_is_stable() -> Result<()>
+    {
+        anyhow::ensure!(sanitize_lane_artifact_name("").is_err());
+        anyhow::ensure!(sanitize_lane_artifact_name("   \t").is_err());
+        anyhow::ensure!(sanitize_artifact_name("") == "~EMPTY");
+        anyhow::ensure!(sanitize_artifact_name("   ") == "~20~20~20");
+        anyhow::ensure!(
+            sanitize_lane_artifact_name("foo.bar")? != sanitize_lane_artifact_name("foo.bar ")?
         );
+        Ok(())
     }
 
     #[test]
@@ -484,6 +510,9 @@ pub(crate) fn run_available_model_lanes_with_runner(
             .iter()
             .map(|task| (task.index, task.spec.clone()))
             .collect::<BTreeMap<_, _>>();
+        for task in &wave {
+            remove_internal_audit_artifact(&model_dir, &task.lane.id)?;
+        }
         calls += wave.len();
         let mut results = runner(&context, &model_dir, wave)?;
         results.sort_by_key(|result| result.index);
@@ -512,6 +541,21 @@ pub(crate) fn run_available_model_lanes_with_runner(
                     receipt.http_status = outcome.http_status;
                     receipt.response_shape = Some(outcome.response_shape.clone());
                     receipt.cache_usage = outcome.cache_usage;
+                    if let Some(audit) = outcome
+                        .output
+                        .internal_audit
+                        .as_ref()
+                        .filter(|audit| audit.has_value())
+                        && let Err(error) =
+                            write_internal_audit_artifact(&model_dir, &receipt.lane, audit)
+                    {
+                        receipt.status = "degraded".to_owned();
+                        receipt.reason = format!(
+                            "{}; internal audit artifact write failed: {error:#}",
+                            receipt.reason
+                        );
+                        missing_or_failed_model_evidence.push(model_issue_from_receipt(receipt));
+                    }
                     apply_model_output(
                         lane,
                         outcome.output,

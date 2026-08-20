@@ -5,8 +5,56 @@
 //! contentful-but-malformed model output into a receipted observation
 //! rather than dropping it.
 
+use std::io;
+
 use crate::*;
 
+/// Preserve a successful specialist's private coverage audit beside the raw
+/// model content.  This intentionally has no public-review or observation
+/// sink: the audit is calibration context, not a finding.
+pub(crate) fn write_internal_audit_artifact(
+    model_dir: &Path,
+    lane: &str,
+    audit: &InternalAudit,
+) -> Result<()> {
+    let artifact_path = internal_audit_artifact_path(model_dir, lane)?;
+    let lane_dir = artifact_path
+        .parent()
+        .context("internal audit artifact path has no lane directory")?;
+    fs::create_dir_all(lane_dir)
+        .with_context(|| format!("create internal audit lane {}", lane_dir.display()))?;
+    let mut artifact = serde_json::to_value(audit)?;
+    let object = artifact
+        .as_object_mut()
+        .context("internal audit serialized as non-object")?;
+    object.insert(
+        "schema".to_owned(),
+        serde_json::Value::String(INTERNAL_AUDIT_SCHEMA.to_owned()),
+    );
+    object.insert(
+        "lane".to_owned(),
+        serde_json::Value::String(lane.to_owned()),
+    );
+    fs::write(artifact_path, serde_json::to_vec_pretty(&artifact)?)?;
+    Ok(())
+}
+
+pub(crate) fn internal_audit_artifact_path(model_dir: &Path, lane: &str) -> Result<PathBuf> {
+    Ok(model_lane_artifact_dir(model_dir, lane)?.join("internal_audit.json"))
+}
+
+pub(crate) fn remove_internal_audit_artifact(model_dir: &Path, lane: &str) -> Result<()> {
+    let path = internal_audit_artifact_path(model_dir, lane)?;
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| format!("remove {}", path.display())),
+    }
+}
+
+pub(crate) fn model_lane_artifact_dir(model_dir: &Path, lane: &str) -> Result<PathBuf> {
+    Ok(model_dir.join(sanitize_lane_artifact_name(lane)?))
+}
 pub(crate) fn write_observation_artifacts(out: &Path, observations: &[Observation]) -> Result<()> {
     let observations_dir = out.join("observations");
     if observations_dir.exists() {
@@ -129,6 +177,10 @@ pub(crate) fn lane_model_output_has_value(output: &LaneModelOutput) -> bool {
         .summary
         .as_deref()
         .is_some_and(|summary| !summary.trim().is_empty())
+        || output
+            .internal_audit
+            .as_ref()
+            .is_some_and(InternalAudit::has_value)
         || !output.inline_comments.is_empty()
         || !output.candidate_findings.is_empty()
         || !output.summary_only_findings.is_empty()
@@ -166,6 +218,7 @@ pub(crate) fn degraded_lane_model_output(
 ) -> LaneModelOutput {
     LaneModelOutput {
         summary: None,
+        internal_audit: None,
         inline_comments: Vec::new(),
         candidate_findings: Vec::new(),
         summary_only_findings: Vec::new(),
@@ -205,5 +258,141 @@ pub(crate) fn lane_output_malformed_content_observation(
             format!("Raw content artifact: {}", parse_path.display()),
         ],
         dedupe_key: Some("lane-output-malformed-content".to_owned()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn internal_audit_artifact_is_lane_scoped_and_not_public_surface() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let audit = InternalAudit {
+            surfaces_checked: vec!["src/parser.rs".to_owned()],
+            strongest_rejected_hypothesis: Some("route skips validation".to_owned()),
+            remaining_local_uncertainty: None,
+        };
+        write_internal_audit_artifact(temp.path(), "tests-oracle", &audit)?;
+        write_internal_audit_artifact(
+            temp.path(),
+            "source-route",
+            &InternalAudit {
+                surfaces_checked: vec!["src/routes.rs".to_owned()],
+                strongest_rejected_hypothesis: None,
+                remaining_local_uncertainty: Some(
+                    "generated route aliases were not changed".to_owned(),
+                ),
+            },
+        )?;
+        let artifact = temp.path().join("tests-oracle/internal_audit.json");
+        assert!(artifact.exists());
+        let value: serde_json::Value = serde_json::from_slice(&fs::read(&artifact)?)?;
+        assert_eq!(value["schema"], INTERNAL_AUDIT_SCHEMA);
+        assert_eq!(value["lane"], "tests-oracle");
+        assert_eq!(value["surfaces_checked"][0], "src/parser.rs");
+        assert!(
+            temp.path()
+                .join("source-route/internal_audit.json")
+                .exists()
+        );
+        write_internal_audit_artifact(
+            temp.path(),
+            "foo.bar",
+            &InternalAudit {
+                surfaces_checked: vec!["src/dot.rs".to_owned()],
+                strongest_rejected_hypothesis: None,
+                remaining_local_uncertainty: None,
+            },
+        )?;
+        write_internal_audit_artifact(
+            temp.path(),
+            "foo/bar",
+            &InternalAudit {
+                surfaces_checked: vec!["src/slash.rs".to_owned()],
+                strongest_rejected_hypothesis: None,
+                remaining_local_uncertainty: None,
+            },
+        )?;
+        assert_ne!(
+            sanitize_lane_artifact_name("foo.bar")?,
+            sanitize_lane_artifact_name("foo/bar")?
+        );
+        assert!(!temp.path().join("review").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn hostile_lane_production_directory_matches_audit_writer_and_reader() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        let model_dir = review_dir.join("model");
+        let lane = "../foo/bar é";
+        let dir = model_lane_artifact_dir(&model_dir, lane)?;
+        write_internal_audit_artifact(
+            &model_dir,
+            lane,
+            &InternalAudit {
+                surfaces_checked: vec!["PRIVATE_SURFACE".to_owned()],
+                strongest_rejected_hypothesis: None,
+                remaining_local_uncertainty: None,
+            },
+        )?;
+        assert!(dir.join("internal_audit.json").exists());
+        assert_eq!(
+            crate::reporter::read_internal_audit(&review_dir, lane)
+                .and_then(|audit| audit.surfaces_checked.into_iter().next())
+                .as_deref(),
+            Some("PRIVATE_SURFACE")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn stale_internal_audit_is_removed_before_a_new_lane_attempt() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let model_dir = temp.path().join("model");
+        let lane = "foo.bar";
+        write_internal_audit_artifact(
+            &model_dir,
+            lane,
+            &InternalAudit {
+                surfaces_checked: vec!["old-surface".to_owned()],
+                strongest_rejected_hypothesis: None,
+                remaining_local_uncertainty: None,
+            },
+        )?;
+        let path = internal_audit_artifact_path(&model_dir, lane)?;
+        assert!(path.exists());
+        remove_internal_audit_artifact(&model_dir, lane)?;
+        assert!(!path.exists());
+        remove_internal_audit_artifact(&model_dir, lane)?;
+        Ok(())
+    }
+
+    #[test]
+    fn internal_audit_writer_reports_filesystem_failure_without_partial_artifact() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let model_dir = temp.path().join("model");
+        fs::write(&model_dir, "model directory collision")?;
+        let error = write_internal_audit_artifact(
+            &model_dir,
+            "tests-oracle",
+            &InternalAudit {
+                surfaces_checked: vec!["src/parser.rs".to_owned()],
+                strongest_rejected_hypothesis: None,
+                remaining_local_uncertainty: None,
+            },
+        )
+        .err()
+        .context("writer must report a filesystem failure")?;
+        assert!(error.to_string().contains("create internal audit lane"));
+        assert!(
+            !temp
+                .path()
+                .join("model/tests-oracle/internal_audit.json")
+                .exists()
+        );
+        Ok(())
     }
 }

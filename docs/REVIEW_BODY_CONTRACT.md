@@ -81,6 +81,12 @@ Everything else stays in artifacts:
 - approval filler;
 - successful-tool announcements;
 - generic residual risk.
+- successful specialist `internal_audit` coverage and rejected hypotheses;
+  these remain under `review/model/<lane>/internal_audit.json` and never become
+  observations, summary findings, reporter prompt content, or GitHub payloads.
+  Offline calibration tooling may read the artifact for contradiction/gap
+  analysis, but production reporter execution must not receive, quote, or emit
+  it.
 
 Missing-proof receipts are public only when their `head` matches the current
 review head and at least one `request_ids` value exactly matches the topic's

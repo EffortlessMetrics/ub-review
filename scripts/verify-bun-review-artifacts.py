@@ -2189,6 +2189,7 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
         fail("terminal_state final_follow_up_tasks does not match metrics")
     follow_up_results = require_follow_up_results(root, orchestrator_plan["follow_up_tasks"])
     require_model_stage_artifacts(root, review, follow_up_results)
+    require_internal_audit_artifacts(root)
     follow_up_outputs = require_follow_up_outputs(root, follow_up_results)
     follow_up_evidence = require_follow_up_evidence(root, follow_up_outputs)
     require_resolved_candidate_artifacts(root, follow_up_results, follow_up_outputs)
@@ -5390,6 +5391,33 @@ def require_model_stage_artifacts(
             fail(f"follow-up model stage packet_path does not match result: {stage!r}")
 
 
+def require_internal_audit_artifacts(root: pathlib.Path) -> None:
+    """Validate optional specialist audits without routing them into review sinks."""
+    model_root = root / "review/model"
+    if not model_root.exists():
+        return
+    for path in model_root.glob("*/internal_audit.json"):
+        audit = load_json(path)
+        if not isinstance(audit, dict):
+            fail(f"internal audit is not an object: {path}")
+        if audit.get("schema") != "ub-review.internal_audit.v1":
+            fail(f"internal audit has wrong schema: {path}")
+        lane = audit.get("lane")
+        if not isinstance(lane, str) or not lane:
+            fail(f"internal audit lane is missing: {path}")
+        if path.parent.name != sanitize_lane_artifact_name(lane):
+            fail(f"internal audit lane does not match artifact path: {path}")
+        surfaces = audit.get("surfaces_checked")
+        if not isinstance(surfaces, list) or not any(
+            isinstance(surface, str) and surface.strip() for surface in surfaces
+        ):
+            fail(f"internal audit surfaces_checked is empty: {path}")
+        for field in ["strongest_rejected_hypothesis", "remaining_local_uncertainty"]:
+            value = audit.get(field)
+            if value is not None and not isinstance(value, str):
+                fail(f"internal audit {field} is not a string or null: {path}")
+
+
 def require_model_stage_schema(stage: dict) -> None:
     if stage.get("schema") != "ub-review.model_stage.v1":
         fail(f"model stage has wrong schema: {stage!r}")
@@ -8064,6 +8092,17 @@ def sanitize_artifact_name(value: str) -> str:
     return f"{sanitized[:prefix_len]}-{digest[:ARTIFACT_NAME_HASH_CHARS]}"
 
 
+def sanitize_lane_artifact_name(value: str) -> str:
+    if not value.strip():
+        fail("lane artifact identity must not be empty")
+    sanitized = sanitize_artifact_name(value)
+    if all((ch.isascii() and ch.isalnum()) or ch in "-_" for ch in value):
+        return sanitized
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+    prefix_len = ARTIFACT_NAME_MAX_CHARS - ARTIFACT_NAME_HASH_CHARS - 1
+    return f"{sanitized[:prefix_len]}-{digest[:ARTIFACT_NAME_HASH_CHARS]}"
+
+
 def require_sensor_receipts(root: pathlib.Path) -> None:
     for sensor in SENSORS:
         receipt = load_json(root / "sensors" / sensor / "ub-review-sensor-status.json")
@@ -9272,6 +9311,36 @@ def self_test_empty_candidate_artifacts_without_dir() -> None:
         write_self_test_json(root / "review/candidates.json", [])
         (root / "candidates.ndjson").write_text("", encoding="utf-8")
         require_candidate_artifacts(root, review)
+
+
+def self_test_internal_audit_artifact_contract() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        path = root / f"review/model/{sanitize_lane_artifact_name('tests-oracle')}/internal_audit.json"
+        write_self_test_json(
+            path,
+            {
+                "schema": "ub-review.internal_audit.v1",
+                "lane": "tests-oracle",
+                "surfaces_checked": ["src/parser.rs"],
+                "strongest_rejected_hypothesis": "route skips validation",
+                "remaining_local_uncertainty": None,
+            },
+        )
+        require_internal_audit_artifacts(root)
+        write_self_test_json(path, {"schema": "ub-review.internal_audit.v1", "lane": "wrong", "surfaces_checked": []})
+        expect_self_test_failure(
+            "invalid internal audit artifact",
+            "lane does not match artifact path",
+            lambda: require_internal_audit_artifacts(root),
+        )
+    foo_dot = sanitize_lane_artifact_name("foo.bar")
+    foo_slash = sanitize_lane_artifact_name("foo/bar")
+    foo_dot_space = sanitize_lane_artifact_name("foo.bar ")
+    if foo_dot == foo_slash:
+        fail("lane artifact IDs collide for foo.bar and foo/bar")
+    if foo_dot == foo_dot_space:
+        fail("lane artifact IDs collide for foo.bar and foo.bar ")
 
 
 def self_test_lane_packet_pr_thread_seed_contract() -> None:
@@ -13808,6 +13877,7 @@ def run_self_tests() -> None:
     self_test_source_route_late_proof_routes_and_suppresses_task()
     self_test_final_tool_gate_routes_to_relevant_lanes()
     self_test_empty_candidate_artifacts_without_dir()
+    self_test_internal_audit_artifact_contract()
     self_test_lane_packet_pr_thread_seed_contract()
     expect_self_test_failure(
         "non-empty candidate artifacts without directory",

@@ -213,16 +213,21 @@ mod lane_identity_artifact_ref_tests {
     use super::{lane_turn_artifact_ref, model_content_artifact_ref};
 
     #[test]
-    fn hostile_lane_refs_use_the_same_encoded_component() {
+    fn hostile_lane_refs_use_the_same_encoded_component() -> anyhow::Result<()> {
         let lane = "../foo/bar é";
+        let model_ref = model_content_artifact_ref(lane)?;
         assert_eq!(
-            model_content_artifact_ref(lane),
-            "review/model/~2E~2E~2Ffoo~2Fbar~20~C3~A9/content.json"
+            model_ref,
+            format!(
+                "review/model/{}/content.json",
+                crate::sanitize_lane_artifact_name(lane)?
+            )
         );
         assert_eq!(
             lane_turn_artifact_ref(lane, 0),
             "review/threads/~2E~2E~2Ffoo~2Fbar~20~C3~A9/turn-000.json"
         );
+        Ok(())
     }
 }
 
@@ -2416,6 +2421,7 @@ struct GitHubReviewPostComment {
 #[derive(Debug)]
 struct LaneModelOutput {
     summary: Option<String>,
+    internal_audit: Option<InternalAudit>,
     inline_comments: Vec<ModelCandidateComment>,
     candidate_findings: Vec<ModelCandidateComment>,
     summary_only_findings: Vec<ModelCandidateFinding>,
@@ -2430,6 +2436,8 @@ struct LaneModelOutput {
 #[derive(Debug, Deserialize)]
 struct LaneModelOutputWire {
     summary: Option<String>,
+    #[serde(default)]
+    internal_audit: Option<InternalAudit>,
     #[serde(default)]
     inline_comments: Vec<ModelCandidateComment>,
     #[serde(default)]
@@ -2461,6 +2469,7 @@ impl<'de> Deserialize<'de> for LaneModelOutput {
         observations.extend(normalization.degraded_observations);
         Ok(Self {
             summary: wire.summary,
+            internal_audit: wire.internal_audit,
             inline_comments: wire.inline_comments,
             candidate_findings: wire.candidate_findings,
             summary_only_findings: wire.summary_only_findings,
@@ -2471,6 +2480,28 @@ impl<'de> Deserialize<'de> for LaneModelOutput {
             issue_candidates: wire.issue_candidates,
             degraded: normalization.degraded,
         })
+    }
+}
+
+/// Specialist work that is useful for coverage and calibration but must not
+/// become reviewer-facing evidence by itself.  This is deliberately kept
+/// beside the parsed lane output and is written only to that lane's model
+/// artifact.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct InternalAudit {
+    #[serde(default)]
+    pub(crate) surfaces_checked: Vec<String>,
+    #[serde(default)]
+    pub(crate) strongest_rejected_hypothesis: Option<String>,
+    #[serde(default)]
+    pub(crate) remaining_local_uncertainty: Option<String>,
+}
+
+impl InternalAudit {
+    fn has_value(&self) -> bool {
+        self.surfaces_checked
+            .iter()
+            .any(|surface| !surface.trim().is_empty())
     }
 }
 
@@ -4051,6 +4082,7 @@ fn apply_unsafe_review_comment_plan_candidates(
     let lane = unsafe_review_sensor_lane();
     let output = LaneModelOutput {
         summary: None,
+        internal_audit: None,
         inline_comments: Vec::new(),
         candidate_findings: candidates,
         summary_only_findings: Vec::new(),
@@ -4125,8 +4157,11 @@ fn finalize_reporter_coordination(
     }
 }
 
-fn model_content_artifact_ref(lane: &str) -> String {
-    format!("review/model/{}/content.json", sanitize_artifact_name(lane))
+fn model_content_artifact_ref(lane: &str) -> anyhow::Result<String> {
+    Ok(format!(
+        "review/model/{}/content.json",
+        sanitize_lane_artifact_name(lane)?
+    ))
 }
 
 fn lane_turn_artifact_ref(lane: &str, turn: u32) -> String {
@@ -4313,7 +4348,7 @@ fn write_review_artifacts(
                     .find(|a| a.lane.id == receipt.lane)
                     .map(|a| a.lane.receives.clone())
                     .unwrap_or_default();
-                let receipt_ref = model_content_artifact_ref(&receipt.lane);
+                let receipt_ref = model_content_artifact_ref(&receipt.lane)?;
                 let turn = primary_turn(
                     &receipt.thread_id,
                     &receipt.lane,
@@ -7912,6 +7947,7 @@ max_new_unsuppressed_findings = 0
                 "No analogous sibling panic paths were found, so the fix is correctly scoped and need not be broadened."
                     .to_owned(),
             ),
+            internal_audit: None,
             inline_comments: Vec::new(),
             candidate_findings: Vec::new(),
             summary_only_findings: Vec::new(),
@@ -8177,6 +8213,7 @@ index 1111111..2222222 100644
         );
         let output = LaneModelOutput {
             summary: None,
+            internal_audit: None,
             inline_comments: vec![ModelCandidateComment {
                 severity: "medium".to_owned(),
                 confidence: "medium-high".to_owned(),
@@ -8438,6 +8475,150 @@ index 1111111..2222222 100644
             observation.source == "model-failed-objection"
                 && observation.evidence == vec!["sibling-path scan was scalar text".to_owned()]
         }));
+        Ok(())
+    }
+
+    #[test]
+    fn internal_audit_stays_out_of_public_sinks() -> Result<()> {
+        let lane = model_lane(
+            "source-route",
+            "Source route review",
+            &["tokmd"],
+            "Check public API route proof.",
+        );
+        let output: LaneModelOutput = serde_json::from_value(serde_json::json!({
+            "internal_audit": {
+                "surfaces_checked": ["src/lib.rs:public-route"],
+                "strongest_rejected_hypothesis": "the sibling route bypasses the guard",
+                "remaining_local_uncertainty": null
+            },
+            "observations": [],
+            "candidate_findings": [],
+            "proof_intents": []
+        }))?;
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut observations = Vec::new();
+        let mut proof_requests = Vec::new();
+        let mut proof_intents = Vec::new();
+        let mut issue_candidates = Vec::new();
+        apply_model_output(
+            &lane,
+            output,
+            &BTreeSet::new(),
+            ModelOutputSinks {
+                inline_comments: &mut inline_comments,
+                summary_only_findings: &mut summary_only_findings,
+                model_observations: &mut observations,
+                proof_requests: &mut proof_requests,
+                proof_intents: &mut proof_intents,
+                issue_candidates: &mut issue_candidates,
+            },
+        );
+        assert!(inline_comments.is_empty());
+        assert!(summary_only_findings.is_empty());
+        assert!(observations.is_empty());
+        assert!(proof_requests.is_empty());
+        assert!(proof_intents.is_empty());
+        assert!(issue_candidates.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn real_finding_remains_public_alongside_internal_audit() -> Result<()> {
+        let lane = model_lane(
+            "tests-oracle",
+            "Test oracle review",
+            &["tokmd"],
+            "Check test proof.",
+        );
+        let line_map = right_side_diff_lines(
+            "diff --git a/src/lib.rs b/src/lib.rs\nindex 1111111..2222222 100644\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,3 +1,4 @@\n pub fn active_len(len: usize) -> usize {\n+    let ptr = &len as *const usize;\n     len\n }\n",
+        );
+        let output: LaneModelOutput = serde_json::from_value(serde_json::json!({
+            "internal_audit": {
+                "surfaces_checked": ["src/lib.rs"],
+                "strongest_rejected_hypothesis": "the test exercises the changed route",
+                "remaining_local_uncertainty": null
+            },
+            "candidate_findings": [{
+                "severity": "medium",
+                "confidence": "high",
+                "path": "src/lib.rs",
+                "line": 2,
+                "body": "[tests-oracle] The changed route lacks a discriminating assertion.",
+                "evidence": "diff hunk"
+            }]
+        }))?;
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut observations = Vec::new();
+        let mut proof_requests = Vec::new();
+        let mut proof_intents = Vec::new();
+        let mut issue_candidates = Vec::new();
+        apply_model_output(
+            &lane,
+            output,
+            &line_map,
+            ModelOutputSinks {
+                inline_comments: &mut inline_comments,
+                summary_only_findings: &mut summary_only_findings,
+                model_observations: &mut observations,
+                proof_requests: &mut proof_requests,
+                proof_intents: &mut proof_intents,
+                issue_candidates: &mut issue_candidates,
+            },
+        );
+        assert_eq!(inline_comments.len(), 1);
+        assert!(summary_only_findings.is_empty());
+        assert!(observations.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn no_finding_audit_corpus_never_becomes_public_prose() -> Result<()> {
+        for text in [
+            "no actionable findings remain on the checked surface",
+            "strongest failed objection: the route bypasses validation",
+            "residual risk is local uncertainty only; no public candidate",
+        ] {
+            let output: LaneModelOutput = serde_json::from_value(serde_json::json!({
+                "internal_audit": {
+                    "surfaces_checked": ["src/lib.rs"],
+                    "strongest_rejected_hypothesis": text,
+                    "remaining_local_uncertainty": null
+                },
+                "candidate_findings": [],
+                "summary_only_findings": [],
+                "observations": [],
+                "proof_intents": []
+            }))?;
+            let mut inline_comments = Vec::new();
+            let mut summary_only_findings = Vec::new();
+            let mut observations = Vec::new();
+            let mut proof_requests = Vec::new();
+            let mut proof_intents = Vec::new();
+            let mut issue_candidates = Vec::new();
+            apply_model_output(
+                &model_lane("tests-oracle", "Test oracle", &["tokmd"], "Check tests."),
+                output,
+                &BTreeSet::new(),
+                ModelOutputSinks {
+                    inline_comments: &mut inline_comments,
+                    summary_only_findings: &mut summary_only_findings,
+                    model_observations: &mut observations,
+                    proof_requests: &mut proof_requests,
+                    proof_intents: &mut proof_intents,
+                    issue_candidates: &mut issue_candidates,
+                },
+            );
+            assert!(inline_comments.is_empty());
+            assert!(summary_only_findings.is_empty());
+            assert!(observations.is_empty());
+            assert!(proof_requests.is_empty());
+            assert!(proof_intents.is_empty());
+            assert!(issue_candidates.is_empty());
+        }
         Ok(())
     }
 
@@ -10406,6 +10587,7 @@ index 1111111..2222222 100644
         for summary in ["LGTM", "no actionable findings", "no actionable"] {
             let output = LaneModelOutput {
                 summary: Some(summary.to_owned()),
+                internal_audit: None,
                 inline_comments: Vec::new(),
                 candidate_findings: Vec::new(),
                 summary_only_findings: Vec::new(),
@@ -11111,6 +11293,7 @@ index 1111111..2222222 100644
     fn empty_lane_output() -> LaneModelOutput {
         LaneModelOutput {
             summary: None,
+            internal_audit: None,
             inline_comments: Vec::new(),
             candidate_findings: Vec::new(),
             summary_only_findings: Vec::new(),
@@ -13387,6 +13570,45 @@ index 1111111..2222222 100644
             serde_json::from_str::<LaneModelOutput>(&model_json_payload("Here is the JSON:\n{}"))
                 .is_err()
         );
+        Ok(())
+    }
+
+    #[test]
+    fn clean_internal_audit_is_successful_without_public_lane_signal() -> Result<()> {
+        let output: LaneModelOutput = serde_json::from_value(serde_json::json!({
+            "findings": [],
+            "observations": [],
+            "proof_intents": [],
+            "internal_audit": {
+                "surfaces_checked": ["src/parser.rs"],
+                "strongest_rejected_hypothesis": "the changed parser route skips validation",
+                "remaining_local_uncertainty": null
+            }
+        }))?;
+
+        assert!(crate::lane_model_output_has_value(&output));
+        assert!(
+            output
+                .internal_audit
+                .as_ref()
+                .is_some_and(crate::InternalAudit::has_value)
+        );
+        assert!(output.observations.is_empty());
+        assert!(output.proof_intents.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn empty_internal_audit_does_not_make_empty_provider_content_successful() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let result = crate::parse_lane_model_output_or_degrade(
+            r#"{"findings":[],"observations":[],"proof_intents":[],"internal_audit":{}}"#,
+            &temp.path().join("content.json"),
+        );
+        let error = result
+            .err()
+            .context("empty internal audit must fail closed")?;
+        assert!(format!("{error:#}").contains("empty or unusable"));
         Ok(())
     }
 
