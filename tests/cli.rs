@@ -96,7 +96,7 @@ fn release_resolver_validates_binary_version_before_acceptance() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::fs::{PermissionsExt, symlink};
 
     let action_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("action.yml");
     let action = fs::read_to_string(&action_path)?;
@@ -123,61 +123,210 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
     fs::set_permissions(&curl, fs::Permissions::from_mode(0o755))?;
 
     let cases = [
-        ("valid", "printf '%s\\n' 'ub-review 0.1.0'", true, ""),
+        (
+            "valid",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "root",
+            true,
+            "",
+        ),
         (
             "wrong-version",
             "printf '%s\\n' 'ub-review 9.9.9'",
+            "root",
             false,
             "release binary version mismatch",
         ),
         (
             "trailing-token",
             "printf '%s\\n' 'ub-review 0.1.0 unexpected'",
+            "root",
             false,
             "release binary version mismatch",
         ),
         (
             "extra-line",
             "printf '%s\\n%s\\n' 'ub-review 0.1.0' 'unexpected diagnostic'",
+            "root",
             false,
             "release binary version mismatch",
         ),
         (
             "empty-output",
             ":",
+            "root",
             false,
             "release binary version mismatch",
         ),
         (
             "execution-failure",
             "exit 1",
+            "root",
             false,
             "release binary --version execution failed",
         ),
+        (
+            "nested-only",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "nested",
+            false,
+            "archive must contain exactly one root-level ub-review executable",
+        ),
+        (
+            "missing-candidate",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "missing",
+            false,
+            "archive must contain exactly one root-level ub-review executable",
+        ),
+        (
+            "root-and-nested",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "root-and-nested",
+            false,
+            "archive must contain exactly one root-level ub-review executable",
+        ),
+        (
+            "root-and-nested-space",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "root-and-nested-space",
+            false,
+            "archive must contain exactly one root-level ub-review executable",
+        ),
+        (
+            "root-and-directory",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "root-and-directory",
+            false,
+            "archive must contain exactly one root-level ub-review executable",
+        ),
+        (
+            "duplicate-root",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "duplicate-root",
+            false,
+            "archive must contain exactly one root-level ub-review executable",
+        ),
+        (
+            "root-symlink",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "root-symlink",
+            false,
+            "archive must contain exactly one root-level ub-review executable",
+        ),
+        (
+            "root-hard-link",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "root-hard-link",
+            false,
+            "archive must contain exactly one root-level ub-review executable",
+        ),
     ];
 
-    for (name, version_body, expected_success, expected_error) in cases {
+    for (name, version_body, layout, expected_success, expected_error) in cases {
         let candidate_dir = temp.path().join(format!("candidate-{name}"));
         fs::create_dir(&candidate_dir)?;
         let candidate = candidate_dir.join("ub-review");
         fs::write(&candidate, format!("#!/bin/sh\n{version_body}\n"))?;
         fs::set_permissions(&candidate, fs::Permissions::from_mode(0o755))?;
+        if matches!(layout, "nested" | "root-and-nested") {
+            let nested = candidate_dir.join("nested");
+            fs::create_dir(&nested)?;
+            fs::copy(&candidate, nested.join("ub-review"))?;
+        }
+        if layout == "root-and-nested-space" {
+            let nested = candidate_dir.join("nested dir");
+            fs::create_dir(&nested)?;
+            fs::copy(&candidate, nested.join("ub-review"))?;
+        }
+        if layout == "root-symlink" {
+            let nested = candidate_dir.join("nested");
+            fs::create_dir(&nested)?;
+            let target = nested.join("ub-review-target");
+            fs::rename(&candidate, &target)?;
+            symlink("nested/ub-review-target", &candidate)?;
+        }
+        if layout == "root-hard-link" {
+            let alias = candidate_dir.join("ub-review-alias");
+            fs::hard_link(&candidate, &alias)?;
+        }
+        if layout == "missing" {
+            fs::write(candidate_dir.join("README"), "no executable candidate\n")?;
+        }
+        if layout == "root-and-directory" {
+            fs::create_dir(candidate_dir.join("directory-entry"))?;
+        }
         let archive = temp.path().join(format!("{name}.tar.gz"));
-        let archive_status = Command::new("tar")
-            .args([
-                "-czf",
-                archive
-                    .to_str()
-                    .ok_or_else(|| anyhow::anyhow!("archive path is not UTF-8"))?,
-                "-C",
-                candidate_dir
-                    .to_str()
-                    .ok_or_else(|| anyhow::anyhow!("candidate path is not UTF-8"))?,
-                "ub-review",
-            ])
+        let mut archive_command = Command::new("tar");
+        archive_command.args([
+            "-czf",
+            archive
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("archive path is not UTF-8"))?,
+            "-C",
+            candidate_dir
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("candidate path is not UTF-8"))?,
+        ]);
+        match layout {
+            "root" | "nested" => {
+                archive_command.arg(if layout == "root" {
+                    "ub-review"
+                } else {
+                    "nested/ub-review"
+                });
+            }
+            "root-and-nested" => {
+                archive_command.args(["ub-review", "nested/ub-review"]);
+            }
+            "root-and-nested-space" => {
+                archive_command.args(["ub-review", "nested dir/ub-review"]);
+            }
+            "root-and-directory" => {
+                archive_command.args([
+                    "--transform=s#^directory-entry$#ub-review/#",
+                    "ub-review",
+                    "directory-entry",
+                ]);
+            }
+            "duplicate-root" => {
+                archive_command.args(["ub-review", "./ub-review"]);
+            }
+            "root-symlink" => {
+                archive_command.args(["ub-review", "nested/ub-review-target"]);
+            }
+            "root-hard-link" => {
+                archive_command.args(["ub-review-alias", "ub-review"]);
+            }
+            "missing" => {
+                archive_command.arg("README");
+            }
+            _ => bail!("unknown fixture layout {layout}"),
+        }
+        let archive_status = archive_command
             .status()
             .context("create release fixture archive")?;
         anyhow::ensure!(archive_status.success(), "tar failed for fixture {name}");
+        if layout == "root-and-directory" {
+            let listing = Command::new("tar")
+                .args([
+                    "-tzf",
+                    archive
+                        .to_str()
+                        .ok_or_else(|| anyhow::anyhow!("archive path is not UTF-8"))?,
+                ])
+                .output()
+                .context("list root-directory release fixture archive")?;
+            anyhow::ensure!(
+                listing.status.success(),
+                "tar listing failed for fixture {name}"
+            );
+            let listing = String::from_utf8_lossy(&listing.stdout);
+            anyhow::ensure!(
+                listing.lines().any(|path| path.trim_end() == "ub-review/"),
+                "root-directory fixture must contain ub-review/: {listing}"
+            );
+        }
         let checksum = temp.path().join(format!("{name}.sha256"));
         let checksum_output = Command::new("sha256sum")
             .arg(&archive)

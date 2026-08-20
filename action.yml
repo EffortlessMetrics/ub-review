@@ -447,12 +447,36 @@ runs:
 
           case "$release_asset" in
             *.tar.gz|*.tgz)
+              layout_counts="$(tar -tvzf "$archive" | awk '
+                {
+                  if ($0 ~ /(^|[[:space:]])(\.\/)*ub-review(\/|[[:space:]]|$)/) {
+                    if (substr($1, 1, 1) == "-") {
+                      root_regular++
+                    } else {
+                      root_nonregular++
+                    }
+                  } else if ($0 ~ /\/ub-review(\/|[[:space:]]|$)/) {
+                    nested++
+                  }
+                }
+                END {
+                  printf "%d %d %d\n", root_regular + 0, root_nonregular + 0, nested + 0
+                }
+              ')" || {
+                report_release_unavailable warning "release binary archive listing failed"
+                return 1
+              }
+              read -r root_regular_count root_nonregular_count nested_count <<< "$layout_counts"
+              if [[ "$root_regular_count" != "1" || "$root_nonregular_count" != "0" || "$nested_count" != "0" ]]; then
+                report_release_unavailable warning "release binary archive must contain exactly one root-level ub-review executable"
+                return 1
+              fi
               if ! tar -xzf "$archive" -C "$release_dir"; then
                 echo "::endgroup::"
                 report_release_unavailable warning "release binary archive extraction failed"
                 return 1
               fi
-              candidate="$(find "$release_dir" -type f -name ub-review | head -n 1 || true)"
+              candidate="$release_dir/ub-review"
               ;;
             *)
               candidate="$release_dir/ub-review"
@@ -461,7 +485,7 @@ runs:
           esac
           echo "::endgroup::"
 
-          if [[ -z "${candidate:-}" || ! -f "$candidate" ]]; then
+          if [[ -z "${candidate:-}" || ! -f "$candidate" || -L "$candidate" ]]; then
             report_release_unavailable warning "release binary archive did not contain ub-review"
             return 1
           fi
