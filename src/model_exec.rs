@@ -427,6 +427,20 @@ mod lane_thread_reference_tests {
         assert!(!reference.contains("../"));
         assert!(!reference.contains("/foo"));
     }
+
+    #[test]
+    fn continuation_prompt_and_receipt_references_share_encoded_lane_root() {
+        let lane = "../foo/bar é";
+        let encoded = sanitize_artifact_name(lane);
+        assert_eq!(
+            lane_thread_artifact_ref(lane, "continuation-prompt-001.md"),
+            format!("review/threads/{encoded}/continuation-prompt-001.md")
+        );
+        assert_eq!(
+            lane_thread_artifact_ref(lane, "turn-001.json"),
+            format!("review/threads/{encoded}/turn-001.json")
+        );
+    }
 }
 
 /// Order 9 (#678): the live reporter — same-model coordinator. Runs after the

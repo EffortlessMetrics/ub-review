@@ -5828,8 +5828,9 @@ mod tests {
     };
     use crate::{
         ModelCandidateComment, ModelCandidateFinding, ModelCandidateObservation,
-        ModelFailedObjection, collect_sensor_evidence_issues, validate_failed_objection,
-        validate_inline_candidate, validate_model_observation, validate_summary_only_candidate,
+        ModelFailedObjection, collect_sensor_evidence_issues, sanitize_artifact_name,
+        validate_failed_objection, validate_inline_candidate, validate_model_observation,
+        validate_summary_only_candidate,
     };
 
     #[test]
@@ -6681,7 +6682,7 @@ mod tests {
         coverage.phase = super::SensorPhase::Late;
         let plan = test_plan(vec![coverage, sensor_plan("ast-grep", "ast-grep", true)]);
         let lane = LanePlan {
-            id: "tests-oracle".to_owned(),
+            id: "../tests/oracle é".to_owned(),
             role: "test oracle".to_owned(),
             model: "custom:test".to_owned(),
             model_display: "test model".to_owned(),
@@ -6697,7 +6698,12 @@ mod tests {
             &test_pr_thread_context(),
             &event_log,
         )?;
-        let packet = fs::read_to_string(out.join("lanes/tests-oracle.md"))?;
+        let encoded_lane = sanitize_artifact_name(&lane.id);
+        let packet_path = out.join("lanes").join(format!("{encoded_lane}.md"));
+        let packet = fs::read_to_string(&packet_path)?;
+        assert!(packet_path.is_file());
+        assert!(!out.join("tests").exists());
+        assert!(packet.contains("# Lane: `../tests/oracle é`"));
         assert!(
             packet.contains("- `coverage`: `scheduled-late`"),
             "late routed sensor must render as scheduled: {packet}"

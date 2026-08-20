@@ -262,6 +262,13 @@ mod tests {
             session.latest_turn_ref.as_deref(),
             Some(expected_ref.as_str())
         );
+        assert_eq!(
+            serde_json::from_slice::<LaneThreadTurn>(&fs::read(
+                encoded_dir.join("turn-000.json")
+            )?)?
+            .thread_id,
+            "tid"
+        );
         Ok(())
     }
 

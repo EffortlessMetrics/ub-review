@@ -634,6 +634,7 @@ mod tests {
             Some("test-model")
         );
         assert!(!out.join("foo").exists());
+        assert_eq!(lane_packet_model_display(out, "missing/lane"), None);
         Ok(())
     }
 }

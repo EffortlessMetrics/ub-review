@@ -199,6 +199,25 @@ mod artifact_identity_tests {
     }
 
     #[test]
+    fn provider_preflight_labels_keep_legacy_component_mapping() {
+        assert_eq!(
+            legacy_provider_preflight_name("minimax:MiniMax-M3:openai-chat"),
+            "minimax-MiniMax-M3-openai-chat"
+        );
+    }
+
+    #[test]
+    fn long_artifact_ids_use_input_hash_to_disambiguate_shared_prefixes() {
+        let left = format!("{}-left", "x".repeat(128));
+        let right = format!("{}-right", "x".repeat(128));
+        let left_name = sanitize_artifact_name(&left);
+        let right_name = sanitize_artifact_name(&right);
+        assert_ne!(left_name, right_name);
+        assert!(left_name.len() <= ARTIFACT_NAME_MAX_CHARS);
+        assert!(right_name.len() <= ARTIFACT_NAME_MAX_CHARS);
+    }
+
+    #[test]
     fn safe_components_remain_compatible_and_long_values_are_bounded() -> Result<()> {
         anyhow::ensure!(sanitize_artifact_name("safe_lane-01") == "safe_lane-01");
         let long = "candidate-".to_owned() + &"generated-id-segment-".repeat(24);
