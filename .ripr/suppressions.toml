@@ -21986,3 +21986,33 @@ kind = "exposure_gap"
 finding_id = "probe:src_model_exec.rs:return_value:b22fc430"
 owner = "ub-review/core"
 reason = "Proof-planner classification receipt: proof_planner_forwards_malformed_internal_audit_classification observes the exact Malformed result after advisory transformation. Re-verify after proof-planner output shaping changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:c1fa3cdf"
+owner = "ub-review/core"
+reason = "Public boundary receipt: internal_audit_observations_are_withheld_from_public_review_boundary exercises the empty and malformed observation filter at the PR-render admission boundary. Re-verify after artifact-only observation policy changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:field_construction:f056bb08"
+owner = "ub-review/core"
+reason = "Public boundary receipt: internal_audit_observations_are_withheld_from_public_review_boundary constructs the empty-internal-audit observation group with degraded status and asserts artifact-only admission. Re-verify after observation group changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:e48cbe81"
+owner = "ub-review/core"
+reason = "Public boundary receipt: internal_audit_observations_are_withheld_from_public_review_boundary observes empty-internal-audit exclusion from public review rendering. Re-verify after observation filter changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:field_construction:498967c6"
+owner = "ub-review/core"
+reason = "Public boundary receipt: internal_audit_observations_are_withheld_from_public_review_boundary constructs the malformed-internal-audit observation group with failed status and asserts artifact-only admission. Re-verify after observation group changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:b9d7a140"
+owner = "ub-review/core"
+reason = "Public boundary receipt: internal_audit_observations_are_withheld_from_public_review_boundary observes malformed-internal-audit exclusion from public review rendering. Re-verify after observation filter changes."

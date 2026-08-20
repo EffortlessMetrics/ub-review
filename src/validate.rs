@@ -17,13 +17,20 @@ pub(crate) fn validate_model_observation(
         .kind
         .as_deref()
         .map(str::trim)
-        .filter(|kind| allowed_observation_kind(kind))
+        .filter(|kind| {
+            allowed_observation_kind(kind)
+                || matches!(*kind, "empty-internal-audit" | "malformed-internal-audit")
+        })
         .unwrap_or_else(|| infer_observation_kind(&lane.id, &claim, &evidence.join("\n")));
+    let internal_audit_kind = matches!(kind, "empty-internal-audit" | "malformed-internal-audit");
     let status = candidate
         .status
         .as_deref()
         .map(str::trim)
-        .filter(|status| allowed_observation_status(status))
+        .filter(|status| {
+            allowed_observation_status(status)
+                || (internal_audit_kind && matches!(*status, "degraded" | "failed"))
+        })
         .unwrap_or("open");
     let severity = candidate
         .severity

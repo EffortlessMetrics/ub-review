@@ -49,6 +49,10 @@ pub(crate) fn is_pr_body_artifact_only_observation(observation: &ObservationGrou
         format!("{} {}", observation.claim, observation.evidence.join(" ")).to_ascii_lowercase();
     observation.status == "covered"
         || observation.kind == "resolved-check"
+        || matches!(
+            observation.kind.as_str(),
+            "empty-internal-audit" | "malformed-internal-audit"
+        )
         || observation.dedupe_key.starts_with("lane-output-shape")
         || observation
             .dedupe_key
@@ -902,6 +906,40 @@ pub(crate) fn normalized_review_text(value: &str) -> String {
 mod human_output_admission_tests {
     use super::*;
     use anyhow::ensure;
+
+    fn internal_audit_observation(kind: &str, status: &str) -> ObservationGroup {
+        ObservationGroup {
+            schema: OBSERVATION_GROUP_SCHEMA.to_owned(),
+            id: format!("group-{kind}"),
+            dedupe_key: kind.to_owned(),
+            claim: format!("Specialist internal audit was {kind}."),
+            kind: kind.to_owned(),
+            status: status.to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "high".to_owned(),
+            path: None,
+            line: None,
+            evidence: vec!["Parser artifact: review/model/lane/content.json".to_owned()],
+            lanes: vec!["tests-oracle".to_owned()],
+            sources: vec!["model-observation".to_owned()],
+            observation_ids: vec![format!("obs-{kind}")],
+            duplicate_count: 0,
+        }
+    }
+
+    #[test]
+    fn internal_audit_observations_are_withheld_from_public_review_boundary() {
+        for (kind, status) in [
+            ("empty-internal-audit", "degraded"),
+            ("malformed-internal-audit", "failed"),
+        ] {
+            let observation = internal_audit_observation(kind, status);
+            assert!(
+                is_pr_body_artifact_only_observation(&observation),
+                "{kind} must remain artifact-only at the public render boundary"
+            );
+        }
+    }
 
     #[test]
     fn paraphrased_summary_findings_compile_to_one_claim() -> Result<()> {
