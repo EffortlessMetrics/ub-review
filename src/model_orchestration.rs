@@ -226,6 +226,9 @@ mod preflight_identity_tests {
         anyhow::ensure!(sanitize_lane_artifact_name("   \t").is_err());
         anyhow::ensure!(sanitize_artifact_name("") == "~EMPTY");
         anyhow::ensure!(sanitize_artifact_name("   ") == "~20~20~20");
+        anyhow::ensure!(
+            sanitize_lane_artifact_name("foo.bar")? != sanitize_lane_artifact_name("foo.bar ")?
+        );
         Ok(())
     }
 
@@ -543,8 +546,15 @@ pub(crate) fn run_available_model_lanes_with_runner(
                         .internal_audit
                         .as_ref()
                         .filter(|audit| audit.has_value())
+                        && let Err(error) =
+                            write_internal_audit_artifact(&model_dir, &receipt.lane, audit)
                     {
-                        write_internal_audit_artifact(&model_dir, &receipt.lane, audit)?;
+                        receipt.status = "degraded".to_owned();
+                        receipt.reason = format!(
+                            "{}; internal audit artifact write failed: {error:#}",
+                            receipt.reason
+                        );
+                        missing_or_failed_model_evidence.push(model_issue_from_receipt(receipt));
                     }
                     apply_model_output(
                         lane,

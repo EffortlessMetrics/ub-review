@@ -369,4 +369,30 @@ mod tests {
         remove_internal_audit_artifact(&model_dir, lane)?;
         Ok(())
     }
+
+    #[test]
+    fn internal_audit_writer_reports_filesystem_failure_without_partial_artifact() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let model_dir = temp.path().join("model");
+        fs::write(&model_dir, "model directory collision")?;
+        let error = write_internal_audit_artifact(
+            &model_dir,
+            "tests-oracle",
+            &InternalAudit {
+                surfaces_checked: vec!["src/parser.rs".to_owned()],
+                strongest_rejected_hypothesis: None,
+                remaining_local_uncertainty: None,
+            },
+        )
+        .err()
+        .context("writer must report a filesystem failure")?;
+        assert!(error.to_string().contains("create internal audit lane"));
+        assert!(
+            !temp
+                .path()
+                .join("model/tests-oracle/internal_audit.json")
+                .exists()
+        );
+        Ok(())
+    }
 }

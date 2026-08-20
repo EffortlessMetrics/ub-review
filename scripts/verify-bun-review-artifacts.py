@@ -8096,7 +8096,7 @@ def sanitize_lane_artifact_name(value: str) -> str:
     if not value.strip():
         fail("lane artifact identity must not be empty")
     sanitized = sanitize_artifact_name(value)
-    if all(ch.isascii() and ch.isalnum() or ch in "-_" for ch in value):
+    if all((ch.isascii() and ch.isalnum()) or ch in "-_" for ch in value):
         return sanitized
     digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
     prefix_len = ARTIFACT_NAME_MAX_CHARS - ARTIFACT_NAME_HASH_CHARS - 1
@@ -9334,10 +9334,13 @@ def self_test_internal_audit_artifact_contract() -> None:
             "lane does not match artifact path",
             lambda: require_internal_audit_artifacts(root),
         )
-        foo_dot = sanitize_lane_artifact_name("foo.bar")
-        foo_slash = sanitize_lane_artifact_name("foo/bar")
-        if foo_dot == foo_slash:
-            fail("lane artifact IDs collide for foo.bar and foo/bar")
+    foo_dot = sanitize_lane_artifact_name("foo.bar")
+    foo_slash = sanitize_lane_artifact_name("foo/bar")
+    foo_dot_space = sanitize_lane_artifact_name("foo.bar ")
+    if foo_dot == foo_slash:
+        fail("lane artifact IDs collide for foo.bar and foo/bar")
+    if foo_dot == foo_dot_space:
+        fail("lane artifact IDs collide for foo.bar and foo.bar ")
 
 
 def self_test_lane_packet_pr_thread_seed_contract() -> None:
