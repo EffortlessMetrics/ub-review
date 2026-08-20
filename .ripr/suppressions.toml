@@ -21869,6 +21869,60 @@ reason = "Foundation writer receipt: internal_audit_artifact_is_lane_scoped_and_
 
 [[suppressions]]
 kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:match_arm:2048b01a"
+owner = "ub-review/core"
+reason = "Proof-planner cleanup receipt: proof_planner_removes_stale_internal_audit_before_attempt exercises remove_internal_audit_artifact's removal dispatch before a new lane attempt. Re-verify after stale-audit cleanup changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:call_deletion:378bb6ae"
+owner = "ub-review/core"
+reason = "Proof-planner cleanup receipt: proof_planner_removes_stale_internal_audit_before_attempt proves the canonical stale internal_audit path is removed before lane directory creation. Re-verify after stale-audit cleanup changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:match_arm:61eee999"
+owner = "ub-review/core"
+reason = "Proof-planner cleanup receipt: proof_planner_removes_stale_internal_audit_before_attempt exercises successful stale-audit removal and confirms the artifact no longer exists. Re-verify after cleanup result handling changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:return_value:55f02f30"
+owner = "ub-review/core"
+reason = "Proof-planner cleanup receipt: proof_planner_removes_stale_internal_audit_before_attempt asserts cleanup succeeds and returns a usable lane directory. Re-verify after cleanup result handling changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:match_arm:67bdf915"
+owner = "ub-review/core"
+reason = "Proof-planner cleanup receipt: stale_internal_audit_is_removed_before_a_new_lane_attempt covers the no-existing-artifact cleanup branch while the production proof-planner test covers the existing-artifact branch. Re-verify after cleanup matching changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:match_arm:bdfe56a2"
+owner = "ub-review/core"
+reason = "Proof-planner cleanup receipt: internal_audit_writer_reports_filesystem_failure_without_partial_artifact and proof_planner_removes_stale_internal_audit_before_attempt cover contextualized writer/cleanup failure boundaries. Re-verify after audit IO error handling changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner_lane.rs:return_value:680fe74b"
+owner = "ub-review/core"
+reason = "Proof-planner preparation receipt: proof_planner_removes_stale_internal_audit_before_attempt asserts prepare_proof_planner_lane_artifacts returns a directory after cleanup. Re-verify after proof-planner artifact preparation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner_lane.rs:field_construction:5f0d3516"
+owner = "ub-review/core"
+reason = "Proof-planner failure receipt: proof_planner_audit_write_failure_becomes_degraded_evidence exercises record_proof_planner_internal_audit's writer input and failure conversion. Re-verify after proof-planner audit handling changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner_lane.rs:field_construction:bd45d8cf"
+owner = "ub-review/core"
+reason = "Proof-planner failure receipt: proof_planner_audit_write_failure_becomes_degraded_evidence asserts degraded receipt status, actionable reason, and one missing-or-failed evidence item. Re-verify after proof-planner failure propagation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
 finding_id = "probe:src_observations.rs:return_value:8468d28b"
 owner = "ub-review/core"
 reason = "Foundation writer receipt: internal_audit_artifact_is_lane_scoped_and_not_public_surface asserts successful artifact completion and no public review directory. Re-verify after writer result changes."
