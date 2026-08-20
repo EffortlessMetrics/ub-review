@@ -100,7 +100,9 @@ extracted and must contain an executable named `ub-review`. The candidate must
 also report the exact `ub-review <release-version-without-v>` identity from
 `--version`; version-command failure, empty output, or mismatch fails release
 mode before the candidate is accepted. Any other asset name is treated as the
-raw binary. Every failure branch returns to the source build.
+raw binary. In `auto` mode, a failed release attempt returns to the source
+build; explicit `release` mode fails the job and never substitutes a source
+build.
 
 Rust toolchain setup (action.yml "Select Rust toolchain"): when
 `setup-rust` is true and rustup exists, it installs and defaults 1.95.0
@@ -234,9 +236,10 @@ doctor pins              CORE_REVIEW_TOOLS = tokmd, cargo-allow, ripr,
 
 ## Advisory vs blocking behavior
 
-- Installing ub-review itself is blocking for the job: if the chosen mode
-  and the source fallback both fail, the job fails. There is no "run
-  without the binary" state.
+- Installing ub-review itself is blocking for the job: `auto` may fall back
+  to the source build, while explicit `release` fails on any release
+  download, integrity, layout, executable, or identity error. There is no
+  "run without the binary" state.
 - `setup-rust` is advisory when a toolchain already exists (warning on
   missing rustup); blocking only when no cargo exists at all (action.yml).
 - Sensor installs are advisory always: failures warn, and the missing

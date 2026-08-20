@@ -137,6 +137,12 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
             "release binary version mismatch",
         ),
         (
+            "extra-line",
+            "printf '%s\\n%s\\n' 'ub-review 0.1.0' 'unexpected diagnostic'",
+            false,
+            "release binary version mismatch",
+        ),
+        (
             "empty-output",
             ":",
             false,
@@ -223,12 +229,26 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
                 log.contains("actual=ub-review 0.1.0"),
                 "valid fixture must log its identity: {log}"
             );
+            let outputs = fs::read_to_string(&output_path)?;
+            for key in ["release-url=", "release-dir=", "bin="] {
+                anyhow::ensure!(
+                    outputs.contains(key),
+                    "valid fixture missing {key}: {outputs}"
+                );
+            }
         } else {
             anyhow::ensure!(!output.status.success(), "fixture {name} must fail: {log}");
             anyhow::ensure!(
                 log.contains(expected_error),
                 "fixture {name} missing `{expected_error}`: {log}"
             );
+            let outputs = fs::read_to_string(&output_path).unwrap_or_default();
+            for key in ["release-url=", "release-dir=", "bin="] {
+                anyhow::ensure!(
+                    !outputs.contains(key),
+                    "negative fixture {name} emitted {key}: {outputs}"
+                );
+            }
         }
     }
     Ok(())
