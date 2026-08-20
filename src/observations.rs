@@ -19,7 +19,7 @@ pub(crate) fn write_internal_audit_artifact(
     let lane_dir = artifact_path
         .parent()
         .context("internal audit artifact path has no lane directory")?;
-    fs::create_dir_all(&lane_dir)
+    fs::create_dir_all(lane_dir)
         .with_context(|| format!("create internal audit lane {}", lane_dir.display()))?;
     let mut artifact = serde_json::to_value(audit)?;
     let object = artifact
