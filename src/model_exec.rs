@@ -424,7 +424,7 @@ pub(crate) fn run_reporter_coordination(
     // before deciding whether this invocation can run, so skipped or failed
     // reporter work cannot inherit an older decision.
     prepare_reporter_run(review_dir)?;
-    let digests = lane_digests_from_receipts(model_lanes);
+    let digests = lane_digests_from_receipts(review_dir, model_lanes);
     if digests.is_empty() || model_calls_used >= args.max_model_calls {
         let reason = if digests.is_empty() {
             "no lane digests"
@@ -596,6 +596,7 @@ pub(crate) fn run_reporter_coordination(
                     status: r.status.clone(),
                     conclusion: revised.unwrap_or(&r.reason).to_owned(),
                     thread_id: r.thread_id.clone(),
+                    internal_audit: read_internal_audit(review_dir, &r.lane),
                 }
             })
             .collect();

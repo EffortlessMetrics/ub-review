@@ -5405,7 +5405,7 @@ def require_internal_audit_artifacts(root: pathlib.Path) -> None:
         lane = audit.get("lane")
         if not isinstance(lane, str) or not lane:
             fail(f"internal audit lane is missing: {path}")
-        if path.parent.name != lane:
+        if path.parent.name != sanitize_lane_artifact_name(lane):
             fail(f"internal audit lane does not match artifact path: {path}")
         surfaces = audit.get("surfaces_checked")
         if not isinstance(surfaces, list) or not any(
@@ -8077,6 +8077,17 @@ def sanitize_artifact_name(value: str) -> str:
     return f"{sanitized[:prefix_len]}-{digest[:ARTIFACT_NAME_HASH_CHARS]}"
 
 
+def sanitize_lane_artifact_name(value: str) -> str:
+    if not value.strip():
+        fail("lane artifact identity must not be empty")
+    sanitized = sanitize_artifact_name(value)
+    if all(ch.isascii() and ch.isalnum() or ch in "-_" for ch in value):
+        return sanitized
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+    prefix_len = ARTIFACT_NAME_MAX_CHARS - ARTIFACT_NAME_HASH_CHARS - 1
+    return f"{sanitized[:prefix_len]}-{digest[:ARTIFACT_NAME_HASH_CHARS]}"
+
+
 def require_sensor_receipts(root: pathlib.Path) -> None:
     for sensor in SENSORS:
         receipt = load_json(root / "sensors" / sensor / "ub-review-sensor-status.json")
@@ -9290,7 +9301,7 @@ def self_test_empty_candidate_artifacts_without_dir() -> None:
 def self_test_internal_audit_artifact_contract() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         root = pathlib.Path(temp_dir)
-        path = root / "review/model/tests-oracle/internal_audit.json"
+        path = root / f"review/model/{sanitize_lane_artifact_name('tests-oracle')}/internal_audit.json"
         write_self_test_json(
             path,
             {
@@ -9308,6 +9319,10 @@ def self_test_internal_audit_artifact_contract() -> None:
             "lane does not match artifact path",
             lambda: require_internal_audit_artifacts(root),
         )
+        foo_dot = sanitize_lane_artifact_name("foo.bar")
+        foo_slash = sanitize_lane_artifact_name("foo/bar")
+        if foo_dot == foo_slash:
+            fail("lane artifact IDs collide for foo.bar and foo/bar")
 
 
 def self_test_lane_packet_pr_thread_seed_contract() -> None:

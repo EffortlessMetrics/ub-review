@@ -2467,11 +2467,11 @@ impl<'de> Deserialize<'de> for LaneModelOutput {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct InternalAudit {
     #[serde(default)]
-    surfaces_checked: Vec<String>,
+    pub(crate) surfaces_checked: Vec<String>,
     #[serde(default)]
-    strongest_rejected_hypothesis: Option<String>,
+    pub(crate) strongest_rejected_hypothesis: Option<String>,
     #[serde(default)]
-    remaining_local_uncertainty: Option<String>,
+    pub(crate) remaining_local_uncertainty: Option<String>,
 }
 
 impl InternalAudit {

@@ -109,6 +109,29 @@ pub(crate) fn sanitize_artifact_name(value: &str) -> String {
     )
 }
 
+/// Map a lane identity to a filesystem component without collapsing distinct
+/// custom IDs such as `foo.bar` and `foo/bar` onto the same artifact path.
+pub(crate) fn sanitize_lane_artifact_name(value: &str) -> Result<String> {
+    if value.trim().is_empty() {
+        bail!("lane artifact identity must not be empty")
+    }
+    let sanitized = sanitize_artifact_name(value);
+    let is_safe_identity = value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'));
+    if is_safe_identity {
+        return Ok(sanitized);
+    }
+    let digest = sha256_hex(value.as_bytes());
+    let suffix = &digest[..ARTIFACT_NAME_HASH_CHARS];
+    let prefix_len = ARTIFACT_NAME_MAX_CHARS - ARTIFACT_NAME_HASH_CHARS - 1;
+    Ok(format!(
+        "{}-{}",
+        sanitized.chars().take(prefix_len).collect::<String>(),
+        suffix
+    ))
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
