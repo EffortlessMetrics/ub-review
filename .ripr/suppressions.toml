@@ -21956,3 +21956,33 @@ kind = "exposure_gap"
 finding_id = "probe:src_observations.rs:return_value:8468d28b"
 owner = "ub-review/core"
 reason = "Foundation writer receipt: internal_audit_artifact_is_lane_scoped_and_not_public_surface asserts successful artifact completion and no public review directory. Re-verify after writer result changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:cec58b38"
+owner = "ub-review/core"
+reason = "Proof-planner classification receipt: proof_planner_forwards_valid_internal_audit_classification asserts the advisory transformation preserves ValidNonEmpty. Re-verify after proof-planner output shaping changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:9b100c68"
+owner = "ub-review/core"
+reason = "Proof-planner classification receipt: proof_planner_forwards_empty_internal_audit_classification asserts the advisory output preserves Empty. Re-verify after proof-planner output shaping changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:0390a147"
+owner = "ub-review/core"
+reason = "Proof-planner classification receipt: proof_planner_forwards_empty_internal_audit_classification observes the exact Empty result after advisory transformation. Re-verify after proof-planner output shaping changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:0e6420ba"
+owner = "ub-review/core"
+reason = "Proof-planner classification receipt: proof_planner_forwards_malformed_internal_audit_classification asserts the advisory output preserves Malformed. Re-verify after proof-planner output shaping changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:b22fc430"
+owner = "ub-review/core"
+reason = "Proof-planner classification receipt: proof_planner_forwards_malformed_internal_audit_classification observes the exact Malformed result after advisory transformation. Re-verify after proof-planner output shaping changes."
