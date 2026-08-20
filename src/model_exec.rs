@@ -1008,10 +1008,7 @@ pub(crate) fn run_receipt_reconsiderations(
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
-        let turn_ref = format!(
-            "review/threads/{}/{turn:03}.json",
-            sanitize_artifact_name(&lane_id)
-        );
+        let turn_ref = receipt_reconsideration_turn_ref(&lane_id, turn);
         let reconsideration = ReceiptReconsideration {
             lane: lane_id.clone(),
             receipt_ids,
@@ -1082,6 +1079,13 @@ pub(crate) fn run_receipt_reconsiderations(
         result.reconsiderations.push(reconsideration);
     }
     Ok(result)
+}
+
+fn receipt_reconsideration_turn_ref(lane: &str, turn: u32) -> String {
+    format!(
+        "review/threads/{}/turn-{turn:03}.json",
+        sanitize_artifact_name(lane)
+    )
 }
 
 fn apply_lane_reconsideration_update(
@@ -2054,6 +2058,18 @@ mod receipt_reconsideration_tests {
             estimated_value: Some("high".to_owned()),
             timeout_sec: Some(180),
         }
+    }
+
+    #[test]
+    fn reconsideration_turn_reference_matches_written_turn_artifact() {
+        let lane = "../hostile/lane é";
+        assert_eq!(
+            receipt_reconsideration_turn_ref(lane, 7),
+            format!(
+                "review/threads/{}/turn-007.json",
+                sanitize_artifact_name(lane)
+            )
+        );
     }
 
     #[test]

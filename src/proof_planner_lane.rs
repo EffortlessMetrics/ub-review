@@ -414,12 +414,10 @@ pub(crate) fn follow_up_result_artifact_path(
     task_dir: &Path,
     file_name: &str,
 ) -> Option<String> {
-    task_dir.join(file_name).exists().then(|| {
-        format!(
-            "review/model/{}/{file_name}",
-            sanitize_artifact_name(model_lane)
-        )
-    })
+    task_dir
+        .join(file_name)
+        .exists()
+        .then(|| format!("review/model/{model_lane}/{file_name}"))
 }
 
 pub(crate) fn follow_up_output_counts(output: &LaneModelOutput) -> FollowUpOutputCounts {
@@ -555,4 +553,24 @@ pub(crate) fn follow_up_result(input: FollowUpResultInput<'_>) -> FollowUpResult
 pub(crate) enum PrObservationTone {
     Signal,
     Verification,
+}
+
+#[cfg(test)]
+mod follow_up_artifact_path_tests {
+    use super::*;
+
+    #[test]
+    fn follow_up_artifact_reference_does_not_double_encode_lane_component() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let encoded_lane = "orchestrator-follow-up-foo~2Fbar";
+        let task_dir = temp.path().join(encoded_lane);
+        fs::create_dir_all(&task_dir)?;
+        fs::write(task_dir.join("content.json"), "{}")?;
+
+        assert_eq!(
+            follow_up_result_artifact_path(encoded_lane, &task_dir, "content.json"),
+            Some(format!("review/model/{encoded_lane}/content.json"))
+        );
+        Ok(())
+    }
 }
