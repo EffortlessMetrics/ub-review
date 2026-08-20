@@ -4225,6 +4225,7 @@ fn write_review_artifacts(
     let seeded_proof_requests = proof_requests.clone();
 
     let mut proof_result = ProofBrokerResult::default();
+    let trusted_diff_only = trusted_admission_requested(&args.review);
     if matches!(args.model_mode, ModelMode::Auto) {
         let initial_proof_loop = start_run_loop(
             event_log,
@@ -4425,6 +4426,30 @@ fn write_review_artifacts(
             proof_result = seeded_result;
             Ok(())
         })?;
+    } else if trusted_diff_only {
+        let model_loop =
+            start_run_loop(event_log, run_started, "model", "investigation", "primary")?;
+        finish_run_loop(
+            event_log,
+            run_started,
+            run_loop_tracker,
+            model_loop,
+            "skipped_model_mode_off",
+        )?;
+        let proof_loop = start_run_loop(
+            event_log,
+            run_started,
+            "proof",
+            "proof",
+            "initial-diff-broker",
+        )?;
+        finish_run_loop(
+            event_log,
+            run_started,
+            run_loop_tracker,
+            proof_loop,
+            "skipped_trusted_explicit_diff",
+        )?;
     } else {
         let model_loop =
             start_run_loop(event_log, run_started, "model", "investigation", "primary")?;
@@ -4525,11 +4550,13 @@ fn write_review_artifacts(
         proof_requests: &proof_requests,
         additional_intents: &proof_intents,
     })?;
-    if has_unreceipted_proof_request_tasks(
-        &proof_requests,
-        &proof_result.proof_receipts,
-        &diff.head,
-    ) {
+    if !trusted_diff_only
+        && has_unreceipted_proof_request_tasks(
+            &proof_requests,
+            &proof_result.proof_receipts,
+            &diff.head,
+        )
+    {
         let request_proof_loop = start_run_loop(
             event_log,
             run_started,
@@ -4784,18 +4811,22 @@ fn write_review_artifacts(
     append_follow_up_proof_requests(&mut review.proof_requests, &follow_up_evidence);
     let follow_up_proof_loop =
         start_run_loop(event_log, run_started, "proof", "proof", "follow-up-broker")?;
-    let follow_up_proof_result = run_follow_up_proof_broker_v0(
-        root,
-        out,
-        diff,
-        profile,
-        &follow_up_evidence.proof_requests,
-        &review.proof_receipts,
-        &review.resource_leases,
-        args,
-        box_state,
-        run_started,
-    )?;
+    let follow_up_proof_result = if trusted_diff_only {
+        ProofBrokerResult::default()
+    } else {
+        run_follow_up_proof_broker_v0(
+            root,
+            out,
+            diff,
+            profile,
+            &follow_up_evidence.proof_requests,
+            &review.proof_receipts,
+            &review.resource_leases,
+            args,
+            box_state,
+            run_started,
+        )?
+    };
     let follow_up_proof_receipts = follow_up_proof_result.proof_receipts;
     review
         .resource_leases
@@ -5805,28 +5836,29 @@ mod tests {
         build_witness_records, builtin_profiles, candidate_matches_inline_comment,
         candidate_matches_summary_finding, cap_review_body, cap_review_body_bullets, classify_diff,
         classify_diff_class, classify_issue_candidates, classify_proof_cost, cmd_gate_check,
-        cmd_post, collect_pr_thread_context, combined_observations, compile_review_surface,
-        dedupe_inline_comments, deep_minimax_lanes, default_lanes, degrade_review_body,
-        direct_minimax_spec, execute_issue_broker, extract_model_content,
+        cmd_post, cmd_run, collect_pr_thread_context, combined_observations,
+        compile_review_surface, dedupe_inline_comments, deep_minimax_lanes, default_lanes,
+        degrade_review_body, direct_minimax_spec, execute_issue_broker, extract_model_content,
         fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
         follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
         follow_up_provider_assignment_with_key_state, follow_up_resolved_away_candidate_ids,
-        github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
-        make_observation, model_api_url, model_assignments, model_assignments_with_key_state,
-        model_auth_header, model_json_payload, model_lane, model_request_payload,
-        model_response_shape, normalize_run_args, observation_summary_artifacts,
-        opencode_canary_spec, pr_decision_sentence, proof_planner_assignment_with_key_state,
-        provider_concurrency_limits, provider_spec_for_lane_with_key_state,
-        read_candidate_review_surfaces, read_github_event_pr_context, render_lane_model_prompt,
-        render_ledger_context, render_pr_thread_context, render_refuter_prompt, render_review_body,
-        render_summary, resolved_candidate_records, resolved_minimax_prompt_cache,
-        resolved_provider_policy, review_lanes_for_args, right_side_diff_lines,
-        run_available_model_lanes, run_available_model_lanes_with_runner, run_refuter_pass,
-        runtime_fallback_retry_spec, runtime_profile_from_toml, runtime_profile_override,
-        selected_provider_spec, sha256_hex, split_curl_http_status, standard_minimax_lanes,
-        terminalize_proof_requests, validate_github_review_payload,
-        validate_github_review_payload_for_post, validate_pr_review_body_policy, validate_run_args,
-        wait_for_child_output_files, write_candidate_artifacts, write_final_orchestrator_artifact,
+        git_text, git_tree_sha, github_review_skip_path, http_status_from_error,
+        is_model_receipt_evidence_issue, make_observation, model_api_url, model_assignments,
+        model_assignments_with_key_state, model_auth_header, model_json_payload, model_lane,
+        model_request_payload, model_response_shape, normalize_run_args,
+        observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence,
+        proof_planner_assignment_with_key_state, provider_concurrency_limits,
+        provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
+        read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
+        render_pr_thread_context, render_refuter_prompt, render_review_body, render_summary,
+        resolved_candidate_records, resolved_minimax_prompt_cache, resolved_provider_policy,
+        review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
+        run_available_model_lanes_with_runner, run_refuter_pass, runtime_fallback_retry_spec,
+        runtime_profile_from_toml, runtime_profile_override, selected_provider_spec, sha256_hex,
+        split_curl_http_status, standard_minimax_lanes, terminalize_proof_requests,
+        validate_github_review_payload, validate_github_review_payload_for_post,
+        validate_pr_review_body_policy, validate_run_args, wait_for_child_output_files,
+        write_candidate_artifacts, write_final_orchestrator_artifact,
         write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
         write_github_review_payload, write_issue_broker_results, write_issue_capture_artifacts,
         write_observation_artifacts, write_orchestrator_artifacts, write_proof_receipt_artifacts,
@@ -23073,6 +23105,72 @@ index 1111111..2222222 100644
             review_body_max_bytes: 60_000,
             review_mode: None,
         }
+    }
+
+    #[test]
+    fn trusted_cmd_run_does_not_resolve_head_or_run_proof_brokers() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("trusted-root");
+        let objects = temp.path().join("objects");
+        let out = temp.path().join("trusted-output");
+        fs::create_dir_all(&root)?;
+        fs::create_dir_all(&objects)?;
+        git_text(&root, &["init", "--quiet"])?;
+        git_text(
+            &root,
+            &["config", "user.email", "trusted-cmd-run@example.invalid"],
+        )?;
+        git_text(&root, &["config", "user.name", "Trusted Cmd Run"])?;
+        fs::write(root.join("README.md"), "trusted base\n")?;
+        git_text(&root, &["add", "--", "README.md"])?;
+        git_text(&root, &["commit", "--quiet", "-m", "trusted base"])?;
+
+        let changed = objects.join("changed-files.zlist");
+        let patch = objects.join("patch.diff");
+        let config = temp.path().join("trusted-config.toml");
+        fs::write(&changed, b"src/lib.rs\0")?;
+        fs::write(
+            &patch,
+            b"diff --git a/src/lib.rs b/src/lib.rs\nnew file mode 100644\n--- /dev/null\n+++ b/src/lib.rs\n@@ -0,0 +1 @@\n+pub fn admitted_only() {}\n",
+        )?;
+        fs::write(&config, "profile = 'gh-runner'\n")?;
+
+        let mut args = test_run_args(out.clone());
+        args.review.root = root.clone();
+        args.review.base = "must-not-resolve-base".to_owned();
+        args.review.head = "must-not-resolve-head".to_owned();
+        args.review.trusted_base_tree = Some(git_tree_sha(&root, "HEAD")?);
+        // This valid identity is deliberately absent from the fixture repo.
+        // A Git lookup, checkout, or proof worktree operation would fail.
+        args.review.trusted_head = Some("c".repeat(40));
+        args.review.trusted_changed_files = Some(changed);
+        args.review.trusted_patch = Some(patch);
+        args.review.config = config;
+        args.review.out = out.clone();
+        args.dry_run = true;
+        args.model_mode = ModelMode::Off;
+        args.provider_policy = ModelProviderPolicy::Auto;
+        args.fail_on_gate = FailOnGate::False;
+
+        cmd_run(args)?;
+
+        let events = fs::read_to_string(out.join("events.ndjson"))?;
+        if !events.contains("skipped_trusted_explicit_diff") {
+            bail!("trusted cmd_run did not receipt the proof-broker bypass");
+        }
+        let status = git_text(
+            &root,
+            &[
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=all",
+                "--ignored=matching",
+            ],
+        )?;
+        if !status.trim().is_empty() {
+            bail!("trusted cmd_run changed or populated the trusted base root");
+        }
+        Ok(())
     }
 
     fn spawn_fake_github_thread_api(

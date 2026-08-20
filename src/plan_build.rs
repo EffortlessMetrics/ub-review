@@ -290,6 +290,7 @@ impl DiffContext {
 #[derive(Clone, Debug)]
 pub(crate) struct TrustedDiffAdmission {
     trusted_root: PathBuf,
+    trusted_out: PathBuf,
     pub(crate) base_tree_sha: String,
     pub(crate) head_sha: String,
     pub(crate) observed_checkout_tree_sha: String,
@@ -304,6 +305,7 @@ pub(crate) struct TrustedDiffAdmission {
 impl TrustedDiffAdmission {
     pub(crate) fn load(
         root: &Path,
+        out: &Path,
         base_tree: &str,
         head: &str,
         changed_files_path: &Path,
@@ -315,6 +317,7 @@ impl TrustedDiffAdmission {
         let root = fs::canonicalize(root)
             .with_context(|| format!("canonicalize trusted repository root {}", root.display()))?;
         let observed_checkout_tree_sha = validate_trusted_root(&root, base_tree)?;
+        let trusted_out = validate_trusted_output_path(&root, out)?;
         let changed_files_path =
             validate_trusted_object_path(&root, changed_files_path, "changed-files")?;
         let patch_path = validate_trusted_object_path(&root, patch_path, "patch")?;
@@ -337,6 +340,7 @@ impl TrustedDiffAdmission {
         let patch = std::str::from_utf8(&patch_bytes)
             .context("trusted patch object must be valid UTF-8")?
             .to_owned();
+        validate_trusted_patch(&root, &patch_bytes, &changed_files)?;
 
         let observed_after_read = validate_trusted_root(&root, base_tree)?;
         if observed_after_read != observed_checkout_tree_sha {
@@ -345,10 +349,11 @@ impl TrustedDiffAdmission {
 
         Ok(Self {
             trusted_root: root,
+            trusted_out,
             base_tree_sha: base_tree.to_owned(),
             head_sha: head.to_owned(),
             observed_checkout_tree_sha,
-            changed_files_sha256: sha256_hex(changed_files.join("\n").as_bytes()),
+            changed_files_sha256: sha256_hex(&encode_trusted_changed_files(&changed_files)),
             patch_sha256: sha256_hex(patch.as_bytes()),
             changed_files_object_sha256: sha256_hex(&changed_files_bytes),
             patch_object_sha256: sha256_hex(&patch_bytes),
@@ -364,6 +369,14 @@ impl TrustedDiffAdmission {
         }
         Ok(())
     }
+
+    pub(crate) fn verify_output(&self, out: &Path) -> Result<()> {
+        let observed = validate_trusted_output_path(&self.trusted_root, out)?;
+        if observed != self.trusted_out {
+            bail!("trusted output path changed after explicit diff admission");
+        }
+        Ok(())
+    }
 }
 
 fn validate_trusted_root(root: &Path, base_tree: &str) -> Result<String> {
@@ -373,7 +386,15 @@ fn validate_trusted_root(root: &Path, base_tree: &str) -> Result<String> {
             "trusted-base admission rejected: checkout tree {observed_tree} does not match base tree {base_tree}"
         );
     }
-    let status = git_text(root, &["status", "--porcelain=v1", "--untracked-files=all"])?;
+    let status = git_text(
+        root,
+        &[
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+            "--ignored=matching",
+        ],
+    )?;
     if !status.trim().is_empty() {
         bail!("trusted-base admission requires a clean trusted repository root");
     }
@@ -413,6 +434,37 @@ fn validate_trusted_object_path(root: &Path, path: &Path, label: &str) -> Result
     Ok(canonical)
 }
 
+fn validate_trusted_output_path(root: &Path, out: &Path) -> Result<PathBuf> {
+    if !out.is_absolute()
+        || out
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
+    {
+        bail!("trusted output path must be absolute without lexical traversal");
+    }
+    let observed = if out.exists() {
+        if fs::symlink_metadata(out)?.file_type().is_symlink() {
+            bail!("trusted output path must not be a symbolic link");
+        }
+        fs::canonicalize(out)
+            .with_context(|| format!("canonicalize trusted output path {}", out.display()))?
+    } else {
+        let parent = out
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("trusted output path has no parent"))?;
+        let parent = fs::canonicalize(parent)
+            .with_context(|| format!("canonicalize trusted output parent {}", parent.display()))?;
+        parent.join(
+            out.file_name()
+                .ok_or_else(|| anyhow::anyhow!("trusted output path has no final component"))?,
+        )
+    };
+    if observed.starts_with(root) {
+        bail!("trusted output path must be outside the trusted repository root");
+    }
+    Ok(observed)
+}
+
 pub(crate) fn validate_git_object_id(value: &str, label: &str) -> Result<()> {
     if value.len() != 40 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         bail!("{label} must be exactly 40 hexadecimal characters");
@@ -421,37 +473,20 @@ pub(crate) fn validate_git_object_id(value: &str, label: &str) -> Result<()> {
 }
 
 pub(crate) fn parse_trusted_changed_files(bytes: &[u8]) -> Result<Vec<String>> {
-    if bytes.is_empty() || bytes.contains(&0) {
-        bail!("trusted changed-files object must be nonempty and contain no NUL bytes");
+    if bytes.is_empty() || !bytes.ends_with(&[0]) {
+        bail!("trusted changed-files object must use trailing-NUL path encoding");
     }
-    let text =
-        std::str::from_utf8(bytes).context("trusted changed-files object must be valid UTF-8")?;
     let mut files = Vec::new();
     let mut seen = BTreeSet::new();
-    for raw in text.lines() {
-        let file = raw.strip_suffix('\r').unwrap_or(raw);
+    for raw in bytes[..bytes.len() - 1].split(|byte| *byte == 0) {
+        let file =
+            std::str::from_utf8(raw).context("trusted changed-files paths must be valid UTF-8")?;
         if file.is_empty() {
             bail!("trusted changed-files object contains an empty path");
         }
-        let path = Path::new(file);
-        if path.is_absolute()
-            || path.components().any(|component| {
-                matches!(
-                    component,
-                    Component::CurDir
-                        | Component::ParentDir
-                        | Component::RootDir
-                        | Component::Prefix(_)
-                )
-            })
-            || file
-                .split(['/', '\\'])
-                .any(|component| component == ".." || component == ".")
-        {
-            bail!("trusted changed-files object contains unsafe path `{file}`");
-        }
+        validate_trusted_changed_path(file)?;
         if !seen.insert(file) {
-            bail!("trusted changed-files object contains duplicate path `{file}`");
+            bail!("trusted changed-files object contains a duplicate path");
         }
         files.push(file.to_owned());
     }
@@ -459,6 +494,107 @@ pub(crate) fn parse_trusted_changed_files(bytes: &[u8]) -> Result<Vec<String>> {
         bail!("trusted changed-files object must contain at least one path");
     }
     Ok(files)
+}
+
+fn validate_trusted_changed_path(file: &str) -> Result<()> {
+    let path = Path::new(file);
+    if path.is_absolute()
+        || path.components().any(|component| {
+            matches!(
+                component,
+                Component::CurDir
+                    | Component::ParentDir
+                    | Component::RootDir
+                    | Component::Prefix(_)
+            )
+        })
+        || file
+            .split(['/', '\\'])
+            .any(|component| component == ".." || component == ".")
+    {
+        bail!("trusted changed-files object contains an unsafe path");
+    }
+    Ok(())
+}
+
+fn encode_trusted_changed_files(files: &[String]) -> Vec<u8> {
+    let mut encoded = Vec::new();
+    for file in files {
+        encoded.extend_from_slice(file.as_bytes());
+        encoded.push(0);
+    }
+    encoded
+}
+
+fn validate_trusted_patch(root: &Path, patch: &[u8], changed_files: &[String]) -> Result<()> {
+    git_apply_output(root, &["--check", "--whitespace=nowarn"], patch)
+        .context("trusted patch object failed git apply syntax/base validation")?;
+    let numstat = git_apply_output(root, &["--numstat", "-z"], patch)
+        .context("derive trusted patch changed paths")?;
+    let patch_files = parse_git_apply_numstat(&numstat)?;
+    let admitted = changed_files.iter().collect::<BTreeSet<_>>();
+    let patched = patch_files.iter().collect::<BTreeSet<_>>();
+    if admitted.len() != changed_files.len()
+        || patched.len() != patch_files.len()
+        || admitted != patched
+    {
+        bail!("trusted changed-files object does not exactly match trusted patch paths");
+    }
+    Ok(())
+}
+
+fn git_apply_output(root: &Path, args: &[&str], patch: &[u8]) -> Result<Vec<u8>> {
+    let mut child = ProcessCommand::new("git")
+        .arg("-C")
+        .arg(root)
+        .arg("apply")
+        .args(args)
+        .arg("-")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("start git apply for trusted patch validation")?;
+    let mut stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("open git apply stdin"))?;
+    std::io::Write::write_all(&mut stdin, patch).context("write trusted patch to git apply")?;
+    drop(stdin);
+    let output = child
+        .wait_with_output()
+        .context("wait for trusted git apply validation")?;
+    if !output.status.success() {
+        bail!(
+            "git apply trusted patch validation failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    Ok(output.stdout)
+}
+
+fn parse_git_apply_numstat(bytes: &[u8]) -> Result<Vec<String>> {
+    if bytes.is_empty() || !bytes.ends_with(&[0]) {
+        bail!("trusted patch did not produce NUL-delimited numstat paths");
+    }
+    let mut paths = Vec::new();
+    for record in bytes[..bytes.len() - 1].split(|byte| *byte == 0) {
+        let mut fields = record.splitn(3, |byte| *byte == b'\t');
+        let added = fields.next();
+        let deleted = fields.next();
+        let path = fields.next();
+        if added.is_none() || deleted.is_none() || path.is_none_or(|path| path.is_empty()) {
+            bail!("trusted patch produced malformed numstat output");
+        }
+        let path = std::str::from_utf8(path.unwrap_or_default())
+            .context("trusted patch path must be valid UTF-8")?;
+        validate_trusted_changed_path(path)?;
+        paths.push(path.to_owned());
+    }
+    if paths.is_empty() {
+        bail!("trusted patch must change at least one path");
+    }
+    Ok(paths)
 }
 
 pub(crate) fn git_lines(root: &Path, args: &[&str]) -> Result<Vec<String>> {
@@ -793,6 +929,7 @@ mod trusted_input_tests {
     struct TrustedFixture {
         _temp: tempfile::TempDir,
         root: PathBuf,
+        out: PathBuf,
         changed: PathBuf,
         patch: PathBuf,
         base_tree: String,
@@ -811,20 +948,36 @@ mod trusted_input_tests {
         )?;
         git_text(&root, &["config", "user.name", "Trusted Fixture"])?;
         fs::write(root.join("README.md"), "trusted base\n")?;
-        git_text(&root, &["add", "--", "README.md"])?;
+        fs::write(root.join(".gitignore"), "ignored/\n*.dll\n")?;
+        git_text(&root, &["add", "--", "README.md", ".gitignore"])?;
         git_text(&root, &["commit", "--quiet", "-m", "trusted base"])?;
+        let out = temp.path().join("out");
         let changed = objects.join("changed-files.txt");
         let patch = objects.join("patch.diff");
-        fs::write(&changed, b"src/main.rs\n")?;
-        fs::write(&patch, b"diff --git a/src/main.rs b/src/main.rs\n")?;
+        fs::write(&changed, b"src/main.rs\0")?;
+        fs::write(
+            &patch,
+            new_file_patch(&[("src/main.rs", "pub fn trusted_fixture() {}")]),
+        )?;
         let base_tree = git_tree_sha(&root, "HEAD")?;
         Ok(TrustedFixture {
             _temp: temp,
             root,
+            out,
             changed,
             patch,
             base_tree,
         })
+    }
+
+    fn new_file_patch(files: &[(&str, &str)]) -> String {
+        let mut patch = String::new();
+        for (path, content) in files {
+            patch.push_str(&format!(
+                "diff --git a/{path} b/{path}\nnew file mode 100644\n--- /dev/null\n+++ b/{path}\n@@ -0,0 +1 @@\n+{content}\n"
+            ));
+        }
+        patch
     }
 
     #[test]
@@ -843,6 +996,7 @@ mod trusted_input_tests {
         let fixture = trusted_fixture()?;
         let admission = TrustedDiffAdmission::load(
             &fixture.root,
+            &fixture.out,
             &fixture.base_tree,
             &"b".repeat(40),
             &fixture.changed,
@@ -861,9 +1015,10 @@ mod trusted_input_tests {
             "./secret.txt",
             "src/./secret.txt",
         ] {
-            fs::write(&fixture.changed, format!("{unsafe_path}\n"))?;
+            fs::write(&fixture.changed, format!("{unsafe_path}\0"))?;
             if TrustedDiffAdmission::load(
                 &fixture.root,
+                &fixture.out,
                 &fixture.base_tree,
                 &"b".repeat(40),
                 &fixture.changed,
@@ -874,9 +1029,10 @@ mod trusted_input_tests {
                 bail!("accepted parent-traversal changed path {unsafe_path}");
             }
         }
-        fs::write(&fixture.changed, b"src/main.rs\nsrc/main.rs\n")?;
+        fs::write(&fixture.changed, b"src/main.rs\0src/main.rs\0")?;
         if TrustedDiffAdmission::load(
             &fixture.root,
+            &fixture.out,
             &fixture.base_tree,
             &"b".repeat(40),
             &fixture.changed,
@@ -886,9 +1042,10 @@ mod trusted_input_tests {
         {
             bail!("accepted duplicate changed path");
         }
-        fs::write(&fixture.changed, b"src/main.rs\0\n")?;
+        fs::write(&fixture.changed, b"src/main.rs\0\0")?;
         if TrustedDiffAdmission::load(
             &fixture.root,
+            &fixture.out,
             &fixture.base_tree,
             &"b".repeat(40),
             &fixture.changed,
@@ -896,13 +1053,14 @@ mod trusted_input_tests {
         )
         .is_ok()
         {
-            bail!("accepted NUL changed path");
+            bail!("accepted an empty NUL-delimited changed path");
         }
-        fs::write(&fixture.changed, b"src/main.rs\n")?;
+        fs::write(&fixture.changed, b"src/main.rs\0")?;
         for invalid_patch in [b"".as_slice(), b"diff\0".as_slice(), &[0xff, 0xfe]] {
             fs::write(&fixture.patch, invalid_patch)?;
             if TrustedDiffAdmission::load(
                 &fixture.root,
+                &fixture.out,
                 &fixture.base_tree,
                 &"b".repeat(40),
                 &fixture.changed,
@@ -915,6 +1073,7 @@ mod trusted_input_tests {
         }
         if TrustedDiffAdmission::load(
             &fixture.root,
+            &fixture.out,
             &fixture.base_tree,
             &"b".repeat(40),
             Path::new("changed-files.txt"),
@@ -924,6 +1083,49 @@ mod trusted_input_tests {
         {
             bail!("accepted relative trusted object path");
         }
+        fs::write(&fixture.patch, b"not a git patch\n")?;
+        if TrustedDiffAdmission::load(
+            &fixture.root,
+            &fixture.out,
+            &fixture.base_tree,
+            &"b".repeat(40),
+            &fixture.changed,
+            &fixture.patch,
+        )
+        .is_ok()
+        {
+            bail!("accepted syntactically invalid trusted patch");
+        }
+        fs::write(
+            &fixture.patch,
+            new_file_patch(&[("src/main.rs", "pub fn trusted_fixture() {}")]),
+        )?;
+        fs::write(&fixture.changed, b"src/other.rs\0")?;
+        if TrustedDiffAdmission::load(
+            &fixture.root,
+            &fixture.out,
+            &fixture.base_tree,
+            &"b".repeat(40),
+            &fixture.changed,
+            &fixture.patch,
+        )
+        .is_ok()
+        {
+            bail!("accepted changed paths that do not match the trusted patch");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn trusted_changed_paths_use_unambiguous_nul_encoding() -> Result<()> {
+        let encoded = b"line\nname.rs\0carriage\rname.rs\0";
+        let paths = parse_trusted_changed_files(encoded)?;
+        if paths != vec!["line\nname.rs", "carriage\rname.rs"] {
+            bail!("NUL-delimited changed paths did not preserve CR/LF names exactly");
+        }
+        if parse_trusted_changed_files(b"line\nname.rs\ncarriage\rname.rs\n").is_ok() {
+            bail!("accepted ambiguous newline-delimited changed paths");
+        }
         Ok(())
     }
 
@@ -932,6 +1134,7 @@ mod trusted_input_tests {
         let fixture = trusted_fixture()?;
         if TrustedDiffAdmission::load(
             &fixture.root,
+            &fixture.out,
             &"c".repeat(40),
             &"b".repeat(40),
             &fixture.changed,
@@ -941,6 +1144,18 @@ mod trusted_input_tests {
         {
             bail!("accepted checkout tree mismatch");
         }
+        if TrustedDiffAdmission::load(
+            &fixture.root,
+            &fixture.root.join("trusted-output"),
+            &fixture.base_tree,
+            &"b".repeat(40),
+            &fixture.changed,
+            &fixture.patch,
+        )
+        .is_ok()
+        {
+            bail!("accepted an output directory inside the trusted repository root");
+        }
         Ok(())
     }
 
@@ -949,6 +1164,7 @@ mod trusted_input_tests {
         let fixture = trusted_fixture()?;
         let admission = TrustedDiffAdmission::load(
             &fixture.root,
+            &fixture.out,
             &fixture.base_tree,
             &"b".repeat(40),
             &fixture.changed,
@@ -960,6 +1176,7 @@ mod trusted_input_tests {
         }
         if TrustedDiffAdmission::load(
             &fixture.root,
+            &fixture.out,
             &fixture.base_tree,
             &"b".repeat(40),
             &fixture.changed,
@@ -970,8 +1187,27 @@ mod trusted_input_tests {
             bail!("accepted an untracked file in the trusted repository root");
         }
         fs::remove_file(fixture.root.join("hostile-plugin.toml"))?;
+        let ignored = fixture.root.join("ignored");
+        fs::create_dir_all(&ignored)?;
+        fs::write(ignored.join(".ub-review.toml"), "[providers]\n")?;
+        fs::write(ignored.join("hostile-plugin.toml"), "load = true\n")?;
+        fs::write(ignored.join("hostile.dll"), b"HOSTILE_DLL_SENTINEL")?;
+        if admission.verify_root().is_ok()
+            || TrustedDiffAdmission::load(
+                &fixture.root,
+                &fixture.out,
+                &fixture.base_tree,
+                &"b".repeat(40),
+                &fixture.changed,
+                &fixture.patch,
+            )
+            .is_ok()
+        {
+            bail!("accepted ignored hostile config, plugin, or library files");
+        }
+        fs::remove_dir_all(&ignored)?;
         let repository_object = fixture.root.join("changed-files.txt");
-        fs::write(&repository_object, b"src/main.rs\n")?;
+        fs::write(&repository_object, b"src/main.rs\0")?;
         git_text(&fixture.root, &["add", "--", "changed-files.txt"])?;
         git_text(
             &fixture.root,
@@ -980,6 +1216,7 @@ mod trusted_input_tests {
         let new_tree = git_tree_sha(&fixture.root, "HEAD")?;
         if TrustedDiffAdmission::load(
             &fixture.root,
+            &fixture.out,
             &new_tree,
             &"b".repeat(40),
             &repository_object,
@@ -997,17 +1234,20 @@ mod trusted_input_tests {
         let fixture = trusted_fixture()?;
         fs::write(
             &fixture.changed,
-            b".ub-review.toml\nplugins/hostile.toml\nscripts/evil.sh\nlib/hostile.dll\n",
+            b".ub-review.toml\0plugins/hostile.toml\0scripts/evil.sh\0lib/hostile.dll\0",
         )?;
         fs::write(
             &fixture.patch,
-            b"diff --git a/.ub-review.toml b/.ub-review.toml\n+EXECUTE_CONFIG_SENTINEL\n\n\
-diff --git a/plugins/hostile.toml b/plugins/hostile.toml\n+LOAD_PLUGIN_SENTINEL\n\n\
-diff --git a/scripts/evil.sh b/scripts/evil.sh\n+RUN_SCRIPT_SENTINEL\n\n\
-diff --git a/lib/hostile.dll b/lib/hostile.dll\n+LOAD_LIBRARY_SENTINEL\n",
+            new_file_patch(&[
+                (".ub-review.toml", "EXECUTE_CONFIG_SENTINEL"),
+                ("plugins/hostile.toml", "LOAD_PLUGIN_SENTINEL"),
+                ("scripts/evil.sh", "RUN_SCRIPT_SENTINEL"),
+                ("lib/hostile.dll", "LOAD_LIBRARY_SENTINEL"),
+            ]),
         )?;
         let admission = TrustedDiffAdmission::load(
             &fixture.root,
+            &fixture.out,
             &fixture.base_tree,
             // This identity deliberately does not exist in the fixture repo.
             // Success proves it is recorded as metadata, never resolved.
@@ -1015,7 +1255,7 @@ diff --git a/lib/hostile.dll b/lib/hostile.dll\n+LOAD_LIBRARY_SENTINEL\n",
             &fixture.changed,
             &fixture.patch,
         )?;
-        fs::write(&fixture.changed, b"different/head-controlled/path\n")?;
+        fs::write(&fixture.changed, b"different/head-controlled/path\0")?;
         fs::write(&fixture.patch, b"MUTATED_AFTER_ADMISSION\n")?;
         let diff = DiffContext::from_trusted_admission(&admission);
         if diff.changed_files.len() != 4 || diff.head != "c".repeat(40) {
@@ -1031,7 +1271,7 @@ diff --git a/lib/hostile.dll b/lib/hostile.dll\n+LOAD_LIBRARY_SENTINEL\n",
         }
         if admission.patch_sha256 != sha256_hex(diff.patch.as_bytes())
             || admission.changed_files_sha256
-                != sha256_hex(diff.changed_files.join("\n").as_bytes())
+                != sha256_hex(&encode_trusted_changed_files(&diff.changed_files))
         {
             bail!("trusted diff digests do not describe the admitted DiffContext");
         }

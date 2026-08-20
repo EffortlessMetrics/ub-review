@@ -16,9 +16,10 @@ pub(crate) fn prepare_plan(
 )> {
     validate_selector_syntax(selectors)?;
     let trusted_mode = trusted_admission_complete(args)?;
-    let trusted_admission = if trusted_mode {
+    let (trusted_admission, trusted_config) = if trusted_mode {
         let admission = TrustedDiffAdmission::load(
             &args.root,
+            &args.out,
             args.trusted_base_tree
                 .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("trusted base tree missing"))?,
@@ -32,18 +33,25 @@ pub(crate) fn prepare_plan(
                 .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("trusted patch object missing"))?,
         )?;
-        reject_repo_controlled_config(args)?;
-        Some(admission)
+        let trusted_config = load_trusted_config(args)?;
+        (Some(admission), Some(trusted_config))
     } else {
-        None
+        (None, None)
     };
     let trusted_diff = trusted_admission
         .as_ref()
         .map(DiffContext::from_trusted_admission);
-    let config = Config::load_or_default(
-        &args.config,
-        runtime_profile_override(args.profile.as_ref(), args.runtime_profile.as_ref()),
-    )?;
+    let profile_override =
+        runtime_profile_override(args.profile.as_ref(), args.runtime_profile.as_ref());
+    let config = if let Some(trusted_config) = trusted_config {
+        Config::load_from_bytes(
+            &trusted_config.bytes,
+            profile_override,
+            &trusted_config.path,
+        )?
+    } else {
+        Config::load_or_default(&args.config, profile_override)?
+    };
     let profile = config.selected_profile()?;
     let box_state = BoxState::detect()?;
     let diff = if let Some(diff) = trusted_diff {
@@ -114,17 +122,25 @@ pub(crate) fn validate_trusted_execution_settings(
     Ok(())
 }
 
-fn reject_repo_controlled_config(args: &ReviewArgs) -> Result<()> {
+struct TrustedConfigInput {
+    path: PathBuf,
+    bytes: Vec<u8>,
+}
+
+fn load_trusted_config(args: &ReviewArgs) -> Result<TrustedConfigInput> {
     let root = fs::canonicalize(&args.root).with_context(|| {
         format!(
             "canonicalize trusted repository root {}",
             args.root.display()
         )
     })?;
-    validate_trusted_config_path(&root, &args.config)
+    let path = validate_trusted_config_path(&root, &args.config)?;
+    let bytes = fs::read(&path)
+        .with_context(|| format!("read trusted configuration {}", path.display()))?;
+    Ok(TrustedConfigInput { path, bytes })
 }
 
-pub(crate) fn validate_trusted_config_path(root: &Path, config: &Path) -> Result<()> {
+pub(crate) fn validate_trusted_config_path(root: &Path, config: &Path) -> Result<PathBuf> {
     if !config.is_absolute() {
         bail!("trusted-base admission rejects repository-relative config paths");
     }
@@ -150,7 +166,7 @@ pub(crate) fn validate_trusted_config_path(root: &Path, config: &Path) -> Result
     if canonical_config.starts_with(root) {
         bail!("trusted-base admission rejects configuration reached through a repository symlink");
     }
-    Ok(())
+    Ok(canonical_config)
 }
 
 pub(crate) fn write_plan_artifacts(
@@ -161,6 +177,31 @@ pub(crate) fn write_plan_artifacts(
     plan: &Plan,
     selectors: PlanArtifactSelectors<'_>,
 ) -> Result<()> {
+    let trusted_receipt = if let Some(admission) = selectors.trusted_admission {
+        admission.verify_root()?;
+        admission.verify_output(out)?;
+        if admission.changed_files != diff.changed_files || admission.patch != diff.patch {
+            bail!("trusted-base receipt rejected a diff outside the admitted objects");
+        }
+        Some(serde_json::to_vec_pretty(&serde_json::json!({
+            "schema_version": 1,
+            "admission": "trusted-base-explicit-diff",
+            "base_tree_sha": &admission.base_tree_sha,
+            "observed_checkout_tree_sha": &admission.observed_checkout_tree_sha,
+            "head_sha": &admission.head_sha,
+            "changed_files_object_sha256": &admission.changed_files_object_sha256,
+            "patch_object_sha256": &admission.patch_object_sha256,
+            "changed_files_sha256": &admission.changed_files_sha256,
+            "patch_sha256": &admission.patch_sha256,
+            "head_tree_loaded": false,
+            "head_config_loaded": false,
+            "repository_config_loaded": false,
+            "model_mode": selectors.run_args.map(|args| args.model_mode.key()),
+            "provider_policy": selectors.run_args.map(|args| args.provider_policy.key()),
+        }))?)
+    } else {
+        None
+    };
     fs::create_dir_all(out.join("input"))?;
     let profile = config.selected_profile()?;
     fs::write(out.join("plan.json"), serde_json::to_vec_pretty(plan)?)?;
@@ -198,30 +239,12 @@ pub(crate) fn write_plan_artifacts(
         diff.changed_files.join("\n"),
     )?;
     fs::write(out.join("input/diff.patch"), &diff.patch)?;
-    if let Some(admission) = selectors.trusted_admission {
-        admission.verify_root()?;
-        if admission.changed_files != diff.changed_files || admission.patch != diff.patch {
-            bail!("trusted-base receipt rejected a diff outside the admitted objects");
+    if let Some(receipt) = trusted_receipt {
+        if let Some(admission) = selectors.trusted_admission {
+            admission.verify_root()?;
+            admission.verify_output(out)?;
         }
-        fs::write(
-            out.join("input/trusted-base-receipt.json"),
-            serde_json::to_vec_pretty(&serde_json::json!({
-                "schema_version": 1,
-                "admission": "trusted-base-explicit-diff",
-                "base_tree_sha": &admission.base_tree_sha,
-                "observed_checkout_tree_sha": &admission.observed_checkout_tree_sha,
-                "head_sha": &admission.head_sha,
-                "changed_files_object_sha256": &admission.changed_files_object_sha256,
-                "patch_object_sha256": &admission.patch_object_sha256,
-                "changed_files_sha256": &admission.changed_files_sha256,
-                "patch_sha256": &admission.patch_sha256,
-                "head_tree_loaded": false,
-                "head_config_loaded": false,
-                "repository_config_loaded": false,
-                "model_mode": selectors.run_args.map(|args| args.model_mode.key()),
-                "provider_policy": selectors.run_args.map(|args| args.provider_policy.key()),
-            }))?,
-        )?;
+        fs::write(out.join("input/trusted-base-receipt.json"), receipt)?;
     }
     fs::write(out.join("input/pr.md"), render_pr_packet(diff))?;
     fs::write(out.join("input/claims.md"), render_claim_prompt(diff))?;
@@ -432,6 +455,89 @@ mod trusted_config_tests {
         }
         if validate_trusted_config_path(&root, &link).is_ok() {
             bail!("accepted repository symlink to configuration");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn trusted_config_load_uses_validated_immutable_bytes() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("root");
+        fs::create_dir_all(&root)?;
+        let config_path = temp.path().join("trusted.toml");
+        fs::write(&config_path, "profile = 'gh-runner'\n")?;
+        let mut args = review_args();
+        args.root = root;
+        args.config = config_path.clone();
+
+        let input = load_trusted_config(&args)?;
+        fs::write(&config_path, "profile = 'attacker-replaced'\n")?;
+        let config = Config::load_from_bytes(&input.bytes, None, &input.path)?;
+        if config.profile != "gh-runner" {
+            bail!("trusted config loader reopened a caller-controlled path after validation");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn trusted_artifacts_reject_dirty_root_before_writing() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("root");
+        let objects = temp.path().join("objects");
+        let out = temp.path().join("out");
+        fs::create_dir_all(&root)?;
+        fs::create_dir_all(&objects)?;
+        git_text(&root, &["init", "--quiet"])?;
+        git_text(
+            &root,
+            &["config", "user.email", "trusted-artifact@example.invalid"],
+        )?;
+        git_text(&root, &["config", "user.name", "Trusted Artifact"])?;
+        fs::write(root.join("README.md"), "trusted base\n")?;
+        git_text(&root, &["add", "--", "README.md"])?;
+        git_text(&root, &["commit", "--quiet", "-m", "trusted base"])?;
+        let changed = objects.join("changed-files.zlist");
+        let patch = objects.join("patch.diff");
+        fs::write(&changed, b"src/lib.rs\0")?;
+        fs::write(
+            &patch,
+            b"diff --git a/src/lib.rs b/src/lib.rs\nnew file mode 100644\n--- /dev/null\n+++ b/src/lib.rs\n@@ -0,0 +1 @@\n+pub fn admitted_only() {}\n",
+        )?;
+        let admission = TrustedDiffAdmission::load(
+            &root,
+            &out,
+            &git_tree_sha(&root, "HEAD")?,
+            &"c".repeat(40),
+            &changed,
+            &patch,
+        )?;
+        let diff = DiffContext::from_trusted_admission(&admission);
+        let config = Config::default();
+        let profile = config.selected_profile()?;
+        let box_state = BoxState::detect()?;
+        let plan = build_plan(&config, profile, &box_state, &diff, &root, false);
+        let selectors = SelectorArgs::default();
+        fs::write(root.join("hostile-plugin.toml"), "load = true\n")?;
+
+        if write_plan_artifacts(
+            &out,
+            &config,
+            &diff,
+            &box_state,
+            &plan,
+            PlanArtifactSelectors {
+                run_args: None,
+                selectors: &selectors,
+                effective_model_lanes: None,
+                trusted_admission: Some(&admission),
+            },
+        )
+        .is_ok()
+        {
+            bail!("trusted artifact writer accepted a dirty root");
+        }
+        if out.exists() {
+            bail!("trusted artifact writer created plausible output before admission verification");
         }
         Ok(())
     }

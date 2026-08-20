@@ -866,7 +866,7 @@ fn known_policy_selector(value: &str, known: &[&str]) -> bool {
 
 impl Config {
     pub(crate) fn load_or_default(path: &Path, profile_override: Option<&str>) -> Result<Self> {
-        let mut config = if path.exists() {
+        let config = if path.exists() {
             let text =
                 fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
             Self::from_toml_with_policy_receipts(&text)
@@ -874,6 +874,22 @@ impl Config {
         } else {
             Self::default()
         };
+        Self::finish_load(config, profile_override)
+    }
+
+    pub(crate) fn load_from_bytes(
+        bytes: &[u8],
+        profile_override: Option<&str>,
+        source: &Path,
+    ) -> Result<Self> {
+        let text = std::str::from_utf8(bytes)
+            .with_context(|| format!("read {} as UTF-8", source.display()))?;
+        let config = Self::from_toml_with_policy_receipts(text)
+            .with_context(|| format!("parse {}", source.display()))?;
+        Self::finish_load(config, profile_override)
+    }
+
+    fn finish_load(mut config: Self, profile_override: Option<&str>) -> Result<Self> {
         if let Some(profile) = profile_override {
             config.profile = profile.to_owned();
         }

@@ -456,7 +456,7 @@ pub(crate) struct ReviewArgs {
     /// Trusted-base admission: exact head object identity (metadata only; never checked out).
     #[arg(long = "trusted-head", env = "UB_REVIEW_TRUSTED_HEAD")]
     pub(crate) trusted_head: Option<String>,
-    /// Trusted-base admission: newline-delimited changed-path object.
+    /// Trusted-base admission: NUL-delimited changed-path object.
     #[arg(
         long = "trusted-changed-files",
         env = "UB_REVIEW_TRUSTED_CHANGED_FILES"
