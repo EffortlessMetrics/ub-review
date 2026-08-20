@@ -137,7 +137,9 @@ pub(crate) fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Res
     for lane in lane_packet_summary_rows(out, plan) {
         text.push_str(&format!(
             "| `{}` | `{}` | `lanes/{}.md` |\n",
-            lane.id, lane.model_display, lane.id
+            lane.id,
+            lane.model_display,
+            sanitize_artifact_name(&lane.id)
         ));
     }
     text.push_str("\n## Diff flags\n\n");

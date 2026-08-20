@@ -4284,7 +4284,10 @@ fn write_review_artifacts(
                     .find(|a| a.lane.id == receipt.lane)
                     .map(|a| a.lane.receives.clone())
                     .unwrap_or_default();
-                let receipt_ref = format!("review/model/{}/content.json", receipt.lane);
+                let receipt_ref = format!(
+                    "review/model/{}/content.json",
+                    sanitize_artifact_name(&receipt.lane)
+                );
                 let turn = primary_turn(
                     &receipt.thread_id,
                     &receipt.lane,
@@ -4304,7 +4307,10 @@ fn write_review_artifacts(
                 // conclusion. Also emit thread_terminal when the lane is done.
                 // Message-log errors are logged to the event log, not
                 // propagated (the queue is observability, not a run dependency).
-                let turn_ref = format!("review/threads/{}/turn-000.json", receipt.lane);
+                let turn_ref = format!(
+                    "review/threads/{}/turn-000.json",
+                    sanitize_artifact_name(&receipt.lane)
+                );
                 if let Err(e) = message_log.append(
                     CrossLaneMessageKind::LaneReport,
                     &receipt.lane,
@@ -8294,9 +8300,10 @@ index 1111111..2222222 100644
             temp.path().join("review/proof_request_groups.json"),
         )?)?;
         let proof_request_file: serde_json::Value = serde_json::from_slice(&fs::read(
-            temp.path()
-                .join("proof_requests")
-                .join(format!("{}.json", proof_requests[0].id)),
+            temp.path().join("proof_requests").join(format!(
+                "{}.json",
+                super::sanitize_artifact_name(&proof_requests[0].id)
+            )),
         )?)?;
         let proof_plan = fs::read_to_string(temp.path().join("review/proof_plan.md"))?;
         let proof_ndjson = fs::read_to_string(temp.path().join("proof_requests.ndjson"))?;
@@ -10055,7 +10062,10 @@ index 3333333..4444444 100644
             &[] as &[ProofRequestGroup],
         );
         let lease = test_focused_test_lease(&task);
-        let base_receipt_dir = out.join("proof").join(&task.id).join("base-plus-tests");
+        let base_receipt_dir = out
+            .join("proof")
+            .join(super::sanitize_artifact_name(&task.id))
+            .join("base-plus-tests");
         fs::create_dir_all(base_receipt_dir.parent().context("base receipt parent")?)?;
         fs::write(&base_receipt_dir, b"not a directory")?;
 
@@ -19020,7 +19030,7 @@ index 1111111..2222222 100644
     fn artifact_name_sanitizer_bounds_long_generated_ids() {
         assert_eq!(
             super::sanitize_artifact_name("source-route/question one"),
-            "source-route-question-one"
+            "source-route~2Fquestion~20one"
         );
         let raw = format!("candidate-{}", "generated-id-segment-".repeat(24));
         let sanitized = super::sanitize_artifact_name(&raw);
@@ -21765,7 +21775,7 @@ index 1111111..2222222 100644
     }
 
     #[test]
-    fn observation_question_artifacts_reject_path_collisions() -> Result<()> {
+    fn observation_question_artifacts_disambiguate_hostile_paths() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let mut observations = vec![
             test_observation(
@@ -21790,16 +21800,13 @@ index 1111111..2222222 100644
         observations[0].question = "same/question".to_owned();
         observations[1].question = "same-question".to_owned();
 
-        let error = match write_observation_artifacts(temp.path(), &observations) {
-            Ok(()) => return Err(anyhow::anyhow!("question path collision was not rejected")),
-            Err(error) => error,
-        };
-
-        assert!(
-            error
-                .to_string()
-                .contains("questions artifact path collision")
-        );
+        write_observation_artifacts(temp.path(), &observations)?;
+        let first = temp.path().join("questions/lane~2Fa/same~2Fquestion.json");
+        let second = temp.path().join("questions/lane-a/same-question.json");
+        assert!(first.is_file());
+        assert!(second.is_file());
+        assert_ne!(first, second);
+        assert!(!temp.path().join("questions/lane").exists());
         Ok(())
     }
 

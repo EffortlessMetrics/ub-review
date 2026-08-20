@@ -28,7 +28,7 @@ pub(crate) fn run_model_lane_tasks(
                     let Some(task) = task else {
                         break;
                     };
-                    let lane_dir = model_dir.join(&task.lane.id);
+                    let lane_dir = model_dir.join(sanitize_artifact_name(&task.lane.id));
                     let result = fs::create_dir_all(&lane_dir)
                         .with_context(|| format!("create {}", lane_dir.display()))
                         .and_then(|()| {
@@ -333,7 +333,9 @@ fn run_lane_continuation_turn(
         &proof_excerpts,
         &late_excerpts,
     );
-    let lane_thread_dir = review_dir.join("threads").join(&lane_receipt.lane);
+    let lane_thread_dir = review_dir
+        .join("threads")
+        .join(sanitize_artifact_name(&lane_receipt.lane));
     fs::create_dir_all(&lane_thread_dir)?;
     fs::write(lane_thread_dir.join("continuation-prompt-001.md"), &prompt)?;
     let content = call_model_prompt_content(
@@ -363,11 +365,14 @@ fn run_lane_continuation_turn(
         stage: "follow-up".to_owned(),
         prompt_packet_path: format!(
             "review/threads/{}/continuation-prompt-001.md",
-            lane_receipt.lane
+            sanitize_artifact_name(&lane_receipt.lane)
         ),
         response_summary: revised.clone(),
         routed_evidence_refs: vec![format!("reporter-question:{question}")],
-        receipt_ref: format!("review/threads/{}/turn-001.json", lane_receipt.lane),
+        receipt_ref: format!(
+            "review/threads/{}/turn-001.json",
+            sanitize_artifact_name(&lane_receipt.lane)
+        ),
         head_sha: None,
         verdict: None,
     };
@@ -845,7 +850,12 @@ pub(crate) fn receipt_reconsideration_prompt(
 }
 
 fn next_lane_turn_number(review_dir: &Path, lane: &str) -> u32 {
-    let Some(entries) = review_dir.join("threads").join(lane).read_dir().ok() else {
+    let Some(entries) = review_dir
+        .join("threads")
+        .join(sanitize_artifact_name(lane))
+        .read_dir()
+        .ok()
+    else {
         return 1;
     };
     entries
@@ -909,7 +919,9 @@ pub(crate) fn run_receipt_reconsiderations(
         let prior_conclusion = lane.reason.clone();
         let prompt = receipt_reconsideration_prompt(&lane_id, &prior_conclusion, &lane_receipts);
         let turn = next_lane_turn_number(review_dir, &lane_id);
-        let lane_dir = review_dir.join("threads").join(&lane_id);
+        let lane_dir = review_dir
+            .join("threads")
+            .join(sanitize_artifact_name(&lane_id));
         fs::create_dir_all(&lane_dir)?;
         let prompt_path = lane_dir.join(format!("evidence-reconsideration-{turn:03}.md"));
         fs::write(&prompt_path, &prompt)?;
@@ -968,7 +980,10 @@ pub(crate) fn run_receipt_reconsiderations(
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
-        let turn_ref = format!("review/threads/{lane_id}/turn-{turn:03}.json");
+        let turn_ref = format!(
+            "review/threads/{}/{turn:03}.json",
+            sanitize_artifact_name(&lane_id)
+        );
         let reconsideration = ReceiptReconsideration {
             lane: lane_id.clone(),
             receipt_ids,
@@ -983,7 +998,8 @@ pub(crate) fn run_receipt_reconsiderations(
             turn,
             stage: "follow-up-evidence".to_owned(),
             prompt_packet_path: format!(
-                "review/threads/{lane_id}/evidence-reconsideration-{turn:03}.md"
+                "review/threads/{}/evidence-reconsideration-{turn:03}.md",
+                sanitize_artifact_name(&lane_id)
             ),
             response_summary: conclusion.clone(),
             routed_evidence_refs: lane_receipts

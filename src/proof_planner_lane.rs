@@ -107,7 +107,10 @@ pub(crate) fn run_proof_planner_model_lane(
         return Ok(0);
     }
 
-    let lane_dir = context.review_dir.join("model").join(&lane.id);
+    let lane_dir = context
+        .review_dir
+        .join("model")
+        .join(sanitize_artifact_name(&lane.id));
     fs::create_dir_all(&lane_dir)?;
     receipt.status = "running".to_owned();
     match call_model_proof_planner(
@@ -411,10 +414,12 @@ pub(crate) fn follow_up_result_artifact_path(
     task_dir: &Path,
     file_name: &str,
 ) -> Option<String> {
-    task_dir
-        .join(file_name)
-        .exists()
-        .then(|| format!("review/model/{model_lane}/{file_name}"))
+    task_dir.join(file_name).exists().then(|| {
+        format!(
+            "review/model/{}/{file_name}",
+            sanitize_artifact_name(model_lane)
+        )
+    })
 }
 
 pub(crate) fn follow_up_output_counts(output: &LaneModelOutput) -> FollowUpOutputCounts {

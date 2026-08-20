@@ -360,7 +360,7 @@ pub(crate) fn focused_red_green_receipt(
 }
 
 fn proof_command_paths(out: &Path, receipt_id: &str, side: &str) -> Result<ProofCommandPaths> {
-    let rel_dir = format!("proof/{receipt_id}/{side}");
+    let rel_dir = format!("proof/{}/{side}", sanitize_artifact_name(receipt_id));
     let dir = out.join(&rel_dir);
     fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
     let stdout_path = dir.join("stdout.txt");

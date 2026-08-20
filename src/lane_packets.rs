@@ -442,7 +442,10 @@ pub(crate) fn write_lane_packets(
             "Start inline comments for this lane with `[{}]`. If no blocking finding exists, write an audit trail: what you checked, strongest failed objection, and residual risk. Do not infer safety from missing sensor receipts.\n",
             lane.id
         ));
-        fs::write(lane_dir.join(format!("{}.md", lane.id)), text)?;
+        fs::write(
+            lane_dir.join(format!("{}.md", sanitize_artifact_name(&lane.id))),
+            text,
+        )?;
         event_log.append("lane_packet_written", serde_json::json!({"lane": lane.id}))?;
     }
     Ok(())

@@ -86,17 +86,27 @@ pub(crate) fn provider_preflight_cacheable_prefix<'a>(
 pub(crate) const ARTIFACT_NAME_MAX_CHARS: usize = 96;
 const ARTIFACT_NAME_HASH_CHARS: usize = 16;
 
+/// Encode a logical artifact identity into one portable filesystem component.
+///
+/// Only ASCII alphanumerics, `-`, and `_` are preserved. Every other UTF-8 byte
+/// is escaped, so values such as `foo.bar` and `foo/bar` cannot collapse onto
+/// the same artifact path. The Python verifier mirrors this byte-level mapping.
 pub(crate) fn sanitize_artifact_name(value: &str) -> String {
-    let sanitized: String = value
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
-                ch
+    let sanitized = if value.is_empty() {
+        "~EMPTY".to_owned()
+    } else {
+        let mut encoded = String::with_capacity(value.len());
+        for byte in value.bytes() {
+            if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_') {
+                encoded.push(char::from(byte));
             } else {
-                '-'
+                encoded.push('~');
+                encoded.push(char::from(b"0123456789ABCDEF"[(byte >> 4) as usize]));
+                encoded.push(char::from(b"0123456789ABCDEF"[(byte & 0x0f) as usize]));
             }
-        })
-        .collect();
+        }
+        encoded
+    };
     if sanitized.len() <= ARTIFACT_NAME_MAX_CHARS {
         return sanitized;
     }
@@ -107,6 +117,69 @@ pub(crate) fn sanitize_artifact_name(value: &str) -> String {
         sanitized.chars().take(prefix_len).collect::<String>(),
         &digest[..ARTIFACT_NAME_HASH_CHARS]
     )
+}
+
+#[cfg(test)]
+mod artifact_identity_tests {
+    use super::*;
+
+    #[test]
+    fn hostile_logical_ids_have_distinct_portable_components() -> Result<()> {
+        let values = [
+            "foo.bar",
+            "foo/bar",
+            "../foo",
+            "\u{e9}vidence",
+            " white space ",
+            "a\\b",
+            "",
+            "safe_lane-01",
+        ];
+        let components = values
+            .iter()
+            .map(|value| sanitize_artifact_name(value))
+            .collect::<Vec<_>>();
+        let unique = components.iter().collect::<std::collections::BTreeSet<_>>();
+        anyhow::ensure!(
+            unique.len() == components.len(),
+            "hostile logical IDs must not collapse: {components:?}"
+        );
+        anyhow::ensure!(
+            components
+                == vec![
+                    "foo~2Ebar",
+                    "foo~2Fbar",
+                    "~2E~2E~2Ffoo",
+                    "~C3~A9vidence",
+                    "~20white~20space~20",
+                    "a~5Cb",
+                    "~EMPTY",
+                    "safe_lane-01",
+                ],
+            "hostile corpus mapping drifted: {components:?}"
+        );
+        for component in components {
+            anyhow::ensure!(
+                !component.is_empty()
+                    && component
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric()
+                            || matches!(byte, b'-' | b'_' | b'~')),
+                "component is not portable: {component:?}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn safe_components_remain_compatible_and_long_values_are_bounded() -> Result<()> {
+        anyhow::ensure!(sanitize_artifact_name("safe_lane-01") == "safe_lane-01");
+        let long = "candidate-".to_owned() + &"generated-id-segment-".repeat(24);
+        let component = sanitize_artifact_name(&long);
+        anyhow::ensure!(component.len() == ARTIFACT_NAME_MAX_CHARS);
+        anyhow::ensure!(component.ends_with(&format!("-{}", &sha256_hex(long.as_bytes())[..16])));
+        Ok(())
+    }
 }
 
 #[expect(
