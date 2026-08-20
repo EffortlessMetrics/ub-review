@@ -555,6 +555,8 @@ pub(crate) struct ProofTaskArtifact {
     pub(crate) mode: String,
     pub(crate) requested_by: Vec<String>,
     pub(crate) request_ids: Vec<String>,
+    pub(crate) head_execution_identity: Option<proof::identity::ProofExecutionIdentity>,
+    pub(crate) base_plus_tests_execution_identity: Option<proof::identity::ProofExecutionIdentity>,
 }
 
 #[derive(Clone, Debug, Serialize)]

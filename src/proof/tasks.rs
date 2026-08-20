@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 
-use crate::proof::identity::{ProofExecutionIdentity, ProofSubsumption, identity_for_focused_task};
+use crate::proof::identity::{ProofSubsumption, identity_for_focused_task};
 use crate::test_parse::{
     command_display, command_display_with_env, focused_test_names_for_file, push_unique,
 };
@@ -105,17 +105,12 @@ pub(crate) fn focused_proof_plans_from_diff(
     diff: &DiffContext,
     proof_requests: &[ProofRequest],
     budget: ProofBudget,
-) -> Vec<FocusedProofPlan> {
+) -> Result<Vec<FocusedProofPlan>> {
     focused_test_tasks_from_diff(diff, proof_requests, budget)
         .into_iter()
         .map(|task| {
-            let execution_identity = identity_for_focused_task(
-                diff,
-                &task,
-                "target/ub-review/proof-worktrees/head",
-            )
-            .ok();
             focused_proof_plan_for_task(
+                diff,
                 task,
                 budget,
                 "planned",
@@ -126,7 +121,6 @@ pub(crate) fn focused_proof_plans_from_diff(
                     budget.per_command_timeout_sec,
                     budget.max_total_seconds
                 ),
-                execution_identity,
             )
         })
         .collect()
@@ -136,7 +130,7 @@ pub(crate) fn focused_proof_candidate_plans_from_diff(
     diff: &DiffContext,
     proof_requests: &[ProofRequest],
     budget: ProofBudget,
-) -> Vec<FocusedProofPlan> {
+) -> Result<Vec<FocusedProofPlan>> {
     let planned_ids = focused_test_tasks_from_diff(diff, proof_requests, budget)
         .into_iter()
         .map(|task| task.id)
@@ -145,17 +139,15 @@ pub(crate) fn focused_proof_candidate_plans_from_diff(
     let mut plans = Vec::with_capacity(candidate_tasks.len());
     for task in candidate_tasks {
         let status = candidate_plan_status(planned_ids.contains(&task.id));
-        let execution_identity =
-            identity_for_focused_task(diff, &task, "target/ub-review/proof-worktrees/head").ok();
-        plans.extend(std::iter::once(focused_proof_plan_for_task(
+        plans.push(focused_proof_plan_for_task(
+            diff,
             task,
             budget,
             status,
             "candidate recorded for portfolio accounting; execution is budget-gated".to_owned(),
-            execution_identity,
-        )));
+        )?);
     }
-    plans
+    Ok(plans)
 }
 
 fn candidate_plan_status(planned: bool) -> &'static str {
@@ -167,19 +159,35 @@ fn candidate_plan_status(planned: bool) -> &'static str {
 }
 
 fn focused_proof_plan_for_task(
+    diff: &DiffContext,
     task: FocusedTestTask,
     budget: ProofBudget,
     status: &str,
     reason: String,
-    execution_identity: Option<ProofExecutionIdentity>,
-) -> FocusedProofPlan {
-    let reason = match execution_identity.as_ref() {
-        Some(identity) if matches!(identity.subsumption(identity), ProofSubsumption::Identical) => {
-            reason
-        }
-        Some(_) => format!("{reason}; canonical execution identity rejected"),
-        None => format!("{reason}; canonical execution identity unavailable"),
-    };
+) -> Result<FocusedProofPlan> {
+    let head_execution_identity =
+        identity_for_focused_task(diff, &task, "head", "target/ub-review/proof-worktrees/head")?;
+    let base_plus_tests_execution_identity = (task.mode == FocusedProofMode::RedGreen)
+        .then(|| {
+            identity_for_focused_task(
+                diff,
+                &task,
+                "base-plus-tests",
+                "target/ub-review/proof-worktrees/base-plus-tests",
+            )
+        })
+        .transpose()?;
+    if let Some(base_identity) = &base_plus_tests_execution_identity
+        && matches!(
+            head_execution_identity.subsumption(base_identity),
+            ProofSubsumption::Identical
+        )
+    {
+        bail!(
+            "red-green proof task `{}` has identical head and base-plus-tests execution identities",
+            task.id
+        );
+    }
     let timeout_sec = focused_test_task_command_timeout(&task, budget);
     let head_command = proof_task_plan_command(&task, "head", "head");
     let base_plus_tests_command = if task.mode == FocusedProofMode::RedGreen {
@@ -187,7 +195,7 @@ fn focused_proof_plan_for_task(
     } else {
         "not planned for head-only proof".to_owned()
     };
-    FocusedProofPlan {
+    Ok(FocusedProofPlan {
         id: task.id,
         test_file: task.file,
         test_name: task.test_name,
@@ -199,7 +207,9 @@ fn focused_proof_plan_for_task(
         request_ids: task.request_ids,
         status: status.to_owned(),
         reason,
-    }
+        head_execution_identity,
+        base_plus_tests_execution_identity,
+    })
 }
 
 pub(crate) fn focused_test_tasks_from_diff(
@@ -839,7 +849,7 @@ mod tests {
             "a time-rejected candidate must not hide a later cheaper candidate"
         );
 
-        let plans = focused_proof_candidate_plans_from_diff(&diff, &requests, budget);
+        let plans = focused_proof_candidate_plans_from_diff(&diff, &requests, budget)?;
         anyhow::ensure!(
             plans
                 .iter()
@@ -878,7 +888,7 @@ mod tests {
             max_total_seconds: 240,
         };
 
-        let plans = focused_proof_candidate_plans_from_diff(&diff, &requests, budget);
+        let plans = focused_proof_candidate_plans_from_diff(&diff, &requests, budget)?;
         anyhow::ensure!(
             plans
                 .iter()
@@ -925,12 +935,12 @@ mod tests {
             max_total_seconds: 240,
         };
 
-        let plans = focused_proof_candidate_plans_from_diff(&diff, &requests, budget);
+        let plans = focused_proof_candidate_plans_from_diff(&diff, &requests, budget)?;
         let identities_and_statuses = plans
             .iter()
             .map(|plan| (plan.id.as_str(), plan.status.as_str()))
             .collect::<Vec<_>>();
-        let repeated = focused_proof_candidate_plans_from_diff(&diff, &requests, budget);
+        let repeated = focused_proof_candidate_plans_from_diff(&diff, &requests, budget)?;
         anyhow::ensure!(
             identities_and_statuses
                 == repeated
@@ -1025,20 +1035,34 @@ mod tests {
             request_ids: vec!["request-1".to_owned()],
         };
         let direct = focused_proof_plan_for_task(
+            &DiffContext {
+                base: "base".to_owned(),
+                head: "head".to_owned(),
+                changed_files: vec!["cargo-package:ub-review".to_owned()],
+                patch: String::new(),
+                flags: DiffFlags::default(),
+                diff_class: DiffClass::TestsOnly,
+            },
             task.clone(),
             budget,
             "deferred_by_budget",
             "candidate recorded for portfolio accounting; execution is budget-gated".to_owned(),
-            None,
-        );
+        )?;
         assert_eq!(
             focused_proof_plan_for_task(
+                &DiffContext {
+                    base: "base".to_owned(),
+                    head: "head".to_owned(),
+                    changed_files: vec!["cargo-package:ub-review".to_owned()],
+                    patch: String::new(),
+                    flags: DiffFlags::default(),
+                    diff_class: DiffClass::TestsOnly,
+                },
                 task,
                 budget,
                 "deferred_by_budget",
                 "candidate recorded for portfolio accounting; execution is budget-gated".to_owned(),
-                None,
-            )
+            )?
             .status,
             "deferred_by_budget",
             "focused_proof_plan_for_task must preserve candidate status"
@@ -1051,6 +1075,19 @@ mod tests {
         assert_eq!(direct.status, "deferred_by_budget");
         assert!(direct.head_command.contains("head"));
         assert!(direct.base_plus_tests_command.contains("base-plus-tests"));
+        assert_eq!(
+            direct.head_execution_identity.schema,
+            crate::proof::identity::PROOF_EXECUTION_IDENTITY_SCHEMA
+        );
+        assert!(direct.base_plus_tests_execution_identity.is_some());
+        assert_ne!(
+            direct.head_execution_identity.digest,
+            direct
+                .base_plus_tests_execution_identity
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("missing base-plus-tests identity"))?
+                .digest
+        );
         assert_eq!(direct.requested_by, vec!["tests-oracle"]);
         assert_eq!(direct.request_ids, vec!["request-1"]);
         assert!(direct.reason.contains("portfolio accounting"));
@@ -1063,7 +1100,7 @@ mod tests {
             flags: DiffFlags::default(),
             diff_class: DiffClass::TestsOnly,
         };
-        let planner_plans = focused_proof_plans_from_diff(&diff, &[], budget);
+        let planner_plans = focused_proof_plans_from_diff(&diff, &[], budget)?;
         let planner_plan = planner_plans
             .first()
             .ok_or_else(|| anyhow::anyhow!("missing focused planner plan"))?;
@@ -1083,15 +1120,15 @@ mod tests {
                 .contains("planner-only focused test target")
         );
 
-        let candidate_plans = focused_proof_candidate_plans_from_diff(&diff, &[], budget);
+        let candidate_plans = focused_proof_candidate_plans_from_diff(&diff, &[], budget)?;
         assert_eq!(
-            focused_proof_candidate_plans_from_diff(&diff, &[], budget).len(),
+            focused_proof_candidate_plans_from_diff(&diff, &[], budget)?.len(),
             1,
             "focused_proof_candidate_plans_from_diff must record the candidate"
         );
         assert_eq!(candidate_plans.len(), 1);
         assert_eq!(
-            focused_proof_candidate_plans_from_diff(&diff, &[], budget)
+            focused_proof_candidate_plans_from_diff(&diff, &[], budget)?
                 .iter()
                 .filter(|plan| plan.status == "planned")
                 .count(),
@@ -1141,7 +1178,7 @@ mod tests {
             ..budget
         };
         let deferred_candidates =
-            focused_proof_candidate_plans_from_diff(&diff, &[], zero_test_budget);
+            focused_proof_candidate_plans_from_diff(&diff, &[], zero_test_budget)?;
         assert_eq!(deferred_candidates.len(), 1);
         assert_eq!(
             deferred_candidates

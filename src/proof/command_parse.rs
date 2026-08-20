@@ -371,6 +371,9 @@ pub(crate) struct FocusedProofPlan {
     pub(crate) request_ids: Vec<String>,
     pub(crate) status: String,
     pub(crate) reason: String,
+    pub(crate) head_execution_identity: crate::proof::identity::ProofExecutionIdentity,
+    pub(crate) base_plus_tests_execution_identity:
+        Option<crate::proof::identity::ProofExecutionIdentity>,
 }
 
 #[derive(Clone, Debug)]

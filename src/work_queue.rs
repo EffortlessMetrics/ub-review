@@ -55,6 +55,8 @@ pub(crate) fn proof_task_artifact(
         mode: plan.mode.key().to_owned(),
         requested_by: plan.requested_by,
         request_ids: plan.request_ids,
+        head_execution_identity: Some(plan.head_execution_identity),
+        base_plus_tests_execution_identity: plan.base_plus_tests_execution_identity,
     }
 }
 
@@ -77,6 +79,8 @@ pub(crate) fn focused_build_task_artifact(
         command: plan.command.clone(),
         head_command: plan.command.clone(),
         base_plus_tests_command: None,
+        head_execution_identity: None,
+        base_plus_tests_execution_identity: None,
         purpose: format!("Run focused HEAD build proof `{}`.", plan.command),
         consumers: focused_build_task_consumers(&plan.requested_by),
         value: "medium".to_owned(),

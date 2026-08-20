@@ -159,7 +159,7 @@ pub(crate) fn build_proof_planner_output(
 ) -> Result<ProofPlannerOutput> {
     let budget = proof_budget(profile)?;
     let lease_budget = proof_lease_budget(profile)?;
-    let plans = focused_proof_candidate_plans_from_diff(diff, proof_requests, budget);
+    let plans = focused_proof_candidate_plans_from_diff(diff, proof_requests, budget)?;
     let build_plans = focused_build_candidate_plans_from_requests(proof_requests, budget);
     let proof_tasks = plans
         .into_iter()
@@ -284,7 +284,8 @@ pub(crate) fn write_proof_request_artifacts(
     let terminal_requests = terminalize_proof_requests(&diff.head, proof_requests, proof_receipts);
     ensure_terminal_proof_requests(&terminal_requests)?;
     let proof_groups = proof_request_groups(&terminal_requests);
-    let focused_plans = focused_proof_plans_from_diff(diff, proof_requests, proof_budget(profile)?);
+    let focused_plans =
+        focused_proof_plans_from_diff(diff, proof_requests, proof_budget(profile)?)?;
     let focused_build_plans =
         focused_build_plans_from_requests(proof_requests, proof_budget(profile)?);
     fs::write(
@@ -1073,7 +1074,7 @@ index 1111111..2222222 100644
                 per_command_timeout_sec: 300,
                 max_total_seconds: 1_200,
             },
-        );
+        )?;
         assert_eq!(plans[0].timeout_sec, 180);
         assert_eq!(plans[1].timeout_sec, 300);
         let artifact = super::proof_task_artifact(

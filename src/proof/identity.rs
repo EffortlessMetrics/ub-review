@@ -10,7 +10,7 @@ use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
 use super::{FocusedTestTask, proof_task_command_spec};
-use crate::{DiffContext, normalize_repo_path, sha256_hex};
+use crate::{DiffContext, sha256_hex};
 
 pub(crate) const PROOF_EXECUTION_IDENTITY_SCHEMA: &str = "ub-review.proof_execution_identity.v1";
 
@@ -90,7 +90,7 @@ impl ProofExecutionIdentity {
             target: normalize_token(&input.target, "target")?,
             test_filter: input
                 .test_filter
-                .map(|value| normalize_token(&value, "test_filter"))
+                .map(|value| normalize_test_filter(&value))
                 .transpose()?,
             features: normalize_features(input.features)?,
             tool_versions: normalize_map(input.tool_versions, "tool version")?,
@@ -180,18 +180,22 @@ impl ProofExecutionIdentity {
 pub(crate) fn identity_for_focused_task(
     diff: &DiffContext,
     task: &FocusedTestTask,
+    side: &str,
     working_root: &str,
 ) -> Result<ProofExecutionIdentity> {
-    let spec = proof_task_command_spec(task, "head");
+    let spec = proof_task_command_spec(task, side);
     ProofExecutionIdentity::from_approved(ApprovedProofExecution {
-        mode: task.mode.key().to_owned(),
+        mode: format!("{}:{side}", task.mode.key()),
         base: diff.base.clone(),
         head: diff.head.clone(),
         argv: spec.argv,
         env: spec.env,
         working_root: working_root.to_owned(),
         package: task.file.clone(),
-        target: task.test_name.clone().unwrap_or_else(|| task.file.clone()),
+        // Keep the semantic target stable and token-safe. Human-readable test
+        // names may contain spaces; they belong in `test_filter`, not in the
+        // normalized target field.
+        target: task.file.clone(),
         test_filter: task.test_name.clone(),
         features: Vec::new(),
         tool_versions: BTreeMap::new(),
@@ -239,7 +243,10 @@ fn normalize_argv(argv: Vec<String>) -> Result<Vec<String>> {
             if arg.is_empty() || arg.contains('\0') || arg.chars().any(char::is_control) {
                 bail!("approved proof argv contains an invalid argument");
             }
-            Ok(normalize_repo_path(&arg))
+            // argv is already emitted by the allowlist-backed command parser.
+            // Preserve every token byte-for-byte: a generic path normalizer
+            // would turn an ordinary argument such as `b/` into an alias.
+            Ok(arg)
         })
         .collect()
 }
@@ -280,7 +287,9 @@ fn normalize_features(mut features: Vec<String>) -> Result<Vec<String>> {
 }
 
 fn normalize_root(root: &str) -> Result<String> {
-    let normalized = normalize_repo_path(root);
+    // Working roots are filesystem paths, not diff paths. Never apply the
+    // diff-specific `b/` prefix removal here.
+    let normalized = root.trim().replace('\\', "/");
     if normalized.is_empty()
         || normalized.contains('\0')
         || normalized.chars().any(char::is_control)
@@ -292,6 +301,17 @@ fn normalize_root(root: &str) -> Result<String> {
 
 fn normalize_revision(value: &str, label: &str) -> Result<String> {
     normalize_token(value, label)
+}
+
+fn normalize_test_filter(value: &str) -> Result<String> {
+    let normalized = value.trim().to_owned();
+    if normalized.is_empty()
+        || normalized.contains('\0')
+        || normalized.chars().any(char::is_control)
+    {
+        bail!("invalid proof test_filter");
+    }
+    Ok(normalized)
 }
 
 fn normalize_token(value: &str, label: &str) -> Result<String> {
@@ -309,6 +329,9 @@ fn normalize_token(value: &str, label: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::proof::command::ProofCommandSpec;
+    use crate::proof::tasks::FocusedTestCommandSpecs;
+    use crate::{DiffClass, DiffFlags, FocusedProofMode};
 
     fn input() -> ApprovedProofExecution {
         ApprovedProofExecution {
@@ -389,6 +412,23 @@ mod tests {
     }
 
     #[test]
+    fn argv_tokens_and_working_root_keep_path_domains_distinct() -> Result<()> {
+        let mut first = input();
+        first.argv.push("b/ordinary-argument".to_owned());
+        first.working_root = "b/repo".to_owned();
+        let mut second = first.clone();
+        second.argv.pop();
+        second.argv.push("ordinary-argument".to_owned());
+        second.working_root = "repo".to_owned();
+        let left = ProofExecutionIdentity::from_approved(first)?;
+        let right = ProofExecutionIdentity::from_approved(second)?;
+        assert_ne!(left.argv, right.argv);
+        assert_ne!(left.working_root, right.working_root);
+        assert_eq!(left.subsumption(&right), ProofSubsumption::Distinct);
+        Ok(())
+    }
+
+    #[test]
     fn explicit_narrower_relation_requires_same_execution_dimensions() -> Result<()> {
         let broad = ProofExecutionIdentity::from_approved(input())?;
         let mut narrow_input = input();
@@ -403,6 +443,61 @@ mod tests {
         red_green_input.test_filter = Some("specific_test".to_owned());
         let red_green = ProofExecutionIdentity::from_approved(red_green_input)?;
         assert_eq!(broad.subsumption(&red_green), ProofSubsumption::Distinct);
+        Ok(())
+    }
+
+    #[test]
+    fn red_green_sides_have_distinct_command_identities() -> Result<()> {
+        let diff = DiffContext {
+            base: "base-sha".to_owned(),
+            head: "head-sha".to_owned(),
+            changed_files: vec!["src/lib.rs".to_owned()],
+            patch: String::new(),
+            flags: DiffFlags::default(),
+            diff_class: DiffClass::SourceGeneral,
+        };
+        let task = FocusedTestTask {
+            id: "identity-red-green".to_owned(),
+            file: "cargo-package:demo".to_owned(),
+            test_name: Some("unit".to_owned()),
+            mode: FocusedProofMode::RedGreen,
+            command_specs: Some(FocusedTestCommandSpecs {
+                head: ProofCommandSpec {
+                    argv: vec![
+                        "cargo".to_owned(),
+                        "test".to_owned(),
+                        "--features=head".to_owned(),
+                    ],
+                    env: BTreeMap::new(),
+                },
+                base_plus_tests: ProofCommandSpec {
+                    argv: vec![
+                        "cargo".to_owned(),
+                        "test".to_owned(),
+                        "--features=base".to_owned(),
+                    ],
+                    env: BTreeMap::new(),
+                },
+            }),
+            timeout_sec: Some(30),
+            requested_by: vec!["tests-oracle".to_owned()],
+            request_ids: vec!["request-identity".to_owned()],
+        };
+        let head = identity_for_focused_task(
+            &diff,
+            &task,
+            "head",
+            "target/ub-review/proof-worktrees/head",
+        )?;
+        let base = identity_for_focused_task(
+            &diff,
+            &task,
+            "base-plus-tests",
+            "target/ub-review/proof-worktrees/base-plus-tests",
+        )?;
+        assert_ne!(head.argv, base.argv);
+        assert_ne!(head.digest, base.digest);
+        assert_eq!(head.subsumption(&base), ProofSubsumption::Distinct);
         Ok(())
     }
 }
