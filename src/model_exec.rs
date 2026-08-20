@@ -523,7 +523,10 @@ pub(crate) fn run_reporter_coordination(
             return Ok(());
         }
     };
-    let conclusion = parse_reporter_conclusion(&content.json_payload, &cohort_id, &thread_id);
+    let conclusion = withhold_internal_audit_echo(
+        parse_reporter_conclusion(&content.json_payload, &cohort_id, &thread_id),
+        review_dir,
+    );
     write_reporter_thread(review_dir, &conclusion, current_head)?;
     let _ = message_log.append(
         CrossLaneMessageKind::LaneReport,
@@ -719,11 +722,14 @@ where
     invalidate_reporter_authority(context.review_dir)
         .context("invalidate turn-000 before reporter re-distillation")?;
     let content = call().context("call reporter re-distillation")?;
-    let conclusion = parse_reporter_conclusion_strict(
-        &content.json_payload,
-        context.cohort_id,
-        context.thread_id,
-    )?;
+    let conclusion = withhold_internal_audit_echo(
+        parse_reporter_conclusion_strict(
+            &content.json_payload,
+            context.cohort_id,
+            context.thread_id,
+        )?,
+        context.review_dir,
+    );
     write_reporter_turn(
         context.review_dir,
         &conclusion,

@@ -2525,6 +2525,14 @@ fn classify_internal_audit_value(value: &serde_json::Value) -> InternalAuditClas
         return InternalAuditClassification::Malformed;
     };
     if surfaces.iter().any(|surface| !surface.is_string())
+        || object.keys().any(|key| {
+            !matches!(
+                key.as_str(),
+                "surfaces_checked"
+                    | "strongest_rejected_hypothesis"
+                    | "remaining_local_uncertainty"
+            )
+        })
         || object.iter().any(|(key, value)| {
             matches!(
                 key.as_str(),

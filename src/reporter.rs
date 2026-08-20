@@ -226,11 +226,7 @@ pub(crate) fn lane_digests_from_receipts(
 }
 
 pub(crate) fn read_internal_audit(review_dir: &Path, lane: &str) -> Option<crate::InternalAudit> {
-    let lane_dir = crate::sanitize_lane_artifact_name(lane).ok()?;
-    let path = review_dir
-        .join("model")
-        .join(lane_dir)
-        .join("internal_audit.json");
+    let path = crate::internal_audit_artifact_path(&review_dir.join("model"), lane).ok()?;
     let bytes = fs::read(path).ok()?;
     let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
     if value.get("schema")?.as_str()? != crate::artifacts::INTERNAL_AUDIT_SCHEMA
@@ -240,6 +236,51 @@ pub(crate) fn read_internal_audit(review_dir: &Path, lane: &str) -> Option<crate
     }
     let audit: crate::InternalAudit = serde_json::from_value(value).ok()?;
     audit.has_value().then_some(audit)
+}
+
+/// Remove private audit material from every public reporter sink, including
+/// adversarial model responses that ignore the prompt's no-echo contract.
+pub(crate) fn withhold_internal_audit_echo(
+    mut conclusion: ReporterConclusion,
+    review_dir: &Path,
+) -> ReporterConclusion {
+    let model_dir = review_dir.join("model");
+    let mut private_values = Vec::new();
+    if let Ok(entries) = fs::read_dir(model_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path().join("internal_audit.json");
+            let Ok(bytes) = fs::read(path) else { continue };
+            let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+                continue;
+            };
+            for key in [
+                "surfaces_checked",
+                "strongest_rejected_hypothesis",
+                "remaining_local_uncertainty",
+            ] {
+                match value.get(key) {
+                    Some(serde_json::Value::Array(values)) => private_values
+                        .extend(values.iter().filter_map(|v| v.as_str()).map(str::to_owned)),
+                    Some(serde_json::Value::String(value)) => private_values.push(value.clone()),
+                    _ => {}
+                }
+            }
+        }
+    }
+    for private in private_values
+        .into_iter()
+        .filter(|value| !value.trim().is_empty())
+    {
+        conclusion.distillation = conclusion
+            .distillation
+            .replace(&private, "[private internal audit withheld]");
+        conclusion.proposed_follow_ups = conclusion
+            .proposed_follow_ups
+            .into_iter()
+            .map(|follow_up| follow_up.replace(&private, "[private internal audit withheld]"))
+            .collect();
+    }
+    conclusion
 }
 
 /// Parse the reporter's model response into a ReporterConclusion. Tolerant of
@@ -928,6 +969,30 @@ mod tests {
         assert!(prompt.contains("src/parser.rs"));
         assert!(prompt.contains("parser bypasses guard"));
         assert!(prompt.contains("do not quote or emit"));
+        Ok(())
+    }
+
+    #[test]
+    fn adversarial_reporter_echo_is_withheld_from_public_conclusion() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        crate::write_internal_audit_artifact(
+            &review_dir.join("model"),
+            "tests-oracle",
+            &crate::InternalAudit {
+                surfaces_checked: vec!["PRIVATE_SURFACE".to_owned()],
+                strongest_rejected_hypothesis: Some("PRIVATE_HYPOTHESIS".to_owned()),
+                remaining_local_uncertainty: Some("PRIVATE_UNCERTAINTY".to_owned()),
+            },
+        )?;
+        let conclusion = parse_reporter_conclusion(
+            r#"{"distillation":"PRIVATE_SURFACE PRIVATE_HYPOTHESIS","proposed_follow_ups":["lane: PRIVATE_UNCERTAINTY"]}"#,
+            "cid",
+            "tid",
+        );
+        let sanitized = withhold_internal_audit_echo(conclusion, &review_dir);
+        assert!(!sanitized.distillation.contains("PRIVATE_"));
+        assert!(!sanitized.proposed_follow_ups[0].contains("PRIVATE_"));
         Ok(())
     }
 

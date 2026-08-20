@@ -15,8 +15,11 @@ pub(crate) fn write_internal_audit_artifact(
     lane: &str,
     audit: &InternalAudit,
 ) -> Result<()> {
-    let lane_dir = model_dir.join(sanitize_lane_artifact_name(lane)?);
-    fs::create_dir_all(&lane_dir)
+    let path = internal_audit_artifact_path(model_dir, lane)?;
+    let lane_dir = path
+        .parent()
+        .context("internal audit path has no lane parent")?;
+    fs::create_dir_all(lane_dir)
         .with_context(|| format!("create internal audit lane {}", lane_dir.display()))?;
     let mut artifact = serde_json::to_value(audit)?;
     let object = artifact
@@ -30,11 +33,14 @@ pub(crate) fn write_internal_audit_artifact(
         "lane".to_owned(),
         serde_json::Value::String(lane.to_owned()),
     );
-    fs::write(
-        lane_dir.join("internal_audit.json"),
-        serde_json::to_vec_pretty(&artifact)?,
-    )?;
+    fs::write(path, serde_json::to_vec_pretty(&artifact)?)?;
     Ok(())
+}
+
+pub(crate) fn internal_audit_artifact_path(model_dir: &Path, lane: &str) -> Result<PathBuf> {
+    Ok(model_dir
+        .join(sanitize_lane_artifact_name(lane)?)
+        .join("internal_audit.json"))
 }
 
 pub(crate) fn write_observation_artifacts(out: &Path, observations: &[Observation]) -> Result<()> {
@@ -356,6 +362,24 @@ mod tests {
             Some("malformed-internal-audit")
         );
         assert!(output.internal_audit.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn internal_audit_rejects_unknown_fields() -> Result<()> {
+        let (output, degraded) = parse_fixture(
+            r#"{"internal_audit":{"surfaces_checked":["src/lib.rs"],"secret":"do not echo"},"findings":[]}"#,
+        )?;
+        assert!(degraded);
+        assert_eq!(
+            output.internal_audit_classification,
+            InternalAuditClassification::Malformed
+        );
+        assert!(output.internal_audit.is_none());
+        assert_eq!(
+            output.observations[0].kind.as_deref(),
+            Some("malformed-internal-audit")
+        );
         Ok(())
     }
 
