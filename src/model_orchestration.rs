@@ -507,6 +507,9 @@ pub(crate) fn run_available_model_lanes_with_runner(
             .iter()
             .map(|task| (task.index, task.spec.clone()))
             .collect::<BTreeMap<_, _>>();
+        for task in &wave {
+            remove_internal_audit_artifact(&model_dir, &task.lane.id)?;
+        }
         calls += wave.len();
         let mut results = runner(&context, &model_dir, wave)?;
         results.sort_by_key(|result| result.index);

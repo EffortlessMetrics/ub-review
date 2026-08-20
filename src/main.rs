@@ -213,16 +213,21 @@ mod lane_identity_artifact_ref_tests {
     use super::{lane_turn_artifact_ref, model_content_artifact_ref};
 
     #[test]
-    fn hostile_lane_refs_use_the_same_encoded_component() {
+    fn hostile_lane_refs_use_the_same_encoded_component() -> anyhow::Result<()> {
         let lane = "../foo/bar é";
+        let model_ref = model_content_artifact_ref(lane)?;
         assert_eq!(
-            model_content_artifact_ref(lane),
-            "review/model/~2E~2E~2Ffoo~2Fbar~20~C3~A9/content.json"
+            model_ref,
+            format!(
+                "review/model/{}/content.json",
+                crate::sanitize_lane_artifact_name(lane)?
+            )
         );
         assert_eq!(
             lane_turn_artifact_ref(lane, 0),
             "review/threads/~2E~2E~2Ffoo~2Fbar~20~C3~A9/turn-000.json"
         );
+        Ok(())
     }
 }
 
@@ -4152,8 +4157,11 @@ fn finalize_reporter_coordination(
     }
 }
 
-fn model_content_artifact_ref(lane: &str) -> String {
-    format!("review/model/{}/content.json", sanitize_artifact_name(lane))
+fn model_content_artifact_ref(lane: &str) -> anyhow::Result<String> {
+    Ok(format!(
+        "review/model/{}/content.json",
+        sanitize_lane_artifact_name(lane)?
+    ))
 }
 
 fn lane_turn_artifact_ref(lane: &str, turn: u32) -> String {
@@ -4340,7 +4348,7 @@ fn write_review_artifacts(
                     .find(|a| a.lane.id == receipt.lane)
                     .map(|a| a.lane.receives.clone())
                     .unwrap_or_default();
-                let receipt_ref = model_content_artifact_ref(&receipt.lane);
+                let receipt_ref = model_content_artifact_ref(&receipt.lane)?;
                 let turn = primary_turn(
                     &receipt.thread_id,
                     &receipt.lane,

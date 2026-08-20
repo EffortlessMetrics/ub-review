@@ -5,6 +5,8 @@
 //! contentful-but-malformed model output into a receipted observation
 //! rather than dropping it.
 
+use std::io;
+
 use crate::*;
 
 /// Preserve a successful specialist's private coverage audit beside the raw
@@ -39,6 +41,15 @@ pub(crate) fn write_internal_audit_artifact(
 
 pub(crate) fn internal_audit_artifact_path(model_dir: &Path, lane: &str) -> Result<PathBuf> {
     Ok(model_lane_artifact_dir(model_dir, lane)?.join("internal_audit.json"))
+}
+
+pub(crate) fn remove_internal_audit_artifact(model_dir: &Path, lane: &str) -> Result<()> {
+    let path = internal_audit_artifact_path(model_dir, lane)?;
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| format!("remove {}", path.display())),
+    }
 }
 
 pub(crate) fn model_lane_artifact_dir(model_dir: &Path, lane: &str) -> Result<PathBuf> {
@@ -334,6 +345,28 @@ mod tests {
                 .as_deref(),
             Some("PRIVATE_SURFACE")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn stale_internal_audit_is_removed_before_a_new_lane_attempt() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let model_dir = temp.path().join("model");
+        let lane = "foo.bar";
+        write_internal_audit_artifact(
+            &model_dir,
+            lane,
+            &InternalAudit {
+                surfaces_checked: vec!["old-surface".to_owned()],
+                strongest_rejected_hypothesis: None,
+                remaining_local_uncertainty: None,
+            },
+        )?;
+        let path = internal_audit_artifact_path(&model_dir, lane)?;
+        assert!(path.exists());
+        remove_internal_audit_artifact(&model_dir, lane)?;
+        assert!(!path.exists());
+        remove_internal_audit_artifact(&model_dir, lane)?;
         Ok(())
     }
 }
