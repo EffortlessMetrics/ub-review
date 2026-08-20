@@ -21728,3 +21728,147 @@ kind = "exposure_gap"
 finding_id = "probe:src_sensors_mod.rs:return_value:58552b06"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 weak-oracle residual in the Unix fake-RIPR truncated-JSON fixture branch. ripr_sensor_keeps_primary_receipts_when_successful_detail_output_is_truncated executes the fake process successfully, forces this exact malformed output, asserts v2 detail_unavailable without counts/entries, preserves the primary sensor status and verbatim gate receipt, and proves temporary captures are removed. Re-verify after the fake sensor or detail failure contract changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:error_path:afb2ead4"
+owner = "ub-review/core"
+reason = "Foundation path receipt: model_exec lane identity is exercised by continuation_prompt_and_receipt_references_share_encoded_lane_root and hostile_lane_production_directory_matches_audit_writer_and_reader. Re-verify after model lane directory changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:965a529c"
+owner = "ub-review/core"
+reason = "Foundation path receipt: model_exec lane identity is exercised by continuation_prompt_and_receipt_references_share_encoded_lane_root and hostile_lane_production_directory_matches_audit_writer_and_reader. Re-verify after model lane directory changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:error_path:52bdad40"
+owner = "ub-review/core"
+reason = "Foundation path receipt: run_model_lane_tasks uses the canonical model_lane_artifact_dir helper; hostile lane identity tests and model lane reference tests cover the exact path contract. Re-verify after task runner changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:3e7c9e50"
+owner = "ub-review/core"
+reason = "Foundation path receipt: run_model_lane_tasks uses the canonical model_lane_artifact_dir helper; hostile lane identity tests and model lane reference tests cover the exact path contract. Re-verify after task runner changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:error_path:6ef7c1a2"
+owner = "ub-review/core"
+reason = "Foundation path receipt: model lane execution is covered by the hostile production directory and model lane reference tests; this call preserves the canonical lane directory contract. Re-verify after model invocation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:1ec50750"
+owner = "ub-review/core"
+reason = "Foundation path receipt: model lane execution is covered by the hostile production directory and model lane reference tests; this call preserves the canonical lane directory contract. Re-verify after model invocation changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:error_path:8c04834b"
+owner = "ub-review/core"
+reason = "Foundation path receipt: model lane request writes are covered by model lane artifact identity tests and the CLI model artifact regression. Re-verify after request path changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:213954e9"
+owner = "ub-review/core"
+reason = "Foundation path receipt: model lane request writes are covered by model lane artifact identity tests and the CLI model artifact regression. Re-verify after request path changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:error_path:c0114e65"
+owner = "ub-review/core"
+reason = "Foundation path receipt: model lane task completion is covered by model lane artifact identity and CLI model artifact regressions. Re-verify after task completion handling changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:e7a1b25f"
+owner = "ub-review/core"
+reason = "Foundation path receipt: model lane task completion is covered by model lane artifact identity and CLI model artifact regressions. Re-verify after task completion handling changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:error_path:c5bcbada"
+owner = "ub-review/core"
+reason = "Foundation path receipt: model lane task result propagation is covered by model lane artifact identity and CLI model artifact regressions. Re-verify after task result changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:cd975dbd"
+owner = "ub-review/core"
+reason = "Foundation path receipt: model lane task result propagation is covered by model lane artifact identity and CLI model artifact regressions. Re-verify after task result changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:36ace019"
+owner = "ub-review/core"
+reason = "Foundation prompt-contract receipt: render_lane_model_task_prompt contains the artifact-only internal_audit contract and is covered by reporter withholding and lane output tests. Re-verify after prompt contract changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:a32b461b"
+owner = "ub-review/core"
+reason = "Foundation prompt-contract receipt: render_lane_model_task_prompt contains the artifact-only internal_audit contract and is covered by reporter withholding and lane output tests. Re-verify after prompt contract changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_orchestration.rs:return_value:26a8565f"
+owner = "ub-review/core"
+reason = "Foundation sanitizer receipt: hostile_logical_ids_have_distinct_portable_components and lane_identity_rejects_empty_and_whitespace_but_raw_artifact_encoding_is_stable assert encoded identity, bounds, and empty/whitespace semantics. Re-verify after sanitizer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:field_construction:df484105"
+owner = "ub-review/core"
+reason = "Foundation writer receipt: internal_audit_artifact_is_lane_scoped_and_not_public_surface and hostile_lane_production_directory_matches_audit_writer_and_reader exercise the writer inputs and private artifact boundary. Re-verify after writer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:call_deletion:72c4a9de"
+owner = "ub-review/core"
+reason = "Foundation writer receipt: hostile_lane_production_directory_matches_audit_writer_and_reader asserts the canonical lane directory is created and readable. Re-verify after writer IO changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:call_deletion:3ff674ba"
+owner = "ub-review/core"
+reason = "Foundation writer receipt: internal_audit_artifact_is_lane_scoped_and_not_public_surface asserts schema and lane fields survive serialization. Re-verify after artifact serialization changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:call_deletion:3df18cc9"
+owner = "ub-review/core"
+reason = "Foundation writer receipt: internal_audit_artifact_is_lane_scoped_and_not_public_surface and hostile_lane_production_directory_matches_audit_writer_and_reader assert exact artifact persistence. Re-verify after writer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:side_effect:bf8c25af"
+owner = "ub-review/core"
+reason = "Foundation writer receipt: hostile_lane_production_directory_matches_audit_writer_and_reader asserts the private audit file side effect at the canonical path. Re-verify after writer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:call_deletion:3df18cc9.2"
+owner = "ub-review/core"
+reason = "Foundation writer receipt: internal_audit_artifact_is_lane_scoped_and_not_public_surface and hostile_lane_production_directory_matches_audit_writer_and_reader assert exact artifact persistence for multiple lane identities. Re-verify after writer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:side_effect:bf8c25af.2"
+owner = "ub-review/core"
+reason = "Foundation writer receipt: hostile_lane_production_directory_matches_audit_writer_and_reader asserts the private audit file side effect for hostile IDs. Re-verify after writer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:call_deletion:eadbf929"
+owner = "ub-review/core"
+reason = "Foundation writer receipt: internal_audit_artifact_is_lane_scoped_and_not_public_surface asserts successful artifact completion and no public review directory. Re-verify after writer result changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:return_value:8468d28b"
+owner = "ub-review/core"
+reason = "Foundation writer receipt: internal_audit_artifact_is_lane_scoped_and_not_public_surface asserts successful artifact completion and no public review directory. Re-verify after writer result changes."
