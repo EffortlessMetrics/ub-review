@@ -21439,6 +21439,69 @@ finding_id = "probe:src_sensors_mod.rs:return_value:bcab99ad"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 weak-oracle residual in the Unix fake-RIPR truncated-JSON fixture branch. ripr_sensor_keeps_primary_receipts_when_successful_detail_output_is_truncated executes the fake process successfully, forces this exact malformed output, asserts v2 detail_unavailable without counts/entries, preserves the primary sensor status and verbatim gate receipt, and proves temporary captures are removed. Re-verify after the fake sensor or detail failure contract changes."
 
+# PR #909 exact-head artifact-identity findings (9419718288). These are
+# content-addressed residuals after named hostile-ID and failure-path tests;
+# keep each receipt independently auditable and re-check when its seam moves.
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:3390e069"
+owner = "ub-review/core"
+reason = "PR #909 exact-head residual on lane packet directory creation. lane_packet_write_reports_unwritable_lane_directory forces a file at lanes/, asserts the contextual create lane packet directory error and blocked path, while lane_packets_render_late_phase_sensors_as_scheduled asserts the encoded packet is written. Re-verify after lane packet directory or write handling changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_threads.rs:call_deletion:65747407"
+owner = "ub-review/core"
+reason = "PR #909 exact-head residual on lane thread rollup reference construction. hostile_lane_identity_stays_inside_encoded_thread_root asserts the literal encoded latest-turn reference and serialized turn artifact under the encoded root. Re-verify after lane thread rollup identity changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_threads.rs:field_construction:cc9a0652"
+owner = "ub-review/core"
+reason = "PR #909 exact-head residual on lane thread latest-turn field construction. hostile_lane_identity_stays_inside_encoded_thread_root asserts the exact review/threads/~2E~2E~2Ffoo~2Fbar~20~C3~A9/turn-000.json value and serialized artifact identity. Re-verify after rollup field changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_threads.rs:return_value:e43ca74e"
+owner = "ub-review/core"
+reason = "PR #909 exact-head residual on lane thread rollup return/write path. hostile_lane_identity_stays_inside_encoded_thread_root and malformed_latest_turn_preserves_previous_rollup_identity assert successful encoded output and preserved prior state on malformed input. Re-verify after rollup refresh changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_orchestration.rs:field_construction:594b6ceb"
+owner = "ub-review/core"
+reason = "PR #909 exact-head residual on the legacy provider preflight hash-width constant. long_provider_preflight_labels_are_bounded_and_hash_suffixed asserts the complete deterministic 96-character component with dbf1a5a0af723b96 suffix. Re-verify after provider preflight naming changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_orchestration.rs:predicate:ecb6abf4"
+owner = "ub-review/core"
+reason = "PR #909 exact-head residual on the sanitizer length predicate. safe_components_remain_compatible_and_long_values_are_bounded and long_artifact_ids_use_input_hash_to_disambiguate_shared_prefixes assert the short compatibility branch, exact max length, hash suffix, and distinct long inputs. Re-verify after sanitizer bounds change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_orchestration.rs:return_value:875a053d"
+owner = "ub-review/core"
+reason = "PR #909 exact-head residual on sanitizer hash-suffixed return construction. safe_components_remain_compatible_and_long_values_are_bounded asserts the exact SHA-256-derived suffix and long_artifact_ids_use_input_hash_to_disambiguate_shared_prefixes asserts distinct outputs. Re-verify after artifact encoding changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:call_deletion:a5124a6a"
+owner = "ub-review/core"
+reason = "PR #909 exact-head residual on encoded summary packet lookup. lane_packet_model_display_resolves_encoded_hostile_lane_id asserts the literal encoded packet path is read and returns test-model. Re-verify after summary packet lookup changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:call_deletion:67b6108e"
+owner = "ub-review/core"
+reason = "PR #909 exact-head residual on summary packet read error mapping. lane_packet_model_display_returns_none_for_missing_packet asserts a missing hostile path returns None, while the encoded lookup test asserts successful content extraction. Re-verify after summary lookup error handling changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:error_path:4dada384"
+owner = "ub-review/core"
+reason = "PR #909 exact-head residual on the fallible summary packet read path. lane_packet_model_display_returns_none_for_missing_packet explicitly exercises the missing artifact and asserts None; the encoded lookup test covers the success path. Re-verify after summary packet read semantics change."
+
 # PR #879: content-addressed probes for the CommandRun extraction and sensor
 # dispatch wiring. The focused fake-sensor regression observes the production
 # spawn status, captured output, allowlisted PATH, and credential exclusion;

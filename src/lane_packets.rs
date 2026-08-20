@@ -3,6 +3,7 @@
 
 use crate::diff_posture::review_posture_for_diff_class;
 use crate::*;
+use anyhow::Context;
 
 pub(crate) fn trigger_match(trigger: Trigger, flags: &DiffFlags) -> Option<String> {
     match trigger {
@@ -393,7 +394,8 @@ pub(crate) fn write_lane_packets(
         .map(|sensor| sensor.id.as_str())
         .collect::<std::collections::BTreeSet<_>>();
     let lane_dir = out.join("lanes");
-    fs::create_dir_all(&lane_dir)?;
+    fs::create_dir_all(&lane_dir)
+        .with_context(|| format!("create lane packet directory {}", lane_dir.display()))?;
     for lane in lanes {
         let mut text = String::new();
         text.push_str(&format!("# Lane: `{}`\n\n", lane.id));
@@ -442,7 +444,9 @@ pub(crate) fn write_lane_packets(
             "Start inline comments for this lane with `[{}]`. If no blocking finding exists, write an audit trail: what you checked, strongest failed objection, and residual risk. Do not infer safety from missing sensor receipts.\n",
             lane.id
         ));
-        fs::write(lane_dir.join(format!("{}.md", lane.id)), text)?;
+        let packet_path = lane_dir.join(format!("{}.md", sanitize_artifact_name(&lane.id)));
+        fs::write(&packet_path, text)
+            .with_context(|| format!("write lane packet {}", packet_path.display()))?;
         event_log.append("lane_packet_written", serde_json::json!({"lane": lane.id}))?;
     }
     Ok(())

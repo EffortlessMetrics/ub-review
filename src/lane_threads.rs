@@ -20,6 +20,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use crate::artifacts::LANE_THREAD_SCHEMA;
+use crate::sanitize_artifact_name;
 
 /// One turn within a lane's logical thread.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -91,7 +92,9 @@ pub(crate) fn write_lane_thread_turn(
     cohort_id: &str,
     terminal_reason: &str,
 ) -> Result<()> {
-    let thread_dir = review_dir.join("threads").join(lane);
+    let thread_dir = review_dir
+        .join("threads")
+        .join(sanitize_artifact_name(lane));
     fs::create_dir_all(&thread_dir)?;
     let turn_id = format!("turn-{:03}", turn.turn);
     let turn_path = thread_dir.join(format!("{turn_id}.json"));
@@ -149,7 +152,10 @@ pub(crate) fn write_lane_thread_turn(
         cohort_id: latest_cohort_id,
         turns: turn_ids,
         latest_turn: Some(last_id.clone()),
-        latest_turn_ref: Some(format!("review/threads/{lane}/{last_id}.json")),
+        latest_turn_ref: Some(format!(
+            "review/threads/{}/{last_id}.json",
+            sanitize_artifact_name(lane)
+        )),
         latest_conclusion: parsed.response_summary,
         head_sha: parsed.head_sha,
         verdict: parsed.verdict,
@@ -177,7 +183,7 @@ pub(crate) fn primary_turn(
         thread_id: thread_id.to_owned(),
         turn: 0,
         stage: "primary".to_owned(),
-        prompt_packet_path: format!("lanes/{lane}.md"),
+        prompt_packet_path: format!("lanes/{}.md", sanitize_artifact_name(lane)),
         response_summary: truncate_summary(response_summary),
         routed_evidence_refs,
         receipt_ref: receipt_ref.to_owned(),
@@ -233,6 +239,41 @@ mod tests {
         assert_eq!(session.turns, vec!["turn-000".to_owned()]);
         assert!(session.latest_conclusion.contains("discriminate"));
         assert_eq!(session.terminal_reason, "completed");
+        Ok(())
+    }
+
+    #[test]
+    fn hostile_lane_identity_stays_inside_encoded_thread_root() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        let lane = "../foo/bar é";
+        let turn = primary_turn("tid", lane, "conclusion", vec![], "receipt");
+        write_lane_thread_turn(&review_dir, lane, &turn, "cid", "completed")?;
+        let encoded = "~2E~2E~2Ffoo~2Fbar~20~C3~A9";
+        assert_eq!(sanitize_artifact_name(lane), encoded);
+        let encoded_dir = review_dir.join("threads").join(encoded);
+        assert!(encoded_dir.join("turn-000.json").is_file());
+        assert!(encoded_dir.join("thread.json").is_file());
+        assert!(!review_dir.join("foo").exists());
+        let session: LaneThreadSession =
+            serde_json::from_slice(&fs::read(encoded_dir.join("thread.json"))?)?;
+        assert_eq!(session.lane, lane);
+        let expected_ref = format!("review/threads/{encoded}/turn-000.json");
+        assert_eq!(
+            session.latest_turn_ref.as_deref(),
+            Some(expected_ref.as_str())
+        );
+        assert_eq!(
+            session.latest_turn_ref.as_deref(),
+            Some("review/threads/~2E~2E~2Ffoo~2Fbar~20~C3~A9/turn-000.json")
+        );
+        assert_eq!(
+            serde_json::from_slice::<LaneThreadTurn>(&fs::read(
+                encoded_dir.join("turn-000.json")
+            )?)?
+            .thread_id,
+            "tid"
+        );
         Ok(())
     }
 

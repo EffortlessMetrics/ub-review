@@ -107,7 +107,10 @@ pub(crate) fn run_proof_planner_model_lane(
         return Ok(0);
     }
 
-    let lane_dir = context.review_dir.join("model").join(&lane.id);
+    let lane_dir = context
+        .review_dir
+        .join("model")
+        .join(sanitize_artifact_name(&lane.id));
     fs::create_dir_all(&lane_dir)?;
     receipt.status = "running".to_owned();
     match call_model_proof_planner(
@@ -550,4 +553,24 @@ pub(crate) fn follow_up_result(input: FollowUpResultInput<'_>) -> FollowUpResult
 pub(crate) enum PrObservationTone {
     Signal,
     Verification,
+}
+
+#[cfg(test)]
+mod follow_up_artifact_path_tests {
+    use super::*;
+
+    #[test]
+    fn follow_up_artifact_reference_does_not_double_encode_lane_component() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let encoded_lane = "orchestrator-follow-up-foo~2Fbar";
+        let task_dir = temp.path().join(encoded_lane);
+        fs::create_dir_all(&task_dir)?;
+        fs::write(task_dir.join("content.json"), "{}")?;
+
+        assert_eq!(
+            follow_up_result_artifact_path(encoded_lane, &task_dir, "content.json"),
+            Some(format!("review/model/{encoded_lane}/content.json"))
+        );
+        Ok(())
+    }
 }

@@ -67,7 +67,11 @@ pub(crate) fn resolved_effective_model_lane_ids(out: &Path) -> Option<Vec<String
 }
 
 pub(crate) fn lane_packet_model_display(out: &Path, lane_id: &str) -> Option<String> {
-    let text = fs::read_to_string(out.join("lanes").join(format!("{lane_id}.md"))).ok()?;
+    let text = fs::read_to_string(
+        out.join("lanes")
+            .join(format!("{}.md", sanitize_artifact_name(lane_id))),
+    )
+    .ok()?;
     text.lines().find_map(|line| {
         line.strip_prefix("Model: `")
             .and_then(|rest| rest.strip_suffix('`'))
@@ -137,7 +141,9 @@ pub(crate) fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Res
     for lane in lane_packet_summary_rows(out, plan) {
         text.push_str(&format!(
             "| `{}` | `{}` | `lanes/{}.md` |\n",
-            lane.id, lane.model_display, lane.id
+            lane.id,
+            lane.model_display,
+            sanitize_artifact_name(&lane.id)
         ));
     }
     text.push_str("\n## Diff flags\n\n");
@@ -604,5 +610,42 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
         for item in scheduled_late {
             text.push_str(&format!("- {}\n", escape_md(&item)));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lane_packet_model_display_resolves_encoded_hostile_lane_id() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        fs::create_dir_all(out.join("lanes"))?;
+        let lane = "../foo/bar é";
+        let encoded = sanitize_artifact_name(lane);
+        fs::write(
+            out.join("lanes").join(format!("{encoded}.md")),
+            "# Lane: hostile\n\nModel: `test-model`\n",
+        )?;
+
+        assert_eq!(
+            lane_packet_model_display(out, lane).as_deref(),
+            Some("test-model")
+        );
+        assert_eq!(
+            fs::read_to_string(out.join("lanes").join("~2E~2E~2Ffoo~2Fbar~20~C3~A9.md"))?,
+            "# Lane: hostile\n\nModel: `test-model`\n"
+        );
+        assert!(!out.join("foo").exists());
+        assert_eq!(lane_packet_model_display(out, "missing/lane"), None);
+        Ok(())
+    }
+
+    #[test]
+    fn lane_packet_model_display_returns_none_for_missing_packet() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        assert_eq!(lane_packet_model_display(temp.path(), "missing/lane"), None);
+        Ok(())
     }
 }

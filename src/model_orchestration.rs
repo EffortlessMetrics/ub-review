@@ -47,7 +47,11 @@ pub(crate) fn run_provider_preflights(
             continue;
         }
         let spec = provider_spec_from_preflight(receipt)?;
-        let lane_dir = preflight_dir.join(sanitize_artifact_name(&spec.label()));
+        // Provider preflight directories predate the lane-artifact identity
+        // contract and are keyed by a provider label, not a logical lane ID.
+        // Preserve their established component mapping for compatibility;
+        // lane paths use `sanitize_artifact_name` at their own boundaries.
+        let lane_dir = preflight_dir.join(legacy_provider_preflight_name(&spec.label()));
         fs::create_dir_all(&lane_dir)?;
         let prompt = "Return strict JSON only: {\"summary\":\"preflight ok\",\"inline_comments\":[],\"summary_only_findings\":[]}";
         let outcome = match provider_preflight_cacheable_prefix(&spec, shared_context, args) {
@@ -83,10 +87,7 @@ pub(crate) fn provider_preflight_cacheable_prefix<'a>(
     model_cacheable_prefix(spec, shared_context, args)
 }
 
-pub(crate) const ARTIFACT_NAME_MAX_CHARS: usize = 96;
-const ARTIFACT_NAME_HASH_CHARS: usize = 16;
-
-pub(crate) fn sanitize_artifact_name(value: &str) -> String {
+fn legacy_provider_preflight_name(value: &str) -> String {
     let sanitized: String = value
         .chars()
         .map(|ch| {
@@ -107,6 +108,138 @@ pub(crate) fn sanitize_artifact_name(value: &str) -> String {
         sanitized.chars().take(prefix_len).collect::<String>(),
         &digest[..ARTIFACT_NAME_HASH_CHARS]
     )
+}
+
+pub(crate) const ARTIFACT_NAME_MAX_CHARS: usize = 96;
+const ARTIFACT_NAME_HASH_CHARS: usize = 16;
+
+/// Encode a logical artifact identity into one portable filesystem component.
+///
+/// Only ASCII alphanumerics, `-`, and `_` are preserved. Every other UTF-8 byte
+/// is escaped, so values such as `foo.bar` and `foo/bar` cannot collapse onto
+/// the same artifact path. The Python verifier mirrors this byte-level mapping.
+pub(crate) fn sanitize_artifact_name(value: &str) -> String {
+    let sanitized = if value.is_empty() {
+        "~EMPTY".to_owned()
+    } else {
+        let mut encoded = String::with_capacity(value.len());
+        for byte in value.bytes() {
+            if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_') {
+                encoded.push(char::from(byte));
+            } else {
+                encoded.push('~');
+                encoded.push(char::from(b"0123456789ABCDEF"[(byte >> 4) as usize]));
+                encoded.push(char::from(b"0123456789ABCDEF"[(byte & 0x0f) as usize]));
+            }
+        }
+        encoded
+    };
+    if sanitized.len() <= ARTIFACT_NAME_MAX_CHARS {
+        return sanitized;
+    }
+    let digest = sha256_hex(value.as_bytes());
+    let prefix_len = ARTIFACT_NAME_MAX_CHARS - ARTIFACT_NAME_HASH_CHARS - 1;
+    format!(
+        "{}-{}",
+        sanitized.chars().take(prefix_len).collect::<String>(),
+        &digest[..ARTIFACT_NAME_HASH_CHARS]
+    )
+}
+
+#[cfg(test)]
+mod artifact_identity_tests {
+    use super::*;
+
+    #[test]
+    fn hostile_logical_ids_have_distinct_portable_components() -> Result<()> {
+        let values = [
+            "foo.bar",
+            "foo/bar",
+            "../foo",
+            "\u{e9}vidence",
+            " white space ",
+            "a\\b",
+            "",
+            "safe_lane-01",
+        ];
+        let components = values
+            .iter()
+            .map(|value| sanitize_artifact_name(value))
+            .collect::<Vec<_>>();
+        let unique = components.iter().collect::<std::collections::BTreeSet<_>>();
+        anyhow::ensure!(
+            unique.len() == components.len(),
+            "hostile logical IDs must not collapse: {components:?}"
+        );
+        anyhow::ensure!(
+            components
+                == vec![
+                    "foo~2Ebar",
+                    "foo~2Fbar",
+                    "~2E~2E~2Ffoo",
+                    "~C3~A9vidence",
+                    "~20white~20space~20",
+                    "a~5Cb",
+                    "~EMPTY",
+                    "safe_lane-01",
+                ],
+            "hostile corpus mapping drifted: {components:?}"
+        );
+        for component in components {
+            anyhow::ensure!(
+                !component.is_empty()
+                    && component
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric()
+                            || matches!(byte, b'-' | b'_' | b'~')),
+                "component is not portable: {component:?}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn provider_preflight_labels_keep_legacy_component_mapping() {
+        assert_eq!(
+            legacy_provider_preflight_name("minimax:MiniMax-M3:openai-chat"),
+            "minimax-MiniMax-M3-openai-chat"
+        );
+    }
+
+    #[test]
+    fn long_provider_preflight_labels_are_bounded_and_hash_suffixed() {
+        let label = "provider:".to_owned() + &"x".repeat(128);
+        let component = legacy_provider_preflight_name(&label);
+        assert_eq!(component.len(), ARTIFACT_NAME_MAX_CHARS);
+        assert_eq!(
+            component,
+            format!(
+                "{}-dbf1a5a0af723b96",
+                "provider-".to_owned() + &"x".repeat(70)
+            )
+        );
+    }
+
+    #[test]
+    fn long_artifact_ids_use_input_hash_to_disambiguate_shared_prefixes() {
+        let left = format!("{}-left", "x".repeat(128));
+        let right = format!("{}-right", "x".repeat(128));
+        let left_name = sanitize_artifact_name(&left);
+        let right_name = sanitize_artifact_name(&right);
+        assert_ne!(left_name, right_name);
+        assert!(left_name.len() <= ARTIFACT_NAME_MAX_CHARS);
+        assert!(right_name.len() <= ARTIFACT_NAME_MAX_CHARS);
+    }
+
+    #[test]
+    fn safe_components_remain_compatible_and_long_values_are_bounded() -> Result<()> {
+        anyhow::ensure!(sanitize_artifact_name("safe_lane-01") == "safe_lane-01");
+        let long = "candidate-".to_owned() + &"generated-id-segment-".repeat(24);
+        let component = sanitize_artifact_name(&long);
+        anyhow::ensure!(component.len() == ARTIFACT_NAME_MAX_CHARS);
+        anyhow::ensure!(component.ends_with(&format!("-{}", &sha256_hex(long.as_bytes())[..16])));
+        Ok(())
+    }
 }
 
 #[expect(

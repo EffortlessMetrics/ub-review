@@ -208,6 +208,24 @@ fn main() -> Result<()> {
     }
 }
 
+#[cfg(test)]
+mod lane_identity_artifact_ref_tests {
+    use super::{lane_turn_artifact_ref, model_content_artifact_ref};
+
+    #[test]
+    fn hostile_lane_refs_use_the_same_encoded_component() {
+        let lane = "../foo/bar é";
+        assert_eq!(
+            model_content_artifact_ref(lane),
+            "review/model/~2E~2E~2Ffoo~2Fbar~20~C3~A9/content.json"
+        );
+        assert_eq!(
+            lane_turn_artifact_ref(lane, 0),
+            "review/threads/~2E~2E~2Ffoo~2Fbar~20~C3~A9/turn-000.json"
+        );
+    }
+}
+
 /// Execute a single proof request and write its receipt.
 /// (Order 8 of epic #655 — the execution-plane worker command.)
 ///
@@ -4107,6 +4125,17 @@ fn finalize_reporter_coordination(
     }
 }
 
+fn model_content_artifact_ref(lane: &str) -> String {
+    format!("review/model/{}/content.json", sanitize_artifact_name(lane))
+}
+
+fn lane_turn_artifact_ref(lane: &str, turn: u32) -> String {
+    format!(
+        "review/threads/{}/turn-{turn:03}.json",
+        sanitize_artifact_name(lane)
+    )
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
@@ -4284,7 +4313,7 @@ fn write_review_artifacts(
                     .find(|a| a.lane.id == receipt.lane)
                     .map(|a| a.lane.receives.clone())
                     .unwrap_or_default();
-                let receipt_ref = format!("review/model/{}/content.json", receipt.lane);
+                let receipt_ref = model_content_artifact_ref(&receipt.lane);
                 let turn = primary_turn(
                     &receipt.thread_id,
                     &receipt.lane,
@@ -4304,7 +4333,7 @@ fn write_review_artifacts(
                 // conclusion. Also emit thread_terminal when the lane is done.
                 // Message-log errors are logged to the event log, not
                 // propagated (the queue is observability, not a run dependency).
-                let turn_ref = format!("review/threads/{}/turn-000.json", receipt.lane);
+                let turn_ref = lane_turn_artifact_ref(&receipt.lane, 0);
                 if let Err(e) = message_log.append(
                     CrossLaneMessageKind::LaneReport,
                     &receipt.lane,
@@ -5822,8 +5851,9 @@ mod tests {
     };
     use crate::{
         ModelCandidateComment, ModelCandidateFinding, ModelCandidateObservation,
-        ModelFailedObjection, collect_sensor_evidence_issues, validate_failed_objection,
-        validate_inline_candidate, validate_model_observation, validate_summary_only_candidate,
+        ModelFailedObjection, collect_sensor_evidence_issues, sanitize_artifact_name,
+        validate_failed_objection, validate_inline_candidate, validate_model_observation,
+        validate_summary_only_candidate,
     };
 
     #[test]
@@ -6675,7 +6705,7 @@ mod tests {
         coverage.phase = super::SensorPhase::Late;
         let plan = test_plan(vec![coverage, sensor_plan("ast-grep", "ast-grep", true)]);
         let lane = LanePlan {
-            id: "tests-oracle".to_owned(),
+            id: "../tests/oracle é".to_owned(),
             role: "test oracle".to_owned(),
             model: "custom:test".to_owned(),
             model_display: "test model".to_owned(),
@@ -6691,7 +6721,12 @@ mod tests {
             &test_pr_thread_context(),
             &event_log,
         )?;
-        let packet = fs::read_to_string(out.join("lanes/tests-oracle.md"))?;
+        let encoded_lane = sanitize_artifact_name(&lane.id);
+        let packet_path = out.join("lanes").join(format!("{encoded_lane}.md"));
+        let packet = fs::read_to_string(&packet_path)?;
+        assert!(packet_path.is_file());
+        assert!(!out.join("tests").exists());
+        assert!(packet.contains("# Lane: `../tests/oracle é`"));
         assert!(
             packet.contains("- `coverage`: `scheduled-late`"),
             "late routed sensor must render as scheduled: {packet}"
@@ -6700,6 +6735,33 @@ mod tests {
         assert!(
             packet.contains("- `ast-grep`: `ok`"),
             "fast routed sensor still renders its receipt status: {packet}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn lane_packet_write_reports_unwritable_lane_directory() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        fs::create_dir_all(&out)?;
+        fs::write(out.join("lanes"), b"not a directory")?;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let err = match super::write_lane_packets(
+            &out,
+            &test_diff(),
+            &test_plan(Vec::new()),
+            &[],
+            &test_pr_thread_context(),
+            &event_log,
+        ) {
+            Ok(()) => anyhow::bail!("a file at lanes/ must reject packet writes"),
+            Err(err) => err,
+        };
+        let detail = err.to_string();
+        anyhow::ensure!(
+            detail.contains("create lane packet directory")
+                && detail.contains(out.join("lanes").to_string_lossy().as_ref()),
+            "packet write error must identify the blocked lane directory: {detail}"
         );
         Ok(())
     }
@@ -8294,9 +8356,10 @@ index 1111111..2222222 100644
             temp.path().join("review/proof_request_groups.json"),
         )?)?;
         let proof_request_file: serde_json::Value = serde_json::from_slice(&fs::read(
-            temp.path()
-                .join("proof_requests")
-                .join(format!("{}.json", proof_requests[0].id)),
+            temp.path().join("proof_requests").join(format!(
+                "{}.json",
+                super::sanitize_artifact_name(&proof_requests[0].id)
+            )),
         )?)?;
         let proof_plan = fs::read_to_string(temp.path().join("review/proof_plan.md"))?;
         let proof_ndjson = fs::read_to_string(temp.path().join("proof_requests.ndjson"))?;
@@ -10055,7 +10118,10 @@ index 3333333..4444444 100644
             &[] as &[ProofRequestGroup],
         );
         let lease = test_focused_test_lease(&task);
-        let base_receipt_dir = out.join("proof").join(&task.id).join("base-plus-tests");
+        let base_receipt_dir = out
+            .join("proof")
+            .join(super::sanitize_artifact_name(&task.id))
+            .join("base-plus-tests");
         fs::create_dir_all(base_receipt_dir.parent().context("base receipt parent")?)?;
         fs::write(&base_receipt_dir, b"not a directory")?;
 
@@ -19020,7 +19086,7 @@ index 1111111..2222222 100644
     fn artifact_name_sanitizer_bounds_long_generated_ids() {
         assert_eq!(
             super::sanitize_artifact_name("source-route/question one"),
-            "source-route-question-one"
+            "source-route~2Fquestion~20one"
         );
         let raw = format!("candidate-{}", "generated-id-segment-".repeat(24));
         let sanitized = super::sanitize_artifact_name(&raw);
@@ -21765,7 +21831,7 @@ index 1111111..2222222 100644
     }
 
     #[test]
-    fn observation_question_artifacts_reject_path_collisions() -> Result<()> {
+    fn observation_question_artifacts_disambiguate_hostile_paths() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let mut observations = vec![
             test_observation(
@@ -21790,16 +21856,13 @@ index 1111111..2222222 100644
         observations[0].question = "same/question".to_owned();
         observations[1].question = "same-question".to_owned();
 
-        let error = match write_observation_artifacts(temp.path(), &observations) {
-            Ok(()) => return Err(anyhow::anyhow!("question path collision was not rejected")),
-            Err(error) => error,
-        };
-
-        assert!(
-            error
-                .to_string()
-                .contains("questions artifact path collision")
-        );
+        write_observation_artifacts(temp.path(), &observations)?;
+        let first = temp.path().join("questions/lane~2Fa/same~2Fquestion.json");
+        let second = temp.path().join("questions/lane-a/same-question.json");
+        assert!(first.is_file());
+        assert!(second.is_file());
+        assert_ne!(first, second);
+        assert!(!temp.path().join("questions/lane").exists());
         Ok(())
     }
 

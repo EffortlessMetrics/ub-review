@@ -7964,7 +7964,7 @@ def require_proof_command_receipt_schema(
         if path.is_absolute() or ".." in path.parts:
             fail(f"proof command {field} path is not repo-relative: {command!r}")
         expected = pathlib.PurePosixPath(
-            f"proof/{sanitize_artifact_name(receipt_id)}/{command['side']}/{field}.txt"
+            f"proof/{receipt_id}/{command['side']}/{field}.txt"
         )
         if path != expected:
             fail(
@@ -8039,9 +8039,24 @@ def require_proof_request_group_schema(group: dict) -> None:
 
 
 def sanitize_artifact_name(value: str) -> str:
-    sanitized = "".join(
-        ch if (ch.isascii() and ch.isalnum()) or ch in "-_" else "-" for ch in value
-    )
+    """Encode one logical identity as the Rust-compatible path component.
+
+    ASCII alphanumerics, ``-``, and ``_`` remain literal; every other UTF-8
+    byte becomes ``~HH``. Empty values use ``~EMPTY`` and overlong values keep
+    a stable hash suffix. Raw identities remain in the JSON receipt fields.
+    """
+    if not value:
+        sanitized = "~EMPTY"
+    else:
+        sanitized = "".join(
+            chr(byte)
+            if (48 <= byte <= 57)
+            or (65 <= byte <= 90)
+            or (97 <= byte <= 122)
+            or byte in (45, 95)
+            else f"~{byte:02X}"
+            for byte in value.encode("utf-8")
+        )
     if len(sanitized) <= ARTIFACT_NAME_MAX_CHARS:
         return sanitized
     digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
@@ -12695,10 +12710,33 @@ def self_test_sanitize_artifact_name_matches_rust_contract() -> None:
         fail(f"sanitized artifact name length is {len(sanitized)}, expected {ARTIFACT_NAME_MAX_CHARS}")
     if not sanitized.endswith("-" + digest[:ARTIFACT_NAME_HASH_CHARS]):
         fail("sanitized artifact name does not include expected hash suffix")
-    if sanitize_artifact_name("source-route/question one") != "source-route-question-one":
+    if sanitize_artifact_name("source-route/question one") != "source-route~2Fquestion~20one":
         fail("short artifact name sanitization drifted from Rust")
-    if sanitize_artifact_name("évidence") != "-vidence":
+    if sanitize_artifact_name("évidence") != "~C3~A9vidence":
         fail("non-ASCII artifact name sanitization drifted from Rust")
+    expected = {
+        "foo.bar": "foo~2Ebar",
+        "foo/bar": "foo~2Fbar",
+        "../foo": "~2E~2E~2Ffoo",
+        " white space ": "~20white~20space~20",
+        "a\\b": "a~5Cb",
+        "": "~EMPTY",
+        "safe_lane-01": "safe_lane-01",
+    }
+    actual = [sanitize_artifact_name(value) for value in expected]
+    if actual != list(expected.values()):
+        fail(f"artifact identity mapping drifted from Rust: {actual!r}")
+    if len(set(actual)) != len(actual):
+        fail("hostile logical IDs collapsed to one artifact component")
+    if any(
+        not component
+        or any(
+            ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_~"
+            for ch in component
+        )
+        for component in actual
+    ):
+        fail("artifact component contains an unsafe filesystem character")
 
 
 def self_test_tool_gate_outcome_false_pass_fails() -> None:
@@ -12832,8 +12870,8 @@ def self_test_sanitize_artifact_name_bounds_long_values() -> None:
         fail("artifact name sanitizer did not bound long value")
     if not sanitized.endswith(f"-{expected_suffix}"):
         fail("artifact name sanitizer did not use stable hash suffix")
-    if sanitize_artifact_name("source-route/question one") != "source-route-question-one":
-        fail("artifact name sanitizer changed safe replacement behavior")
+    if sanitize_artifact_name("source-route/question one") != "source-route~2Fquestion~20one":
+        fail("artifact name sanitizer changed the canonical byte mapping")
 
 
 def self_test_claim_graph_contract() -> None:

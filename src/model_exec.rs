@@ -28,7 +28,7 @@ pub(crate) fn run_model_lane_tasks(
                     let Some(task) = task else {
                         break;
                     };
-                    let lane_dir = model_dir.join(&task.lane.id);
+                    let lane_dir = model_dir.join(sanitize_artifact_name(&task.lane.id));
                     let result = fs::create_dir_all(&lane_dir)
                         .with_context(|| format!("create {}", lane_dir.display()))
                         .and_then(|()| {
@@ -333,7 +333,9 @@ fn run_lane_continuation_turn(
         &proof_excerpts,
         &late_excerpts,
     );
-    let lane_thread_dir = review_dir.join("threads").join(&lane_receipt.lane);
+    let lane_thread_dir = review_dir
+        .join("threads")
+        .join(sanitize_artifact_name(&lane_receipt.lane));
     fs::create_dir_all(&lane_thread_dir)?;
     fs::write(lane_thread_dir.join("continuation-prompt-001.md"), &prompt)?;
     let content = call_model_prompt_content(
@@ -361,13 +363,13 @@ fn run_lane_continuation_turn(
         thread_id: lane_receipt.thread_id.clone(),
         turn: 1,
         stage: "follow-up".to_owned(),
-        prompt_packet_path: format!(
-            "review/threads/{}/continuation-prompt-001.md",
-            lane_receipt.lane
+        prompt_packet_path: lane_thread_artifact_ref(
+            &lane_receipt.lane,
+            "continuation-prompt-001.md",
         ),
         response_summary: revised.clone(),
         routed_evidence_refs: vec![format!("reporter-question:{question}")],
-        receipt_ref: format!("review/threads/{}/turn-001.json", lane_receipt.lane),
+        receipt_ref: lane_thread_artifact_ref(&lane_receipt.lane, "turn-001.json"),
         head_sha: None,
         verdict: None,
     };
@@ -383,9 +385,9 @@ fn run_lane_continuation_turn(
         &lane_receipt.lane,
         "reporter",
         1,
-        vec![format!(
-            "review/threads/{}/turn-001.json",
-            lane_receipt.lane
+        vec![lane_thread_artifact_ref(
+            &lane_receipt.lane,
+            "turn-001.json",
         )],
         serde_json::json!({"answer": revised, "question": question}),
     );
@@ -394,6 +396,51 @@ fn run_lane_continuation_turn(
         serde_json::json!({"lane": lane_receipt.lane, "turn": 1}),
     );
     Ok(revised)
+}
+
+/// Return a repository-relative reference to a lane-thread artifact. Logical
+/// lane IDs are untrusted model/config input and must use the same encoded
+/// component as the on-disk thread directory.
+fn lane_thread_artifact_ref(lane: &str, file_name: &str) -> String {
+    format!(
+        "review/threads/{}/{}",
+        sanitize_artifact_name(lane),
+        file_name
+    )
+}
+
+#[cfg(test)]
+mod lane_thread_reference_tests {
+    use super::*;
+
+    #[test]
+    fn continuation_receipt_reference_encodes_hostile_lane_id() {
+        let lane = "../foo/bar é";
+        let reference = lane_thread_artifact_ref(lane, "turn-001.json");
+        assert_eq!(
+            reference,
+            format!(
+                "review/threads/{}/turn-001.json",
+                sanitize_artifact_name(lane)
+            )
+        );
+        assert!(!reference.contains("../"));
+        assert!(!reference.contains("/foo"));
+    }
+
+    #[test]
+    fn continuation_prompt_and_receipt_references_share_encoded_lane_root() {
+        let lane = "../foo/bar é";
+        let encoded = sanitize_artifact_name(lane);
+        assert_eq!(
+            lane_thread_artifact_ref(lane, "continuation-prompt-001.md"),
+            format!("review/threads/{encoded}/continuation-prompt-001.md")
+        );
+        assert_eq!(
+            lane_thread_artifact_ref(lane, "turn-001.json"),
+            format!("review/threads/{encoded}/turn-001.json")
+        );
+    }
 }
 
 /// Order 9 (#678): the live reporter — same-model coordinator. Runs after the
@@ -845,7 +892,12 @@ pub(crate) fn receipt_reconsideration_prompt(
 }
 
 fn next_lane_turn_number(review_dir: &Path, lane: &str) -> u32 {
-    let Some(entries) = review_dir.join("threads").join(lane).read_dir().ok() else {
+    let Some(entries) = review_dir
+        .join("threads")
+        .join(sanitize_artifact_name(lane))
+        .read_dir()
+        .ok()
+    else {
         return 1;
     };
     entries
@@ -909,7 +961,9 @@ pub(crate) fn run_receipt_reconsiderations(
         let prior_conclusion = lane.reason.clone();
         let prompt = receipt_reconsideration_prompt(&lane_id, &prior_conclusion, &lane_receipts);
         let turn = next_lane_turn_number(review_dir, &lane_id);
-        let lane_dir = review_dir.join("threads").join(&lane_id);
+        let lane_dir = review_dir
+            .join("threads")
+            .join(sanitize_artifact_name(&lane_id));
         fs::create_dir_all(&lane_dir)?;
         let prompt_path = lane_dir.join(format!("evidence-reconsideration-{turn:03}.md"));
         fs::write(&prompt_path, &prompt)?;
@@ -968,7 +1022,7 @@ pub(crate) fn run_receipt_reconsiderations(
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
-        let turn_ref = format!("review/threads/{lane_id}/turn-{turn:03}.json");
+        let turn_ref = receipt_reconsideration_turn_ref(&lane_id, turn);
         let reconsideration = ReceiptReconsideration {
             lane: lane_id.clone(),
             receipt_ids,
@@ -983,7 +1037,8 @@ pub(crate) fn run_receipt_reconsiderations(
             turn,
             stage: "follow-up-evidence".to_owned(),
             prompt_packet_path: format!(
-                "review/threads/{lane_id}/evidence-reconsideration-{turn:03}.md"
+                "review/threads/{}/evidence-reconsideration-{turn:03}.md",
+                sanitize_artifact_name(&lane_id)
             ),
             response_summary: conclusion.clone(),
             routed_evidence_refs: lane_receipts
@@ -1038,6 +1093,13 @@ pub(crate) fn run_receipt_reconsiderations(
         result.reconsiderations.push(reconsideration);
     }
     Ok(result)
+}
+
+fn receipt_reconsideration_turn_ref(lane: &str, turn: u32) -> String {
+    format!(
+        "review/threads/{}/turn-{turn:03}.json",
+        sanitize_artifact_name(lane)
+    )
 }
 
 fn apply_lane_reconsideration_update(
@@ -2010,6 +2072,18 @@ mod receipt_reconsideration_tests {
             estimated_value: Some("high".to_owned()),
             timeout_sec: Some(180),
         }
+    }
+
+    #[test]
+    fn reconsideration_turn_reference_matches_written_turn_artifact() {
+        let lane = "../hostile/lane é";
+        assert_eq!(
+            receipt_reconsideration_turn_ref(lane, 7),
+            format!(
+                "review/threads/{}/turn-007.json",
+                sanitize_artifact_name(lane)
+            )
+        );
     }
 
     #[test]
