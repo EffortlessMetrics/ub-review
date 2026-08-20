@@ -37,22 +37,6 @@ inputs:
     description: Head ref.
     default: HEAD
     required: false
-  trusted-base-tree:
-    description: Trusted-base mode exact base tree object; requires all four explicit diff inputs.
-    default: ''
-    required: false
-  trusted-head:
-    description: Trusted-base mode exact head object identity (metadata only; never checked out).
-    default: ''
-    required: false
-  trusted-changed-files:
-    description: Trusted-base mode newline-delimited changed-path object.
-    default: ''
-    required: false
-  trusted-patch:
-    description: Trusted-base mode explicit patch object.
-    default: ''
-    required: false
   out:
     description: Output directory for the packet.
     default: target/ub-review
@@ -635,19 +619,6 @@ runs:
         if [[ -n "${{ inputs['review-mode'] }}" ]]; then
           extra+=(--review-mode "${{ inputs['review-mode'] }}")
         fi
-        model_mode="${{ inputs['model-mode'] }}"
-        provider_policy="${{ inputs['provider-policy'] }}"
-        if [[ -n "${{ inputs['trusted-base-tree'] }}" || -n "${{ inputs['trusted-head'] }}" || -n "${{ inputs['trusted-changed-files'] }}" || -n "${{ inputs['trusted-patch'] }}" ]]; then
-          extra+=(--trusted-base-tree "${{ inputs['trusted-base-tree'] }}")
-          extra+=(--trusted-head "${{ inputs['trusted-head'] }}")
-          extra+=(--trusted-changed-files "${{ inputs['trusted-changed-files'] }}")
-          extra+=(--trusted-patch "${{ inputs['trusted-patch'] }}")
-          # Explicit-diff admission never executes model lanes or resolves a
-          # repository provider policy. Set the scalar values at their sole
-          # emission sites below so trusted mode cannot receive duplicates.
-          model_mode="off"
-          provider_policy="auto"
-        fi
 
         config_path="${{ inputs.config }}"
         if [[ -z "$config_path" ]]; then
@@ -675,14 +646,14 @@ runs:
           --posting "${{ inputs.posting }}" \
           --mode "${{ inputs.mode }}" \
           --run-pass "${{ inputs['run-pass'] }}" \
-          --model-mode "$model_mode" \
+          --model-mode "${{ inputs['model-mode'] }}" \
           --fail-on-gate false \
           --depth "${{ inputs.depth }}" \
           --lanes "${{ inputs.lanes }}" \
           --except-lanes "${{ inputs['except-lanes'] }}" \
           --tools "${{ inputs.tools }}" \
           --except-tools "${{ inputs['except-tools'] }}" \
-          --provider-policy "$provider_policy" \
+          --provider-policy "${{ inputs['provider-policy'] }}" \
           --lane-width "${{ inputs['lane-width'] }}" \
           --model-timeout-sec "${{ inputs['model-timeout-sec'] }}" \
           --max-inline-comments "${{ inputs['max-inline-comments'] }}" \

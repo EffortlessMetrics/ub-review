@@ -3498,7 +3498,7 @@ fn cmd_cache_warm(args: CacheWarmArgs) -> Result<()> {
 }
 
 fn cmd_plan(args: PlanArgs) -> Result<()> {
-    let (config, diff, box_state, plan) =
+    let (config, diff, box_state, plan, trusted_admission) =
         prepare_plan(&args.review, args.allow_heavy, &args.selectors)?;
     print_plan(&plan, &box_state);
     if args.write {
@@ -3512,6 +3512,7 @@ fn cmd_plan(args: PlanArgs) -> Result<()> {
                 run_args: None,
                 selectors: &args.selectors,
                 effective_model_lanes: None,
+                trusted_admission: trusted_admission.as_ref(),
             },
         )?;
     }
@@ -3537,7 +3538,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         validate_trusted_execution_settings(true, args.model_mode, args.provider_policy)?;
     }
     let run_pass = resolved_run_pass(args.run_pass);
-    let (mut config, diff, box_state, plan) =
+    let (mut config, diff, box_state, plan, trusted_admission) =
         prepare_plan(&args.review, args.allow_heavy, &args.selectors)?;
     // #719: apply the user-facing review-mode preset (advisory/gate/strict)
     // when set. This overrides --mode, --fail-on-gate, and
@@ -3567,6 +3568,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
             run_args: Some(&args),
             selectors: &args.selectors,
             effective_model_lanes: Some(&selected_model_lanes),
+            trusted_admission: trusted_admission.as_ref(),
         },
     )?;
 

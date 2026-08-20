@@ -7,20 +7,17 @@ pub(crate) fn prepare_plan(
     args: &ReviewArgs,
     allow_heavy: bool,
     selectors: &SelectorArgs,
-) -> Result<(Config, DiffContext, BoxState, Plan)> {
+) -> Result<(
+    Config,
+    DiffContext,
+    BoxState,
+    Plan,
+    Option<TrustedDiffAdmission>,
+)> {
     validate_selector_syntax(selectors)?;
     let trusted_mode = trusted_admission_complete(args)?;
-    if trusted_mode {
-        reject_repo_controlled_config(args)?;
-    }
-    let config = Config::load_or_default(
-        &args.config,
-        runtime_profile_override(args.profile.as_ref(), args.runtime_profile.as_ref()),
-    )?;
-    let profile = config.selected_profile()?;
-    let box_state = BoxState::detect()?;
-    let diff = if trusted_mode {
-        DiffContext::from_trusted_inputs(
+    let trusted_admission = if trusted_mode {
+        let admission = TrustedDiffAdmission::load(
             &args.root,
             args.trusted_base_tree
                 .as_deref()
@@ -34,13 +31,29 @@ pub(crate) fn prepare_plan(
             args.trusted_patch
                 .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("trusted patch object missing"))?,
-        )?
+        )?;
+        reject_repo_controlled_config(args)?;
+        Some(admission)
+    } else {
+        None
+    };
+    let trusted_diff = trusted_admission
+        .as_ref()
+        .map(DiffContext::from_trusted_admission);
+    let config = Config::load_or_default(
+        &args.config,
+        runtime_profile_override(args.profile.as_ref(), args.runtime_profile.as_ref()),
+    )?;
+    let profile = config.selected_profile()?;
+    let box_state = BoxState::detect()?;
+    let diff = if let Some(diff) = trusted_diff {
+        diff
     } else {
         DiffContext::from_git(&args.root, &args.base, &args.head)?
     };
     let mut plan = build_plan(&config, profile, &box_state, &diff, &args.root, allow_heavy);
     apply_plan_selectors(&mut plan, selectors)?;
-    Ok((config, diff, box_state, plan))
+    Ok((config, diff, box_state, plan, trusted_admission))
 }
 
 pub(crate) fn trusted_admission_requested(args: &ReviewArgs) -> bool {
@@ -185,60 +198,28 @@ pub(crate) fn write_plan_artifacts(
         diff.changed_files.join("\n"),
     )?;
     fs::write(out.join("input/diff.patch"), &diff.patch)?;
-    if let Some(run_args) = selectors.run_args
-        && trusted_admission_complete(&run_args.review)?
-    {
-        let base_tree = run_args
-            .review
-            .trusted_base_tree
-            .as_deref()
-            .ok_or_else(|| anyhow::anyhow!("trusted base tree missing"))?;
-        let head = run_args
-            .review
-            .trusted_head
-            .as_deref()
-            .ok_or_else(|| anyhow::anyhow!("trusted head missing"))?;
-        let observed_checkout_tree_sha = git_tree_sha(&run_args.review.root, "HEAD")?;
-        if observed_checkout_tree_sha != base_tree {
-            bail!(
-                "trusted-base receipt rejected: checkout tree changed from {base_tree} to {observed_checkout_tree_sha}"
-            );
-        }
-        let changed_path = run_args
-            .review
-            .trusted_changed_files
-            .as_deref()
-            .ok_or_else(|| anyhow::anyhow!("trusted changed-files object missing"))?;
-        let patch_path = run_args
-            .review
-            .trusted_patch
-            .as_deref()
-            .ok_or_else(|| anyhow::anyhow!("trusted patch object missing"))?;
-        let changed_bytes = fs::read(changed_path)?;
-        let patch_bytes = fs::read(patch_path)?;
-        let changed_files = parse_trusted_changed_files(&changed_bytes)?;
-        let patch = std::str::from_utf8(&patch_bytes)
-            .context("trusted patch object must be valid UTF-8")?;
-        if changed_files != diff.changed_files || patch != diff.patch {
-            bail!("trusted-base receipt inputs changed after admission");
+    if let Some(admission) = selectors.trusted_admission {
+        admission.verify_root()?;
+        if admission.changed_files != diff.changed_files || admission.patch != diff.patch {
+            bail!("trusted-base receipt rejected a diff outside the admitted objects");
         }
         fs::write(
             out.join("input/trusted-base-receipt.json"),
             serde_json::to_vec_pretty(&serde_json::json!({
                 "schema_version": 1,
                 "admission": "trusted-base-explicit-diff",
-                "base_tree_sha": base_tree,
-                "observed_checkout_tree_sha": observed_checkout_tree_sha,
-                "head_sha": head,
-                "changed_files_object_sha256": sha256_hex(&changed_bytes),
-                "patch_object_sha256": sha256_hex(&patch_bytes),
-                "changed_files_sha256": sha256_hex(diff.changed_files.join("\n").as_bytes()),
-                "patch_sha256": sha256_hex(diff.patch.as_bytes()),
+                "base_tree_sha": &admission.base_tree_sha,
+                "observed_checkout_tree_sha": &admission.observed_checkout_tree_sha,
+                "head_sha": &admission.head_sha,
+                "changed_files_object_sha256": &admission.changed_files_object_sha256,
+                "patch_object_sha256": &admission.patch_object_sha256,
+                "changed_files_sha256": &admission.changed_files_sha256,
+                "patch_sha256": &admission.patch_sha256,
                 "head_tree_loaded": false,
                 "head_config_loaded": false,
                 "repository_config_loaded": false,
-                "model_mode": run_args.model_mode.key(),
-                "provider_policy": run_args.provider_policy.key(),
+                "model_mode": selectors.run_args.map(|args| args.model_mode.key()),
+                "provider_policy": selectors.run_args.map(|args| args.provider_policy.key()),
             }))?,
         )?;
     }
@@ -251,6 +232,7 @@ pub(crate) struct PlanArtifactSelectors<'a> {
     pub(crate) run_args: Option<&'a RunArgs>,
     pub(crate) selectors: &'a SelectorArgs,
     pub(crate) effective_model_lanes: Option<&'a [LanePlan]>,
+    pub(crate) trusted_admission: Option<&'a TrustedDiffAdmission>,
 }
 
 pub(crate) fn resolved_profile_artifact(config: &Config, profile: &Profile) -> serde_json::Value {
@@ -381,10 +363,54 @@ pub(crate) struct RepairQueueFile {
 mod trusted_config_tests {
     use super::*;
 
+    fn review_args() -> ReviewArgs {
+        ReviewArgs {
+            root: PathBuf::from("."),
+            base: "origin/main".to_owned(),
+            head: "HEAD".to_owned(),
+            trusted_base_tree: None,
+            trusted_head: None,
+            trusted_changed_files: None,
+            trusted_patch: None,
+            config: PathBuf::from(".ub-review.toml"),
+            out: PathBuf::from("target/ub-review"),
+            profile: None,
+            runtime_profile: None,
+        }
+    }
+
+    #[test]
+    fn trusted_admission_requires_all_four_nonempty_inputs() -> Result<()> {
+        let mut args = review_args();
+        if trusted_admission_complete(&args)? {
+            bail!("ordinary review args unexpectedly requested trusted admission");
+        }
+        args.trusted_base_tree = Some("a".repeat(40));
+        if trusted_admission_complete(&args).is_ok() {
+            bail!("accepted partial trusted admission inputs");
+        }
+        args.trusted_head = Some("b".repeat(40));
+        args.trusted_changed_files = Some(PathBuf::from("changed-files.txt"));
+        args.trusted_patch = Some(PathBuf::from("patch.diff"));
+        if !trusted_admission_complete(&args)? {
+            bail!("complete trusted admission inputs were not recognized");
+        }
+        args.trusted_head = Some(String::new());
+        if trusted_admission_complete(&args).is_ok() {
+            bail!("accepted an empty trusted head");
+        }
+        Ok(())
+    }
+
     #[test]
     fn trusted_config_rejects_relative_and_repository_paths() -> Result<()> {
         let temp = tempfile::tempdir()?;
-        let root = temp.path().canonicalize()?;
+        let root_dir = temp.path().join("root");
+        fs::create_dir_all(&root_dir)?;
+        let root = root_dir.canonicalize()?;
+        let outside = temp.path().join("outside.toml");
+        fs::write(&outside, "[providers]\npolicy='auto'\n")?;
+        validate_trusted_config_path(&root, &outside)?;
         if validate_trusted_config_path(&root, Path::new(".ub-review.toml")).is_ok() {
             bail!("accepted relative repository config path");
         }
@@ -397,8 +423,6 @@ mod trusted_config_tests {
         if validate_trusted_config_path(&root, &parent_path).is_ok() {
             bail!("accepted lexical parent traversal config path");
         }
-        let outside = temp.path().join("outside.toml");
-        fs::write(&outside, "[providers]\npolicy='auto'\n")?;
         let link = root.join("linked-config.toml");
         #[cfg(unix)]
         std::os::unix::fs::symlink(&outside, &link)?;

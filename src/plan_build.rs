@@ -265,10 +265,44 @@ impl DiffContext {
         })
     }
 
-    /// Build a diff exclusively from workflow-supplied objects while the
-    /// checkout remains at the trusted base tree. The head is metadata only:
-    /// it is validated as an object id, never resolved as a ref or checked out.
-    pub(crate) fn from_trusted_inputs(
+    /// Build a diff from a previously validated admission. This function has
+    /// no filesystem or Git inputs: the head remains metadata and cannot be
+    /// resolved as a ref, tree, configuration, plugin, script, or library.
+    pub(crate) fn from_trusted_admission(admission: &TrustedDiffAdmission) -> Self {
+        let changed_files = admission.changed_files.clone();
+        let patch = admission.patch.clone();
+        let flags = classify_diff(&changed_files, &patch);
+        let diff_class = classify_diff_class(&changed_files, &flags);
+        Self {
+            base: admission.base_tree_sha.clone(),
+            head: admission.head_sha.clone(),
+            changed_files,
+            patch,
+            flags,
+            diff_class,
+        }
+    }
+}
+
+/// Immutable result of validating trusted-base explicit diff inputs. All
+/// filesystem reads happen while constructing this value, before config or
+/// `DiffContext` use. Receipts reuse these exact admitted bytes and digests.
+#[derive(Clone, Debug)]
+pub(crate) struct TrustedDiffAdmission {
+    trusted_root: PathBuf,
+    pub(crate) base_tree_sha: String,
+    pub(crate) head_sha: String,
+    pub(crate) observed_checkout_tree_sha: String,
+    pub(crate) changed_files: Vec<String>,
+    pub(crate) patch: String,
+    pub(crate) changed_files_object_sha256: String,
+    pub(crate) patch_object_sha256: String,
+    pub(crate) changed_files_sha256: String,
+    pub(crate) patch_sha256: String,
+}
+
+impl TrustedDiffAdmission {
+    pub(crate) fn load(
         root: &Path,
         base_tree: &str,
         head: &str,
@@ -277,38 +311,106 @@ impl DiffContext {
     ) -> Result<Self> {
         validate_git_object_id(base_tree, "trusted base tree")?;
         validate_git_object_id(head, "trusted head")?;
-        let observed_tree = git_tree_sha(root, "HEAD")?;
-        if observed_tree != base_tree {
-            bail!(
-                "trusted-base admission rejected: checkout tree {observed_tree} does not match base tree {base_tree}"
-            );
+
+        let root = fs::canonicalize(root)
+            .with_context(|| format!("canonicalize trusted repository root {}", root.display()))?;
+        let observed_checkout_tree_sha = validate_trusted_root(&root, base_tree)?;
+        let changed_files_path =
+            validate_trusted_object_path(&root, changed_files_path, "changed-files")?;
+        let patch_path = validate_trusted_object_path(&root, patch_path, "patch")?;
+        if changed_files_path == patch_path {
+            bail!("trusted changed-files and patch objects must be distinct files");
         }
-        let changed_files_bytes = fs::read(changed_files_path).with_context(|| {
+
+        let changed_files_bytes = fs::read(&changed_files_path).with_context(|| {
             format!(
                 "read trusted changed-files object {}",
                 changed_files_path.display()
             )
         })?;
         let changed_files = parse_trusted_changed_files(&changed_files_bytes)?;
-        let patch_bytes = fs::read(patch_path)
+        let patch_bytes = fs::read(&patch_path)
             .with_context(|| format!("read trusted patch object {}", patch_path.display()))?;
-        if patch_bytes.contains(&0) {
-            bail!("trusted patch object contains NUL bytes");
+        if patch_bytes.is_empty() || patch_bytes.contains(&0) {
+            bail!("trusted patch object must be nonempty and contain no NUL bytes");
         }
         let patch = std::str::from_utf8(&patch_bytes)
             .context("trusted patch object must be valid UTF-8")?
             .to_owned();
-        let flags = classify_diff(&changed_files, &patch);
-        let diff_class = classify_diff_class(&changed_files, &flags);
+
+        let observed_after_read = validate_trusted_root(&root, base_tree)?;
+        if observed_after_read != observed_checkout_tree_sha {
+            bail!("trusted repository tree changed during explicit diff admission");
+        }
+
         Ok(Self {
-            base: base_tree.to_owned(),
-            head: head.to_owned(),
+            trusted_root: root,
+            base_tree_sha: base_tree.to_owned(),
+            head_sha: head.to_owned(),
+            observed_checkout_tree_sha,
+            changed_files_sha256: sha256_hex(changed_files.join("\n").as_bytes()),
+            patch_sha256: sha256_hex(patch.as_bytes()),
+            changed_files_object_sha256: sha256_hex(&changed_files_bytes),
+            patch_object_sha256: sha256_hex(&patch_bytes),
             changed_files,
             patch,
-            flags,
-            diff_class,
         })
     }
+
+    pub(crate) fn verify_root(&self) -> Result<()> {
+        let observed = validate_trusted_root(&self.trusted_root, &self.base_tree_sha)?;
+        if observed != self.observed_checkout_tree_sha {
+            bail!("trusted repository tree changed after explicit diff admission");
+        }
+        Ok(())
+    }
+}
+
+fn validate_trusted_root(root: &Path, base_tree: &str) -> Result<String> {
+    let observed_tree = git_tree_sha(root, "HEAD")?;
+    if observed_tree != base_tree {
+        bail!(
+            "trusted-base admission rejected: checkout tree {observed_tree} does not match base tree {base_tree}"
+        );
+    }
+    let status = git_text(root, &["status", "--porcelain=v1", "--untracked-files=all"])?;
+    if !status.trim().is_empty() {
+        bail!("trusted-base admission requires a clean trusted repository root");
+    }
+    Ok(observed_tree)
+}
+
+fn validate_trusted_object_path(root: &Path, path: &Path, label: &str) -> Result<PathBuf> {
+    if !path.is_absolute()
+        || path
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
+        || path
+            .to_string_lossy()
+            .split(['/', '\\'])
+            .any(|component| component == ".." || component == ".")
+    {
+        bail!("trusted {label} object path must be absolute without lexical traversal");
+    }
+    if fs::symlink_metadata(path)
+        .with_context(|| format!("inspect trusted {label} object {}", path.display()))?
+        .file_type()
+        .is_symlink()
+    {
+        bail!("trusted {label} object path must not be a symbolic link");
+    }
+    let canonical = fs::canonicalize(path)
+        .with_context(|| format!("canonicalize trusted {label} object {}", path.display()))?;
+    if canonical.starts_with(root) {
+        bail!("trusted {label} object must be outside the trusted repository root");
+    }
+    if !fs::metadata(&canonical)
+        .with_context(|| format!("inspect trusted {label} object {}", canonical.display()))?
+        .is_file()
+    {
+        bail!("trusted {label} object must be a regular file");
+    }
+    Ok(canonical)
 }
 
 pub(crate) fn validate_git_object_id(value: &str, label: &str) -> Result<()> {
@@ -325,6 +427,7 @@ pub(crate) fn parse_trusted_changed_files(bytes: &[u8]) -> Result<Vec<String>> {
     let text =
         std::str::from_utf8(bytes).context("trusted changed-files object must be valid UTF-8")?;
     let mut files = Vec::new();
+    let mut seen = BTreeSet::new();
     for raw in text.lines() {
         let file = raw.strip_suffix('\r').unwrap_or(raw);
         if file.is_empty() {
@@ -335,12 +438,20 @@ pub(crate) fn parse_trusted_changed_files(bytes: &[u8]) -> Result<Vec<String>> {
             || path.components().any(|component| {
                 matches!(
                     component,
-                    Component::ParentDir | Component::RootDir | Component::Prefix(_)
+                    Component::CurDir
+                        | Component::ParentDir
+                        | Component::RootDir
+                        | Component::Prefix(_)
                 )
             })
-            || file.split(['/', '\\']).any(|component| component == "..")
+            || file
+                .split(['/', '\\'])
+                .any(|component| component == ".." || component == ".")
         {
             bail!("trusted changed-files object contains unsafe path `{file}`");
+        }
+        if !seen.insert(file) {
+            bail!("trusted changed-files object contains duplicate path `{file}`");
         }
         files.push(file.to_owned());
     }
@@ -679,6 +790,43 @@ pub(crate) fn skipped(tool: &ToolPolicy, reason: &str, required: bool) -> Sensor
 mod trusted_input_tests {
     use super::*;
 
+    struct TrustedFixture {
+        _temp: tempfile::TempDir,
+        root: PathBuf,
+        changed: PathBuf,
+        patch: PathBuf,
+        base_tree: String,
+    }
+
+    fn trusted_fixture() -> Result<TrustedFixture> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("root");
+        let objects = temp.path().join("objects");
+        fs::create_dir_all(&root)?;
+        fs::create_dir_all(&objects)?;
+        git_text(&root, &["init", "--quiet"])?;
+        git_text(
+            &root,
+            &["config", "user.email", "trusted-fixture@example.invalid"],
+        )?;
+        git_text(&root, &["config", "user.name", "Trusted Fixture"])?;
+        fs::write(root.join("README.md"), "trusted base\n")?;
+        git_text(&root, &["add", "--", "README.md"])?;
+        git_text(&root, &["commit", "--quiet", "-m", "trusted base"])?;
+        let changed = objects.join("changed-files.txt");
+        let patch = objects.join("patch.diff");
+        fs::write(&changed, b"src/main.rs\n")?;
+        fs::write(&patch, b"diff --git a/src/main.rs b/src/main.rs\n")?;
+        let base_tree = git_tree_sha(&root, "HEAD")?;
+        Ok(TrustedFixture {
+            _temp: temp,
+            root,
+            changed,
+            patch,
+            base_tree,
+        })
+    }
+
     #[test]
     fn trusted_object_ids_require_full_sha_values() -> Result<()> {
         validate_git_object_id(&"a".repeat(40), "base")?;
@@ -692,19 +840,15 @@ mod trusted_input_tests {
 
     #[test]
     fn trusted_inputs_use_objects_and_reject_nul_or_unsafe_paths() -> Result<()> {
-        let temp = tempfile::tempdir()?;
-        let changed = temp.path().join("changed-files.txt");
-        let patch = temp.path().join("patch.diff");
-        let base = git_tree_sha(Path::new("."), "HEAD")?;
-        fs::write(&changed, b"src/main.rs\n")?;
-        fs::write(&patch, b"diff --git a/src/main.rs b/src/main.rs\n")?;
-        let diff = DiffContext::from_trusted_inputs(
-            Path::new("."),
-            &base,
+        let fixture = trusted_fixture()?;
+        let admission = TrustedDiffAdmission::load(
+            &fixture.root,
+            &fixture.base_tree,
             &"b".repeat(40),
-            &changed,
-            &patch,
+            &fixture.changed,
+            &fixture.patch,
         )?;
+        let diff = DiffContext::from_trusted_admission(&admission);
         if diff.changed_files != vec!["src/main.rs"] || diff.head != "b".repeat(40) {
             bail!("trusted objects were not used verbatim");
         }
@@ -714,73 +858,84 @@ mod trusted_input_tests {
             "..\\secret.txt",
             "src/../secret.txt",
             "src\\..\\secret.txt",
+            "./secret.txt",
+            "src/./secret.txt",
         ] {
-            fs::write(&changed, format!("{unsafe_path}\n"))?;
-            if DiffContext::from_trusted_inputs(
-                Path::new("."),
-                &base,
+            fs::write(&fixture.changed, format!("{unsafe_path}\n"))?;
+            if TrustedDiffAdmission::load(
+                &fixture.root,
+                &fixture.base_tree,
                 &"b".repeat(40),
-                &changed,
-                &patch,
+                &fixture.changed,
+                &fixture.patch,
             )
             .is_ok()
             {
                 bail!("accepted parent-traversal changed path {unsafe_path}");
             }
         }
-        fs::write(&changed, b"src/main.rs\0\n")?;
-        if DiffContext::from_trusted_inputs(
-            Path::new("."),
-            &base,
+        fs::write(&fixture.changed, b"src/main.rs\nsrc/main.rs\n")?;
+        if TrustedDiffAdmission::load(
+            &fixture.root,
+            &fixture.base_tree,
             &"b".repeat(40),
-            &changed,
-            &patch,
+            &fixture.changed,
+            &fixture.patch,
+        )
+        .is_ok()
+        {
+            bail!("accepted duplicate changed path");
+        }
+        fs::write(&fixture.changed, b"src/main.rs\0\n")?;
+        if TrustedDiffAdmission::load(
+            &fixture.root,
+            &fixture.base_tree,
+            &"b".repeat(40),
+            &fixture.changed,
+            &fixture.patch,
         )
         .is_ok()
         {
             bail!("accepted NUL changed path");
         }
-        fs::write(&changed, b"src/main.rs\n")?;
-        fs::write(&patch, b"diff\0")?;
-        if DiffContext::from_trusted_inputs(
-            Path::new("."),
-            &base,
-            &"b".repeat(40),
-            &changed,
-            &patch,
-        )
-        .is_ok()
-        {
-            bail!("accepted NUL patch");
+        fs::write(&fixture.changed, b"src/main.rs\n")?;
+        for invalid_patch in [b"".as_slice(), b"diff\0".as_slice(), &[0xff, 0xfe]] {
+            fs::write(&fixture.patch, invalid_patch)?;
+            if TrustedDiffAdmission::load(
+                &fixture.root,
+                &fixture.base_tree,
+                &"b".repeat(40),
+                &fixture.changed,
+                &fixture.patch,
+            )
+            .is_ok()
+            {
+                bail!("accepted invalid trusted patch object");
+            }
         }
-        fs::write(&patch, [0xff, 0xfe])?;
-        if DiffContext::from_trusted_inputs(
-            Path::new("."),
-            &base,
+        if TrustedDiffAdmission::load(
+            &fixture.root,
+            &fixture.base_tree,
             &"b".repeat(40),
-            &changed,
-            &patch,
+            Path::new("changed-files.txt"),
+            &fixture.patch,
         )
         .is_ok()
         {
-            bail!("accepted invalid UTF-8 patch");
+            bail!("accepted relative trusted object path");
         }
         Ok(())
     }
 
     #[test]
     fn trusted_inputs_reject_checkout_tree_mismatch() -> Result<()> {
-        let temp = tempfile::tempdir()?;
-        let changed = temp.path().join("changed-files.txt");
-        let patch = temp.path().join("patch.diff");
-        fs::write(&changed, b"src/main.rs\n")?;
-        fs::write(&patch, b"diff\n")?;
-        if DiffContext::from_trusted_inputs(
-            Path::new("."),
+        let fixture = trusted_fixture()?;
+        if TrustedDiffAdmission::load(
+            &fixture.root,
             &"c".repeat(40),
             &"b".repeat(40),
-            &changed,
-            &patch,
+            &fixture.changed,
+            &fixture.patch,
         )
         .is_ok()
         {
@@ -790,32 +945,97 @@ mod trusted_input_tests {
     }
 
     #[test]
+    fn trusted_inputs_reject_dirty_or_repository_owned_objects() -> Result<()> {
+        let fixture = trusted_fixture()?;
+        let admission = TrustedDiffAdmission::load(
+            &fixture.root,
+            &fixture.base_tree,
+            &"b".repeat(40),
+            &fixture.changed,
+            &fixture.patch,
+        )?;
+        fs::write(fixture.root.join("hostile-plugin.toml"), "load = true\n")?;
+        if admission.verify_root().is_ok() {
+            bail!("receipt verification accepted a dirty trusted repository root");
+        }
+        if TrustedDiffAdmission::load(
+            &fixture.root,
+            &fixture.base_tree,
+            &"b".repeat(40),
+            &fixture.changed,
+            &fixture.patch,
+        )
+        .is_ok()
+        {
+            bail!("accepted an untracked file in the trusted repository root");
+        }
+        fs::remove_file(fixture.root.join("hostile-plugin.toml"))?;
+        let repository_object = fixture.root.join("changed-files.txt");
+        fs::write(&repository_object, b"src/main.rs\n")?;
+        git_text(&fixture.root, &["add", "--", "changed-files.txt"])?;
+        git_text(
+            &fixture.root,
+            &["commit", "--quiet", "-m", "object in root"],
+        )?;
+        let new_tree = git_tree_sha(&fixture.root, "HEAD")?;
+        if TrustedDiffAdmission::load(
+            &fixture.root,
+            &new_tree,
+            &"b".repeat(40),
+            &repository_object,
+            &fixture.patch,
+        )
+        .is_ok()
+        {
+            bail!("accepted a repository-controlled changed-files object");
+        }
+        Ok(())
+    }
+
+    #[test]
     fn trusted_inputs_treat_hostile_head_files_as_data_only() -> Result<()> {
-        let temp = tempfile::tempdir()?;
-        let changed = temp.path().join("changed-files.txt");
-        let patch = temp.path().join("patch.diff");
-        let base = git_tree_sha(Path::new("."), "HEAD")?;
+        let fixture = trusted_fixture()?;
         fs::write(
-            &changed,
-            b".ub-review.toml\nplugin.toml\nscripts/evil.sh\nconfig/tree.toml\n",
+            &fixture.changed,
+            b".ub-review.toml\nplugins/hostile.toml\nscripts/evil.sh\nlib/hostile.dll\n",
         )?;
         fs::write(
-            &patch,
-            b"diff --git a/.ub-review.toml b/.ub-review.toml\n\n\
-diff --git a/plugin.toml b/plugin.toml\n\n\
-diff --git a/scripts/evil.sh b/scripts/evil.sh\n\n\
-diff --git a/config/tree.toml b/config/tree.toml\n",
+            &fixture.patch,
+            b"diff --git a/.ub-review.toml b/.ub-review.toml\n+EXECUTE_CONFIG_SENTINEL\n\n\
+diff --git a/plugins/hostile.toml b/plugins/hostile.toml\n+LOAD_PLUGIN_SENTINEL\n\n\
+diff --git a/scripts/evil.sh b/scripts/evil.sh\n+RUN_SCRIPT_SENTINEL\n\n\
+diff --git a/lib/hostile.dll b/lib/hostile.dll\n+LOAD_LIBRARY_SENTINEL\n",
         )?;
-        let diff = DiffContext::from_trusted_inputs(
-            Path::new("."),
-            &base,
+        let admission = TrustedDiffAdmission::load(
+            &fixture.root,
+            &fixture.base_tree,
+            // This identity deliberately does not exist in the fixture repo.
+            // Success proves it is recorded as metadata, never resolved.
             &"c".repeat(40),
-            &changed,
-            &patch,
+            &fixture.changed,
+            &fixture.patch,
         )?;
+        fs::write(&fixture.changed, b"different/head-controlled/path\n")?;
+        fs::write(&fixture.patch, b"MUTATED_AFTER_ADMISSION\n")?;
+        let diff = DiffContext::from_trusted_admission(&admission);
         if diff.changed_files.len() != 4 || diff.head != "c".repeat(40) {
             bail!("trusted hostile-head fixture was not retained as data");
         }
+        for hostile_path in &diff.changed_files {
+            if fixture.root.join(hostile_path).exists() {
+                bail!("hostile-head path was loaded into the trusted base checkout");
+            }
+        }
+        if diff.patch.contains("MUTATED_AFTER_ADMISSION") {
+            bail!("DiffContext re-read the patch object after admission");
+        }
+        if admission.patch_sha256 != sha256_hex(diff.patch.as_bytes())
+            || admission.changed_files_sha256
+                != sha256_hex(diff.changed_files.join("\n").as_bytes())
+        {
+            bail!("trusted diff digests do not describe the admitted DiffContext");
+        }
+        admission.verify_root()?;
         Ok(())
     }
 }
