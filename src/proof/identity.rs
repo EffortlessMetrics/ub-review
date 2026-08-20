@@ -296,7 +296,18 @@ fn normalize_root(root: &str) -> Result<String> {
     {
         bail!("invalid proof working root");
     }
-    Ok(normalized.trim_end_matches('/').to_owned())
+    // Do not turn filesystem roots into a different path: `C:/` must remain
+    // `C:/`, and `/` must remain `/`. Other roots may drop redundant trailing
+    // separators for stable identity bytes.
+    let is_posix_root = normalized == "/";
+    let is_drive_root = normalized.len() == 3
+        && normalized.as_bytes().get(1) == Some(&b':')
+        && normalized.ends_with('/');
+    if is_posix_root || is_drive_root {
+        Ok(normalized)
+    } else {
+        Ok(normalized.trim_end_matches('/').to_owned())
+    }
 }
 
 fn normalize_revision(value: &str, label: &str) -> Result<String> {
@@ -498,6 +509,24 @@ mod tests {
         assert_ne!(head.argv, base.argv);
         assert_ne!(head.digest, base.digest);
         assert_eq!(head.subsumption(&base), ProofSubsumption::Distinct);
+        Ok(())
+    }
+
+    #[test]
+    fn filesystem_roots_keep_root_semantics() -> Result<()> {
+        let mut posix = input();
+        posix.working_root = "/".to_owned();
+        assert_eq!(
+            ProofExecutionIdentity::from_approved(posix)?.working_root,
+            "/"
+        );
+
+        let mut windows = input();
+        windows.working_root = r"C:\".to_owned();
+        assert_eq!(
+            ProofExecutionIdentity::from_approved(windows)?.working_root,
+            "C:/"
+        );
         Ok(())
     }
 }
