@@ -173,6 +173,13 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
             "archive must contain exactly one root-level ub-review executable",
         ),
         (
+            "missing-candidate",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "missing",
+            false,
+            "archive must contain exactly one root-level ub-review executable",
+        ),
+        (
             "root-and-nested",
             "printf '%s\\n' 'ub-review 0.1.0'",
             "root-and-nested",
@@ -224,6 +231,9 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
             let alias = candidate_dir.join("ub-review-alias");
             fs::hard_link(&candidate, &alias)?;
         }
+        if layout == "missing" {
+            fs::write(candidate_dir.join("README"), "no executable candidate\n")?;
+        }
         let archive = temp.path().join(format!("{name}.tar.gz"));
         let mut archive_command = Command::new("tar");
         archive_command.args([
@@ -255,6 +265,9 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
             }
             "root-hard-link" => {
                 archive_command.args(["ub-review-alias", "ub-review"]);
+            }
+            "missing" => {
+                archive_command.arg("README");
             }
             _ => bail!("unknown fixture layout {layout}"),
         }
