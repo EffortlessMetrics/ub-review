@@ -87,6 +87,11 @@ Everything else stays in artifacts:
   Offline calibration tooling may read the artifact for contradiction/gap
   analysis, but production reporter execution must not receive, quote, or emit
   it.
+- Audit parsing has four stable outcomes: valid non-empty audits remain
+  artifact-only; empty audits produce a typed `empty-internal-audit` degraded
+  observation; malformed audits produce a typed `malformed-internal-audit`
+  failed observation; and absent audits retain no-provider-content semantics.
+  None of these classifications is public reporter content.
 
 Missing-proof receipts are public only when their `head` matches the current
 review head and at least one `request_ids` value exactly matches the topic's

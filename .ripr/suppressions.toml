@@ -21923,6 +21923,96 @@ reason = "Proof-planner failure receipt: proof_planner_audit_write_failure_becom
 
 [[suppressions]]
 kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:b4532341"
+owner = "ub-review/core"
+reason = "Classification contract receipt: lane_model_output_deserialize_records_audit_classification directly deserializes a valid audit and asserts InternalAuditClassification::ValidNonEmpty. Re-verify after LaneModelOutput field changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:field_construction:e6e78dc0"
+owner = "ub-review/core"
+reason = "Typed observation receipt: internal_audit_classifies_empty_as_degraded_typed_outcome asserts the exact empty-internal-audit status, severity, confidence, and claim. Re-verify after classification observation construction changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:match_arm:be0c9392"
+owner = "ub-review/core"
+reason = "Typed observation receipt: internal_audit_classifies_empty_as_degraded_typed_outcome observes the empty classification branch and exact typed observation kind. Re-verify after classification branch changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:return_value:aa049388"
+owner = "ub-review/core"
+reason = "Typed observation receipt: internal_audit_classifies_malformed_schema_distinctly asserts the malformed branch's exact failed observation claim and result. Re-verify after malformed classification changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:return_value:35d9545a"
+owner = "ub-review/core"
+reason = "Typed observation receipt: internal_audit_classifies_malformed_schema_distinctly asserts the malformed classification observation is returned with stable typed fields. Re-verify after observation result changes."
+
+[[suppressions]]
+kind = "exposure_gap"
 finding_id = "probe:src_observations.rs:return_value:8468d28b"
 owner = "ub-review/core"
 reason = "Foundation writer receipt: internal_audit_artifact_is_lane_scoped_and_not_public_surface asserts successful artifact completion and no public review directory. Re-verify after writer result changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:cec58b38"
+owner = "ub-review/core"
+reason = "Proof-planner classification receipt: proof_planner_forwards_valid_internal_audit_classification asserts the advisory transformation preserves ValidNonEmpty. Re-verify after proof-planner output shaping changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:9b100c68"
+owner = "ub-review/core"
+reason = "Proof-planner classification receipt: proof_planner_forwards_empty_internal_audit_classification asserts the advisory output preserves Empty. Re-verify after proof-planner output shaping changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:0390a147"
+owner = "ub-review/core"
+reason = "Proof-planner classification receipt: proof_planner_forwards_empty_internal_audit_classification observes the exact Empty result after advisory transformation. Re-verify after proof-planner output shaping changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:0e6420ba"
+owner = "ub-review/core"
+reason = "Proof-planner classification receipt: proof_planner_forwards_malformed_internal_audit_classification asserts the advisory output preserves Malformed. Re-verify after proof-planner output shaping changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:b22fc430"
+owner = "ub-review/core"
+reason = "Proof-planner classification receipt: proof_planner_forwards_malformed_internal_audit_classification observes the exact Malformed result after advisory transformation. Re-verify after proof-planner output shaping changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:c1fa3cdf"
+owner = "ub-review/core"
+reason = "Public boundary receipt: internal_audit_observations_are_withheld_from_public_review_boundary exercises the empty and malformed observation filter at the PR-render admission boundary. Re-verify after artifact-only observation policy changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:field_construction:f056bb08"
+owner = "ub-review/core"
+reason = "Public boundary receipt: internal_audit_observations_are_withheld_from_public_review_boundary constructs the empty-internal-audit observation group with degraded status and asserts artifact-only admission. Re-verify after observation group changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:e48cbe81"
+owner = "ub-review/core"
+reason = "Public boundary receipt: internal_audit_observations_are_withheld_from_public_review_boundary observes empty-internal-audit exclusion from public review rendering. Re-verify after observation filter changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:field_construction:498967c6"
+owner = "ub-review/core"
+reason = "Public boundary receipt: internal_audit_observations_are_withheld_from_public_review_boundary constructs the malformed-internal-audit observation group with failed status and asserts artifact-only admission. Re-verify after observation group changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:b9d7a140"
+owner = "ub-review/core"
+reason = "Public boundary receipt: internal_audit_observations_are_withheld_from_public_review_boundary observes malformed-internal-audit exclusion from public review rendering. Re-verify after observation filter changes."

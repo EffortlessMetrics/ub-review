@@ -1462,19 +1462,7 @@ pub(crate) fn apply_proof_planner_model_output(
     proof_requests: &mut Vec<ProofRequest>,
     proof_intents: &mut Vec<ProofIntent>,
 ) {
-    let advisory_output = LaneModelOutput {
-        summary: None,
-        internal_audit: output.internal_audit,
-        inline_comments: Vec::new(),
-        candidate_findings: Vec::new(),
-        summary_only_findings: Vec::new(),
-        observations: output.observations,
-        failed_objections: output.failed_objections,
-        proof_requests: output.proof_requests,
-        proof_intents: output.proof_intents,
-        issue_candidates: output.issue_candidates,
-        degraded: output.degraded,
-    };
+    let advisory_output = proof_planner_advisory_output(output);
     let mut ignored_inline_comments = Vec::new();
     let mut ignored_summary_only_findings = Vec::new();
     let mut ignored_issue_candidates = Vec::new();
@@ -1491,6 +1479,60 @@ pub(crate) fn apply_proof_planner_model_output(
             issue_candidates: &mut ignored_issue_candidates,
         },
     );
+}
+
+fn proof_planner_advisory_output(output: LaneModelOutput) -> LaneModelOutput {
+    LaneModelOutput {
+        internal_audit_classification: output.internal_audit_classification,
+        summary: None,
+        internal_audit: output.internal_audit,
+        inline_comments: Vec::new(),
+        candidate_findings: Vec::new(),
+        summary_only_findings: Vec::new(),
+        observations: output.observations,
+        failed_objections: output.failed_objections,
+        proof_requests: output.proof_requests,
+        proof_intents: output.proof_intents,
+        issue_candidates: output.issue_candidates,
+        degraded: output.degraded,
+    }
+}
+
+#[cfg(test)]
+mod proof_planner_classification_tests {
+    use super::*;
+
+    fn classify(raw: &str) -> Result<InternalAuditClassification> {
+        let output: LaneModelOutput = serde_json::from_str(raw)?;
+        Ok(proof_planner_advisory_output(output).internal_audit_classification)
+    }
+
+    #[test]
+    fn proof_planner_forwards_valid_internal_audit_classification() -> Result<()> {
+        assert_eq!(
+            classify(r#"{"internal_audit":{"surfaces_checked":["src/lib.rs"]}}"#)?,
+            InternalAuditClassification::ValidNonEmpty
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn proof_planner_forwards_empty_internal_audit_classification() -> Result<()> {
+        assert_eq!(
+            classify(r#"{"internal_audit":{"surfaces_checked":[]}}"#)?,
+            InternalAuditClassification::Empty
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn proof_planner_forwards_malformed_internal_audit_classification() -> Result<()> {
+        assert_eq!(
+            classify(r#"{"internal_audit":{"surfaces_checked":"src/lib.rs"}}"#)?,
+            InternalAuditClassification::Malformed
+        );
+        Ok(())
+    }
 }
 
 pub(crate) fn call_model_lane(

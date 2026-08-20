@@ -66,6 +66,7 @@ fn sibling_summary_completeness_claim_becomes_verification_observation() -> Resu
                     .to_owned(),
             ),
             internal_audit: None,
+            internal_audit_classification: InternalAuditClassification::Absent,
             inline_comments: Vec::new(),
             candidate_findings: Vec::new(),
             summary_only_findings: Vec::new(),
@@ -332,6 +333,7 @@ index 1111111..2222222 100644
     let output = LaneModelOutput {
         summary: None,
         internal_audit: None,
+        internal_audit_classification: InternalAuditClassification::Absent,
         inline_comments: vec![ModelCandidateComment {
             severity: "medium".to_owned(),
             confidence: "medium-high".to_owned(),
