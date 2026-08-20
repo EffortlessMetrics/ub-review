@@ -208,6 +208,24 @@ fn main() -> Result<()> {
     }
 }
 
+#[cfg(test)]
+mod lane_identity_artifact_ref_tests {
+    use super::{lane_turn_artifact_ref, model_content_artifact_ref};
+
+    #[test]
+    fn hostile_lane_refs_use_the_same_encoded_component() {
+        let lane = "../foo/bar é";
+        assert_eq!(
+            model_content_artifact_ref(lane),
+            "review/model/~2E~2E~2Ffoo~2Fbar~20~C3~A9/content.json"
+        );
+        assert_eq!(
+            lane_turn_artifact_ref(lane, 0),
+            "review/threads/~2E~2E~2Ffoo~2Fbar~20~C3~A9/turn-000.json"
+        );
+    }
+}
+
 /// Execute a single proof request and write its receipt.
 /// (Order 8 of epic #655 — the execution-plane worker command.)
 ///
@@ -4107,6 +4125,17 @@ fn finalize_reporter_coordination(
     }
 }
 
+fn model_content_artifact_ref(lane: &str) -> String {
+    format!("review/model/{}/content.json", sanitize_artifact_name(lane))
+}
+
+fn lane_turn_artifact_ref(lane: &str, turn: u32) -> String {
+    format!(
+        "review/threads/{}/turn-{turn:03}.json",
+        sanitize_artifact_name(lane)
+    )
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
@@ -4284,10 +4313,7 @@ fn write_review_artifacts(
                     .find(|a| a.lane.id == receipt.lane)
                     .map(|a| a.lane.receives.clone())
                     .unwrap_or_default();
-                let receipt_ref = format!(
-                    "review/model/{}/content.json",
-                    sanitize_artifact_name(&receipt.lane)
-                );
+                let receipt_ref = model_content_artifact_ref(&receipt.lane);
                 let turn = primary_turn(
                     &receipt.thread_id,
                     &receipt.lane,
@@ -4307,10 +4333,7 @@ fn write_review_artifacts(
                 // conclusion. Also emit thread_terminal when the lane is done.
                 // Message-log errors are logged to the event log, not
                 // propagated (the queue is observability, not a run dependency).
-                let turn_ref = format!(
-                    "review/threads/{}/turn-000.json",
-                    sanitize_artifact_name(&receipt.lane)
-                );
+                let turn_ref = lane_turn_artifact_ref(&receipt.lane, 0);
                 if let Err(e) = message_log.append(
                     CrossLaneMessageKind::LaneReport,
                     &receipt.lane,

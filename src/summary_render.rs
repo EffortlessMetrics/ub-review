@@ -633,6 +633,10 @@ mod tests {
             lane_packet_model_display(out, lane).as_deref(),
             Some("test-model")
         );
+        assert_eq!(
+            fs::read_to_string(out.join("lanes").join("~2E~2E~2Ffoo~2Fbar~20~C3~A9.md"))?,
+            "# Lane: hostile\n\nModel: `test-model`\n"
+        );
         assert!(!out.join("foo").exists());
         assert_eq!(lane_packet_model_display(out, "missing/lane"), None);
         Ok(())

@@ -249,8 +249,8 @@ mod tests {
         let lane = "../foo/bar é";
         let turn = primary_turn("tid", lane, "conclusion", vec![], "receipt");
         write_lane_thread_turn(&review_dir, lane, &turn, "cid", "completed")?;
-        let encoded = sanitize_artifact_name(lane);
-        let encoded_dir = review_dir.join("threads").join(&encoded);
+        let encoded = "~2E~2E~2Ffoo~2Fbar~20~C3~A9";
+        let encoded_dir = review_dir.join("threads").join(encoded);
         assert!(encoded_dir.join("turn-000.json").is_file());
         assert!(encoded_dir.join("thread.json").is_file());
         assert!(!review_dir.join("foo").exists());
@@ -261,6 +261,10 @@ mod tests {
         assert_eq!(
             session.latest_turn_ref.as_deref(),
             Some(expected_ref.as_str())
+        );
+        assert_eq!(
+            session.latest_turn_ref.as_deref(),
+            Some("review/threads/~2E~2E~2Ffoo~2Fbar~20~C3~A9/turn-000.json")
         );
         assert_eq!(
             serde_json::from_slice::<LaneThreadTurn>(&fs::read(
