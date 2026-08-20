@@ -450,6 +450,7 @@ runs:
               layout_counts="$(tar -tvzf "$archive" | awk '
                 function clean(path) {
                   sub(/^(\.\/)+/, "", path)
+                  sub(/\/+$/, "", path)
                   return path
                 }
                 {

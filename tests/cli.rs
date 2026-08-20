@@ -187,6 +187,13 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
             "archive must contain exactly one root-level ub-review executable",
         ),
         (
+            "root-and-directory",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "root-and-directory",
+            false,
+            "archive must contain exactly one root-level ub-review executable",
+        ),
+        (
             "duplicate-root",
             "printf '%s\\n' 'ub-review 0.1.0'",
             "duplicate-root",
@@ -234,6 +241,9 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
         if layout == "missing" {
             fs::write(candidate_dir.join("README"), "no executable candidate\n")?;
         }
+        if layout == "root-and-directory" {
+            fs::create_dir(candidate_dir.join("directory-entry"))?;
+        }
         let archive = temp.path().join(format!("{name}.tar.gz"));
         let mut archive_command = Command::new("tar");
         archive_command.args([
@@ -256,6 +266,13 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
             }
             "root-and-nested" => {
                 archive_command.args(["ub-review", "nested/ub-review"]);
+            }
+            "root-and-directory" => {
+                archive_command.args([
+                    "--transform=s#^directory-entry$#ub-review/#",
+                    "ub-review",
+                    "directory-entry",
+                ]);
             }
             "duplicate-root" => {
                 archive_command.args(["ub-review", "./ub-review"]);
