@@ -96,9 +96,11 @@ path separators, no `..` - in the same charset. The download is attempted
 only on Linux x86_64 runners (`uname` check); `.tar.gz`/`.tgz` assets are
 downloaded with a sibling `<asset>.sha256` receipt, whose first field must be a
 64-hex SHA-256 digest matching the archive before extraction. They are then
-extracted and must contain an executable named `ub-review`, while any other
-asset name is treated as the raw binary. Every failure branch returns to the
-source build.
+extracted and must contain an executable named `ub-review`. The candidate must
+also report the exact `ub-review <release-version-without-v>` identity from
+`--version`; version-command failure, empty output, or mismatch fails release
+mode before the candidate is accepted. Any other asset name is treated as the
+raw binary. Every failure branch returns to the source build.
 
 Rust toolchain setup (action.yml "Select Rust toolchain"): when
 `setup-rust` is true and rustup exists, it installs and defaults 1.95.0
@@ -256,8 +258,8 @@ doctor pins              CORE_REVIEW_TOOLS = tokmd, cargo-allow, ripr,
 - In `auto` mode, release download failures fail closed into the source build,
   never into "no binary". In explicit `release` mode, the same failures stop
   the job rather than silently changing install policy; the extracted
-  candidate must be an executable named `ub-review` before it is accepted
-  (action.yml).
+  candidate must be an executable named `ub-review` and report the requested
+  release identity before it is accepted (action.yml).
 - Release request inputs are validated before any URL is constructed: bare
   file names only, restricted charset, no traversal (action.yml
   `validate_release_request`); the release workflow refuses malformed tags

@@ -470,6 +470,18 @@ runs:
             report_release_unavailable warning "release binary is not executable"
             return 1
           fi
+          expected_version="${release_version#v}"
+          if ! version_output="$("$candidate" --version 2>&1 | head -c 256)"; then
+            report_release_unavailable warning "release binary --version execution failed"
+            return 1
+          fi
+          actual_identity="$(printf '%s\n' "$version_output" | sed -n '1p' | awk '{print $1 " " $2}')"
+          expected_identity="ub-review $expected_version"
+          if [[ "$actual_identity" != "$expected_identity" ]]; then
+            report_release_unavailable warning "release binary version mismatch (expected $expected_identity, got ${actual_identity:-no output})"
+            return 1
+          fi
+          echo "ub-review release binary identity: requested=$release_version actual=$actual_identity"
           echo "release-url=$url" >> "$GITHUB_OUTPUT"
           echo "release-dir=$release_dir" >> "$GITHUB_OUTPUT"
           echo "bin=$candidate" >> "$GITHUB_OUTPUT"

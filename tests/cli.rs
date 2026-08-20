@@ -71,6 +71,29 @@ fn action_forwards_prior_resolved_candidates_input() -> Result<()> {
 }
 
 #[test]
+fn release_resolver_validates_binary_version_before_acceptance() -> Result<()> {
+    let action = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("action.yml"))?;
+    let candidate = action
+        .find("expected_version=\"${release_version#v}\"")
+        .ok_or_else(|| anyhow::anyhow!("release resolver must derive the expected version"))?;
+    let resolver = &action[candidate..];
+    anyhow::ensure!(resolver.contains("\"$candidate\" --version"));
+    anyhow::ensure!(resolver.contains("release binary --version execution failed"));
+    anyhow::ensure!(resolver.contains("release binary version mismatch"));
+    anyhow::ensure!(resolver.contains("expected_identity=\"ub-review $expected_version\""));
+    anyhow::ensure!(
+        resolver
+            .find("echo \"release-url=$url\"")
+            .is_some_and(|output| {
+                resolver
+                    .find("release binary version mismatch")
+                    .is_some_and(|mismatch| mismatch < output)
+            })
+    );
+    Ok(())
+}
+
+#[test]
 fn gate_workflow_grants_actions_read_for_prior_resolved_candidates_lookup() -> Result<()> {
     let workflow = include_str!("../.github/workflows/ub-review-gate.yml");
     assert!(workflow.contains("actions: read"));
