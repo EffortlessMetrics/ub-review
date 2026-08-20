@@ -43,6 +43,7 @@ pub(crate) const ISSUE_ACTION_SCHEMA: &str = "ub-review.issue_action.v1";
 pub(crate) const ISSUE_BROKER_PLAN_SCHEMA: &str = "ub-review.issue_broker_plan.v1";
 pub(crate) const ISSUE_BROKER_RESULT_SCHEMA: &str = "ub-review.issue_broker_result.v1";
 pub(crate) const ISSUE_CANDIDATE_SCHEMA: &str = "ub-review.issue_candidate.v1";
+pub(crate) const INTERNAL_AUDIT_SCHEMA: &str = "ub-review.internal_audit.v1";
 pub(crate) const MERGED_OBSERVATION_SCHEMA: &str = "ub-review.merged_observation.v1";
 pub(crate) const MODEL_STAGE_SCHEMA: &str = "ub-review.model_stage.v1";
 pub(crate) const OBSERVATION_GROUP_SCHEMA: &str = "ub-review.observation_group.v1";

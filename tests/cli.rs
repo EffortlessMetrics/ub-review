@@ -3581,7 +3581,19 @@ path = "src/lib.rs"
     run(&repo, "git", &["commit", "-m", "touch rust behavior"])?;
 
     let dummy_key = "dummy-minimax-key-for-local-test";
-    let (provider_url, provider) = spawn_fake_openai_provider(2)?;
+    let audit_content = serde_json::json!({
+        "summary": "fake provider ok",
+        "inline_comments": [],
+        "summary_only_findings": [],
+        "internal_audit": {
+            "surfaces_checked": ["src/lib.rs:active_len"],
+            "strongest_rejected_hypothesis": "the changed pointer route bypasses validation",
+            "remaining_local_uncertainty": null
+        }
+    })
+    .to_string();
+    let (provider_url, provider) =
+        spawn_fake_openai_provider_with_contents(vec![fake_openai_lane_content(), audit_content])?;
     let out = temp.path().join("packet");
     let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
     let bin = env!("CARGO_BIN_EXE_ub-review");
@@ -3645,6 +3657,7 @@ path = "src/lib.rs"
         lane_artifact_dir.join("request.json"),
         lane_artifact_dir.join("response.json"),
         lane_artifact_dir.join("content.json"),
+        lane_artifact_dir.join("internal_audit.json"),
         lane_artifact_dir.join("stderr.txt"),
     ] {
         assert!(path.exists(), "missing {}", path.display());
@@ -3695,6 +3708,16 @@ path = "src/lib.rs"
     assert_eq!(ub_lane["status"], "ok");
     assert_eq!(ub_lane["http_status"], 200);
     assert_eq!(ub_lane["response_shape"], "openai");
+    let internal_audit: serde_json::Value =
+        serde_json::from_slice(&fs::read(lane_artifact_dir.join("internal_audit.json"))?)?;
+    assert_eq!(internal_audit["schema"], "ub-review.internal_audit.v1");
+    assert_eq!(internal_audit["lane"], "ub");
+    assert_eq!(
+        internal_audit["surfaces_checked"][0],
+        "src/lib.rs:active_len"
+    );
+    let review_body = fs::read_to_string(out.join("review/review.md"))?;
+    assert!(!review_body.contains("changed pointer route bypasses validation"));
     assert!(
         review["summary_only_findings"]
             .as_array()

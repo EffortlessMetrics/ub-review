@@ -150,6 +150,11 @@ generic no-finding prose, and scratch observations stay in artifacts. A clean
 run can produce no PR review payload; a degraded run should name the missing or
 failed evidence that changes trust.
 
+Specialists may also return a non-empty `internal_audit` with no public
+findings. It records bounded surfaces checked and rejected hypotheses in the
+per-lane model artifact for calibration; it is not routed to the reporter,
+compiler, review summary, or GitHub.
+
 ## Economics
 
 The scarce resource is the runner lease. Trusted repos default to two useful

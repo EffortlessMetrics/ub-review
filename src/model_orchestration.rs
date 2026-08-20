@@ -379,6 +379,14 @@ pub(crate) fn run_available_model_lanes_with_runner(
                     receipt.http_status = outcome.http_status;
                     receipt.response_shape = Some(outcome.response_shape.clone());
                     receipt.cache_usage = outcome.cache_usage;
+                    if let Some(audit) = outcome
+                        .output
+                        .internal_audit
+                        .as_ref()
+                        .filter(|audit| audit.has_value())
+                    {
+                        write_internal_audit_artifact(&model_dir, &receipt.lane, audit)?;
+                    }
                     apply_model_output(
                         lane,
                         outcome.output,
