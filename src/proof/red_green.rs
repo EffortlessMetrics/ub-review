@@ -305,3 +305,200 @@ where
         reason,
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tests::{run_test_command, test_run_args};
+    use std::fs;
+
+    /// A change in the shape this repository itself has: the production fix and
+    /// the new unit test live in the same `src/*.rs` file, the test inside a
+    /// `#[cfg(test)] mod tests` block.
+    const BASE_SOURCE: &str = "pub fn classify(value: u8) -> &'static str {\n    if value > 10 {\n        \"high\"\n    } else {\n        \"low\"\n    }\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn classifies_high() {\n        assert_eq!(classify(11), \"high\");\n    }\n}\n";
+    const HEAD_SOURCE: &str = "pub fn classify(value: u8) -> &'static str {\n    if value >= 10 {\n        \"high\"\n    } else {\n        \"low\"\n    }\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn classifies_high() {\n        assert_eq!(classify(11), \"high\");\n    }\n\n    #[test]\n    fn classifies_boundary() {\n        assert_eq!(classify(10), \"high\");\n    }\n}\n";
+
+    fn same_file_fix_and_test_repo(root: &Path) -> Result<DiffContext> {
+        run_test_command(root, "git", &["init", "--initial-branch=main"])?;
+        run_test_command(
+            root,
+            "git",
+            &["config", "user.email", "ub-review@example.invalid"],
+        )?;
+        run_test_command(root, "git", &["config", "user.name", "UB Review Test"])?;
+        fs::create_dir_all(root.join("src"))?;
+        fs::write(root.join("src/lib.rs"), BASE_SOURCE)?;
+        run_test_command(root, "git", &["add", "-A"])?;
+        run_test_command(
+            root,
+            "git",
+            &["-c", "commit.gpgsign=false", "commit", "-m", "base"],
+        )?;
+        let base = git_text_owned(root, &["rev-parse".to_owned(), "HEAD".to_owned()])?
+            .trim()
+            .to_owned();
+        fs::write(root.join("src/lib.rs"), HEAD_SOURCE)?;
+        run_test_command(root, "git", &["add", "-A"])?;
+        run_test_command(
+            root,
+            "git",
+            &["-c", "commit.gpgsign=false", "commit", "-m", "head"],
+        )?;
+        let head = git_text_owned(root, &["rev-parse".to_owned(), "HEAD".to_owned()])?
+            .trim()
+            .to_owned();
+        Ok(DiffContext {
+            base,
+            head,
+            changed_files: vec!["src/lib.rs".to_owned()],
+            patch: String::new(),
+            flags: DiffFlags {
+                source_changed: true,
+                rust_changed: true,
+                rust_tests_changed: true,
+                ..DiffFlags::default()
+            },
+            diff_class: DiffClass::SourceUb,
+        })
+    }
+
+    fn cargo_test_task() -> FocusedTestTask {
+        let spec = ProofCommandSpec {
+            argv: vec![
+                "cargo".to_owned(),
+                "test".to_owned(),
+                "--locked".to_owned(),
+                "classifies_boundary".to_owned(),
+            ],
+            env: BTreeMap::new(),
+        };
+        FocusedTestTask {
+            id: "proof-rust-001".to_owned(),
+            file: "src/lib.rs".to_owned(),
+            test_name: Some("classifies_boundary".to_owned()),
+            mode: FocusedProofMode::RedGreen,
+            command_specs: Some(FocusedTestCommandSpecs {
+                head: spec.clone(),
+                base_plus_tests: spec,
+            }),
+            timeout_sec: Some(60),
+            requested_by: vec!["tests".to_owned()],
+            request_ids: vec!["proof-rust-001".to_owned()],
+        }
+    }
+
+    /// A Rust unit test that lives beside the fix it pins must come out
+    /// `discriminating`. Selecting whole files by path prefix could only either
+    /// carry the fix into the base run or leave the new test out of it, and both
+    /// spellings report a false `non_discriminating`.
+    #[test]
+    fn same_file_rust_unit_test_discriminates_against_its_own_fix() -> Result<()> {
+        let repo = tempfile::tempdir()?;
+        let diff = same_file_fix_and_test_repo(repo.path())?;
+        let out = repo.path().join("out");
+        let args = test_run_args(out.clone());
+        let mut observed = Vec::<(bool, bool)>::new();
+
+        let result = run_focused_red_green_proof_tasks_with_runner(
+            repo.path(),
+            &out,
+            &diff,
+            &Profile::default(),
+            &args,
+            ProofBudget {
+                max_focused_test_files: 2,
+                max_focused_tests: 2,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 600,
+            },
+            vec![cargo_test_task()],
+            |root, _argv, _env, _timeout, stdout, stderr| {
+                // Stand in for `cargo test classifies_boundary`: the new test
+                // only passes where the production fix is present.
+                let source = fs::read_to_string(root.join("src/lib.rs"))?;
+                let has_test = source.contains("fn classifies_boundary");
+                let has_fix = source.contains("value >= 10");
+                observed.push((has_test, has_fix));
+                let success = !has_test || has_fix;
+                fs::write(
+                    stdout,
+                    if success {
+                        b"ok\n".as_slice()
+                    } else {
+                        b"FAILED\n".as_slice()
+                    },
+                )?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    exit_code: Some(i32::from(!success)),
+                    timed_out: false,
+                    success,
+                    reason: "completed".to_owned(),
+                    duration_ms: 7,
+                })
+            },
+            prepare_base_plus_tests_worktree,
+        )?;
+
+        // HEAD carries fix and test; base+tests carries the test alone.
+        assert_eq!(observed, vec![(true, true), (true, false)]);
+        let receipt = result
+            .proof_receipts
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("expected one proof receipt"))?;
+        assert_eq!(receipt.result, "discriminating", "{receipt:?}");
+        assert_eq!(receipt.test_patch_mode, "base-plus-tests");
+        let patch = fs::read_to_string(out.join("proof/base-plus-tests.patch"))?;
+        assert!(patch.contains("fn classifies_boundary"), "{patch}");
+        assert!(!patch.contains("value >= 10"), "{patch}");
+        Ok(())
+    }
+
+    /// The refusal path: an unbuildable base+tests patch must be reported as
+    /// `base_patch_failed`, never as a verdict about the tests.
+    #[test]
+    fn unbuildable_base_plus_tests_patch_reports_base_patch_failed() -> Result<()> {
+        let repo = tempfile::tempdir()?;
+        let diff = same_file_fix_and_test_repo(repo.path())?;
+        let out = repo.path().join("out");
+        let args = test_run_args(out.clone());
+
+        let result = run_focused_red_green_proof_tasks_with_runner(
+            repo.path(),
+            &out,
+            &diff,
+            &Profile::default(),
+            &args,
+            ProofBudget {
+                max_focused_test_files: 2,
+                max_focused_tests: 2,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 600,
+            },
+            vec![cargo_test_task()],
+            |_root, _argv, _env, _timeout, stdout, stderr| {
+                fs::write(stdout, b"ok\n")?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    exit_code: Some(0),
+                    timed_out: false,
+                    success: true,
+                    reason: "completed".to_owned(),
+                    duration_ms: 7,
+                })
+            },
+            |_root, _out, _diff| anyhow::bail!("classification refused"),
+        )?;
+
+        let receipt = result
+            .proof_receipts
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("expected one proof receipt"))?;
+        assert_eq!(receipt.result, "base_patch_failed", "{receipt:?}");
+        assert!(
+            receipt.reason.contains("classification refused"),
+            "{receipt:?}"
+        );
+        Ok(())
+    }
+}
