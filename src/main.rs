@@ -30,6 +30,7 @@ use builtin::*;
 mod gate;
 use gate::*;
 mod artifacts;
+mod gate_truth;
 use artifacts::*;
 mod proof;
 pub(crate) use proof::*;
@@ -5258,7 +5259,11 @@ fn write_review_artifacts(
         serde_json::json!({
             "conclusion": gate_outcome.conclusion,
             "terminal_status": gate_outcome.terminal_status,
+            "analysis_result": gate_outcome.analysis_result,
+            "publication_result": gate_outcome.publication_result,
+            "gate_result": gate_outcome.gate_result,
             "reasons": gate_outcome.reasons.len(),
+            "not_proven_reasons": gate_outcome.not_proven_reasons.len(),
             "fail_on_gate": args.fail_on_gate.key(),
             "fail_on_gate_resolved": args.fail_on_gate.resolved(args.mode),
         }),
@@ -18614,11 +18619,17 @@ index 1111111..2222222 100644
             schema: super::GATE_OUTCOME_SCHEMA.to_owned(),
             conclusion: "pass".to_owned(),
             terminal_status: "artifact-only".to_owned(),
+            analysis_result: "clean".to_owned(),
+            publication_result: "not_needed".to_owned(),
+            gate_result: "pass".to_owned(),
             reasons: Vec::new(),
             required_proof: super::GateRequiredProofCounts::default(),
             tool_gates: super::GateToolGateCounts::default(),
             evidence_gaps_blocking: 0,
             evidence_gaps_advisory: 0,
+            sensor_coverage: super::gate_truth::GateSensorCoverage::default(),
+            model_coverage: super::gate_truth::GateModelCoverage::default(),
+            not_proven_reasons: Vec::new(),
         };
 
         let ledger = super::build_fill_ledger(super::FillLedgerInput {

@@ -6474,15 +6474,61 @@ GATE_OUTCOME_REASON_KINDS = {
     "required-tool-timeout",
     "sensor-finding",
     "reporter-verdict",
+    # #857/#874: stale/malformed reporter turns under [gate].review_forward.
+    # An unusable deciding artifact is evidence-unavailable, not a
+    # demonstrated code defect.
+    "reporter-evidence",
     "blocking-finding",
     "policy",
     "internal",
 }
 
+# Required instruments that owed evidence and could not report. These are the
+# kinds the gate counts into `evidence_gaps_blocking`.
 GATE_OUTCOME_EVIDENCE_UNAVAILABLE_REASON_KINDS = {
     "required-sensor",
     "required-tool-timeout",
 }
+# Kinds that mean "we could not check" for the conclusion classifier itself
+# (#839): the inconclusive-vs-fail decision accepts every kind in the Rust
+# helper `gate_reason_kind_is_evidence_unavailable`, which also folds in
+# unusable reporter turns. Kept separate from the blocking-gap count above so
+# a mixed packet (reporter turn lost + required sensor gap) still reconciles.
+GATE_OUTCOME_INCONCLUSIVE_REASON_KINDS = (
+    GATE_OUTCOME_EVIDENCE_UNAVAILABLE_REASON_KINDS | {"reporter-evidence"}
+)
+
+# #839: the three separated results. `conclusion` keeps its legacy meaning and
+# stays the enforced verdict; these say what was actually established, whether
+# the reviewer received it, and what the check may truthfully claim. The
+# verifier audits their coherence so a packet can never report a clean analysis
+# over failed instruments, or a passing gate over findings that never shipped.
+GATE_OUTCOME_ANALYSIS_RESULTS = {"clean", "findings", "limited", "not_proven"}
+GATE_OUTCOME_PUBLICATION_RESULTS = {"posted", "not_needed", "failed", "not_proven"}
+GATE_OUTCOME_GATE_RESULTS = {"pass", "finding", "not_proven"}
+GATE_OUTCOME_NOT_PROVEN_REASON_PREFIXES = (
+    "terminal-state:",
+    "required-sensor-coverage:",
+    "required-proof:",
+    "model-coverage:",
+    "instrument-coverage:",
+    "publication:",
+    "gate-conclusion:",
+)
+GATE_OUTCOME_SENSOR_COVERAGE_FIELDS = (
+    "required_total",
+    "required_completed",
+    "optional_total",
+    "optional_completed",
+    "failed",
+    "timed_out",
+    "skipped",
+)
+GATE_OUTCOME_MODEL_COVERAGE_FIELDS = (
+    "lanes_total",
+    "lanes_usable",
+    "budget_exhausted_lanes",
+)
 
 # gate_watchdog.json (#745): every reason maps to exactly one state, so a
 # reason/state mismatch is a classifier bug. A `terminal` state is the only one
@@ -6718,6 +6764,199 @@ def ndjson_parity(root: pathlib.Path, name: str, expected: list) -> None:
             fail(f"{name} line {index + 1} does not match JSON artifact")
 
 
+def require_gate_coverage_counts(outcome: dict) -> tuple[dict, dict]:
+    """`sensor_coverage` / `model_coverage` are the structured evidence-coverage
+    counts a consumer branches on instead of parsing prose (#839). Totals count
+    only instruments that owed evidence, so the loss buckets must account for
+    every non-completion exactly once."""
+    sensor_coverage = outcome.get("sensor_coverage")
+    if not isinstance(sensor_coverage, dict):
+        fail("gate outcome sensor_coverage is not an object")
+    for field in GATE_OUTCOME_SENSOR_COVERAGE_FIELDS:
+        value = sensor_coverage.get(field)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            fail(f"gate outcome sensor_coverage.{field} is invalid: {value!r}")
+    if sensor_coverage["required_completed"] > sensor_coverage["required_total"]:
+        fail(
+            "gate outcome sensor_coverage required_completed exceeds "
+            f"required_total: {sensor_coverage!r}"
+        )
+    if sensor_coverage["optional_completed"] > sensor_coverage["optional_total"]:
+        fail(
+            "gate outcome sensor_coverage optional_completed exceeds "
+            f"optional_total: {sensor_coverage!r}"
+        )
+    lost = (
+        sensor_coverage["required_total"]
+        - sensor_coverage["required_completed"]
+        + sensor_coverage["optional_total"]
+        - sensor_coverage["optional_completed"]
+    )
+    bucketed = (
+        sensor_coverage["failed"]
+        + sensor_coverage["timed_out"]
+        + sensor_coverage["skipped"]
+    )
+    if lost != bucketed:
+        fail(
+            "gate outcome sensor_coverage loss must equal its failed/timed_out/"
+            f"skipped buckets: lost={lost} bucketed={bucketed}"
+        )
+    model_coverage = outcome.get("model_coverage")
+    if not isinstance(model_coverage, dict):
+        fail("gate outcome model_coverage is not an object")
+    for field in GATE_OUTCOME_MODEL_COVERAGE_FIELDS:
+        value = model_coverage.get(field)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            fail(f"gate outcome model_coverage.{field} is invalid: {value!r}")
+    if model_coverage["lanes_usable"] > model_coverage["lanes_total"]:
+        fail(
+            "gate outcome model_coverage lanes_usable exceeds lanes_total: "
+            f"{model_coverage!r}"
+        )
+    budget_exhausted = model_coverage.get("budget_exhausted")
+    if not isinstance(budget_exhausted, bool):
+        fail(
+            "gate outcome model_coverage.budget_exhausted is not a boolean: "
+            f"{budget_exhausted!r}"
+        )
+    if budget_exhausted != (model_coverage["budget_exhausted_lanes"] > 0):
+        fail(
+            "gate outcome model_coverage.budget_exhausted disagrees with "
+            f"budget_exhausted_lanes: {model_coverage!r}"
+        )
+    return sensor_coverage, model_coverage
+
+
+def require_gate_result_separation(outcome: dict, terminal: dict) -> None:
+    """#839: analysis, publication, and gate results are separate facts, and the
+    packet may not let one launder another. Insufficient evidence can never read
+    `clean`; findings trapped in artifacts can never read as a passing public
+    result; and `not_proven` always names its reasons."""
+    analysis = outcome.get("analysis_result")
+    if analysis not in GATE_OUTCOME_ANALYSIS_RESULTS:
+        fail(f"gate outcome analysis_result is invalid: {analysis!r}")
+    publication = outcome.get("publication_result")
+    if publication not in GATE_OUTCOME_PUBLICATION_RESULTS:
+        fail(f"gate outcome publication_result is invalid: {publication!r}")
+    gate_result = outcome.get("gate_result")
+    if gate_result not in GATE_OUTCOME_GATE_RESULTS:
+        fail(f"gate outcome gate_result is invalid: {gate_result!r}")
+    reasons = outcome.get("not_proven_reasons")
+    if not isinstance(reasons, list):
+        fail("gate outcome not_proven_reasons is not an array")
+    for index, reason in enumerate(reasons):
+        if not isinstance(reason, str) or not reason.strip():
+            fail(
+                f"gate outcome not_proven_reason {index + 1} is not a non-empty "
+                f"string: {reason!r}"
+            )
+        if not reason.startswith(GATE_OUTCOME_NOT_PROVEN_REASON_PREFIXES):
+            fail(
+                f"gate outcome not_proven_reason {index + 1} does not lead with a "
+                f"machine-readable token: {reason!r}"
+            )
+    sensor_coverage, _model_coverage = require_gate_coverage_counts(outcome)
+
+    unproven = (
+        analysis == "not_proven"
+        or publication in {"failed", "not_proven"}
+        or gate_result == "not_proven"
+    )
+    if unproven and not reasons:
+        fail(
+            "gate outcome reports an unproven result without naming a reason: "
+            f"analysis={analysis!r} publication={publication!r} "
+            f"gate_result={gate_result!r}"
+        )
+    # A fully clean, passing result may not carry unproven reasons. Reasons are
+    # deliberately retained alongside `findings`, so coverage loss stays visible
+    # when a demonstrated finding takes precedence in `analysis_result`.
+    if analysis == "clean" and gate_result == "pass" and reasons:
+        fail(
+            "gate outcome reports a clean passing result while naming not_proven "
+            f"reasons: {reasons!r}"
+        )
+    # Insufficient evidence can never yield `clean`.
+    if analysis == "clean":
+        lost = (
+            sensor_coverage["failed"]
+            + sensor_coverage["timed_out"]
+            + sensor_coverage["skipped"]
+        )
+        if lost:
+            fail(
+                "gate outcome reports a clean analysis over lost sensor coverage: "
+                f"{sensor_coverage!r}"
+            )
+        if outcome.get("evidence_gaps_blocking", 0) or outcome.get(
+            "evidence_gaps_advisory", 0
+        ):
+            fail(
+                "gate outcome reports a clean analysis over recorded evidence gaps: "
+                f"blocking={outcome.get('evidence_gaps_blocking')!r} "
+                f"advisory={outcome.get('evidence_gaps_advisory')!r}"
+            )
+    # Material findings must be reported as findings, and must never read as a
+    # publication that was simply unnecessary.
+    def terminal_count(field: str) -> int:
+        value = terminal.get(field)
+        if value is None:
+            return 0
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            fail(f"review/terminal_state.json {field} is invalid: {value!r}")
+        return value
+
+    material_findings = terminal_count("inline_comments") + terminal_count(
+        "substantive_summary_only_findings"
+    )
+    if material_findings and analysis != "findings":
+        fail(
+            f"gate outcome records {material_findings} material findings but "
+            f"analysis_result is {analysis!r}"
+        )
+    if material_findings and publication == "not_needed":
+        fail(
+            f"gate outcome records {material_findings} material findings but "
+            "publication_result claims the review was not needed"
+        )
+    if (
+        material_findings
+        and terminal.get("review_payload_status")
+        and terminal["review_payload_status"] != "prepared"
+        and publication == "posted"
+    ):
+        fail(
+            "gate outcome claims a posted publication while "
+            f"review_payload_status is {terminal['review_payload_status']!r}"
+        )
+    # The gate verdict is constrained by the other two results plus the legacy
+    # conclusion, so the artifact can never disagree with itself the way a single
+    # overloaded field used to. `findings` admits both `finding` and `pass`: a
+    # deterministic finding reports `finding` even under advisory policy, while
+    # model-only findings stay non-blocking because model output never feeds the
+    # deterministic verdict.
+    conclusion = outcome.get("conclusion")
+    if publication in {"failed", "not_proven"}:
+        expected = {"not_proven"}
+    elif conclusion == "fail":
+        expected = {"finding"}
+    elif analysis == "not_proven":
+        expected = {"not_proven"}
+    elif conclusion == "inconclusive":
+        expected = {"not_proven"}
+    elif analysis == "findings":
+        expected = {"pass", "finding"}
+    else:
+        expected = {"pass"}
+    if gate_result not in expected:
+        fail(
+            f"gate outcome gate_result is {gate_result!r} but analysis={analysis!r}, "
+            f"publication={publication!r}, conclusion={conclusion!r} require one of "
+            f"{sorted(expected)!r}"
+        )
+
+
 def require_gate_outcome(root: pathlib.Path) -> None:
     """The verdict artifact decides pass/fail/inconclusive; the verifier audits it
     (release lane step 3 / decision D5): schema, reason shapes, receipt
@@ -6799,7 +7038,7 @@ def require_gate_outcome(root: pathlib.Path) -> None:
         reason.get("kind") for reason in reasons if isinstance(reason, dict)
     }
     evidence_unavailable_only = bool(reasons) and reason_kinds.issubset(
-        GATE_OUTCOME_EVIDENCE_UNAVAILABLE_REASON_KINDS
+        GATE_OUTCOME_INCONCLUSIVE_REASON_KINDS
     )
     if conclusion == "inconclusive" and not evidence_unavailable_only:
         fail(
@@ -6850,6 +7089,7 @@ def require_gate_outcome(root: pathlib.Path) -> None:
             f"its unavailable reason count: gaps={outcome.get('evidence_gaps_blocking')!r} "
             f"unavailable_reasons={unavailable_reason_count}"
         )
+    require_gate_result_separation(outcome, terminal if isinstance(terminal, dict) else {})
     skip_path = root / "review/github-review-skip.json"
     if conclusion == "fail" and skip_path.is_file():
         skip = load_json(skip_path)
@@ -11747,6 +11987,288 @@ def self_test_ci_audit_runner_cancellations_contract() -> None:
     )
 
 
+def self_test_gate_result_separation_contract() -> None:
+    """#839: analysis, publication, and gate results are separate facts. The
+    incident shape (substantive summary findings + failed instruments + a
+    suppressed body) must report findings/failed/not_proven, a genuinely clean
+    complete run must report clean/not_needed/pass, and no combination may
+    launder insufficient evidence or a withheld review into a passing result."""
+    import tempfile
+
+    def write_root(outcome: dict, terminal: dict) -> "pathlib.Path":
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        review_dir = tmp / "review"
+        review_dir.mkdir()
+        (review_dir / "terminal_state.json").write_text(
+            json.dumps(terminal), encoding="utf-8"
+        )
+        outcome = dict(outcome)
+        outcome["terminal_status"] = terminal["status"]
+        (review_dir / "gate_outcome.json").write_text(
+            json.dumps(outcome), encoding="utf-8"
+        )
+        return tmp
+
+    def terminal(**overrides) -> dict:
+        base = {
+            "status": "needs-reviewer-attention",
+            "review_payload_status": "prepared",
+            "inline_comments": 0,
+            "substantive_summary_only_findings": 0,
+        }
+        base.update(overrides)
+        return base
+
+    def outcome(**overrides) -> dict:
+        base = {
+            "schema": "ub-review.gate_outcome.v1",
+            "conclusion": "pass",
+            "terminal_status": "needs-reviewer-attention",
+            "analysis_result": "clean",
+            "publication_result": "not_needed",
+            "gate_result": "pass",
+            "reasons": [],
+            "required_proof": {"matched": 0, "passed": 0, "failed": 0, "skipped": 0},
+            "tool_gates": {"evaluated": 0, "passed": 0, "failed": 0},
+            "evidence_gaps_blocking": 0,
+            "evidence_gaps_advisory": 0,
+            "sensor_coverage": {
+                "required_total": 1,
+                "required_completed": 1,
+                "optional_total": 1,
+                "optional_completed": 1,
+                "failed": 0,
+                "timed_out": 0,
+                "skipped": 0,
+            },
+            "model_coverage": {
+                "lanes_total": 2,
+                "lanes_usable": 2,
+                "budget_exhausted_lanes": 0,
+                "budget_exhausted": False,
+            },
+            "not_proven_reasons": [],
+        }
+        base.update(overrides)
+        return base
+
+    # A genuinely clean, complete run.
+    require_gate_outcome(write_root(outcome(), terminal()))
+
+    # The #5797-shaped incident: substantive summary findings, failed and
+    # timed-out instruments, a suppressed PR body, exhausted model budget.
+    incident_coverage = {
+        "required_total": 1,
+        "required_completed": 0,
+        "optional_total": 2,
+        "optional_completed": 1,
+        "failed": 1,
+        "timed_out": 1,
+        "skipped": 0,
+    }
+    incident = outcome(
+        analysis_result="findings",
+        publication_result="failed",
+        gate_result="not_proven",
+        evidence_gaps_advisory=3,
+        sensor_coverage=incident_coverage,
+        model_coverage={
+            "lanes_total": 4,
+            "lanes_usable": 2,
+            "budget_exhausted_lanes": 1,
+            "budget_exhausted": True,
+        },
+        not_proven_reasons=[
+            "required-sensor-coverage: 1 of 1 required sensors could not report "
+            "(timed_out=1, skipped=0)",
+            "publication: 0 inline and 3 substantive summary findings were withheld "
+            "from the PR-facing review (review_payload_status "
+            "`skipped_artifact_only_body`)",
+        ],
+    )
+    incident_terminal = terminal(
+        review_payload_status="skipped_artifact_only_body",
+        substantive_summary_only_findings=3,
+    )
+    require_gate_outcome(write_root(incident, incident_terminal))
+
+    # A clean analysis where publication is legitimately unnecessary.
+    require_gate_outcome(
+        write_root(
+            outcome(publication_result="not_needed"),
+            terminal(status="sufficient", review_payload_status="skipped_empty_smoke"),
+        )
+    )
+
+    cases = [
+        (
+            "unknown analysis result",
+            outcome(analysis_result="probably-fine"),
+            terminal(),
+            "analysis_result is invalid",
+        ),
+        (
+            "unknown publication result",
+            outcome(publication_result="maybe"),
+            terminal(),
+            "publication_result is invalid",
+        ),
+        (
+            "unknown gate result",
+            outcome(gate_result="green"),
+            terminal(),
+            "gate_result is invalid",
+        ),
+        (
+            "clean analysis over lost coverage",
+            outcome(
+                sensor_coverage={
+                    "required_total": 1,
+                    "required_completed": 0,
+                    "optional_total": 1,
+                    "optional_completed": 1,
+                    "failed": 1,
+                    "timed_out": 0,
+                    "skipped": 0,
+                }
+            ),
+            terminal(),
+            "clean analysis over lost sensor coverage",
+        ),
+        (
+            "unproven result without a reason",
+            outcome(analysis_result="not_proven", gate_result="not_proven"),
+            terminal(),
+            "unproven result without naming a reason",
+        ),
+        (
+            "not_proven reason without a machine token",
+            outcome(
+                analysis_result="not_proven",
+                gate_result="not_proven",
+                not_proven_reasons=["it did not feel right"],
+            ),
+            terminal(),
+            "does not lead with a machine-readable token",
+        ),
+        (
+            "clean passing result with unproven reasons",
+            outcome(not_proven_reasons=["publication: withheld"]),
+            terminal(),
+            "clean passing result while naming not_proven reasons",
+        ),
+        (
+            "material findings reported as clean",
+            outcome(),
+            terminal(inline_comments=2),
+            "material findings but analysis_result is 'clean'",
+        ),
+        (
+            "material findings with publication not needed",
+            outcome(analysis_result="findings"),
+            terminal(substantive_summary_only_findings=2),
+            "publication_result claims the review was not needed",
+        ),
+        (
+            "withheld findings claimed as posted",
+            outcome(
+                analysis_result="findings",
+                publication_result="posted",
+                gate_result="pass",
+            ),
+            terminal(
+                review_payload_status="skipped_artifact_only_body",
+                inline_comments=1,
+            ),
+            "claims a posted publication while review_payload_status",
+        ),
+        (
+            "failed publication laundered into a pass",
+            outcome(
+                analysis_result="findings",
+                publication_result="failed",
+                gate_result="pass",
+                not_proven_reasons=["publication: withheld"],
+            ),
+            terminal(
+                review_payload_status="skipped_artifact_only_body",
+                substantive_summary_only_findings=2,
+            ),
+            "require one of ['not_proven']",
+        ),
+        (
+            "unproven analysis laundered into a pass",
+            outcome(
+                analysis_result="not_proven",
+                gate_result="pass",
+                not_proven_reasons=["terminal-state: failed-to-review"],
+            ),
+            terminal(),
+            "require one of ['not_proven']",
+        ),
+        (
+            "sensor coverage buckets do not account for the loss",
+            outcome(
+                analysis_result="limited",
+                sensor_coverage={
+                    "required_total": 2,
+                    "required_completed": 0,
+                    "optional_total": 0,
+                    "optional_completed": 0,
+                    "failed": 1,
+                    "timed_out": 0,
+                    "skipped": 0,
+                },
+            ),
+            terminal(),
+            "sensor_coverage loss must equal",
+        ),
+        (
+            "model coverage budget flag disagrees with its count",
+            outcome(
+                model_coverage={
+                    "lanes_total": 2,
+                    "lanes_usable": 2,
+                    "budget_exhausted_lanes": 0,
+                    "budget_exhausted": True,
+                }
+            ),
+            terminal(),
+            "budget_exhausted disagrees with budget_exhausted_lanes",
+        ),
+        (
+            "more usable lanes than lanes",
+            outcome(
+                model_coverage={
+                    "lanes_total": 1,
+                    "lanes_usable": 2,
+                    "budget_exhausted_lanes": 0,
+                    "budget_exhausted": False,
+                }
+            ),
+            terminal(),
+            "lanes_usable exceeds lanes_total",
+        ),
+        (
+            "missing separated results",
+            {
+                key: value
+                for key, value in outcome().items()
+                if key != "analysis_result"
+            },
+            terminal(),
+            "analysis_result is invalid",
+        ),
+    ]
+    for label, fixture, fixture_terminal, expected in cases:
+        root = write_root(fixture, fixture_terminal)
+        expect_self_test_failure(
+            f"gate-result-separation {label}",
+            expected,
+            lambda root=root: require_gate_outcome(root),
+        )
+
+
 def self_test_gate_outcome_contract() -> None:
     """Release lane step 3: the verdict artifact is audited, not just
     executed. A valid red outcome passes; each violation class fails."""
@@ -11783,8 +12305,50 @@ def self_test_gate_outcome_contract() -> None:
             "tool_gates": {"evaluated": 0, "passed": 0, "failed": 0},
             "evidence_gaps_blocking": 0,
             "evidence_gaps_advisory": 1,
+            "sensor_coverage": {
+                "required_total": 1,
+                "required_completed": 1,
+                "optional_total": 1,
+                "optional_completed": 1,
+                "failed": 0,
+                "timed_out": 0,
+                "skipped": 0,
+            },
+            "model_coverage": {
+                "lanes_total": 2,
+                "lanes_usable": 2,
+                "budget_exhausted_lanes": 0,
+                "budget_exhausted": False,
+            },
+            "not_proven_reasons": [],
         }
         base.update(overrides)
+        # Keep the #839 separated results coherent with whatever a case set, so
+        # a legacy-field case still fails on the violation it is testing rather
+        # than on the separation cross-check. Cases that exercise the separation
+        # itself override these explicitly.
+        base.setdefault("analysis_result", "findings")
+        base.setdefault("publication_result", "not_needed")
+        if base["publication_result"] in {"failed", "not_proven"}:
+            derived_gate = "not_proven"
+        elif base.get("conclusion") == "fail":
+            derived_gate = "finding"
+        elif base["analysis_result"] == "not_proven":
+            derived_gate = "not_proven"
+        elif base.get("conclusion") == "inconclusive":
+            derived_gate = "not_proven"
+        else:
+            derived_gate = "pass"
+        base.setdefault("gate_result", derived_gate)
+        unproven = (
+            base["gate_result"] == "not_proven"
+            or base["analysis_result"] == "not_proven"
+            or base["publication_result"] in {"failed", "not_proven"}
+        )
+        if unproven and not base["not_proven_reasons"]:
+            base["not_proven_reasons"] = [
+                "gate-conclusion: self-test fixture unproven result"
+            ]
         return base
 
     require_gate_outcome(write_root(outcome()))
@@ -13989,6 +14553,7 @@ def run_self_tests() -> None:
     self_test_leaked_refuted_surface_fails_final_compiler_input()
     self_test_compiler_reconciliation_contract()
     self_test_gate_outcome_contract()
+    self_test_gate_result_separation_contract()
     self_test_gate_watchdog_contract()
     self_test_proof_planner_resolution_contract()
     self_test_ci_audit_core_artifact_contract()

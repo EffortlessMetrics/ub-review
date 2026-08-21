@@ -170,12 +170,68 @@ configurable.
 schema                    "ub-review.gate_outcome.v1" exactly
 conclusion                "pass" | "fail" | "inconclusive"
 terminal_status           from ub-review.terminal_state.v1
+analysis_result           "clean" | "findings" | "limited" | "not_proven"
+publication_result        "posted" | "not_needed" | "failed" | "not_proven"
+gate_result               "pass" | "finding" | "not_proven"
 reasons[]                 {kind, id, detail, receipt, next_action?}
 required_proof            {matched, passed, failed, skipped}
 tool_gates                {evaluated, passed, failed}
 evidence_gaps_blocking    count
 evidence_gaps_advisory    count
+sensor_coverage           {required_total, required_completed, optional_total,
+                          optional_completed, failed, timed_out, skipped}
+model_coverage            {lanes_total, lanes_usable, budget_exhausted_lanes,
+                          budget_exhausted}
+not_proven_reasons[]      strings, each led by a stable token
 ```
+
+### Separated results (#839)
+
+`conclusion` answers one question — does enforcement redden the check — and it
+keeps exactly its historical meaning and values; `gate-check` still enforces
+`conclusion` alone, so a repo running advisory stays advisory. The three
+`*_result` fields answer three different questions that a single verdict field
+used to launder into one another (src/gate_truth.rs `build_gate_truth`):
+
+```text
+analysis_result     what the investigation established. Insufficient evidence
+                    can never read `clean`. `findings` covers material model
+                    findings and demonstrated instrument/proof defects, and
+                    takes precedence over `limited`/`not_proven` because the
+                    coverage loss stays separately visible. `limited` means
+                    optional coverage was lost. `not_proven` means a required
+                    instrument or proof could not report, the run ended
+                    `failed-to-review`, no model lane produced usable output,
+                    or no sensor reported at all.
+publication_result  whether reviewer-facing value reached the PR surface.
+                    `posted` means `run` prepared the grouped review payload
+                    (`post` submits it and fails the job on a submission
+                    error). `not_needed` means there was nothing material to
+                    publish. `failed` means material findings existed and the
+                    payload was withheld. `not_proven` means the run never
+                    reached a reviewable state.
+gate_result         the truthful check verdict. `not_proven` whenever
+                    publication is `failed`/`not_proven` or the analysis is
+                    `not_proven`; `finding` when a deterministic finding was
+                    demonstrated, including where repo policy left it
+                    advisory and `conclusion` stayed `pass`; `pass` only when
+                    the analysis is `clean`/`limited`/model-only-`findings`,
+                    publication is proven, and `conclusion` is `pass`.
+```
+
+`gate_result` may therefore be `not_proven` while `conclusion` is `pass`. That
+divergence is the point: it removes the masking without changing enforcement
+posture. `sensor_coverage` totals count only instruments that owed evidence, so
+`(required_total - required_completed) + (optional_total - optional_completed)`
+always equals `failed + timed_out + skipped`. `model_coverage.budget_exhausted`
+is explicit but never blocking on its own. `not_proven_reasons` is non-empty
+whenever any result is `not_proven`, and each entry leads with one of
+`terminal-state:`, `required-sensor-coverage:`, `required-proof:`,
+`model-coverage:`, `instrument-coverage:`, `publication:`, `gate-conclusion:`
+so a workflow branches on tokens rather than prose. `action.yml` exposes
+`gate-conclusion`, `analysis-result`, `publication-result`, `gate-result`,
+`not-proven-reasons` (JSON array) and `sensor-coverage` (JSON object) as step
+outputs.
 
 Reason kinds (src/gate.rs gate outcome construction; docs/adr/0002):
 

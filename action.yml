@@ -251,6 +251,24 @@ outputs:
   gate-outcome-path:
     description: Path to the deterministic gate verdict artifact.
     value: ${{ steps.paths.outputs.gate-outcome-path }}
+  gate-conclusion:
+    description: 'Legacy single gate verdict read from review/gate_outcome.json: pass, fail, or inconclusive. Unchanged in meaning; this is the value the Enforce gate outcome step acts on.'
+    value: ${{ steps.results.outputs.gate-conclusion }}
+  analysis-result:
+    description: 'What the investigation established (#839): clean, findings, limited, or not_proven. Insufficient evidence never reports clean.'
+    value: ${{ steps.results.outputs.analysis-result }}
+  publication-result:
+    description: 'Whether reviewer-facing value reached the PR surface (#839): posted, not_needed, failed, or not_proven. `posted` means a grouped review payload was prepared for submission; the separate post step fails the job if submission fails.'
+    value: ${{ steps.results.outputs.publication-result }}
+  gate-result:
+    description: 'The truthful check verdict (#839): pass, finding, or not_proven. May be not_proven while gate-conclusion is pass — enforcement still follows gate-conclusion, so an advisory workflow stays non-blocking while the reported result stops claiming a review happened.'
+    value: ${{ steps.results.outputs.gate-result }}
+  not-proven-reasons:
+    description: 'JSON array of the reasons any result is not_proven, each prefixed with a stable token (terminal-state:, required-sensor-coverage:, required-proof:, model-coverage:, instrument-coverage:, publication:, gate-conclusion:). Consume with fromJSON.'
+    value: ${{ steps.results.outputs.not-proven-reasons }}
+  sensor-coverage:
+    description: 'JSON object of instrument coverage: required_total, required_completed, optional_total, optional_completed, failed, timed_out, skipped. Consume with fromJSON.'
+    value: ${{ steps.results.outputs.sensor-coverage }}
 
 runs:
   using: composite
@@ -748,6 +766,52 @@ runs:
         echo "post-stdout-path=${{ inputs.out }}/review/post-stdout.json" >> "$GITHUB_OUTPUT"
         echo "post-stderr-path=${{ inputs.out }}/review/post-stderr.txt" >> "$GITHUB_OUTPUT"
         echo "gate-outcome-path=${{ inputs.out }}/review/gate_outcome.json" >> "$GITHUB_OUTPUT"
+
+    # #839: expose the separated results as structured outputs so a consumer
+    # workflow branches on values, never on prose. Reads the recorded artifact
+    # only; it derives nothing. Fails closed: an unreadable or fieldless
+    # artifact reports not_proven rather than an implied pass.
+    - name: Publish gate result outputs
+      id: results
+      if: always()
+      shell: bash
+      env:
+        UB_REVIEW_GATE_OUTCOME_PATH: ${{ inputs.out }}/review/gate_outcome.json
+      run: |
+        set -euo pipefail
+        if [ ! -f "$UB_REVIEW_GATE_OUTCOME_PATH" ]; then
+          echo "::warning::$UB_REVIEW_GATE_OUTCOME_PATH is missing; reporting not_proven"
+          {
+            echo "gate-conclusion=missing"
+            echo "analysis-result=not_proven"
+            echo "publication-result=not_proven"
+            echo "gate-result=not_proven"
+            echo 'not-proven-reasons=["gate-outcome: review/gate_outcome.json is missing"]'
+            echo "sensor-coverage={}"
+          } >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        # A null/absent field or a jq failure both yield the fail-closed
+        # fallback, so a future-incompatible artifact never implies a pass.
+        read_field() {
+          jq -r --arg field "$1" --arg fallback "$2" \
+            '(.[$field] // $fallback) | tostring' \
+            "$UB_REVIEW_GATE_OUTCOME_PATH" 2>/dev/null || printf '%s' "$2"
+        }
+        conclusion="$(read_field conclusion missing)"
+        analysis="$(read_field analysis_result not_proven)"
+        publication="$(read_field publication_result not_proven)"
+        gate="$(read_field gate_result not_proven)"
+        reasons="$(jq -c '.not_proven_reasons // []' "$UB_REVIEW_GATE_OUTCOME_PATH" 2>/dev/null || printf '[]')"
+        coverage="$(jq -c '.sensor_coverage // {}' "$UB_REVIEW_GATE_OUTCOME_PATH" 2>/dev/null || printf '{}')"
+        {
+          echo "gate-conclusion=$conclusion"
+          echo "analysis-result=$analysis"
+          echo "publication-result=$publication"
+          echo "gate-result=$gate"
+          echo "not-proven-reasons=$reasons"
+          echo "sensor-coverage=$coverage"
+        } >> "$GITHUB_OUTPUT"
 
     # `ub-review gate-check` is the single source of the FailOnGate::resolved
     # semantics; this step only forwards inputs. The binary is always present

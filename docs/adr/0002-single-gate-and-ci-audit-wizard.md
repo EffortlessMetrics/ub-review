@@ -95,6 +95,13 @@ posting trouble is not gate trouble.
 Every `fail` or `inconclusive` reason carries a receipt pointer. A blocking gate
 with no receipt is a bug in the gate, not a finding.
 
+`conclusion` above keeps exactly this meaning and stays the only enforced
+verdict. Issue #839 added `analysis_result`, `publication_result`, `gate_result`,
+`sensor_coverage`, `model_coverage`, and `not_proven_reasons` alongside it, so
+that a run which investigated nothing or failed to publish its findings can no
+longer report as a clean pass; docs/specs/UB-REVIEW-SPEC-0003 carries the
+current full field contract.
+
 `gate_outcome.json` decides "is this compiled review a pass, fail, or inconclusive?" A
 separate, inert substrate — the current-head watchdog
 (`review/gate_watchdog.json`, schema `ub-review.gate_watchdog.v1`, issue #745,

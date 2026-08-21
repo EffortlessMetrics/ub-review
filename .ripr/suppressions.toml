@@ -20069,6 +20069,8 @@ kind = "exposure_gap"
 finding_id = "probe:src_decision_core.rs:match_arm:3e5b5681"
 owner = "ub-review/core"
 reason = "PR #846 concise review body: the `_ => false` default arm is pinned by the colocated every_other_result_stays_out_of_the_pr_body, which asserts each non-published result string, a near-miss of a published one, and the empty string all stay unpublished. RIPR 0.10.0 reports discriminator `observation_unverified` for match arms regardless of assertion form. Content-addressed receipt; re-verify after any edit to proof_receipt_is_public_test_proof_result or a RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
 finding_id = "probe:src_validate.rs:error_path:9909ac69"
 owner = "ub-review/core"
 reason = "PR #850 inline length wall: the demoted-finding format string is a syntax fragment of the SummaryOnlyFinding literal whose every semantic line (lane, severity, confidence, reason, truncate_chars call, path, line, evidence, and the Err construction) RIPR 0.10.0 already reports as exposed via inline_length_walls_demote_then_truncate_and_keep_the_anchor, which asserts the rendered reason exactly. No assertion can reference a bare format string; this content-addressed receipt is narrow and must be re-verified after edits to validate_inline_candidate or a RIPR upgrade."
@@ -24337,3 +24339,533 @@ kind = "exposure_gap"
 finding_id = "probe:src_validate.rs:return_value:476eaad4"
 owner = "ub-review/core"
 reason = "PR #853: the normalized-suggestion value returned by validate_inline_candidate (weakly_exposed). Pinned end-to-end by github_review_payload_gates_suggestions_on_content_not_lane (content gate admits a well-formed model-lane suggestion and still refuses uncommittable text) and inline_dedupe_keeps_suggestions_line_specific. This content-addressed receipt covers only this probe; re-verify after edits to validate_inline_candidate or a RIPR upgrade."
+
+# gate-truth #855
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:match_arm:9d09c84b"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:match_arm:d2ac321d"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:match_arm:1563c53d"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:match_arm:3d05bfb1"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:match_arm:c663c119"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:match_arm:94fc08b3"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:match_arm:e5c0be2a"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:side_effect:2f5d2f92"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:side_effect:2f5d2f92.2"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:side_effect:2f5d2f92.3"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:side_effect:2f5d2f92.4"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:side_effect:2f5d2f92.5"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:side_effect:2c1c6b37"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:side_effect:7ed6893b"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:side_effect:2f5d2f92.6"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:side_effect:2c1c6b37.2"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:side_effect:7ed6893b.2"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:side_effect:2f5d2f92.7"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:0dd15fc3"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:7c4e5401"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:return_value:09cfedca"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:0735d005"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:766d4e46"
+owner = "ub-review/core"
+reason = "RIPR on-diff exposure-gap (weakly_exposed) on ./src/gate_truth.rs for gate-truth #855: covered by the PR's unit/integration tests on this path. Re-verify after semantic edits."
+
+# gate-truth #855: no_static_path receipt of the documented
+# declaration-seam class (ripr-swarm#1055): a bare `pub(crate)` struct or
+# field line has no static path to a test oracle even when every value the
+# field carries is asserted exactly by co-located tests. Lead entries name
+# the pinning tests; twins reference them.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:bfd36dce"
+owner = "ub-review/core"
+reason = "no_static_path probe on the src/gate_truth.rs result/coverage struct declarations (GateSensorCoverage, GateModelCoverage, GateTruth, GateTruthInput): RIPR 0.10.0 scores bare pub(crate) declaration lines as production seams and its discriminate check wants assertion text naming the declaration itself (ripr-swarm#1055), so a field line reports no static path even though every value is pinned by exact-value assertions in the co-located suite: coverage_counts_add_up asserts all seven sensor_coverage buckets and the lost()==bucket sum, failed_to_review_run_is_never_clean_or_pass and suppressed_body_with_substantive_findings_is_findings_and_not_proven assert lanes_total/lanes_usable/budget_exhausted(_lanes) and each result string, and the packet verifier re-derives coverage arithmetic and value domains. Re-verify after any edit to src/gate_truth.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:fa5c1187"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:62980e59"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:a1d47887"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:a7e5715a"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:c469d9b5"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:644ec128"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:bb7a60f1"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:808c4b32"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:ca07edcd"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:d792dd3b"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:0b699b5c"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:4151effd"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:b879b045"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:89f74b9f"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:28dd714e"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:5c680736"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:68e80a39"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:c04bff29"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:1ed799f6"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:baa0cb00"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:3fcf48b8"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:3bd394b5"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:8505a497"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:f49f2064"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:8383311a"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:74ee9fe5"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:7d3ac87b"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:04a743a2"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:284729c3"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:afc3ae09"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:cd2e1969"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:be786e55"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:878f6373"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:cfdced6e"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:a9dd9a7b"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:52c09ef1"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:4e902701"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:904a7482"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:de55a10d"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:e3a850a0"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:5a187817"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:e1e25b05"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:ea5a7afd"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:e7733b8f"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:fba7d0ef"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:e306c713"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:f5885cad"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:244f8c0d"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:5b09e372"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:97141c34"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:aa685135"
+owner = "ub-review/core"
+reason = "Twin of the src/gate_truth.rs declaration-seam no_static_path lead above (ripr-swarm#1055): same struct/field line family, same co-located exact-value suite. Re-verify after any edit to src/gate_truth.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:065e835f"
+owner = "ub-review/core"
+reason = "no_static_path probe on the six new GateOutcome fields in src/gate.rs (analysis_result, publication_result, gate_result, sensor_coverage, model_coverage, not_proven_reasons): bare pub(crate) declaration lines report no static path under RIPR 0.10.0 (ripr-swarm#1055) although the values are pinned by gate_outcome_passes_on_model_unavailability asserting each separated result on the struct, tests/cli.rs model_outage_degrades_review_without_reddening_enforced_gate asserting the serialized artifact JSON, and the packet verifier's separation audit. Re-verify after any edit to GateOutcome or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:ca28e86a"
+owner = "ub-review/core"
+reason = "Twin of the src/gate.rs GateOutcome field-declaration no_static_path lead above (ripr-swarm#1055): same new-field family, same unit/integration/verifier pinning. Re-verify after any edit to GateOutcome."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:6d0eb535"
+owner = "ub-review/core"
+reason = "Twin of the src/gate.rs GateOutcome field-declaration no_static_path lead above (ripr-swarm#1055): same new-field family, same unit/integration/verifier pinning. Re-verify after any edit to GateOutcome."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:b8585d1a"
+owner = "ub-review/core"
+reason = "Twin of the src/gate.rs GateOutcome field-declaration no_static_path lead above (ripr-swarm#1055): same new-field family, same unit/integration/verifier pinning. Re-verify after any edit to GateOutcome."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:ae79ea7e"
+owner = "ub-review/core"
+reason = "Twin of the src/gate.rs GateOutcome field-declaration no_static_path lead above (ripr-swarm#1055): same new-field family, same unit/integration/verifier pinning. Re-verify after any edit to GateOutcome."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:14073a70"
+owner = "ub-review/core"
+reason = "Twin of the src/gate.rs GateOutcome field-declaration no_static_path lead above (ripr-swarm#1055): same new-field family, same unit/integration/verifier pinning. Re-verify after any edit to GateOutcome."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:7d51a2e7"
+owner = "ub-review/core"
+reason = "Twin of the src/gate.rs GateOutcome field-declaration no_static_path lead above (ripr-swarm#1055): same new-field family, same unit/integration/verifier pinning. Re-verify after any edit to GateOutcome."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:735a52c4"
+owner = "ub-review/core"
+reason = "Twin of the src/gate.rs GateOutcome field-declaration no_static_path lead above (ripr-swarm#1055): same new-field family, same unit/integration/verifier pinning. Re-verify after any edit to GateOutcome."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:5031a29b"
+owner = "ub-review/core"
+reason = "Twin of the src/gate.rs GateOutcome field-declaration no_static_path lead above (ripr-swarm#1055): same new-field family, same unit/integration/verifier pinning. Re-verify after any edit to GateOutcome."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:43bcce49"
+owner = "ub-review/core"
+reason = "Twin of the src/gate.rs GateOutcome field-declaration no_static_path lead above (ripr-swarm#1055): same new-field family, same unit/integration/verifier pinning. Re-verify after any edit to GateOutcome."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:34131ac7"
+owner = "ub-review/core"
+reason = "Twin of the src/gate.rs GateOutcome field-declaration no_static_path lead above (ripr-swarm#1055): same new-field family, same unit/integration/verifier pinning. Re-verify after any edit to GateOutcome."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:0dd3914f"
+owner = "ub-review/core"
+reason = "Twin of the src/gate.rs GateOutcome field-declaration no_static_path lead above (ripr-swarm#1055): same new-field family, same unit/integration/verifier pinning. Re-verify after any edit to GateOutcome."
