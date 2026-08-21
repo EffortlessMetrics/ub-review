@@ -19225,6 +19225,20 @@ index 1111111..2222222 100644
         Ok(())
     }
 
+    /// How long a fake HTTP fixture waits for the next client connection
+    /// before declaring the client absent. Sized for a saturated machine, not
+    /// for the expected latency: the suite runs tests that shell out to real
+    /// `cargo`/`git` for tens of seconds, so a client's `curl` spawn can be
+    /// starved far past any plausible request latency. The deadline resets on
+    /// every served request, so a generous budget costs a passing run nothing
+    /// and only changes how long a genuinely absent client is waited for.
+    pub(crate) const FAKE_HTTP_IDLE_DEADLINE: Duration = Duration::from_secs(120);
+
+    /// Per-connection read/write budget for fake HTTP fixtures. Same reasoning
+    /// as [`FAKE_HTTP_IDLE_DEADLINE`]: a connected but starved client can take
+    /// seconds to push its request bytes.
+    pub(crate) const FAKE_HTTP_STREAM_TIMEOUT: Duration = Duration::from_secs(30);
+
     /// Drives a fake HTTP fixture listener until `expected_requests` requests
     /// have been served (or the deadline expires). See the reliability contract
     /// on the integration-test twin in `tests/common/mod.rs::serve_fake_http`
@@ -19291,7 +19305,7 @@ index 1111111..2222222 100644
                 listener,
                 expected_requests,
                 "GitHub GraphQL",
-                Duration::from_secs(20),
+                FAKE_HTTP_IDLE_DEADLINE,
                 |_idx, stream| handle_fake_quality_github_graphql_request(stream),
             )
         });
@@ -19300,8 +19314,8 @@ index 1111111..2222222 100644
 
     fn handle_fake_quality_github_graphql_request(mut stream: TcpStream) -> Result<String> {
         stream.set_nonblocking(false)?;
-        stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-        stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+        stream.set_read_timeout(Some(FAKE_HTTP_STREAM_TIMEOUT))?;
+        stream.set_write_timeout(Some(FAKE_HTTP_STREAM_TIMEOUT))?;
         let mut reader = BufReader::new(stream.try_clone()?);
         let mut headers = String::new();
         loop {
@@ -21588,7 +21602,7 @@ index 1111111..2222222 100644
                 listener,
                 expected_requests,
                 "issue broker",
-                Duration::from_secs(20),
+                FAKE_HTTP_IDLE_DEADLINE,
                 |_idx, stream| handle_fake_issue_broker_request(stream),
             )
         });
@@ -21597,8 +21611,8 @@ index 1111111..2222222 100644
 
     fn handle_fake_issue_broker_request(mut stream: TcpStream) -> Result<String> {
         stream.set_nonblocking(false)?;
-        stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-        stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+        stream.set_read_timeout(Some(FAKE_HTTP_STREAM_TIMEOUT))?;
+        stream.set_write_timeout(Some(FAKE_HTTP_STREAM_TIMEOUT))?;
         let mut reader = BufReader::new(stream.try_clone()?);
         let mut headers = String::new();
         loop {
@@ -23429,7 +23443,7 @@ index 1111111..2222222 100644
                 listener,
                 expected_requests,
                 "GitHub thread",
-                Duration::from_secs(20),
+                FAKE_HTTP_IDLE_DEADLINE,
                 |_idx, stream| handle_fake_github_thread_request(stream),
             )
         });
@@ -23438,8 +23452,8 @@ index 1111111..2222222 100644
 
     fn handle_fake_github_thread_request(mut stream: TcpStream) -> Result<String> {
         stream.set_nonblocking(false)?;
-        stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-        stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+        stream.set_read_timeout(Some(FAKE_HTTP_STREAM_TIMEOUT))?;
+        stream.set_write_timeout(Some(FAKE_HTTP_STREAM_TIMEOUT))?;
         let mut reader = BufReader::new(stream.try_clone()?);
         let mut headers = String::new();
         loop {

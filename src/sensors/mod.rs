@@ -714,6 +714,14 @@ mod tests {
     use crate::tests::{run_test_command, sensor_plan, sleeper_argv, test_diff, test_plan};
     use crate::*;
 
+    /// Subprocess budget for fixtures whose fake sensor command is a real
+    /// spawned process. These tests assert receipt content, never latency, so
+    /// the budget only has to be impossible to starve: the suite runs tests
+    /// that shell out to real `cargo`/`git` for tens of seconds, and a 5s
+    /// budget lost that race and produced a `timed_out` receipt instead of the
+    /// receipt under test. A completing command never spends this budget.
+    const FIXTURE_SENSOR_TIMEOUT_SEC: u64 = 120;
+
     #[test]
     fn baseline_gate_sensor_argvs_match_required_matrix() -> Result<()> {
         let mut config: Config = toml::from_str(include_str!("../../.ub-review.toml"))?;
@@ -892,7 +900,7 @@ mod tests {
         let mut tracker = RunLoopTracker::new();
         let mut sensor = sensor_plan("late-probe", "ub-review-test-late-tool-missing", true);
         sensor.phase = SensorPhase::Late;
-        sensor.timeout_sec = 5;
+        sensor.timeout_sec = FIXTURE_SENSOR_TIMEOUT_SEC;
         let plan = test_plan(vec![sensor.clone()]);
 
         let phase = super::spawn_late_sensor_phase(
@@ -1020,7 +1028,7 @@ mod tests {
         let fake_ripr = write_fake_ripr_command(&fake_bin)?;
         let event_log = EventLog::open(&out.join("events.ndjson"))?;
         let mut sensor = sensor_plan("ripr", &fake_ripr.display().to_string(), true);
-        sensor.timeout_sec = 5;
+        sensor.timeout_sec = FIXTURE_SENSOR_TIMEOUT_SEC;
         let plan = test_plan(vec![sensor.clone()]);
 
         run_sensor(&root, &out, &sensor, &event_log, &plan)?;
@@ -1048,7 +1056,10 @@ mod tests {
         let detail: serde_json::Value =
             serde_json::from_slice(&fs::read(sensor_dir.join("exposure-gaps.json"))?)?;
         assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v3");
-        assert_eq!(detail["status"], "ok");
+        assert_eq!(
+            detail["status"], "ok",
+            "detail pass did not succeed: {detail}"
+        );
         assert_eq!(detail["semantics"], "raw_pre_policy");
         assert_eq!(
             detail["raw_outputs"],
@@ -1111,7 +1122,7 @@ mod tests {
         let fake_ripr = write_fake_ripr_command(&fake_bin)?;
         let event_log = EventLog::open(&out.join("events.ndjson"))?;
         let mut sensor = sensor_plan("ripr", &fake_ripr.display().to_string(), true);
-        sensor.timeout_sec = 5;
+        sensor.timeout_sec = FIXTURE_SENSOR_TIMEOUT_SEC;
         let plan = test_plan(vec![sensor.clone()]);
 
         run_sensor(&root, &out, &sensor, &event_log, &plan)?;
@@ -1344,7 +1355,7 @@ mod tests {
         let fake_tokmd = write_fake_tokmd_command(&fake_bin, "1.11.1")?;
         let event_log = EventLog::open(&out.join("events.ndjson"))?;
         let mut sensor = sensor_plan("tokmd", &fake_tokmd.display().to_string(), true);
-        sensor.timeout_sec = 5;
+        sensor.timeout_sec = FIXTURE_SENSOR_TIMEOUT_SEC;
         let plan = test_plan(vec![sensor.clone()]);
 
         run_sensor(&root, &out, &sensor, &event_log, &plan)?;
@@ -1356,7 +1367,10 @@ mod tests {
         let reason = status["reason"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("status reason missing"))?;
-        assert!(reason.contains("tokmd version drift"));
+        assert!(
+            reason.contains("tokmd version drift"),
+            "unexpected tokmd failure reason: {reason}"
+        );
         assert!(reason.contains("tokmd 1.11.1 installed"));
         assert!(reason.contains("pin requires 1.12.0 (bun-ub preset)"));
         assert!(reason.contains("cargo install tokmd --locked --version 1.12.0 --force"));

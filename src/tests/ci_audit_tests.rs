@@ -229,7 +229,7 @@ fn spawn_fake_ci_required_checks_api() -> Result<(String, thread::JoinHandle<Res
             listener,
             3,
             "audit-ci",
-            Duration::from_secs(20),
+            super::FAKE_HTTP_IDLE_DEADLINE,
             |_idx, stream| handle_fake_ci_required_checks_request(stream),
         )
     });
@@ -246,7 +246,7 @@ fn spawn_fake_ci_required_checks_404_api()
             listener,
             3,
             "audit-ci 404",
-            Duration::from_secs(20),
+            super::FAKE_HTTP_IDLE_DEADLINE,
             |_idx, stream| handle_fake_ci_required_checks_404_request(stream),
         )
     });
@@ -255,8 +255,8 @@ fn spawn_fake_ci_required_checks_404_api()
 
 fn handle_fake_ci_required_checks_404_request(mut stream: TcpStream) -> Result<String> {
     stream.set_nonblocking(false)?;
-    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_read_timeout(Some(super::FAKE_HTTP_STREAM_TIMEOUT))?;
+    stream.set_write_timeout(Some(super::FAKE_HTTP_STREAM_TIMEOUT))?;
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut headers = String::new();
     loop {
@@ -297,8 +297,8 @@ fn handle_fake_ci_required_checks_404_request(mut stream: TcpStream) -> Result<S
 
 fn handle_fake_ci_required_checks_request(mut stream: TcpStream) -> Result<String> {
     stream.set_nonblocking(false)?;
-    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_read_timeout(Some(super::FAKE_HTTP_STREAM_TIMEOUT))?;
+    stream.set_write_timeout(Some(super::FAKE_HTTP_STREAM_TIMEOUT))?;
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut headers = String::new();
     loop {
@@ -1290,7 +1290,7 @@ fn spawn_fake_setup_ci_api(
             listener,
             expected_requests,
             "setup-ci",
-            Duration::from_secs(20),
+            super::FAKE_HTTP_IDLE_DEADLINE,
             move |_idx, stream| handle_fake_setup_ci_request(stream, config_exists),
         )
     });
@@ -1299,8 +1299,8 @@ fn spawn_fake_setup_ci_api(
 
 fn handle_fake_setup_ci_request(mut stream: TcpStream, config_exists: bool) -> Result<String> {
     stream.set_nonblocking(false)?;
-    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_read_timeout(Some(super::FAKE_HTTP_STREAM_TIMEOUT))?;
+    stream.set_write_timeout(Some(super::FAKE_HTTP_STREAM_TIMEOUT))?;
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut headers = String::new();
     loop {
