@@ -420,8 +420,8 @@ fn read_cargo_workspace(root: &Path) -> Option<CargoWorkspaceGraph> {
 /// Convert an absolute path to a repo-relative path. If the path is not under
 /// the repo root, returns the original (best-effort).
 fn relative_to_repo(root: &Path, abs: &str) -> String {
-    let normalized_root = root.canonicalize().unwrap_or_else(|_| {
-        if root.is_absolute() {
+    let normalized_root = plain_canonical(root).unwrap_or_else(|| {
+        if root.has_root() {
             root.to_path_buf()
         } else {
             std::env::current_dir()
@@ -430,13 +430,26 @@ fn relative_to_repo(root: &Path, abs: &str) -> String {
         }
     });
     let abs_path = std::path::Path::new(abs);
-    let normalized_abs = abs_path
-        .canonicalize()
-        .unwrap_or_else(|_| abs_path.to_path_buf());
+    let normalized_abs = plain_canonical(abs_path).unwrap_or_else(|| abs_path.to_path_buf());
     normalized_abs
         .strip_prefix(&normalized_root)
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .unwrap_or_else(|_| abs.replace('\\', "/"))
+}
+
+/// Canonicalize `path` and collapse Windows verbatim (`\\?\`) prefixes so both
+/// sides of a `strip_prefix` comparison share one spelling; None when the path
+/// does not resolve on disk.
+fn plain_canonical(path: &Path) -> Option<PathBuf> {
+    let canonical = path.canonicalize().ok()?;
+    let text = canonical.to_string_lossy();
+    if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
+        Some(PathBuf::from(format!(r"\\{unc}")))
+    } else if let Some(plain) = text.strip_prefix(r"\\?\") {
+        Some(PathBuf::from(plain))
+    } else {
+        Some(canonical)
+    }
 }
 
 /// Extract the parent directory from a repo-relative manifest path.
@@ -802,6 +815,17 @@ mod tests {
             "src/main.rs"
         );
         Ok(())
+    }
+
+    #[test]
+    fn relative_to_repo_keeps_unresolvable_absolute_root() {
+        let missing_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("does-not-exist");
+        let under_missing = missing_root.join("src").join("main.rs");
+
+        assert_eq!(
+            relative_to_repo(&missing_root, &under_missing.to_string_lossy()),
+            "src/main.rs"
+        );
     }
 
     #[test]

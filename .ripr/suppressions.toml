@@ -22163,3 +22163,55 @@ kind = "exposure_gap"
 finding_id = "probe:tests_common_mod.rs:call_deletion:510a05ba"
 owner = "ub-review/core"
 reason = "PR #848 fake-HTTP fixture budgets, rebased-code ID: FAKE_HTTP_STREAM_TIMEOUT is a constant in tests/common/mod.rs, the integration-test HTTP fixture helper, not production code. It sets a per-connection socket timeout so a starved client is not cut off mid-request; the behavioral discriminator is the tests/cli.rs suite the fixture serves. RIPR 0.10.0 probes integration-test fixture code and its discriminate check requires assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). This content-addressed receipt covers only this probe and must be re-verified after edits to tests/common/mod.rs or a RIPR upgrade."
+
+# PR #870 (agent/fix-relative-impact-root): relative --root resolution in
+# impact_plan::relative_to_repo. The colocated unit tests pin the resolved
+# output with exact-value assertions on every branch (relative root joined
+# against the current directory, unresolvable absolute root kept as-is, plain
+# prefix strip). RIPR 0.10.0's discriminate check requires assertion text that
+# names each changed expression; an output-level unit test never carries such
+# text, so these probes report weakly_exposed despite full behavioral
+# discrimination (fixture_opaque stop reason throughout). Content-addressed
+# IDs; re-verify after edits to src/impact_plan.rs or a RIPR upgrade.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:call_deletion:687edbe6"
+owner = "ub-review/core"
+reason = "Else arm of the unresolvable-root fallback in relative_to_repo: a relative root that does not canonicalize is joined against the current directory. relative_to_repo_resolves_relative_root_against_current_directory asserts the exact resolved output src/main.rs for a relative root, which fails if this arm is deleted. RIPR cannot match the output-level assertion text to this expression. Re-verify after edits to src/impact_plan.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:call_deletion:10efb00c"
+owner = "ub-review/core"
+reason = "Close of the has_root conditional inside relative_to_repo's unresolvable-root fallback. relative_to_repo_keeps_unresolvable_absolute_root asserts src/main.rs for a nonexistent absolute root and relative_to_repo_resolves_relative_root_against_current_directory asserts the same for a relative root, so deleting either arm flips an exact assertion. RIPR cannot match output-level assertion text to this brace line. Re-verify after edits to src/impact_plan.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:call_deletion:f79d7efb"
+owner = "ub-review/core"
+reason = "Close of the unwrap_or_else fallback that computes normalized_root in relative_to_repo. Both boundary tests (relative root against current directory, unresolvable absolute root) assert the exact returned repo-relative path and fail if the fallback collapses. RIPR cannot match output-level assertion text to this closing token. Re-verify after edits to src/impact_plan.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:call_deletion:02e50b76"
+owner = "ub-review/core"
+reason = "normalized_abs computation in relative_to_repo: canonicalize the changed-file path and fall back to the raw string when it does not resolve. On Windows canonicalize yields a verbatim \\\\?\\ path, so plain_canonical's prefix collapse is what lets relative_to_repo_resolves_relative_root_against_current_directory strip the root and assert src/main.rs; removing the call reverts the test to the absolute fallback string. RIPR cannot tie that assertion to this intermediate binding. Re-verify after edits to src/impact_plan.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:call_deletion:62e85ada"
+owner = "ub-review/core"
+reason = "normalized_abs operand of the strip_prefix comparison in relative_to_repo. The three colocated relative_to_repo tests assert the exact repo-relative result of this comparison, including the Windows verbatim-prefix case exercised by relative_to_repo_resolves_relative_root_against_current_directory. RIPR cannot match those output-level assertions to this expression line. Re-verify after edits to src/impact_plan.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:call_deletion:cb613907"
+owner = "ub-review/core"
+reason = "strip_prefix call effect in relative_to_repo comparing the normalized changed-file path against the normalized root. All three colocated relative_to_repo tests assert its exact output (src/main.rs, Cargo.toml) across relative, unresolvable-absolute, and plain-prefix roots. RIPR's discriminate check wants assertion text naming this expression and reports weakly_exposed instead. Re-verify after edits to src/impact_plan.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:return_value:ca5b2c93"
+owner = "ub-review/core"
+reason = "Return value of relative_to_repo when the normalized prefix strip succeeds. relative_to_repo_strips_prefix, relative_to_repo_resolves_relative_root_against_current_directory, and relative_to_repo_keeps_unresolvable_absolute_root each pin the exact returned string for a different root shape, so any mutation of the value fails an exact assertion. RIPR cannot connect function-output assertions to this return-site probe. Re-verify after edits to src/impact_plan.rs or a RIPR upgrade."
