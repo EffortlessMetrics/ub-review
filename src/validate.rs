@@ -1466,6 +1466,7 @@ mod inline_demotion_tests {
     }
 }
 
+#[cfg(test)]
 mod suggestion_gate_tests {
     use anyhow::ensure;
 
