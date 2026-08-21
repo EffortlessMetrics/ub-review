@@ -407,7 +407,8 @@ fn suggestion_case() -> GoldenCase {
             body: "[unsafe-review] Avoid constructing a slice from the pointer when the length is zero.".to_owned(),
             evidence: "src/buffer.rs:39 and the changed call order".to_owned(),
             suggestion: Some(
-                "let slice = if len == 0 { &[] } else { unsafe { core::slice::from_raw_parts(ptr, len) } };".to_owned(),
+                "    let slice = if len == 0 { &[] } else { unsafe { core::slice::from_raw_parts(ptr, len) } };"
+                    .to_owned(),
             ),
         }],
         summary_only_findings: Vec::new(),
@@ -493,7 +494,7 @@ fn snapshot_uses_the_production_inline_delivery_transform() -> Result<()> {
     let actual = snapshot_text(&case, &surface)?;
     ensure!(!actual.contains("[unsafe-review]"));
     ensure!(actual.contains(
-        "```suggestion\nlet slice = if len == 0 { &[] } else { unsafe { core::slice::from_raw_parts(ptr, len) } };\n```"
+        "```suggestion\n    let slice = if len == 0 { &[] } else { unsafe { core::slice::from_raw_parts(ptr, len) } };\n```"
     ));
     Ok(())
 }

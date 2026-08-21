@@ -1338,6 +1338,7 @@ mod tests {
             path: Some("src/parser.rs".to_owned()),
             line: Some(12),
             side: Some("RIGHT".to_owned()),
+            suggestion: None,
         };
         let mut graph = build_active_claim_graph(
             head,

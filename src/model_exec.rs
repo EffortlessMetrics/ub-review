@@ -1773,7 +1773,8 @@ Use the cached shared context. Return only one strict JSON object:
       "path": "repo-relative/path.rs",
       "line": 123,
       "body": "[{lane}] concise actionable finding, 400 chars max",
-      "evidence": "artifact, diff, or invariant, 240 chars max"
+      "evidence": "artifact, diff, or invariant, 240 chars max",
+      "suggestion": "optional: exact replacement source for that one line, 800 chars max"
     }}
   ],
   "summary_only_findings": [
@@ -1824,6 +1825,7 @@ Prefer `proof_intents` for new requests: describe the claim question and expecte
 answer, and let the deterministic broker choose an approved command. `target`
 is a repository symbol or test/package label, never a shell command.
 IMPORTANT: proof commands must use exact syntax the broker accepts. Use `--package <name>` (not `-p`), always include `--locked`. Examples: `cargo test --locked --package <name> --test <target>`, `cargo check --locked --package <name>`, `cargo doc --locked --package <name> --no-deps`. Commands with `-p`, missing `--locked`, or shell pipes will be rejected.
+`suggestion` becomes a GitHub click-to-apply block that replaces the anchored line verbatim, so emit it only when you are certain of the exact replacement: source text only, starting with the same indentation as the line it replaces, never prose, an ellipsis placeholder, a diff hunk, or a fenced block. Omit it when unsure - the finding still posts as a comment.
 Do not guess line numbers. Do not use deletion-side comments. Do not output a standalone approval.
 Calibration: do not introduce `Box::from(slice)` / `Box::<[u8]>::from(slice)` allocation-failure analysis unless the current PR diff, seeded thread, or a candidate explicitly raises that objection. When raised, allocation failure does not return `None`, an empty box, or a recoverable fallback; return it as a refuted false-premise failed_objection, not as a candidate finding."#,
         lane = lane.id,

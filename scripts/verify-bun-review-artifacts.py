@@ -2079,17 +2079,72 @@ def require_github_comment(comment: dict, index: int) -> None:
     )
     suggestion = comment.get("suggestion")
     if suggestion is not None:
-        if not isinstance(suggestion, str) or not suggestion.strip():
-            fail(f"github review comment {index} suggestion must be a non-empty string")
-        if not body.startswith("[unsafe-review]"):
-            fail(f"github review comment {index} suggestion must be sourced from unsafe-review")
-        if len(suggestion) > GITHUB_SUGGESTION_MAX_CHARS:
+        require_github_suggestion(suggestion, index)
+
+
+# A `suggestion` block is committed verbatim into the repository when the PR
+# author clicks "Commit suggestion", so the packet contract admits it on
+# content rather than on which lane produced it: it must be a bounded literal
+# replacement, never commentary, elided code, a pasted diff, or a fence.
+# Mirrors `validate_github_suggestion_text` in src/validate.rs.
+GITHUB_SUGGESTION_MAX_LINES = 20
+GITHUB_SUGGESTION_PROSE_WORDS = 6
+GITHUB_SUGGESTION_CODE_PUNCTUATION = set(";{}()[]=<>:|&/*")
+GITHUB_SUGGESTION_COMMENTARY_LEAD_INS = (
+    "consider ",
+    "you should ",
+    "you could ",
+    "we should ",
+    "this should ",
+    "it should ",
+    "instead ",
+    "prefer ",
+    "please ",
+    "suggest ",
+)
+
+
+def require_github_suggestion(suggestion: object, index: int) -> None:
+    if not isinstance(suggestion, str):
+        fail(f"github review comment {index} suggestion must be a non-empty string")
+    text = suggestion.rstrip()
+    if not text.strip():
+        fail(f"github review comment {index} suggestion must be a non-empty string")
+    if len(text) > GITHUB_SUGGESTION_MAX_CHARS:
+        fail(
+            f"github review comment {index} suggestion exceeds "
+            f"{GITHUB_SUGGESTION_MAX_CHARS} characters"
+        )
+    if "```" in text:
+        fail(f"github review comment {index} suggestion contains fenced code markers")
+    if "\r" in text:
+        fail(f"github review comment {index} suggestion contains carriage returns")
+    lines = text.split("\n")
+    if len(lines) > GITHUB_SUGGESTION_MAX_LINES:
+        fail(
+            f"github review comment {index} suggestion exceeds "
+            f"{GITHUB_SUGGESTION_MAX_LINES} lines"
+        )
+    for line in lines:
+        if line.startswith(("@@ ", "--- ", "+++ ", "diff --git ")):
+            fail(f"github review comment {index} suggestion contains unified diff markers")
+        stripped = line.strip().lstrip("//").lstrip("#").lstrip("/*").rstrip("*/").strip()
+        if "…" in line or (stripped.startswith("...") and stripped.endswith("...")):
             fail(
-                f"github review comment {index} suggestion exceeds "
-                f"{GITHUB_SUGGESTION_MAX_CHARS} characters"
+                f"github review comment {index} suggestion elides code "
+                "with an ellipsis placeholder"
             )
-        if "```" in suggestion:
-            fail(f"github review comment {index} suggestion contains fenced code markers")
+    if any(char in GITHUB_SUGGESTION_CODE_PUNCTUATION for char in text):
+        return
+    lowered = text.lower()
+    reads_as_commentary = lowered.startswith(GITHUB_SUGGESTION_COMMENTARY_LEAD_INS) or (
+        len(text.split()) >= GITHUB_SUGGESTION_PROSE_WORDS and text.endswith(".")
+    )
+    if reads_as_commentary:
+        fail(
+            f"github review comment {index} suggestion is reviewer commentary, "
+            "not replacement text"
+        )
 
 
 def require_metrics(root: pathlib.Path, review: dict) -> dict:
@@ -13315,16 +13370,55 @@ def run_self_tests() -> None:
         },
         0,
     )
+    # Any lane may carry a suggestion; the packet contract gates it on content.
+    require_github_comment(
+        {
+            "path": "src/lib.rs",
+            "side": "RIGHT",
+            "line": 12,
+            "body": "[tests-oracle] The oracle never observes the changed boundary.",
+            "suggestion": "    assert_eq!(active_len(3), 3);",
+        },
+        0,
+    )
     expect_self_test_failure(
-        "non unsafe-review suggestion",
-        "sourced from unsafe-review",
+        "commentary suggestion",
+        "reviewer commentary",
         lambda: require_github_comment(
             {
                 "path": "src/lib.rs",
                 "side": "RIGHT",
                 "line": 12,
-                "body": "[tests-oracle] Model suggestions are not proof.",
-                "suggestion": "assert!(proved);",
+                "body": "[tests-oracle] The oracle never observes the changed boundary.",
+                "suggestion": "Consider asserting the changed boundary here",
+            },
+            1,
+        ),
+    )
+    expect_self_test_failure(
+        "elided suggestion",
+        "ellipsis placeholder",
+        lambda: require_github_comment(
+            {
+                "path": "src/lib.rs",
+                "side": "RIGHT",
+                "line": 12,
+                "body": "[unsafe-review] Guard evidence is missing.",
+                "suggestion": "fn read() {\n    // ...existing code...\n}",
+            },
+            1,
+        ),
+    )
+    expect_self_test_failure(
+        "pasted diff suggestion",
+        "unified diff markers",
+        lambda: require_github_comment(
+            {
+                "path": "src/lib.rs",
+                "side": "RIGHT",
+                "line": 12,
+                "body": "[unsafe-review] Guard evidence is missing.",
+                "suggestion": "--- a/src/lib.rs\n+++ b/src/lib.rs",
             },
             1,
         ),

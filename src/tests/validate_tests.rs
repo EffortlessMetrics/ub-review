@@ -243,16 +243,36 @@ index 1111111..2222222 100644
             confidence: "medium-high".to_owned(),
             path: "src/lib.rs".to_owned(),
             line: 2,
-            body: "[tests] model-proposed edit must remain advisory".to_owned(),
+            body: "[tests] the assertion never observes the changed boundary".to_owned(),
             evidence: "diff hunk".to_owned(),
             suggestion: Some("assert!(proved);".to_owned()),
         },
         &line_map,
     )
     .map_err(|finding| anyhow::anyhow!("unexpected rejection: {}", finding.reason))?;
+    assert_eq!(
+        model_suggestion.suggestion.as_deref(),
+        Some("assert!(proved);"),
+        "a well-formed suggestion is admitted on content, not on lane identity"
+    );
+
+    let prose_suggestion = validate_inline_candidate(
+        &lane,
+        ModelCandidateComment {
+            severity: "medium".to_owned(),
+            confidence: "medium-high".to_owned(),
+            path: "src/lib.rs".to_owned(),
+            line: 2,
+            body: "[tests] the assertion never observes the changed boundary".to_owned(),
+            evidence: "diff hunk".to_owned(),
+            suggestion: Some("Consider asserting the changed boundary here".to_owned()),
+        },
+        &line_map,
+    )
+    .map_err(|finding| anyhow::anyhow!("unexpected rejection: {}", finding.reason))?;
     assert!(
-        model_suggestion.suggestion.is_none(),
-        "non-unsafe-review lanes must not smuggle suggestion blocks"
+        prose_suggestion.suggestion.is_none(),
+        "reviewer commentary is not committable replacement text"
     );
 
     let rejected = validate_inline_candidate(

@@ -5962,8 +5962,8 @@ index 1111111..2222222 100644
                     "path": "src/lib.rs",
                     "line": 2,
                     "side": "RIGHT",
-                    "body": "[unsafe-review] Guard evidence is missing.",
-                    "suggestion": "let header = guarded_header_read(ptr)?;"
+                    "body": "[ub] Guard evidence is missing.",
+                    "suggestion": "    let header = guarded_header_read(ptr)?;"
                 }
             ]
         }))?,
@@ -6010,7 +6010,9 @@ index 1111111..2222222 100644
     let requests = join_fake_provider(handle)?;
     assert_eq!(requests.len(), 5);
     let request_text = &requests[1];
-    assert!(request_text.contains("```suggestion\\nlet header = guarded_header_read(ptr)?;\\n```"));
+    assert!(
+        request_text.contains("```suggestion\\n    let header = guarded_header_read(ptr)?;\\n```")
+    );
     assert!(
         !request_text.contains("\"suggestion\""),
         "GitHub API payload must not contain internal suggestion field: {request_text}"
@@ -6018,7 +6020,8 @@ index 1111111..2222222 100644
 
     let post_payload_text = fs::read_to_string(out.join("github-review-post-payload.json"))?;
     assert!(
-        post_payload_text.contains("```suggestion\\nlet header = guarded_header_read(ptr)?;\\n```")
+        post_payload_text
+            .contains("```suggestion\\n    let header = guarded_header_read(ptr)?;\\n```")
     );
     assert!(
         !post_payload_text.contains("\"suggestion\""),

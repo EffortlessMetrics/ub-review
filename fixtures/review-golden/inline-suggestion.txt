@@ -20,7 +20,7 @@ src/buffer.rs:39 RIGHT
 Avoid constructing a slice from the pointer when the length is zero.
 
 ```suggestion
-let slice = if len == 0 { &[] } else { unsafe { core::slice::from_raw_parts(ptr, len) } };
+    let slice = if len == 0 { &[] } else { unsafe { core::slice::from_raw_parts(ptr, len) } };
 ```
 === end inline comment 1 ===
 
@@ -33,7 +33,7 @@ let slice = if len == 0 { &[] } else { unsafe { core::slice::from_raw_parts(ptr,
       "path": "src/buffer.rs",
       "line": 39,
       "side": "RIGHT",
-      "body": "Avoid constructing a slice from the pointer when the length is zero.\n\n```suggestion\nlet slice = if len == 0 { &[] } else { unsafe { core::slice::from_raw_parts(ptr, len) } };\n```"
+      "body": "Avoid constructing a slice from the pointer when the length is zero.\n\n```suggestion\n    let slice = if len == 0 { &[] } else { unsafe { core::slice::from_raw_parts(ptr, len) } };\n```"
     }
   ]
 }

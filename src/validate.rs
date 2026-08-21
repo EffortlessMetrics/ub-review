@@ -890,16 +890,56 @@ pub(crate) fn truncate_chars(value: &str, max_chars: usize) -> String {
 }
 
 const GITHUB_SUGGESTION_MAX_CHARS: usize = 800;
+const GITHUB_SUGGESTION_MAX_LINES: usize = 20;
+const GITHUB_SUGGESTION_PROSE_WORDS: usize = 6;
 
+/// Commentary openers a model lane reaches for when it answers "what should
+/// change" in English instead of emitting the replacement text. Applied only
+/// to a suggestion carrying no code punctuation at all, so a real code line
+/// that happens to start with one of these words is untouched.
+const GITHUB_SUGGESTION_COMMENTARY_LEAD_INS: [&str; 10] = [
+    "consider ",
+    "you should ",
+    "you could ",
+    "we should ",
+    "this should ",
+    "it should ",
+    "instead ",
+    "prefer ",
+    "please ",
+    "suggest ",
+];
+
+/// Normalize a proposed suggestion, or reject it.
+///
+/// Only *trailing* whitespace is trimmed: leading indentation is part of the
+/// replacement GitHub commits, so stripping it would silently dedent every
+/// suggestion out of its block.
 pub(crate) fn normalize_github_suggestion_text(value: Option<&str>) -> Option<String> {
-    let text = value?.trim();
+    let text = value?.trim_end();
     validate_github_suggestion_text(text).ok()?;
     Some(text.to_owned())
 }
 
+/// Structural gate on a GitHub `suggestion` block's text.
+///
+/// GitHub commits this text verbatim in place of the anchored line when the
+/// author clicks "Commit suggestion", so it must be a literal replacement and
+/// nothing else. These checks used to be a second line of defence behind a
+/// lane allowlist: only `unsafe-review` could emit a suggestion, and its text
+/// came from a sensor's structured `replacement_text` rather than from a
+/// model. Now that any lane may propose an edit, the content itself carries
+/// the whole burden, so the gate also rejects the three ways free-form model
+/// output corrupts a file when applied - English commentary, elided code, and
+/// a pasted unified diff - plus unbounded rewrites.
+///
+/// It is deliberately biased toward rejection: a dropped suggestion costs the
+/// author nothing (the finding still posts as a comment), while a malformed
+/// one costs a revert.
 pub(crate) fn validate_github_suggestion_text(value: &str) -> Result<()> {
-    let text = value.trim();
-    if text.is_empty() {
+    // Leading indentation is significant (see `normalize_github_suggestion_text`).
+    let text = value.trim_end();
+    if text.trim().is_empty() {
         bail!("github review suggestion must not be empty");
     }
     if text.chars().count() > GITHUB_SUGGESTION_MAX_CHARS {
@@ -907,6 +947,23 @@ pub(crate) fn validate_github_suggestion_text(value: &str) -> Result<()> {
     }
     if text.contains("```") {
         bail!("github review suggestion must not contain fenced code markers");
+    }
+    if text.contains('\r') {
+        bail!("github review suggestion must not contain carriage returns");
+    }
+    if text.lines().count() > GITHUB_SUGGESTION_MAX_LINES {
+        bail!("github review suggestion must be {GITHUB_SUGGESTION_MAX_LINES} lines or fewer");
+    }
+    for line in text.lines() {
+        if is_unified_diff_marker_line(line) {
+            bail!("github review suggestion must not contain unified diff markers");
+        }
+        if is_elided_code_line(line) {
+            bail!("github review suggestion must not elide code with an ellipsis placeholder");
+        }
+    }
+    if reads_as_commentary(text) {
+        bail!("github review suggestion must be replacement text, not reviewer commentary");
     }
     Ok(())
 }
@@ -924,6 +981,82 @@ pub(crate) const INLINE_COMMENT_MAX_REVIEWER_CHARS: usize = 400;
 /// Upper bound on the demoted summary text, matching the summary-only
 /// guard's own concise limit in `validate_summary_only_candidate`.
 pub(crate) const DEMOTED_SUMMARY_MAX_CHARS: usize = 1_200;
+
+fn is_unified_diff_marker_line(line: &str) -> bool {
+    line.starts_with("@@ ")
+        || line.starts_with("--- ")
+        || line.starts_with("+++ ")
+        || line.starts_with("diff --git ")
+}
+
+/// Elision markers ("...", "// ...existing code...") are how a model says
+/// "unchanged code goes here". Committed verbatim they delete that code.
+fn is_elided_code_line(line: &str) -> bool {
+    if line.contains('\u{2026}') {
+        return true;
+    }
+    let stripped = line
+        .trim()
+        .trim_start_matches("//")
+        .trim_start_matches('#')
+        .trim_start_matches("/*")
+        .trim_end_matches("*/")
+        .trim();
+    stripped.starts_with("...") && stripped.ends_with("...")
+}
+
+/// English prose that would be committed as source. Code punctuation anywhere
+/// in the suggestion clears it - comments (`//`, `#`, `/*`) count as code
+/// punctuation, so a suggestion that explains itself in a comment is kept.
+fn reads_as_commentary(text: &str) -> bool {
+    if text.chars().any(|value| {
+        matches!(
+            value,
+            ';' | '{' | '}' | '(' | ')' | '[' | ']' | '=' | '<' | '>' | ':' | '|' | '&' | '/' | '*'
+        )
+    }) {
+        return false;
+    }
+    let lowered = text.to_ascii_lowercase();
+    if GITHUB_SUGGESTION_COMMENTARY_LEAD_INS
+        .iter()
+        .any(|lead_in| lowered.starts_with(lead_in))
+    {
+        return true;
+    }
+    text.split_whitespace().count() >= GITHUB_SUGGESTION_PROSE_WORDS && text.ends_with('.')
+}
+
+/// Does a suggestion actually apply where it is anchored?
+///
+/// `anchor_line` is the RIGHT-side source text of the commented line (see
+/// [`right_side_diff_line_text`]), which is precisely what GitHub replaces.
+/// Two things are checkable without a checkout: a suggestion identical to the
+/// line it replaces is a no-op that only costs the author a click, and a first
+/// line whose indentation differs from the anchor's would commit misindented
+/// code. Indentation equality conservatively rejects an intentional dedent;
+/// that is the safe direction.
+pub(crate) fn validate_github_suggestion_anchor(anchor_line: &str, suggestion: &str) -> Result<()> {
+    let suggestion = suggestion.trim_end();
+    if suggestion.trim() == anchor_line.trim() {
+        bail!("github review suggestion is identical to the line it would replace");
+    }
+    if anchor_line.trim().is_empty() {
+        return Ok(());
+    }
+    let first = suggestion.lines().next().unwrap_or_default();
+    if leading_whitespace(first) != leading_whitespace(anchor_line) {
+        bail!("github review suggestion indentation does not match the line it would replace");
+    }
+    Ok(())
+}
+
+fn leading_whitespace(line: &str) -> &str {
+    let end = line
+        .find(|value: char| !value.is_whitespace())
+        .unwrap_or(line.len());
+    line.get(..end).unwrap_or_default()
+}
 
 pub(crate) fn validate_inline_candidate(
     lane: &LanePlan,
@@ -945,11 +1078,12 @@ pub(crate) fn validate_inline_candidate(
     let body_present = !reviewer_facing.is_empty();
     let evidence_present = !evidence.is_empty();
     let repo_relative = is_repo_relative_path(&path);
-    let suggestion = if lane.id == "unsafe-review" {
-        normalize_github_suggestion_text(candidate.suggestion.as_deref())
-    } else {
-        None
-    };
+    // Any lane may propose a click-to-apply edit; what a suggestion has to
+    // earn is content, not lane membership. `normalize_github_suggestion_text`
+    // drops anything that is not a well-formed literal replacement, and the
+    // compiler additionally proves it applies at this anchor before it reaches
+    // a payload.
+    let suggestion = normalize_github_suggestion_text(candidate.suggestion.as_deref());
 
     if allowed_severity
         && allowed_confidence
@@ -1329,5 +1463,88 @@ mod inline_demotion_tests {
             "{}",
             finding.evidence
         );
+    }
+}
+
+#[cfg(test)]
+mod suggestion_gate_tests {
+    use anyhow::ensure;
+
+    use super::*;
+
+    /// The gate that replaced the `lane.id == "unsafe-review"` allowlist. Every
+    /// rejection here is a way free-form model output corrupts a file when the
+    /// author clicks "Commit suggestion".
+    #[test]
+    fn suggestion_text_gate_admits_code_and_refuses_uncommittable_text() {
+        for admitted in [
+            "assert_eq!(active_len(3), 3);",
+            "// SAFETY: alignment checked above\nunsafe { ptr.cast::<Header>().read() }",
+            "runs-on: ubuntu-latest",
+            "MAX_RETRIES",
+        ] {
+            assert!(
+                validate_github_suggestion_text(admitted).is_ok(),
+                "well-formed replacement text must be admitted: {admitted}"
+            );
+        }
+
+        for refused in [
+            "",
+            "   ",
+            "```rust\nassert!(x);\n```",
+            "assert!(x);\r\nassert!(y);",
+            "Consider guarding the read before dereferencing",
+            "The parser now rejects every trailing comma.",
+            "fn f() {\n    ...\n}",
+            "fn f() {\n    // ...existing code...\n}",
+            "fn f() {\n    \u{2026}\n}",
+            "@@ -1,3 +1,4 @@\n new line",
+            "--- a/src/lib.rs\n+++ b/src/lib.rs",
+            "diff --git a/src/lib.rs b/src/lib.rs",
+        ] {
+            assert!(
+                validate_github_suggestion_text(refused).is_err(),
+                "uncommittable suggestion must be refused: {refused:?}"
+            );
+        }
+
+        assert!(validate_github_suggestion_text(&"x();\n".repeat(20)).is_ok());
+        assert!(validate_github_suggestion_text(&"x();\n".repeat(21)).is_err());
+        assert!(validate_github_suggestion_text(&"a".repeat(801)).is_err());
+    }
+
+    /// A comment body carrying `//` keeps its comment lines out of the prose
+    /// heuristic, so an explained edit is not mistaken for commentary.
+    #[test]
+    fn commented_replacement_text_is_not_treated_as_commentary() {
+        assert!(
+            validate_github_suggestion_text("// consider this guarded read instead").is_ok(),
+            "comment syntax is code punctuation, not reviewer commentary"
+        );
+    }
+
+    #[test]
+    fn suggestion_anchor_gate_requires_a_real_edit_at_the_anchored_indentation() -> Result<()> {
+        let anchor = "    let ptr = &len as *const usize;";
+        validate_github_suggestion_anchor(anchor, "    let ptr = core::ptr::from_ref(&len);")?;
+
+        let noop = validate_github_suggestion_anchor(anchor, anchor)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("a no-op suggestion was accepted"))?;
+        ensure!(format!("{noop:#}").contains("identical to the line"));
+
+        let misindented =
+            validate_github_suggestion_anchor(anchor, "let ptr = core::ptr::from_ref(&len);")
+                .err()
+                .ok_or_else(|| anyhow::anyhow!("a misindented suggestion was accepted"))?;
+        ensure!(format!("{misindented:#}").contains("indentation"));
+
+        // Multi-line edits are anchored by their first line.
+        validate_github_suggestion_anchor(
+            anchor,
+            "    // SAFETY: len outlives ptr\n    let ptr = core::ptr::from_ref(&len);",
+        )?;
+        Ok(())
     }
 }

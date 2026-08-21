@@ -319,7 +319,9 @@ fn handle_fake_github_request_at(
                 // carry the `[unsafe-review] ` prefix. The delivery digest is
                 // taken over the posted body; a prefixed fixture makes the
                 // observed comment hash disagree and aborts submission.
-                "body": "Guard evidence is missing.\n\n```suggestion\nlet header = guarded_header_read(ptr)?;\n```"
+                // Only trailing whitespace is trimmed on the way out, so the
+                // echoed suggestion keeps the indentation GitHub would commit.
+                "body": "Guard evidence is missing.\n\n```suggestion\n    let header = guarded_header_read(ptr)?;\n```"
             }])
         } else {
             serde_json::json!([])
