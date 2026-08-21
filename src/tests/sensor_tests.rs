@@ -460,7 +460,11 @@ fn unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap() -> Result<()>
     fs::create_dir_all(&gate_dir)?;
     fs::write(
         gate_dir.join("unsafe-review-gate.json"),
-        r#"{"schema_version":"unsafe-review-gate/v1","status":"advisory"}"#,
+        r#"{"schema_version":"unsafe-review-gate/v1","status":"advisory","artifacts":{"comment_plan":"comment-plan.json"}}"#,
+    )?;
+    fs::write(
+        gate_dir.join("comment-plan.json"),
+        r#"{"schema_version":"0.1","comments":[]}"#,
     )?;
 
     let issues = collect_sensor_evidence_issues(&out, &plan);

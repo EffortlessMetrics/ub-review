@@ -146,11 +146,17 @@ an absent/malformed file while the sensor status is `ok`, becomes an
 unsafe-review sensors therefore block from the same receipt chain as other
 required sensor gaps. Markdown output is never scraped as a substitute.
 
-**Compiler intake**: `comment-plan.json` entries are deserialized into a
-structured type (carrying `card_id`, `path`, `line`, `changed_line`,
-`coverage_gap`, `selection_reason`, `selection_reason_code`,
-`confirmation_state`, `trust_boundary`) and routed into the review compiler as
-inline-comment candidates. They share the same `max_inline_comments` cap,
+**Compiler intake**: unsafe-review 0.3.x `comment-plan.json` is an object
+envelope with `schema_version: "0.1"` and a `comments` array; the obsolete
+top-level array is not accepted. Each entry is deserialized into a structured
+type carrying `card_id`, `path`, `line`, `changed_line`, `coverage_gap`,
+`selection_reason`, `selection_reason_code`, `confirmation_state`, opaque
+`operation_family`, and `trust_boundary`. Unknown additive envelope or entry
+fields are tolerated, but a missing/malformed pointer, envelope, entry, or
+required identity field becomes an explicit typed artifact gap rather than a
+valid-looking empty candidate set. Repair-queue context joins on the exact
+`(card_id, operation_family)` pair, so a reused card ID from another family
+cannot borrow guidance. Candidates share the same `max_inline_comments` cap,
 RIGHT-side diff-line guard, candidate ledger, dedupe, and refuter path as model
 lane candidates. Tools do not post inside ub-review mode.
 

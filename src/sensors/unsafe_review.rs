@@ -71,14 +71,16 @@ pub(crate) struct UnsafeReviewSummary {
     pub(crate) inherited_gaps: u32,
 }
 
-/// One entry from `comment-plan.json` produced by unsafe-review 0.3.4.
+/// One entry from the `comments` array in the object envelope emitted by
+/// unsafe-review 0.3.x (`comment-plan.json`, schema `0.1`).
 ///
 /// Field names verified against real output: each entry carries `card_id`,
 /// `path`, `line`, `changed_line`, `coverage_gap`, `selection_reason`,
-/// `selection_reason_code`, `confirmation_state`, and `trust_boundary`. Only
-/// the fields ub-review uses are bound here; unknown fields are tolerated so
-/// the plan stays loadable as unsafe-review extends it. Structured for #360 to
-/// consume directly; no further parsing is done here.
+/// `selection_reason_code`, `confirmation_state`, `operation_family`, and
+/// `trust_boundary`. Only the fields ub-review uses are bound here; unknown
+/// fields are tolerated so the plan stays loadable as unsafe-review extends
+/// it. Required identity fields are validated by the envelope parser before
+/// a candidate can be consumed.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct UnsafeReviewCommentPlanEntry {
     #[serde(default)]
@@ -103,6 +105,11 @@ pub(crate) struct UnsafeReviewCommentPlanEntry {
     /// Advisory boundary propagated per-entry to consumers.
     #[serde(default)]
     pub(crate) trust_boundary: Option<String>,
+    /// Opaque producer operation family.  The consumer preserves this value
+    /// for identity joins and display; it deliberately does not impose a
+    /// closed vocabulary on future unsafe-review producers.
+    #[serde(default)]
+    pub(crate) operation_family: Option<String>,
 }
 
 /// Parsed unsafe-review artifacts loaded from `--out-dir <dir>`.
@@ -115,6 +122,9 @@ pub(crate) struct UnsafeReviewArtifacts {
 
 pub(crate) const UNSAFE_REVIEW_GATE_SCHEMA: &str = "unsafe-review-gate/v1";
 
+/// Schema version emitted by unsafe-review 0.3.x `comment-plan.json`.
+pub(crate) const UNSAFE_REVIEW_COMMENT_PLAN_SCHEMA: &str = "0.1";
+
 pub(crate) const UNSAFE_REVIEW_OUTPUT_SUBDIR: &str = "unsafe-review-output";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -123,6 +133,12 @@ pub(crate) enum UnsafeReviewIngestGap {
     Unreadable(String),
     Malformed(String),
     UnknownSchema(String),
+    CommentPlanMissingPointer,
+    CommentPlanUnreadable(String),
+    CommentPlanMalformed(String),
+    CommentPlanUnknownSchema(String),
+    CommentPlanMissingField(String),
+    CommentPlanInvalidField(String),
 }
 
 impl UnsafeReviewIngestGap {
@@ -141,6 +157,25 @@ impl UnsafeReviewIngestGap {
                 "unsafe-review-gate.json schema_version `{found}` not recognised \
                  (known: `{UNSAFE_REVIEW_GATE_SCHEMA}`); structured evidence not parsed"
             ),
+            Self::CommentPlanMissingPointer => {
+                "comment-plan.json pointer missing from unsafe-review-gate.json artifacts; structured comment evidence not parsed".to_owned()
+            }
+            Self::CommentPlanUnreadable(detail) => {
+                format!("comment-plan.json unreadable: {detail}")
+            }
+            Self::CommentPlanMalformed(detail) => {
+                format!("comment-plan.json malformed: {detail}")
+            }
+            Self::CommentPlanUnknownSchema(found) => format!(
+                "comment-plan.json schema_version `{found}` not recognised \
+                 (known: `{UNSAFE_REVIEW_COMMENT_PLAN_SCHEMA}`); structured comment evidence not parsed"
+            ),
+            Self::CommentPlanMissingField(field) => {
+                format!("comment-plan.json missing required field: {field}")
+            }
+            Self::CommentPlanInvalidField(field) => {
+                format!("comment-plan.json invalid required field: {field}")
+            }
         }
     }
 }
@@ -149,6 +184,93 @@ impl UnsafeReviewIngestGap {
 struct UnsafeReviewSchemaProbe {
     #[serde(default)]
     schema_version: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct UnsafeReviewCommentPlanEnvelope {
+    #[serde(default)]
+    schema_version: Option<String>,
+    #[serde(default)]
+    comments: Option<Vec<UnsafeReviewCommentPlanEntry>>,
+}
+
+fn required_comment_plan_field(
+    entry: &UnsafeReviewCommentPlanEntry,
+    index: usize,
+) -> Result<(), UnsafeReviewIngestGap> {
+    let prefix = format!("comments[{index}]");
+    if entry.card_id.as_deref().is_none_or(str::is_empty) {
+        return Err(UnsafeReviewIngestGap::CommentPlanMissingField(format!(
+            "{prefix}.card_id"
+        )));
+    }
+    if entry.path.as_deref().is_none_or(str::is_empty) {
+        return Err(UnsafeReviewIngestGap::CommentPlanMissingField(format!(
+            "{prefix}.path"
+        )));
+    }
+    if entry.line.is_none() {
+        return Err(UnsafeReviewIngestGap::CommentPlanMissingField(format!(
+            "{prefix}.line"
+        )));
+    }
+    if entry.changed_line.is_none() {
+        return Err(UnsafeReviewIngestGap::CommentPlanMissingField(format!(
+            "{prefix}.changed_line"
+        )));
+    }
+    if entry
+        .operation_family
+        .as_deref()
+        .is_none_or(|family| family.trim().is_empty())
+    {
+        return Err(UnsafeReviewIngestGap::CommentPlanInvalidField(format!(
+            "{prefix}.operation_family must be nonempty"
+        )));
+    }
+    if entry
+        .trust_boundary
+        .as_deref()
+        .is_none_or(|boundary| boundary.trim().is_empty())
+    {
+        return Err(UnsafeReviewIngestGap::CommentPlanInvalidField(format!(
+            "{prefix}.trust_boundary must be nonempty"
+        )));
+    }
+    Ok(())
+}
+
+fn parse_comment_plan(
+    text: &str,
+) -> Result<Vec<UnsafeReviewCommentPlanEntry>, UnsafeReviewIngestGap> {
+    let value: serde_json::Value = serde_json::from_str(text)
+        .map_err(|err| UnsafeReviewIngestGap::CommentPlanMalformed(err.to_string()))?;
+    if !value.is_object() {
+        return Err(UnsafeReviewIngestGap::CommentPlanMalformed(
+            "top-level value must be an object envelope".to_owned(),
+        ));
+    }
+    let envelope: UnsafeReviewCommentPlanEnvelope = serde_json::from_value(value)
+        .map_err(|err| UnsafeReviewIngestGap::CommentPlanMalformed(err.to_string()))?;
+    let Some(found_version) = envelope.schema_version else {
+        return Err(UnsafeReviewIngestGap::CommentPlanMissingField(
+            "schema_version".to_owned(),
+        ));
+    };
+    if found_version != UNSAFE_REVIEW_COMMENT_PLAN_SCHEMA {
+        return Err(UnsafeReviewIngestGap::CommentPlanUnknownSchema(
+            found_version,
+        ));
+    }
+    let Some(comments) = envelope.comments else {
+        return Err(UnsafeReviewIngestGap::CommentPlanMissingField(
+            "comments".to_owned(),
+        ));
+    };
+    for (index, entry) in comments.iter().enumerate() {
+        required_comment_plan_field(entry, index)?;
+    }
+    Ok(comments)
 }
 
 /// Parse the structured artifacts written by `unsafe-review first-pr --out-dir`.
@@ -179,20 +301,18 @@ pub(crate) fn read_unsafe_review_artifacts(
     }
     let gate: UnsafeReviewGate = serde_json::from_str(&text)
         .map_err(|err| UnsafeReviewIngestGap::Malformed(err.to_string()))?;
-    // Follow the artifacts pointer for comment-plan.json (if present).
-    // Key is snake_case `comment_plan` in unsafe-review-gate/v1 (the value is the
-    // hyphenated filename); routing by the wrong key silently drops the plan.
-    let comment_plan = gate
+    // Follow the required artifacts pointer for comment-plan.json.  The real
+    // 0.3.x producer writes an object envelope, not the obsolete top-level
+    // array.  Every read/parse/shape failure remains an explicit typed gap;
+    // never turn a malformed plan into a valid-looking empty candidate set.
+    let comment_plan_rel = gate
         .artifacts
         .get("comment_plan")
-        .and_then(|rel| {
-            let cp_path = out_dir.join(rel);
-            fs::read_to_string(&cp_path).ok()
-        })
-        .and_then(|cp_text| {
-            serde_json::from_str::<Vec<UnsafeReviewCommentPlanEntry>>(&cp_text).ok()
-        })
-        .unwrap_or_default();
+        .ok_or(UnsafeReviewIngestGap::CommentPlanMissingPointer)?;
+    let comment_plan_path = out_dir.join(comment_plan_rel);
+    let comment_plan_text = fs::read_to_string(&comment_plan_path)
+        .map_err(|err| UnsafeReviewIngestGap::CommentPlanUnreadable(err.to_string()))?;
+    let comment_plan = parse_comment_plan(&comment_plan_text)?;
     Ok(UnsafeReviewArtifacts { gate, comment_plan })
 }
 
@@ -246,21 +366,31 @@ mod tests {
                 "tool_version": "0.3.4"
             }"#,
         )?;
-        // Real-shape comment-plan entry: every field unsafe-review actually
-        // emits is present, including the ones #360 will route on.
+        // Real-shape 0.3.x comment-plan envelope: every field unsafe-review
+        // actually emits is present, including the opaque operation family
+        // and the fields #360 will route on.
         fs::write(
             out_dir.join("comment-plan.json"),
-            r#"[{
-                "card_id": "card-001",
-                "path": "src/lib.rs",
-                "line": 42,
-                "changed_line": true,
-                "coverage_gap": "raw pointer dereference without lifetime guard",
-                "selection_reason": "changed line in unsafe block",
-                "selection_reason_code": "changed-line-unsafe",
-                "confirmation_state": "unconfirmed",
+            r#"{
+                "schema_version": "0.1",
+                "tool": "unsafe-review",
+                "mode": "plan_only",
+                "policy": "advisory",
+                "summary": {"selected_count": 1, "not_selected_count": 0, "budget": 3},
+                "comments": [{
+                    "card_id": "card-001",
+                    "path": "src/lib.rs",
+                    "line": 42,
+                    "changed_line": true,
+                    "coverage_gap": "raw pointer dereference without lifetime guard",
+                    "selection_reason": "changed line in unsafe block",
+                    "selection_reason_code": "changed-line-unsafe",
+                    "confirmation_state": "unconfirmed",
+                    "operation_family": "raw_pointer_read",
+                    "trust_boundary": "static unsafe-review coverage evidence; not proof, not a merge verdict"
+                }],
                 "trust_boundary": "static unsafe-review coverage evidence; not proof, not a merge verdict"
-            }]"#,
+            }"#,
         )?;
 
         let artifacts = super::read_unsafe_review_artifacts(&sensor_dir)
@@ -291,6 +421,7 @@ mod tests {
             Some("changed-line-unsafe")
         );
         assert_eq!(entry.confirmation_state.as_deref(), Some("unconfirmed"));
+        assert_eq!(entry.operation_family.as_deref(), Some("raw_pointer_read"));
         assert_eq!(
             entry.trust_boundary.as_deref(),
             Some("static unsafe-review coverage evidence; not proof, not a merge verdict")
@@ -433,6 +564,160 @@ mod tests {
                 .starts_with("unsafe-review-gate.json malformed: "),
             "gap reason should include malformed prefix: {}",
             gap.reason()
+        );
+        Ok(())
+    }
+
+    fn write_comment_plan_gate(sensor_dir: &Path, artifacts: &str) -> Result<std::path::PathBuf> {
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        fs::create_dir_all(&out_dir)?;
+        fs::write(
+            out_dir.join("unsafe-review-gate.json"),
+            format!(
+                r#"{{"schema_version":"unsafe-review-gate/v1","status":"advisory","artifacts":{artifacts}}}"#
+            ),
+        )?;
+        Ok(out_dir)
+    }
+
+    #[test]
+    fn comment_plan_envelope_accepts_additive_fields_and_retains_opaque_identity() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir =
+            write_comment_plan_gate(&sensor_dir, r#"{"comment_plan":"comment-plan.json"}"#)?;
+        fs::write(
+            out_dir.join("comment-plan.json"),
+            r#"{
+                "schema_version":"0.1",
+                "tool":"unsafe-review",
+                "mode":"plan_only",
+                "comments":[{
+                    "card_id":"card-opaque",
+                    "path":"src/lib.rs",
+                    "line":8,
+                    "changed_line":true,
+                    "operation_family":"future_family_v9",
+                    "trust_boundary":"producer advisory boundary",
+                    "future_field":{"kept":true}
+                }],
+                "future_envelope_field":"accepted"
+            }"#,
+        )?;
+        let artifacts = super::read_unsafe_review_artifacts(&sensor_dir)
+            .map_err(|gap| anyhow::anyhow!("expected valid envelope, got {gap:?}"))?;
+        assert_eq!(artifacts.comment_plan.len(), 1);
+        assert_eq!(
+            artifacts.comment_plan[0].operation_family.as_deref(),
+            Some("future_family_v9")
+        );
+        assert_eq!(
+            artifacts.comment_plan[0].trust_boundary.as_deref(),
+            Some("producer advisory boundary")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn comment_plan_wrong_top_level_type_is_explicit_gap() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir =
+            write_comment_plan_gate(&sensor_dir, r#"{"comment_plan":"comment-plan.json"}"#)?;
+        fs::write(out_dir.join("comment-plan.json"), "[]")?;
+        let gap = super::read_unsafe_review_artifacts(&sensor_dir)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("array unexpectedly parsed as an envelope"))?;
+        assert!(
+            matches!(gap, super::UnsafeReviewIngestGap::CommentPlanMalformed(_)),
+            "unexpected gap: {gap:?}"
+        );
+        assert!(gap.reason().contains("comment-plan.json malformed"));
+        Ok(())
+    }
+
+    #[test]
+    fn comment_plan_missing_comments_is_explicit_field_gap() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir =
+            write_comment_plan_gate(&sensor_dir, r#"{"comment_plan":"comment-plan.json"}"#)?;
+        fs::write(
+            out_dir.join("comment-plan.json"),
+            r#"{"schema_version":"0.1","mode":"plan_only"}"#,
+        )?;
+        let gap = super::read_unsafe_review_artifacts(&sensor_dir)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("missing comments unexpectedly parsed"))?;
+        assert_eq!(
+            gap,
+            super::UnsafeReviewIngestGap::CommentPlanMissingField("comments".to_owned())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn comment_plan_malformed_entry_is_explicit_field_gap() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir =
+            write_comment_plan_gate(&sensor_dir, r#"{"comment_plan":"comment-plan.json"}"#)?;
+        fs::write(
+            out_dir.join("comment-plan.json"),
+            r#"{"schema_version":"0.1","comments":[{"path":"src/lib.rs","line":8,"changed_line":true,"operation_family":"raw_pointer_read","trust_boundary":"advisory"}]}"#,
+        )?;
+        let gap = super::read_unsafe_review_artifacts(&sensor_dir)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("malformed entry unexpectedly parsed"))?;
+        assert_eq!(
+            gap,
+            super::UnsafeReviewIngestGap::CommentPlanMissingField("comments[0].card_id".to_owned())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn comment_plan_pointer_missing_or_file_missing_is_explicit_gap() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let _out_dir = write_comment_plan_gate(&sensor_dir, "{}")?;
+        let gap = super::read_unsafe_review_artifacts(&sensor_dir)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("missing pointer unexpectedly parsed"))?;
+        assert_eq!(gap, super::UnsafeReviewIngestGap::CommentPlanMissingPointer);
+
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let _out_dir =
+            write_comment_plan_gate(&sensor_dir, r#"{"comment_plan":"comment-plan.json"}"#)?;
+        let gap = super::read_unsafe_review_artifacts(&sensor_dir)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("missing file unexpectedly parsed"))?;
+        assert!(matches!(
+            gap,
+            super::UnsafeReviewIngestGap::CommentPlanUnreadable(_)
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn comment_plan_empty_operation_family_is_explicit_invalid_gap() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir =
+            write_comment_plan_gate(&sensor_dir, r#"{"comment_plan":"comment-plan.json"}"#)?;
+        fs::write(
+            out_dir.join("comment-plan.json"),
+            r#"{"schema_version":"0.1","comments":[{"card_id":"card-1","path":"src/lib.rs","line":8,"changed_line":true,"operation_family":"  ","trust_boundary":"advisory"}]}"#,
+        )?;
+        let gap = super::read_unsafe_review_artifacts(&sensor_dir)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("empty family unexpectedly parsed"))?;
+        assert_eq!(
+            gap,
+            super::UnsafeReviewIngestGap::CommentPlanInvalidField(
+                "comments[0].operation_family must be nonempty".to_owned()
+            )
         );
         Ok(())
     }
