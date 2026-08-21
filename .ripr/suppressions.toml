@@ -24162,3 +24162,178 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_worktree.rs:predicate:d9e368ae"
 owner = "ub-review/core"
 reason = "cfg(test) test-module predicate probe at src/proof/worktree.rs:610 in mod tests: [const HEAD_SOURCE: &str = 'pub fn classify(value: u8) -> &'st...]. This line belongs to the test suite that itself discriminates base+tests hunk classification, so the oracle is exactly the test code RIPR probes here. RIPR 0.10.0 scores test-module code as a production seam and its discriminate check wants assertion text naming the changed expression (ripr-swarm#1055 tracks the cfg(test)-skipping work). Re-verify after edits to src/proof/worktree.rs or a RIPR upgrade."
+# PR #853 (suggestions on every lane): every probe below sits on PR-added
+# suggestion-gate/delivery code whose discriminating tests are co-located but
+# statically opaque to RIPR 0.10.0 (fixture_opaque): the tests drive the
+# production functions directly with exact-value or exact-error-suffix oracles,
+# but their fixtures are local consts ripr cannot link into a static call path.
+# Two probes are cfg(test) fixture lines scored as production (ripr-swarm#1055)
+# and three are const/array declarations with no runtime seam to assert on.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_validation.rs:error_path:5063b325"
+owner = "ub-review/core"
+reason = "PR #853: the `validate_github_review_payload_for_right_lines(...)?` call inside `validate_github_review_payload_for_post` is weakly_exposed because the test harness reaches it only through fixture payloads. The post-time ordering (right-line gate before suggestion anchors) is pinned by post_gate_proves_suggestions_apply_to_the_line_they_replace and github_review_post_payload_renders_suggestion_without_internal_field. This content-addressed receipt covers only this probe; re-verify after edits to validate_github_review_payload_for_post or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_validation.rs:field_construction:fa9c4b3f"
+owner = "ub-review/core"
+reason = "PR #853 lead receipt for `validate_github_review_suggestion_anchors` (the function whose statement deletions must break the post gate): post_gate_proves_suggestions_apply_to_the_line_they_replace drives the real function with an applying edit (passes), a misindented edit (exact suffix \"does not apply in input/diff.patch\"), a no-op edit (\"identical to the line\"), and an unanchored comment (\"no RIGHT-side line\"). RIPR 0.10.0 scores the body reachable_unrevealed only because the PATCH fixture is not statically linkable. Twins below share this pinning; re-verify after edits to the function or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_validation.rs:call_deletion:306e3915"
+owner = "ub-review/core"
+reason = "PR #853 twin of the validate_github_review_suggestion_anchors lead receipt above (comment.suggestion early-continue line). Same pinning test and re-verification trigger."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_validation.rs:call_deletion:f6a0713e"
+owner = "ub-review/core"
+reason = "PR #853 twin of the validate_github_review_suggestion_anchors lead receipt above (normalize_repo_path line). Same pinning test and re-verification trigger."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_validation.rs:call_deletion:7eab8d19"
+owner = "ub-review/core"
+reason = "PR #853 twin of the validate_github_review_suggestion_anchors lead receipt above (anchor lookup line; its deletion is caught by the \"no RIGHT-side line\" assertion). Same pinning test and re-verification trigger."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_validation.rs:error_path:83589473"
+owner = "ub-review/core"
+reason = "PR #853 twin of the validate_github_review_suggestion_anchors lead receipt above (the ok_or_else error path; asserted verbatim via \"has no RIGHT-side line in\"). Same pinning test and re-verification trigger."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_validation.rs:call_deletion:7eab8d19.2"
+owner = "ub-review/core"
+reason = "PR #853 twin of the validate_github_review_suggestion_anchors lead receipt above (validate_github_suggestion_anchor dispatch line; asserted via the \"does not apply in\" suffix). Same pinning test and re-verification trigger."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_validation.rs:error_path:83589473.2"
+owner = "ub-review/core"
+reason = "PR #853 twin of the validate_github_review_suggestion_anchors lead receipt above (with_context error wrap; asserted via \"does not apply in input/diff.patch\"). Same pinning test and re-verification trigger."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_validation.rs:call_deletion:f5da770e"
+owner = "ub-review/core"
+reason = "PR #853 twin of the validate_github_review_suggestion_anchors lead receipt above (Ok(()) tail). Same pinning test and re-verification trigger."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_validation.rs:return_value:186157ef"
+owner = "ub-review/core"
+reason = "PR #853 twin of the validate_github_review_suggestion_anchors lead receipt above (return-value seam of the same function). Same pinning test and re-verification trigger."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_validation.rs:field_construction:9e2175c5"
+owner = "ub-review/core"
+reason = "PR #853 cfg(test) fixture line (the PATCH const inside mod tests) scored no_static_path as if it were a production seam (ripr-swarm#1055). It is consumed only by the co-located post_gate_proves_suggestions_apply_to_the_line_they_replace. This content-addressed receipt covers only this probe; re-verify after edits to the github_validation test module or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_validation.rs:field_construction:09064cea"
+owner = "ub-review/core"
+reason = "PR #853 cfg(test) twin of the PATCH receipt above (the review_with builder's GitHubReviewComment construction, weakly_exposed). Same class (ripr-swarm#1055), same test module, same re-verification trigger."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:de1567f0"
+owner = "ub-review/core"
+reason = "PR #853 rebased-code ID: the `suggestion: Option<String>,` field declaration on the candidate record. A serde field declaration has no runtime seam for an assertion to name; RIPR 0.10.0 reports no_static_path. Its carry-through is pinned by resolved_candidate_record_serialization_round_trips_for_known_dispositions (queue write/read shape) and end-to-end by github_review_payload_gates_suggestions_on_content_not_lane plus compiler_surface_admits_model_lane_suggestions_that_apply_at_the_anchor. This content-addressed receipt covers only this probe; re-verify after edits to the candidate record or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_compiler.rs:field_construction:6b9aa3d8"
+owner = "ub-review/core"
+reason = "PR #853 lead receipt for `applicable_suggestion` (signature line): the function is unit-tested arm by arm by applicable_suggestion_keeps_applying_edits_and_drops_the_rest (anchored applying edit kept verbatim, misindented/no-op/non-matching dropped, missing anchor kept) and end-to-end by compiler_surface_admits_model_lane_suggestions_that_apply_at_the_anchor. RIPR 0.10.0 stays weakly_exposed because the anchor map is built from a local patch literal it cannot trace. Twins below share this pinning; re-verify after edits to applicable_suggestion or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_compiler.rs:match_arm:c4216e73"
+owner = "ub-review/core"
+reason = "PR #853 twin of the applicable_suggestion lead receipt above (Some-anchor arm delegating to validate_github_suggestion_anchor; the dropping assertions discriminate it). Same pinning tests and re-verification trigger."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_compiler.rs:match_arm:d86ce427"
+owner = "ub-review/core"
+reason = "PR #853 twin of the applicable_suggestion lead receipt above (.ok().map arm keeping only validated suggestions; discriminated by the kept-versus-dropped assertion pair). Same pinning tests and re-verification trigger."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_compiler.rs:match_arm:2055b201"
+owner = "ub-review/core"
+reason = "PR #853 twin of the applicable_suggestion lead receipt above (None-anchor arm deliberately keeping the suggestion; asserted explicitly as the unreachable-on-payload-path contract). Same pinning tests and re-verification trigger."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:side_effect:58f3bf98"
+owner = "ub-review/core"
+reason = "PR #853 lead receipt for `right_side_diff_line_text` (map insert side effect): the anchor map it builds is the authority every suggestion gate validates against, and it is exercised through real patch fixtures by post_gate_proves_suggestions_apply_to_the_line_they_replace (unanchored comment rejected) and applicable_suggestion_keeps_applying_edits_and_drops_the_rest (map miss keeps the suggestion). RIPR 0.10.0 scores the insert weakly_exposed because both tests observe it indirectly through the gates. Twins below share this pinning; re-verify after edits to right_side_diff_line_text or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:a548c7bf"
+owner = "ub-review/core"
+reason = "PR #853 twin of the right_side_diff_line_text lead receipt above (lines.insert call). Same pinning tests and re-verification trigger."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:side_effect:bc58faaf"
+owner = "ub-review/core"
+reason = "PR #853 twin of the right_side_diff_line_text lead receipt above (line-number advance side effect; its deletion shifts anchors so the unanchored-suggestion assertion fires). Same pinning tests and re-verification trigger."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:field_construction:a2b8d8e2"
+owner = "ub-review/core"
+reason = "PR #853 rebased-code ID: the GITHUB_SUGGESTION_MAX_CHARS const declaration. A constant has no runtime behavior for an assertion to discriminate; RIPR 0.10.0 reports no_static_path. Its bound is pinned by suggestion_text_gate_admits_code_and_refuses_uncommittable_text (over-long suggestions refused with the rendered limit). This content-addressed receipt covers only this probe; re-verify after edits to validate_github_suggestion_text or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:field_construction:6481802a"
+owner = "ub-review/core"
+reason = "PR #853 rebased-code ID, twin of the GITHUB_SUGGESTION_MAX_CHARS receipt above: the GITHUB_SUGGESTION_MAX_LINES const declaration, pinned by the same gate test's multi-line refusal case. Same re-verification trigger."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:field_construction:794594c8"
+owner = "ub-review/core"
+reason = "PR #853 rebased-code ID, twin of the GITHUB_SUGGESTION_MAX_CHARS receipt above: the GITHUB_SUGGESTION_COMMENTARY_LEAD_INS array declaration, pinned by commented_replacement_text_is_not_treated_as_commentary (code punctuation beats commentary wording) and the commentary-refusal cases of suggestion_text_gate_admits_code_and_refuses_uncommittable_text. Same re-verification trigger."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:predicate:c25cb107"
+owner = "ub-review/core"
+reason = "PR #853: the reads_as_commentary predicate inside validate_github_suggestion_text is weakly_exposed because the gate test builds inputs locally. Discriminated exactly by suggestion_text_gate_admits_code_and_refuses_uncommittable_text (prose-only text rejected, code punctuation admitted) and commented_replacement_text_is_not_treated_as_commentary. This content-addressed receipt covers only this probe; re-verify after edits to validate_github_suggestion_text or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:predicate:4f6e1e35"
+owner = "ub-review/core"
+reason = "PR #853: the identical-to-anchor no-op predicate inside validate_github_suggestion_anchor. Discriminated verbatim by suggestion_anchor_gate_requires_a_real_edit_at_the_anchored_indentation and by the post gate's \"identical to the line\" error suffix in post_gate_proves_suggestions_apply_to_the_line_they_replace. This content-addressed receipt covers only this probe; re-verify after edits to validate_github_suggestion_anchor or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:predicate:c16a2255"
+owner = "ub-review/core"
+reason = "PR #853: the indentation-equality predicate inside validate_github_suggestion_anchor. Discriminated verbatim by suggestion_anchor_gate_requires_a_real_edit_at_the_anchored_indentation (misindented first line rejected, dedent conservatively rejected) and the applicable_suggestion_keeps_applying_edits_and_drops_the_rest dropping assertions. This content-addressed receipt covers only this probe; re-verify after edits to validate_github_suggestion_anchor or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:return_value:2816366f"
+owner = "ub-review/core"
+reason = "PR #853: return-value seam of validate_github_suggestion_anchor (weakly_exposed). Same exact-oracle pinning as the two predicate receipts above; re-verify after edits to validate_github_suggestion_anchor or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:return_value:476eaad4"
+owner = "ub-review/core"
+reason = "PR #853: the normalized-suggestion value returned by validate_inline_candidate (weakly_exposed). Pinned end-to-end by github_review_payload_gates_suggestions_on_content_not_lane (content gate admits a well-formed model-lane suggestion and still refuses uncommittable text) and inline_dedupe_keeps_suggestions_line_specific. This content-addressed receipt covers only this probe; re-verify after edits to validate_inline_candidate or a RIPR upgrade."
