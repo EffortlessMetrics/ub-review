@@ -987,4 +987,77 @@ mod tests {
             Some("The regression is anchored at src/main.rs:42. Version 1.2.3 is affected.")
         );
     }
+
+    /// The compiler's last suggestion gate: an edit that demonstrably applies
+    /// at its anchor keeps its exact indentation, while one that fails the
+    /// anchor check is dropped so the finding survives as a plain comment
+    /// instead of handing the author a broken commit button. A missing anchor
+    /// keeps the suggestion deliberately: the payload write validates every
+    /// comment against the same map's key set and fails first, so dropping
+    /// here would only diverge in-memory state from the delivered artifact.
+    #[test]
+    fn applicable_suggestion_keeps_applying_edits_and_drops_the_rest() {
+        let patch = "\
+diff --git a/src/buffer.rs b/src/buffer.rs
+--- a/src/buffer.rs
++++ b/src/buffer.rs
+@@ -1,2 +1,3 @@
+ pub fn active_len(len: usize) -> usize {
++    let ptr = &len as *const usize;
+     len
+ }
+"
+        .to_owned();
+        let anchors = right_side_diff_line_text(&patch);
+        let comment = |line: u32, suggestion: Option<&str>| ReviewInlineComment {
+            lane: "unsafe-review".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/buffer.rs".to_owned(),
+            line,
+            side: "RIGHT".to_owned(),
+            body: "[unsafe-review] the raw pointer is taken but never asserted upon".to_owned(),
+            evidence: "src/buffer.rs:2 and the changed call order".to_owned(),
+            suggestion: suggestion.map(str::to_owned),
+        };
+        let anchored_edit = "    let ptr = core::ptr::from_ref(&len);";
+
+        // Only trailing whitespace is trimmed: a dedented block would not
+        // commit as the author previews it.
+        assert_eq!(
+            applicable_suggestion(&comment(2, Some(anchored_edit)), &anchors).as_deref(),
+            Some(anchored_edit)
+        );
+
+        // Misindented and no-op edits are dropped; reviewer commentary never
+        // normalizes into replacement text in the first place.
+        assert_eq!(
+            applicable_suggestion(
+                &comment(2, Some("let ptr = core::ptr::from_ref(&len);")),
+                &anchors
+            ),
+            None
+        );
+        assert_eq!(
+            applicable_suggestion(
+                &comment(2, Some("    let ptr = &len as *const usize;")),
+                &anchors
+            ),
+            None
+        );
+        assert_eq!(
+            applicable_suggestion(
+                &comment(2, Some("Consider asserting the changed boundary here")),
+                &anchors
+            ),
+            None
+        );
+
+        // Unreachable on the payload path, pinned so the contract is explicit:
+        // a comment whose anchor is absent from the map keeps its suggestion.
+        assert_eq!(
+            applicable_suggestion(&comment(99, Some(anchored_edit)), &anchors).as_deref(),
+            Some(anchored_edit)
+        );
+    }
 }
