@@ -156,7 +156,11 @@ fields are tolerated, but a missing/malformed pointer, envelope, entry, or
 required identity field becomes an explicit typed artifact gap rather than a
 valid-looking empty candidate set. Repair-queue context joins on the exact
 `(card_id, operation_family)` pair, so a reused card ID from another family
-cannot borrow guidance. Candidates share the same `max_inline_comments` cap,
+cannot borrow guidance. The `comment_plan` pointer must be a nonempty relative
+path of normal components whose canonical target remains under the producer's
+output directory; absolute, parent-traversing, unreadable, and symlink-escape
+targets remain typed artifact gaps. Candidates share the same
+`max_inline_comments` cap,
 RIGHT-side diff-line guard, candidate ledger, dedupe, and refuter path as model
 lane candidates. Tools do not post inside ub-review mode.
 

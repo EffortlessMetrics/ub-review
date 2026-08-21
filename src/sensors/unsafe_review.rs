@@ -2,7 +2,7 @@
 //! entries the lane evidence renderer consumes.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -135,6 +135,7 @@ pub(crate) enum UnsafeReviewIngestGap {
     UnknownSchema(String),
     CommentPlanMissingPointer,
     CommentPlanUnreadable(String),
+    CommentPlanInvalidPointer(String),
     CommentPlanMalformed(String),
     CommentPlanUnknownSchema(String),
     CommentPlanMissingField(String),
@@ -162,6 +163,9 @@ impl UnsafeReviewIngestGap {
             }
             Self::CommentPlanUnreadable(detail) => {
                 format!("comment-plan.json unreadable: {detail}")
+            }
+            Self::CommentPlanInvalidPointer(detail) => {
+                format!("comment-plan.json invalid artifact pointer: {detail}")
             }
             Self::CommentPlanMalformed(detail) => {
                 format!("comment-plan.json malformed: {detail}")
@@ -273,6 +277,43 @@ fn parse_comment_plan(
     Ok(comments)
 }
 
+fn confined_comment_plan_path(
+    out_dir: &Path,
+    pointer: &str,
+) -> Result<PathBuf, UnsafeReviewIngestGap> {
+    if pointer.trim().is_empty() {
+        return Err(UnsafeReviewIngestGap::CommentPlanInvalidPointer(
+            "pointer must be a nonempty relative path".to_owned(),
+        ));
+    }
+    let relative = Path::new(pointer);
+    if relative.is_absolute()
+        || relative
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return Err(UnsafeReviewIngestGap::CommentPlanInvalidPointer(format!(
+            "pointer must contain only normal relative components: {pointer:?}"
+        )));
+    }
+    let canonical_out_dir = fs::canonicalize(out_dir).map_err(|err| {
+        UnsafeReviewIngestGap::CommentPlanUnreadable(format!(
+            "output directory could not be canonicalized: {err}"
+        ))
+    })?;
+    let canonical_target = fs::canonicalize(out_dir.join(relative)).map_err(|err| {
+        UnsafeReviewIngestGap::CommentPlanUnreadable(format!(
+            "pointer target could not be canonicalized: {err}"
+        ))
+    })?;
+    if !canonical_target.starts_with(&canonical_out_dir) {
+        return Err(UnsafeReviewIngestGap::CommentPlanInvalidPointer(format!(
+            "canonical target escapes output directory: {pointer:?}"
+        )));
+    }
+    Ok(canonical_target)
+}
+
 /// Parse the structured artifacts written by `unsafe-review first-pr --out-dir`.
 ///
 /// Schema-routed before binding the typed v1 shape so an unknown version is
@@ -309,7 +350,7 @@ pub(crate) fn read_unsafe_review_artifacts(
         .artifacts
         .get("comment_plan")
         .ok_or(UnsafeReviewIngestGap::CommentPlanMissingPointer)?;
-    let comment_plan_path = out_dir.join(comment_plan_rel);
+    let comment_plan_path = confined_comment_plan_path(&out_dir, comment_plan_rel)?;
     let comment_plan_text = fs::read_to_string(&comment_plan_path)
         .map_err(|err| UnsafeReviewIngestGap::CommentPlanUnreadable(err.to_string()))?;
     let comment_plan = parse_comment_plan(&comment_plan_text)?;
@@ -696,6 +737,94 @@ mod tests {
         assert!(matches!(
             gap,
             super::UnsafeReviewIngestGap::CommentPlanUnreadable(_)
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn comment_plan_parent_relative_pointer_is_rejected() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = write_comment_plan_gate(
+            &sensor_dir,
+            r#"{"comment_plan":"../outside-comment-plan.json"}"#,
+        )?;
+        fs::write(
+            out_dir
+                .parent()
+                .ok_or_else(|| anyhow::anyhow!("sensor output parent missing"))?
+                .join("outside-comment-plan.json"),
+            r#"{"schema_version":"0.1","comments":[]}"#,
+        )?;
+        let gap = super::read_unsafe_review_artifacts(&sensor_dir)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("parent-relative pointer unexpectedly parsed"))?;
+        assert!(matches!(
+            gap,
+            super::UnsafeReviewIngestGap::CommentPlanInvalidPointer(_)
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn comment_plan_absolute_pointer_is_rejected() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = write_comment_plan_gate(&sensor_dir, "{}")?;
+        let outside = temp.path().join("absolute-comment-plan.json");
+        fs::write(&outside, r#"{"schema_version":"0.1","comments":[]}"#)?;
+        fs::write(
+            out_dir.join("unsafe-review-gate.json"),
+            format!(
+                r#"{{"schema_version":"unsafe-review-gate/v1","status":"advisory","artifacts":{{"comment_plan":{}}}}}"#,
+                serde_json::to_string(&outside.to_string_lossy())?
+            ),
+        )?;
+        let gap = super::read_unsafe_review_artifacts(&sensor_dir)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("absolute pointer unexpectedly parsed"))?;
+        assert!(matches!(
+            gap,
+            super::UnsafeReviewIngestGap::CommentPlanInvalidPointer(_)
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn comment_plan_symlink_redirect_is_rejected() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = write_comment_plan_gate(&sensor_dir, r#"{"comment_plan":"redirect.json"}"#)?;
+        let outside = temp.path().join("symlink-target-comment-plan.json");
+        fs::write(&outside, r#"{"schema_version":"0.1","comments":[]}"#)?;
+        let redirect = out_dir.join("redirect.json");
+        let symlink_result = {
+            #[cfg(unix)]
+            {
+                std::os::unix::fs::symlink(&outside, &redirect)
+            }
+            #[cfg(windows)]
+            {
+                std::os::windows::fs::symlink_file(&outside, &redirect)
+            }
+        };
+        if let Err(err) = symlink_result {
+            // Windows without symlink privilege (no Developer Mode) reports
+            // ERROR_PRIVILEGE_NOT_HELD, which does not surface as
+            // `PermissionDenied` on every toolchain; skip by raw code too.
+            if err.kind() == std::io::ErrorKind::PermissionDenied
+                || err.raw_os_error() == Some(1314)
+            {
+                return Ok(());
+            }
+            return Err(err.into());
+        }
+        let gap = super::read_unsafe_review_artifacts(&sensor_dir)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("symlink pointer unexpectedly parsed"))?;
+        assert!(matches!(
+            gap,
+            super::UnsafeReviewIngestGap::CommentPlanInvalidPointer(_)
         ));
         Ok(())
     }

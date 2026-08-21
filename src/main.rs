@@ -3891,10 +3891,78 @@ fn read_repair_queue(
 fn repair_queue_entry_for_comment<'a>(
     entry: &UnsafeReviewCommentPlanEntry,
     repair_queue: &'a std::collections::BTreeMap<(String, String), RepairQueueEntry>,
-) -> Option<&'a RepairQueueEntry> {
-    let card_id = entry.card_id.as_deref()?;
-    let operation_family = entry.operation_family.as_deref()?;
-    repair_queue.get(&(card_id.to_owned(), operation_family.to_owned()))
+) -> RepairQueueDisposition<'a> {
+    let (Some(card_id), Some(operation_family)) =
+        (entry.card_id.as_deref(), entry.operation_family.as_deref())
+    else {
+        return RepairQueueDisposition::Missing;
+    };
+    if let Some(repair_entry) = repair_queue.get(&(card_id.to_owned(), operation_family.to_owned()))
+    {
+        return RepairQueueDisposition::Matched(repair_entry);
+    }
+    if repair_queue
+        .keys()
+        .any(|(candidate_card_id, _)| candidate_card_id == card_id)
+    {
+        RepairQueueDisposition::FamilyMismatch
+    } else {
+        RepairQueueDisposition::Missing
+    }
+}
+
+enum RepairQueueDisposition<'a> {
+    Matched(&'a RepairQueueEntry),
+    Missing,
+    FamilyMismatch,
+}
+
+fn render_repair_queue_advisory(
+    entry: &UnsafeReviewCommentPlanEntry,
+    repair_queue: &std::collections::BTreeMap<(String, String), RepairQueueEntry>,
+) -> (String, String, Option<String>) {
+    let family_label = entry
+        .operation_family
+        .as_deref()
+        .map(|family| format!("\n\n**Operation family**: `{family}`"))
+        .unwrap_or_default();
+    match repair_queue_entry_for_comment(entry, repair_queue) {
+        RepairQueueDisposition::Matched(rq_entry) => {
+            let bucket = rq_entry
+                .bucket_reason
+                .as_deref()
+                .unwrap_or("see repair-queue.json");
+            let operation_line = rq_entry
+                .operation
+                .as_deref()
+                .map(|op| format!("\n\n**Operation**: `{op}`"))
+                .unwrap_or_default();
+            let evidence_lines = rq_entry
+                .missing_evidence
+                .iter()
+                .map(|e| format!("  - {e}"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            let rq_context = if evidence_lines.is_empty() {
+                format!("\n\n**Repair class**: {bucket}{operation_line}")
+            } else {
+                format!(
+                    "\n\n**Repair class**: {bucket}{operation_line}\n\n**Missing evidence**:\n{evidence_lines}"
+                )
+            };
+            (family_label, rq_context, rq_entry.suggestion())
+        }
+        RepairQueueDisposition::Missing => (
+            family_label,
+            "\n\n**Repair guidance**: no matching repair-queue entry for this card and operation family; no suggestion emitted.".to_owned(),
+            None,
+        ),
+        RepairQueueDisposition::FamilyMismatch => (
+            family_label,
+            "\n\n**Repair guidance**: repair-queue entry exists for this card but a different operation family; guidance is not borrowed across families and no suggestion emitted.".to_owned(),
+            None,
+        ),
+    }
 }
 
 /// Build `GitHubReviewComment` entries from unsafe-review `comment-plan.json`
@@ -3969,42 +4037,8 @@ fn build_unsafe_review_inline_comments(
             .as_deref()
             .map(|id| format!(" (`{id}`)"))
             .unwrap_or_default();
-        let family_label = entry
-            .operation_family
-            .as_deref()
-            .map(|family| format!("\n\n**Operation family**: `{family}`"))
-            .unwrap_or_default();
-        // Optional: if the repair queue has an entry for this exact card/family
-        // pair, surface the bucket reason, operation, and missing evidence as
-        // additional context (guidance only, not a suggestion block).
-        let rq_entry = repair_queue_entry_for_comment(entry, &repair_queue);
-        let rq_context = rq_entry
-            .map(|rq_entry| {
-                let bucket = rq_entry
-                    .bucket_reason
-                    .as_deref()
-                    .unwrap_or("see repair-queue.json");
-                let operation_line = rq_entry
-                    .operation
-                    .as_deref()
-                    .map(|op| format!("\n\n**Operation**: `{op}`"))
-                    .unwrap_or_default();
-                let evidence_lines = rq_entry
-                    .missing_evidence
-                    .iter()
-                    .map(|e| format!("  - {e}"))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                if evidence_lines.is_empty() {
-                    format!("\n\n**Repair class**: {bucket}{operation_line}")
-                } else {
-                    format!(
-                        "\n\n**Repair class**: {bucket}{operation_line}\n\n**Missing evidence**:\n{evidence_lines}"
-                    )
-                }
-            })
-            .unwrap_or_default();
-        let suggestion = rq_entry.and_then(RepairQueueEntry::suggestion);
+        let (family_label, rq_context, suggestion) =
+            render_repair_queue_advisory(entry, &repair_queue);
         let body = format!(
             "[unsafe-review]{card_label} **{gap}**\n\n\
              **Next action**: {action}\n\n\
@@ -4091,40 +4125,9 @@ fn unsafe_review_comment_plan_candidates(
             .as_deref()
             .map(|id| format!(" (`{id}`)"))
             .unwrap_or_default();
-        let family_label = entry
-            .operation_family
-            .as_deref()
-            .map(|family| format!("\n\n**Operation family**: `{family}`"))
-            .unwrap_or_default();
         let trust = entry.trust_boundary.as_deref().unwrap_or(gate_trust);
-        let rq_entry = repair_queue_entry_for_comment(entry, &repair_queue);
-        let rq_context = rq_entry
-            .map(|rq_entry| {
-                let bucket = rq_entry
-                    .bucket_reason
-                    .as_deref()
-                    .unwrap_or("see repair-queue.json");
-                let operation_line = rq_entry
-                    .operation
-                    .as_deref()
-                    .map(|op| format!("\n\n**Operation**: `{op}`"))
-                    .unwrap_or_default();
-                let evidence_lines = rq_entry
-                    .missing_evidence
-                    .iter()
-                    .map(|e| format!("  - {e}"))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                if evidence_lines.is_empty() {
-                    format!("\n\n**Repair class**: {bucket}{operation_line}")
-                } else {
-                    format!(
-                        "\n\n**Repair class**: {bucket}{operation_line}\n\n**Missing evidence**:\n{evidence_lines}"
-                    )
-                }
-            })
-            .unwrap_or_default();
-        let suggestion = rq_entry.and_then(RepairQueueEntry::suggestion);
+        let (family_label, rq_context, suggestion) =
+            render_repair_queue_advisory(entry, &repair_queue);
         // The 155-character advisory footer this template used to repeat on
         // every card was pure boilerplate on a source line and pushed the
         // standard card past `INLINE_COMMENT_MAX_REVIEWER_CHARS`. The advisory
@@ -24446,6 +24449,12 @@ index 1111111..2222222 100644
         assert_eq!(comments.len(), 1);
         assert!(comments[0].body.contains("wanted_family"));
         assert!(!comments[0].body.contains("wrong_family_should_not_join"));
+        assert!(
+            comments[0]
+                .body
+                .contains("different operation family; guidance is not borrowed")
+        );
+        assert!(comments[0].suggestion.is_none());
         Ok(())
     }
 
@@ -24544,6 +24553,11 @@ index 1111111..2222222 100644
         );
         assert_eq!(comments[0].path, "src/ffi.rs");
         assert_eq!(comments[0].line, 12);
+        assert!(
+            comments[0]
+                .body
+                .contains("no matching repair-queue entry for this card and operation family")
+        );
         assert!(comments[0].suggestion.is_none());
         Ok(())
     }
