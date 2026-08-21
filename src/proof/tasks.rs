@@ -103,9 +103,10 @@ pub(crate) fn canonical_proof_request_group_command(command: &str, cost: &str) -
 pub(crate) fn focused_proof_plans_from_diff(
     diff: &DiffContext,
     proof_requests: &[ProofRequest],
+    impact: Option<&ImpactPlan>,
     budget: ProofBudget,
 ) -> Vec<FocusedProofPlan> {
-    focused_test_tasks_from_diff(diff, proof_requests, budget)
+    focused_test_tasks_from_diff(diff, proof_requests, impact, budget)
         .into_iter()
         .map(|task| {
             focused_proof_plan_for_task(
@@ -127,13 +128,14 @@ pub(crate) fn focused_proof_plans_from_diff(
 pub(crate) fn focused_proof_candidate_plans_from_diff(
     diff: &DiffContext,
     proof_requests: &[ProofRequest],
+    impact: Option<&ImpactPlan>,
     budget: ProofBudget,
 ) -> Vec<FocusedProofPlan> {
-    let planned_ids = focused_test_tasks_from_diff(diff, proof_requests, budget)
+    let planned_ids = focused_test_tasks_from_diff(diff, proof_requests, impact, budget)
         .into_iter()
         .map(|task| task.id)
         .collect::<BTreeSet<_>>();
-    let candidate_tasks = focused_test_candidates_from_diff(diff, proof_requests);
+    let candidate_tasks = focused_test_candidates_from_diff(diff, proof_requests, impact);
     let mut plans = Vec::with_capacity(candidate_tasks.len());
     for task in candidate_tasks {
         let status = candidate_plan_status(planned_ids.contains(&task.id));
@@ -183,12 +185,24 @@ fn focused_proof_plan_for_task(
     }
 }
 
+/// Admit candidates in order while they fit the budget.
+///
+/// #838: this used to `return` at the first rejection, so one expensive
+/// candidate blocked every later, cheaper one — a 300s red/green candidate
+/// could hide a 30s head-only cargo test that fit the remaining time easily.
+/// Rejection is now per candidate: scanning continues and later candidates are
+/// admitted whenever they independently fit the remaining task, file, and time
+/// budgets. Input order is unchanged, so the admitted sequence stays
+/// deterministic. Rejected candidates are not silently dropped —
+/// [`focused_proof_candidate_plans_from_diff`] records them as
+/// `deferred_by_budget` in the planner artifact.
 pub(crate) fn focused_test_tasks_from_diff(
     diff: &DiffContext,
     proof_requests: &[ProofRequest],
+    impact: Option<&ImpactPlan>,
     budget: ProofBudget,
 ) -> Vec<FocusedTestTask> {
-    let candidates = focused_test_candidates_from_diff(diff, proof_requests);
+    let candidates = focused_test_candidates_from_diff(diff, proof_requests, impact);
     let mut tasks = Vec::new();
     let mut files = BTreeSet::new();
     let mut estimated_seconds = 0_u64;
@@ -213,9 +227,94 @@ pub(crate) fn focused_test_tasks_from_diff(
     tasks
 }
 
+/// How many impact-plan test targets may enter the deterministic candidate
+/// floor. The portfolio selector and the runtime budget still decide what
+/// actually executes; this only bounds how much of the ranked catalog is
+/// offered, so a wide refactor cannot flood the portfolio with hundreds of
+/// equally ranked targets.
+pub(crate) const MAX_IMPACT_CARGO_TEST_CANDIDATES: usize = 8;
+
+/// Deterministic Cargo floor: turn the impact plan's ranked `test` targets
+/// into focused proof tasks.
+///
+/// The impact plan already maps each changed file to its owning package,
+/// closes over reverse dependencies, and ranks `test` targets above `lib`/
+/// `bin` (see `impact_plan.rs`). Until now that ranking only reached a model
+/// prompt, so on a Rust-only diff the executor received nothing. Every derived
+/// command is re-validated by [`focused_cargo_test_command_spec`]: the
+/// allowlist stays the single gate on what may run.
+pub(crate) fn focused_cargo_test_candidates_from_impact_plan(
+    plan: &ImpactPlan,
+    limit: usize,
+) -> Vec<FocusedTestTask> {
+    let mut tasks = Vec::new();
+    // Every brokered cargo command carries `--locked`, which refuses to create
+    // a missing lock file. Without one the proof could only ever fail on that
+    // precondition, and a PR author would read "your test failed". The plan
+    // already records the absent lock file as an evidence gap; selecting
+    // nothing keeps that missing evidence from turning into failed evidence.
+    if !plan.cargo_lockfile {
+        return tasks;
+    }
+    for candidate in plan
+        .candidate_tasks
+        .iter()
+        .filter(|candidate| candidate.kind == "test")
+    {
+        if tasks.len() >= limit {
+            break;
+        }
+        let Some(task) = focused_cargo_test_task_from_impact_candidate(candidate) else {
+            continue;
+        };
+        merge_focused_test_task(&mut tasks, task);
+    }
+    tasks
+}
+
+/// Build one focused task for an impact-plan test target, or `None` when the
+/// derived command is not allowlisted. Head-only mode is deliberate: a
+/// diff-derived candidate claims "the package's tests pass at HEAD", not that
+/// a specific test discriminates the patch. A model request naming the same
+/// command merges into this task and upgrades it to red/green.
+fn focused_cargo_test_task_from_impact_candidate(
+    candidate: &ImpactCandidateTask,
+) -> Option<FocusedTestTask> {
+    let command = format!(
+        "cargo test --locked --package {} --test {}",
+        candidate.test_package, candidate.target
+    );
+    let spec = focused_cargo_test_command_spec(&command)?;
+    let command_specs = FocusedTestCommandSpecs {
+        head: spec.clone(),
+        base_plus_tests: spec.clone(),
+    };
+    Some(FocusedTestTask {
+        id: focused_test_task_id_for_target(
+            &focused_cargo_test_target_label(&spec.argv),
+            None,
+            FocusedProofMode::HeadOnly,
+            Some(&command_specs),
+        ),
+        file: focused_cargo_test_target_label(&spec.argv),
+        test_name: None,
+        mode: FocusedProofMode::HeadOnly,
+        command_specs: Some(command_specs),
+        timeout_sec: None,
+        requested_by: vec!["impact-planner".to_owned()],
+        request_ids: Vec::new(),
+    })
+}
+
+/// Deterministic candidate floor for a diff.
+///
+/// `impact` carries the Cargo workspace impact plan when the caller has one.
+/// Callers that pass `None` (request metadata attribution, follow-up phases
+/// that only re-plan requested work) keep the Bun-and-requests behavior.
 pub(crate) fn focused_test_candidates_from_diff(
     diff: &DiffContext,
     proof_requests: &[ProofRequest],
+    impact: Option<&ImpactPlan>,
 ) -> Vec<FocusedTestTask> {
     let request_groups = proof_request_groups(proof_requests);
     let mut tasks = Vec::new();
@@ -247,6 +346,16 @@ pub(crate) fn focused_test_candidates_from_diff(
                     ),
                 );
             }
+        }
+    }
+    // Cargo branch. The Bun detector above matches nothing on a Rust repo,
+    // which left the deterministic floor empty and handed test selection to
+    // whatever the model happened to request.
+    if let Some(impact) = impact {
+        for task in
+            focused_cargo_test_candidates_from_impact_plan(impact, MAX_IMPACT_CARGO_TEST_CANDIDATES)
+        {
+            merge_focused_test_task(&mut tasks, task);
         }
     }
     merge_focused_test_request_group_tasks(&mut tasks, &request_groups);
@@ -709,6 +818,412 @@ fn strip_matching_quotes(value: &str) -> &str {
 mod tests {
     use super::*;
 
+    /// A synthetic impact plan carrying one ranked Cargo test target per
+    /// entry, so the Cargo branch can be pinned without shelling out to
+    /// `cargo metadata`.
+    fn impact_plan_with_test_targets(targets: &[(&str, &str, u32)]) -> ImpactPlan {
+        ImpactPlan {
+            schema: crate::artifacts::IMPACT_PLAN_SCHEMA,
+            changed_files: vec!["src/proof/tasks.rs".to_owned()],
+            changed_packages: Vec::new(),
+            affected_packages: Vec::new(),
+            candidate_tasks: targets
+                .iter()
+                .map(|(package, target, rank)| ImpactCandidateTask {
+                    target: (*target).to_owned(),
+                    kind: "test".to_owned(),
+                    reason: "package owns a changed file".to_owned(),
+                    owning_package: (*package).to_owned(),
+                    test_package: (*package).to_owned(),
+                    estimated_cost: "low",
+                    expected_value: "high",
+                    rank: *rank,
+                    selection: "selected",
+                })
+                .collect(),
+            evidence_gaps: Vec::new(),
+            selection_mode: "shadow",
+            cargo_lockfile: true,
+        }
+    }
+
+    /// Without a committed lock file the `--locked` command template cannot
+    /// run, so the floor must select nothing rather than manufacture a receipt
+    /// that reads as a failing test.
+    #[test]
+    fn a_workspace_without_a_lockfile_selects_no_cargo_candidate() -> Result<()> {
+        let mut plan = impact_plan_with_test_targets(&[("ub-review", "cli", 190)]);
+        plan.cargo_lockfile = false;
+        anyhow::ensure!(
+            focused_test_candidates_from_diff(&rust_only_diff(), &[], Some(&plan)).is_empty(),
+            "a lock-less workspace must not yield an unrunnable cargo proof"
+        );
+        Ok(())
+    }
+
+    fn rust_only_diff() -> DiffContext {
+        DiffContext {
+            base: "base".to_owned(),
+            head: "head".to_owned(),
+            changed_files: vec!["src/proof/tasks.rs".to_owned()],
+            patch: String::new(),
+            flags: DiffFlags::default(),
+            diff_class: DiffClass::SourceGeneral,
+        }
+    }
+
+    /// A Rust-only diff used to select nothing at all: the deterministic floor
+    /// only recognized Bun `.test.ts` files, so test selection collapsed to
+    /// whatever the model happened to request. It now yields a real focused
+    /// cargo-test command that the broker allowlist accepts.
+    #[test]
+    fn rust_only_diff_yields_a_focused_cargo_test_candidate() -> Result<()> {
+        let diff = rust_only_diff();
+        anyhow::ensure!(
+            focused_test_candidates_from_diff(&diff, &[], None).is_empty(),
+            "without an impact plan the Bun-only floor still selects nothing"
+        );
+
+        let plan = impact_plan_with_test_targets(&[("ub-review", "cli", 190)]);
+        let candidates = focused_test_candidates_from_diff(&diff, &[], Some(&plan));
+        let candidate = candidates
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("a Rust-only diff must yield a cargo test candidate"))?;
+        let specs = candidate
+            .command_specs
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("cargo candidate must carry an approved command"))?;
+        anyhow::ensure!(
+            specs.head.argv
+                == [
+                    "cargo",
+                    "test",
+                    "--locked",
+                    "--package",
+                    "ub-review",
+                    "--test",
+                    "cli"
+                ],
+            "unexpected cargo command {:?}",
+            specs.head.argv
+        );
+        anyhow::ensure!(candidate.file == "cargo-test:cli");
+        anyhow::ensure!(candidate.mode == FocusedProofMode::HeadOnly);
+        anyhow::ensure!(candidate.requested_by == ["impact-planner"]);
+        Ok(())
+    }
+
+    /// The allowlist stays the only gate: an impact-plan target whose derived
+    /// command cannot pass `focused_cargo_test_command_spec` is dropped rather
+    /// than smuggled into execution.
+    #[test]
+    fn impact_candidates_that_fail_the_allowlist_are_dropped() -> Result<()> {
+        let diff = rust_only_diff();
+        let plan = impact_plan_with_test_targets(&[
+            ("ub-review", "cli; rm -rf /", 190),
+            ("ub-review", "cli", 190),
+        ]);
+        let candidates = focused_test_candidates_from_diff(&diff, &[], Some(&plan));
+        anyhow::ensure!(
+            candidates.len() == 1,
+            "only the allowlisted target may survive, got {:?}",
+            candidates
+                .iter()
+                .map(|task| task.file.as_str())
+                .collect::<Vec<_>>()
+        );
+        anyhow::ensure!(candidates[0].file == "cargo-test:cli");
+        Ok(())
+    }
+
+    /// End-to-end over this repository's real Cargo metadata: a Rust-only diff
+    /// produces at least one focused cargo-test candidate, and two runs over
+    /// the same commit produce identical candidate identities and order.
+    #[test]
+    fn this_repo_rust_diff_produces_deterministic_cargo_candidates() -> Result<()> {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let changed_files = ["src/proof/tasks.rs".to_owned()];
+        let candidate_ids = |plan: &ImpactPlan| {
+            focused_cargo_test_candidates_from_impact_plan(plan, MAX_IMPACT_CARGO_TEST_CANDIDATES)
+                .into_iter()
+                .map(|task| task.id)
+                .collect::<Vec<_>>()
+        };
+        let first = candidate_ids(&build_impact_plan(root, &changed_files, "shadow"));
+        let second = candidate_ids(&build_impact_plan(root, &changed_files, "shadow"));
+        anyhow::ensure!(
+            !first.is_empty(),
+            "a Rust-only diff on this repo must select at least one cargo test target"
+        );
+        anyhow::ensure!(
+            first == second,
+            "candidate order must be deterministic: {first:?} vs {second:?}"
+        );
+        anyhow::ensure!(
+            first.len() <= MAX_IMPACT_CARGO_TEST_CANDIDATES,
+            "the candidate floor must stay bounded"
+        );
+        Ok(())
+    }
+
+    /// #838: the budget scan used to `return` at the first rejection, so one
+    /// expensive candidate hid every later, cheaper one. The red/green Bun
+    /// candidate below costs two commands and cannot fit; the head-only cargo
+    /// candidate behind it costs one command and fits exactly.
+    #[test]
+    fn budget_rejection_does_not_block_a_later_cheaper_candidate() -> Result<()> {
+        let diff = DiffContext {
+            base: "base".to_owned(),
+            head: "head".to_owned(),
+            changed_files: vec![
+                "test/js/bun/proof.test.ts".to_owned(),
+                "src/proof/tasks.rs".to_owned(),
+            ],
+            patch: "diff --git a/test/js/bun/proof.test.ts b/test/js/bun/proof.test.ts\n@@ -1,2 +1,3 @@\n import { test } from 'bun:test';\n+test(\"expensive proof\", () => {});\n".to_owned(),
+            flags: DiffFlags::default(),
+            diff_class: DiffClass::SourceGeneral,
+        };
+        let plan = impact_plan_with_test_targets(&[("ub-review", "cli", 190)]);
+        let budget = ProofBudget {
+            max_focused_test_files: 4,
+            max_focused_tests: 4,
+            per_command_timeout_sec: 60,
+            max_total_seconds: 60,
+        };
+
+        let candidates = focused_test_candidates_from_diff(&diff, &[], Some(&plan));
+        anyhow::ensure!(
+            candidates.len() == 2 && candidates[0].mode == FocusedProofMode::RedGreen,
+            "fixture must offer the expensive red/green candidate first"
+        );
+
+        let tasks = focused_test_tasks_from_diff(&diff, &[], Some(&plan), budget);
+        anyhow::ensure!(
+            tasks.len() == 1,
+            "the cheaper later candidate must still be admitted, got {:?}",
+            tasks
+                .iter()
+                .map(|task| task.file.as_str())
+                .collect::<Vec<_>>()
+        );
+        anyhow::ensure!(tasks[0].file == "cargo-test:cli");
+        anyhow::ensure!(
+            tasks.iter().map(|task| task.id.clone()).collect::<Vec<_>>()
+                == focused_test_tasks_from_diff(&diff, &[], Some(&plan), budget)
+                    .iter()
+                    .map(|task| task.id.clone())
+                    .collect::<Vec<_>>(),
+            "admitted task order must be deterministic across runs"
+        );
+
+        // The skipped candidate is accounted for as skipped, not as executed.
+        let plans = focused_proof_candidate_plans_from_diff(&diff, &[], Some(&plan), budget);
+        anyhow::ensure!(plans.len() == 2);
+        let statuses = plans
+            .iter()
+            .map(|plan| (plan.test_file.as_str(), plan.status.as_str()))
+            .collect::<Vec<_>>();
+        anyhow::ensure!(
+            statuses
+                == [
+                    ("test/js/bun/proof.test.ts", "deferred_by_budget"),
+                    ("cargo-test:cli", "planned"),
+                ],
+            "planner artifact must record the skipped candidate explicitly, got {statuses:?}"
+        );
+        Ok(())
+    }
+
+    /// The Cargo floor reads exactly three things out of the impact plan: the
+    /// `cargo_lockfile` precondition, each candidate's `kind`, and its package
+    /// and target names. Everything else the planner records is advisory
+    /// bookkeeping for the artifact and the model prompt, and must have no
+    /// authority over which commands the broker is offered — otherwise a purely
+    /// descriptive planner edit would silently change what executes.
+    #[test]
+    fn the_cargo_floor_ignores_advisory_impact_plan_fields() -> Result<()> {
+        let baseline = impact_plan_with_test_targets(&[("ub-review", "cli", 190)]);
+        let floor = |plan: &ImpactPlan| {
+            focused_cargo_test_candidates_from_impact_plan(plan, MAX_IMPACT_CARGO_TEST_CANDIDATES)
+                .into_iter()
+                .map(|task| (task.file, task.id))
+                .collect::<Vec<_>>()
+        };
+        let expected = floor(&baseline);
+        assert_eq!(
+            expected.len(),
+            1,
+            "fixture must offer exactly the cli target, got {expected:?}"
+        );
+        assert_eq!(expected[0].0, "cargo-test:cli");
+
+        let advisory = [
+            (
+                "changed_files",
+                (|plan: &mut ImpactPlan| {
+                    plan.changed_files = vec!["docs/ARCHITECTURE.md".to_owned()];
+                }) as fn(&mut ImpactPlan),
+            ),
+            ("changed_packages", |plan| {
+                plan.changed_packages = vec![crate::ImpactPackage {
+                    name: "ub-review".to_owned(),
+                    manifest_path: "Cargo.toml".to_owned(),
+                    relation: "changed",
+                }];
+            }),
+            ("affected_packages", |plan| {
+                plan.affected_packages = vec![crate::ImpactPackage {
+                    name: "xtask".to_owned(),
+                    manifest_path: "xtask/Cargo.toml".to_owned(),
+                    relation: "reverse-dependency",
+                }];
+            }),
+            ("evidence_gaps", |plan| {
+                plan.evidence_gaps = vec![crate::ImpactEvidenceGap {
+                    kind: "no-test-targets-found",
+                    detail: "advisory only".to_owned(),
+                }];
+            }),
+            ("estimated_cost", |plan| {
+                for candidate in &mut plan.candidate_tasks {
+                    candidate.estimated_cost = "high";
+                }
+            }),
+            ("expected_value", |plan| {
+                for candidate in &mut plan.candidate_tasks {
+                    candidate.expected_value = "low";
+                }
+            }),
+        ];
+        for (field, mutate) in advisory {
+            let mut plan = baseline.clone();
+            mutate(&mut plan);
+            assert_eq!(
+                floor(&plan),
+                expected,
+                "mutating the advisory field {field} must not change the cargo floor"
+            );
+        }
+
+        // The contrast case: `cargo_lockfile` is the one plan-level field the
+        // floor obeys, because `--locked` refuses to create a missing lock file.
+        let mut lockless = baseline.clone();
+        lockless.cargo_lockfile = false;
+        assert_eq!(
+            floor(&lockless),
+            Vec::new(),
+            "cargo_lockfile = false must empty the cargo floor"
+        );
+
+        // And `kind` is the other: only `test` targets become proof tasks.
+        let mut library_only = baseline.clone();
+        for candidate in &mut library_only.candidate_tasks {
+            candidate.kind = "lib".to_owned();
+        }
+        assert_eq!(
+            floor(&library_only),
+            Vec::new(),
+            "only `test` targets may become executable proof tasks"
+        );
+        Ok(())
+    }
+
+    /// A cargo candidate's identity must be a pure function of the approved
+    /// command, because the broker merges and de-duplicates tasks by id and a
+    /// later model request naming the same command has to land on the same
+    /// task. Two plan entries for one package/target therefore collapse into a
+    /// single task regardless of rank, and the derived id must agree with
+    /// `focused_test_task_id_for_target` over the head-only, unnamed-test
+    /// shape the floor actually constructs.
+    #[test]
+    fn cargo_candidate_identity_follows_the_approved_command() -> Result<()> {
+        let plan = impact_plan_with_test_targets(&[
+            ("ub-review", "cli", 190),
+            ("ub-review", "cli", 40),
+            ("ub-review", "gate", 190),
+        ]);
+        let candidates =
+            focused_cargo_test_candidates_from_impact_plan(&plan, MAX_IMPACT_CARGO_TEST_CANDIDATES);
+        let labels = candidates
+            .iter()
+            .map(|task| task.file.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            labels,
+            ["cargo-test:cli", "cargo-test:gate"],
+            "duplicate targets must merge and distinct targets must stay separate"
+        );
+
+        for candidate in &candidates {
+            let specs = candidate
+                .command_specs
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("cargo candidate must carry an approved command"))?;
+            let label = focused_cargo_test_target_label(&specs.head.argv);
+            assert_eq!(
+                candidate.test_name, None,
+                "a head-only package proof names no single test"
+            );
+            assert_eq!(
+                candidate.mode,
+                FocusedProofMode::HeadOnly,
+                "a diff-derived cargo candidate claims HEAD passes, not red/green"
+            );
+            assert_eq!(
+                candidate.id,
+                focused_test_task_id_for_target(
+                    &label,
+                    None,
+                    FocusedProofMode::HeadOnly,
+                    Some(specs),
+                ),
+                "id: focused_test_task_id_for_target must be fed the target label, no test \
+                 name, head-only mode, and the approved command specs"
+            );
+            assert_ne!(
+                candidate.id,
+                focused_test_task_id_for_target(
+                    &label,
+                    None,
+                    FocusedProofMode::RedGreen,
+                    Some(specs),
+                ),
+                "the head-only mode must be part of the identity"
+            );
+            assert_eq!(
+                specs.base_plus_tests.argv, specs.head.argv,
+                "both command slots must hold the same allowlisted argv"
+            );
+        }
+        Ok(())
+    }
+
+    /// The floor is bounded so a wide refactor cannot flood the portfolio with
+    /// equally ranked targets, and it truncates from the front of the ranked
+    /// catalog rather than sampling it.
+    #[test]
+    fn the_cargo_floor_truncates_the_ranked_catalog_at_the_limit() -> Result<()> {
+        let targets = ["a", "b", "c", "d"]
+            .map(|target| ("ub-review", target, 190))
+            .to_vec();
+        let plan = impact_plan_with_test_targets(&targets);
+        for limit in 0..=targets.len() {
+            let labels = focused_cargo_test_candidates_from_impact_plan(&plan, limit)
+                .into_iter()
+                .map(|task| task.file)
+                .collect::<Vec<_>>();
+            let expected = targets[..limit]
+                .iter()
+                .map(|(_, target, _)| format!("cargo-test:{target}"))
+                .collect::<Vec<_>>();
+            assert_eq!(
+                labels, expected,
+                "limit {limit} must take the first {limit} ranked targets"
+            );
+        }
+        Ok(())
+    }
+
     #[test]
     fn focused_proof_mode_keys_and_command_counts_are_stable() {
         assert_eq!(FocusedProofMode::HeadOnly.key(), "head-only");
@@ -807,7 +1322,7 @@ mod tests {
             max_total_seconds: 60,
         };
 
-        let tasks = focused_test_tasks_from_diff(&diff, &requests, budget);
+        let tasks = focused_test_tasks_from_diff(&diff, &requests, None, budget);
         anyhow::ensure!(
             tasks
                 .iter()
@@ -820,7 +1335,7 @@ mod tests {
             "a time-rejected candidate must not hide a later cheaper candidate"
         );
 
-        let plans = focused_proof_candidate_plans_from_diff(&diff, &requests, budget);
+        let plans = focused_proof_candidate_plans_from_diff(&diff, &requests, None, budget);
         anyhow::ensure!(
             plans
                 .iter()
@@ -859,7 +1374,7 @@ mod tests {
             max_total_seconds: 240,
         };
 
-        let plans = focused_proof_candidate_plans_from_diff(&diff, &requests, budget);
+        let plans = focused_proof_candidate_plans_from_diff(&diff, &requests, None, budget);
         anyhow::ensure!(
             plans
                 .iter()
@@ -906,12 +1421,12 @@ mod tests {
             max_total_seconds: 240,
         };
 
-        let plans = focused_proof_candidate_plans_from_diff(&diff, &requests, budget);
+        let plans = focused_proof_candidate_plans_from_diff(&diff, &requests, None, budget);
         let identities_and_statuses = plans
             .iter()
             .map(|plan| (plan.id.as_str(), plan.status.as_str()))
             .collect::<Vec<_>>();
-        let repeated = focused_proof_candidate_plans_from_diff(&diff, &requests, budget);
+        let repeated = focused_proof_candidate_plans_from_diff(&diff, &requests, None, budget);
         anyhow::ensure!(
             identities_and_statuses
                 == repeated
@@ -1042,7 +1557,7 @@ mod tests {
             flags: DiffFlags::default(),
             diff_class: DiffClass::TestsOnly,
         };
-        let planner_plans = focused_proof_plans_from_diff(&diff, &[], budget);
+        let planner_plans = focused_proof_plans_from_diff(&diff, &[], None, budget);
         let planner_plan = planner_plans
             .first()
             .ok_or_else(|| anyhow::anyhow!("missing focused planner plan"))?;
@@ -1062,15 +1577,15 @@ mod tests {
                 .contains("planner-only focused test target")
         );
 
-        let candidate_plans = focused_proof_candidate_plans_from_diff(&diff, &[], budget);
+        let candidate_plans = focused_proof_candidate_plans_from_diff(&diff, &[], None, budget);
         assert_eq!(
-            focused_proof_candidate_plans_from_diff(&diff, &[], budget).len(),
+            focused_proof_candidate_plans_from_diff(&diff, &[], None, budget).len(),
             1,
             "focused_proof_candidate_plans_from_diff must record the candidate"
         );
         assert_eq!(candidate_plans.len(), 1);
         assert_eq!(
-            focused_proof_candidate_plans_from_diff(&diff, &[], budget)
+            focused_proof_candidate_plans_from_diff(&diff, &[], None, budget)
                 .iter()
                 .filter(|plan| plan.status == "planned")
                 .count(),
@@ -1120,7 +1635,7 @@ mod tests {
             ..budget
         };
         let deferred_candidates =
-            focused_proof_candidate_plans_from_diff(&diff, &[], zero_test_budget);
+            focused_proof_candidate_plans_from_diff(&diff, &[], None, zero_test_budget);
         assert_eq!(deferred_candidates.len(), 1);
         assert_eq!(
             deferred_candidates

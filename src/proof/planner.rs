@@ -159,7 +159,11 @@ pub(crate) fn build_proof_planner_output(
 ) -> Result<ProofPlannerOutput> {
     let budget = proof_budget(profile)?;
     let lease_budget = proof_lease_budget(profile)?;
-    let plans = focused_proof_candidate_plans_from_diff(diff, proof_requests, budget);
+    // The planner lane describes model-visible proof intent. Impact-plan Cargo
+    // candidates are a deterministic broker floor, not planner-lane intent,
+    // and are accounted for in review/impact_plan.json and the broker's
+    // review/proof_portfolio.json instead.
+    let plans = focused_proof_candidate_plans_from_diff(diff, proof_requests, None, budget);
     let build_plans = focused_build_candidate_plans_from_requests(proof_requests, budget);
     let proof_tasks = plans
         .into_iter()
@@ -284,7 +288,8 @@ pub(crate) fn write_proof_request_artifacts(
     let terminal_requests = terminalize_proof_requests(&diff.head, proof_requests, proof_receipts);
     ensure_terminal_proof_requests(&terminal_requests)?;
     let proof_groups = proof_request_groups(&terminal_requests);
-    let focused_plans = focused_proof_plans_from_diff(diff, proof_requests, proof_budget(profile)?);
+    let focused_plans =
+        focused_proof_plans_from_diff(diff, proof_requests, None, proof_budget(profile)?);
     let focused_build_plans =
         focused_build_plans_from_requests(proof_requests, proof_budget(profile)?);
     fs::write(
@@ -420,7 +425,7 @@ pub(crate) fn write_proof_request_artifacts(
     if !portfolio_path.exists() {
         let total_budget = proof_budget(profile)?;
         let remaining_budget = remaining_focused_proof_budget(total_budget, resource_leases);
-        let test_candidates = focused_test_candidates_from_diff(diff, proof_requests);
+        let test_candidates = focused_test_candidates_from_diff(diff, proof_requests, None);
         let build_candidates = focused_build_candidates_from_requests(proof_requests);
         let portfolio = select_proof_portfolio(ProofPortfolioInput {
             test_tasks: &test_candidates,
@@ -1016,6 +1021,7 @@ index 1111111..2222222 100644
         let tasks = focused_test_tasks_from_diff(
             &diff,
             &proof_requests,
+            None,
             ProofBudget {
                 max_focused_test_files: 3,
                 max_focused_tests: 6,
@@ -1067,6 +1073,7 @@ index 1111111..2222222 100644
         let plans = super::focused_proof_plans_from_diff(
             &diff,
             &proof_requests,
+            None,
             ProofBudget {
                 max_focused_test_files: 3,
                 max_focused_tests: 6,
@@ -1090,6 +1097,7 @@ index 1111111..2222222 100644
         let time_capped_tasks = focused_test_tasks_from_diff(
             &diff,
             &proof_requests,
+            None,
             ProofBudget {
                 max_focused_test_files: 3,
                 max_focused_tests: 6,
@@ -1158,6 +1166,7 @@ index 1111111..2222222 100644
         let tasks = focused_test_tasks_from_diff(
             &diff,
             &[],
+            None,
             ProofBudget {
                 max_focused_test_files: 2,
                 max_focused_tests: 8,
