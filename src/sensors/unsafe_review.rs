@@ -850,4 +850,119 @@ mod tests {
         );
         Ok(())
     }
+
+    #[test]
+    fn comment_plan_missing_or_unknown_schema_version_is_explicit_gap() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir =
+            write_comment_plan_gate(&sensor_dir, r#"{"comment_plan":"comment-plan.json"}"#)?;
+        fs::write(
+            out_dir.join("comment-plan.json"),
+            r#"{"mode":"plan_only","comments":[]}"#,
+        )?;
+        let gap = super::read_unsafe_review_artifacts(&sensor_dir)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("missing schema version unexpectedly parsed"))?;
+        assert_eq!(
+            gap,
+            super::UnsafeReviewIngestGap::CommentPlanMissingField("schema_version".to_owned())
+        );
+
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir =
+            write_comment_plan_gate(&sensor_dir, r#"{"comment_plan":"comment-plan.json"}"#)?;
+        fs::write(
+            out_dir.join("comment-plan.json"),
+            r#"{"schema_version":"0.2","comments":[]}"#,
+        )?;
+        let gap = super::read_unsafe_review_artifacts(&sensor_dir)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("unknown schema unexpectedly parsed"))?;
+        assert_eq!(
+            gap,
+            super::UnsafeReviewIngestGap::CommentPlanUnknownSchema("0.2".to_owned())
+        );
+        assert!(
+            gap.reason()
+                .contains("schema_version `0.2` not recognised (known: `0.1`)"),
+            "gap must name the found and known versions: {gap:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn comment_plan_identity_field_gaps_name_the_missing_entry_field() -> Result<()> {
+        for (missing_field, entry) in [
+            (
+                "path",
+                r#"{"card_id":"card-1","line":8,"changed_line":true,"operation_family":"f","trust_boundary":"b"}"#,
+            ),
+            (
+                "line",
+                r#"{"card_id":"card-1","path":"src/lib.rs","changed_line":true,"operation_family":"f","trust_boundary":"b"}"#,
+            ),
+            (
+                "changed_line",
+                r#"{"card_id":"card-1","path":"src/lib.rs","line":8,"operation_family":"f","trust_boundary":"b"}"#,
+            ),
+        ] {
+            let temp = tempfile::tempdir()?;
+            let sensor_dir = temp.path().join("sensors/unsafe-review");
+            let out_dir =
+                write_comment_plan_gate(&sensor_dir, r#"{"comment_plan":"comment-plan.json"}"#)?;
+            fs::write(
+                out_dir.join("comment-plan.json"),
+                format!(r#"{{"schema_version":"0.1","comments":[{entry}]}}"#),
+            )?;
+            let gap = super::read_unsafe_review_artifacts(&sensor_dir)
+                .err()
+                .ok_or_else(|| anyhow::anyhow!("{missing_field} gap unexpectedly parsed"))?;
+            assert_eq!(
+                gap,
+                super::UnsafeReviewIngestGap::CommentPlanMissingField(format!(
+                    "comments[0].{missing_field}"
+                ))
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn comment_plan_whitespace_trust_boundary_is_explicit_invalid_gap() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir =
+            write_comment_plan_gate(&sensor_dir, r#"{"comment_plan":"comment-plan.json"}"#)?;
+        fs::write(
+            out_dir.join("comment-plan.json"),
+            r#"{"schema_version":"0.1","comments":[{"card_id":"card-1","path":"src/lib.rs","line":8,"changed_line":true,"operation_family":"f","trust_boundary":"   "}]}"#,
+        )?;
+        let gap = super::read_unsafe_review_artifacts(&sensor_dir)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("blank trust boundary unexpectedly parsed"))?;
+        assert_eq!(
+            gap,
+            super::UnsafeReviewIngestGap::CommentPlanInvalidField(
+                "comments[0].trust_boundary must be nonempty".to_owned()
+            )
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn comment_plan_empty_pointer_is_rejected() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let _out_dir = write_comment_plan_gate(&sensor_dir, r#"{"comment_plan":"   "}"#)?;
+        let gap = super::read_unsafe_review_artifacts(&sensor_dir)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("empty pointer unexpectedly parsed"))?;
+        assert!(matches!(
+            gap,
+            super::UnsafeReviewIngestGap::CommentPlanInvalidPointer(_)
+        ));
+        Ok(())
+    }
 }

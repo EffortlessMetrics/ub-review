@@ -25410,3 +25410,331 @@ finding_id = "probe:src_proof_planner.rs:field_construction:e375491b"
 owner = "ub-review/proof-broker"
 reason = "Portfolio candidate catalog: write_proof_request_artifacts now publishes candidate_tasks next to the decisions it already wrote, derived through the same shared candidate-field derivation the broker uses. proof_request_artifacts_group_duplicate_commands_once asserts the written catalog array, candidate_count consistency, and per-entry id/kind/required/estimated_cost_sec/request_ids shapes. RIPR 0.10.0 reports the construction site as weakly exposed because assertions observe the written artifact rather than this expression. Content-addressed receipt; re-verify after edits to src/proof/planner.rs or a RIPR upgrade."
 
+
+# PR #915 (issue #913) typed comment-plan envelope batch: content-addressed
+# receipts for the on-diff no_static_path declaration seams and weakly_exposed
+# parse/join probes whose colocated suites assert every branch with exact oracles.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:call_deletion:033be82a"
+owner = "ub-review/core"
+reason = "Typed comment-plan envelope declarations (#913/#915): ripr cannot build a static propagation path from the UnsafeReviewIngestGap::CommentPlan* variant definitions, the envelope schema_version/comments fields, the opaque entry operation_family field, and UNSAFE_REVIEW_COMMENT_PLAN_SCHEMA to any consumer. Every consuming branch those declarations back is pinned by the colocated comment_plan_* tests with exact-gap equality or matches! assertions. Classification: no_static_path. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:call_deletion:11049eac"
+owner = "ub-review/core"
+reason = "Twin of the typed comment-plan envelope declaration cluster above: same no_static_path class, same colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:call_deletion:309994d4"
+owner = "ub-review/core"
+reason = "Twin of the typed comment-plan envelope declaration cluster above: same no_static_path class, same colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:call_deletion:8ee65c0a"
+owner = "ub-review/core"
+reason = "Twin of the typed comment-plan envelope declaration cluster above: same no_static_path class, same colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:call_deletion:9bd498e6"
+owner = "ub-review/core"
+reason = "Twin of the typed comment-plan envelope declaration cluster above: same no_static_path class, same colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:call_deletion:a1e344ca"
+owner = "ub-review/core"
+reason = "Twin of the typed comment-plan envelope declaration cluster above: same no_static_path class, same colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:call_deletion:bc9b8226"
+owner = "ub-review/core"
+reason = "Twin of the typed comment-plan envelope declaration cluster above: same no_static_path class, same colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:call_deletion:c2201ffe"
+owner = "ub-review/core"
+reason = "Twin of the typed comment-plan envelope declaration cluster above: same no_static_path class, same colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:field_construction:438d5087"
+owner = "ub-review/core"
+reason = "Twin of the typed comment-plan envelope declaration cluster above: same no_static_path class, same colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:field_construction:8513935c"
+owner = "ub-review/core"
+reason = "Twin of the typed comment-plan envelope declaration cluster above: same no_static_path class, same colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:field_construction:acfac1c1"
+owner = "ub-review/core"
+reason = "Twin of the typed comment-plan envelope declaration cluster above: same no_static_path class, same colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:field_construction:dae285c2"
+owner = "ub-review/core"
+reason = "Twin of the typed comment-plan envelope declaration cluster above: same no_static_path class, same colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:error_path:18962a50"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on comment-plan typed-gap construction sites (#913/#915): each format!/map_err/? site builds an UnsafeReviewIngestGap::CommentPlan* detail whose exact value is asserted by the colocated comment_plan_* suite (wrong_top_level_type, missing_or_unknown_schema_version, identity_field_gaps, empty_operation_family, whitespace_trust_boundary, pointer_missing_or_file_missing, parent_relative/absolute/symlink/empty pointer rejection). ripr attributes related tests at file granularity and scores the sites weakly exposed although every branch has an exact-value oracle. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:error_path:1c100afe"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan typed-gap construction-site false-negative above: sibling format!/map_err/? probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:error_path:2ae10fac"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan typed-gap construction-site false-negative above: sibling format!/map_err/? probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:error_path:2ae10fac.2"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan typed-gap construction-site false-negative above: sibling format!/map_err/? probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:error_path:2ae10fac.3"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan typed-gap construction-site false-negative above: sibling format!/map_err/? probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:error_path:2ae10fac.4"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan typed-gap construction-site false-negative above: sibling format!/map_err/? probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:error_path:2ae10fac.5"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan typed-gap construction-site false-negative above: sibling format!/map_err/? probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:error_path:2ae10fac.6"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan typed-gap construction-site false-negative above: sibling format!/map_err/? probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:error_path:57e20bd4"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan typed-gap construction-site false-negative above: sibling format!/map_err/? probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:error_path:57e20bd4.2"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan typed-gap construction-site false-negative above: sibling format!/map_err/? probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:error_path:67059460"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan typed-gap construction-site false-negative above: sibling format!/map_err/? probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:error_path:67059460.2"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan typed-gap construction-site false-negative above: sibling format!/map_err/? probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:error_path:ed230762"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan typed-gap construction-site false-negative above: sibling format!/map_err/? probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:error_path:ed230762.2"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan typed-gap construction-site false-negative above: sibling format!/map_err/? probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:error_path:ed230762.3"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan typed-gap construction-site false-negative above: sibling format!/map_err/? probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:error_path:ed230762.4"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan typed-gap construction-site false-negative above: sibling format!/map_err/? probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:error_path:f1fe0f84"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan typed-gap construction-site false-negative above: sibling format!/map_err/? probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:return_value:4beb2247"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on the comment-plan parser return arms (#913/#915): every Err/Ok arm of required_comment_plan_field, parse_comment_plan, and confined_comment_plan_path is asserted by the colocated comment_plan_* tests with exact gap equality (CommentPlanMissingField/InvalidField messages, CommentPlanUnknownSchema found-version, CommentPlanInvalidPointer, canonical Ok target). ripr scores the arms weakly exposed because its file-level test attribution cannot link the exact-value oracles to these functions. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:return_value:4df542a8"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan parser return-arm false-negative above: sibling Err/Ok probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:return_value:4df542a8.2"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan parser return-arm false-negative above: sibling Err/Ok probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:return_value:4df542a8.3"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan parser return-arm false-negative above: sibling Err/Ok probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:return_value:4df542a8.4"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan parser return-arm false-negative above: sibling Err/Ok probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:return_value:5c745419"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan parser return-arm false-negative above: sibling Err/Ok probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:return_value:87bd5f1b"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan parser return-arm false-negative above: sibling Err/Ok probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:return_value:87bd5f1b.2"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan parser return-arm false-negative above: sibling Err/Ok probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:return_value:87bd5f1b.3"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan parser return-arm false-negative above: sibling Err/Ok probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:return_value:87bd5f1b.4"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan parser return-arm false-negative above: sibling Err/Ok probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:return_value:87bd5f1b.5"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan parser return-arm false-negative above: sibling Err/Ok probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:return_value:87bd5f1b.6"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan parser return-arm false-negative above: sibling Err/Ok probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:return_value:9b0cd9e9"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan parser return-arm false-negative above: sibling Err/Ok probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:return_value:d445f10e"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan parser return-arm false-negative above: sibling Err/Ok probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:return_value:d445f10e.2"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan parser return-arm false-negative above: sibling Err/Ok probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:return_value:e1947b0e"
+owner = "ub-review/core"
+reason = "Twin of the comment-plan parser return-arm false-negative above: sibling Err/Ok probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:field_construction:333b7912"
+owner = "ub-review/core"
+reason = "comments[index] prefix construction in required_comment_plan_field (#913/#915): the index parameter feeds the comments[N].field gap message, pinned character-exactly by comment_plan_malformed_entry_is_explicit_field_gap, comment_plan_identity_field_gaps_name_the_missing_entry_field, comment_plan_empty_operation_family_is_explicit_invalid_gap, and comment_plan_whitespace_trust_boundary_is_explicit_invalid_gap. ripr scores the construction weakly exposed because assertions observe the formatted gap value rather than this expression. Content-addressed receipt; re-verify after any edit to src/sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:call_deletion:68394a95"
+owner = "ub-review/core"
+reason = "Repair-queue join identity field (#913/#915): RepairQueueEntry.operation_family is a required serde field and ripr has no static propagation path from the declaration to behavior. The exact (card_id, operation_family) join is pinned by read_repair_queue_indexes_entries_by_card_id and build_unsafe_review_inline_comments_requires_matching_operation_family. Classification: no_static_path. Content-addressed receipt; re-verify after any edit to src/plan_artifacts.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:field_construction:f1a1f758"
+owner = "ub-review/core"
+reason = "Twin of the RepairQueueEntry.operation_family declaration above: same no_static_path class, same join coverage. Content-addressed receipt; re-verify after any edit to src/plan_artifacts.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:call_deletion:acd7c0be"
+owner = "ub-review/core"
+reason = "RepairQueueDisposition::Matched variant declaration (#913/#915): pure enum declaration with no static propagation path; the Matched arm it backs renders only through paths pinned exactly by build_unsafe_review_inline_comments_uses_concrete_repair_queue_suggestion and build_unsafe_review_inline_comments_surfaces_repair_queue_context. Classification: no_static_path. Content-addressed receipt; re-verify after any edit to the repair-queue disposition helpers in src/main.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:match_arm:0acc8f65"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on repair-queue disposition joins (#913/#915): the FamilyMismatch/Missing dispositions of repair_queue_entry_for_comment and the advisory rendering arms of render_repair_queue_advisory are pinned exactly by build_unsafe_review_inline_comments_requires_matching_operation_family (wanted_family present, wrong_family_should_not_join absent, guidance-not-borrowed text, suggestion None) and build_unsafe_review_inline_comments_works_without_repair_queue (no-matching-entry text, suggestion None). ripr's file-level test attribution cites unrelated action/workflow tests instead of these exact oracles. Content-addressed receipt; re-verify after any edit to the repair-queue helpers in src/main.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:match_arm:a404d388"
+owner = "ub-review/core"
+reason = "Twin of the repair-queue disposition join false-negative above: sibling match-arm/return probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to the repair-queue helpers in src/main.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:match_arm:d31316f5"
+owner = "ub-review/core"
+reason = "Twin of the repair-queue disposition join false-negative above: sibling match-arm/return probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to the repair-queue helpers in src/main.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f10afaf2"
+owner = "ub-review/core"
+reason = "Twin of the repair-queue disposition join false-negative above: sibling match-arm/return probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to the repair-queue helpers in src/main.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f10afaf2.2"
+owner = "ub-review/core"
+reason = "Twin of the repair-queue disposition join false-negative above: sibling match-arm/return probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to the repair-queue helpers in src/main.rs."
