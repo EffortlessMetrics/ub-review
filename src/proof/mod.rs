@@ -108,9 +108,24 @@ pub(crate) struct ProofPortfolioArtifact {
     pub(crate) budget_seconds: u64,
     pub(crate) remaining_seconds: u64,
     pub(crate) candidate_count: usize,
+    pub(crate) candidate_tasks: Vec<ProofPortfolioCandidateTask>,
     pub(crate) selected_task_ids: Vec<String>,
     pub(crate) runtime: ProofPortfolioRuntime,
     pub(crate) decisions: Vec<ProofPortfolioDecision>,
+}
+
+/// One task from the broker's full input catalog (test + build candidates),
+/// published inside the portfolio artifact. Post-#852 the deterministic
+/// focused-test/build floor lives only in the broker, so this catalog is the
+/// only place a downstream verifier can resolve portfolio decisions for
+/// tasks the planner lane never listed.
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct ProofPortfolioCandidateTask {
+    pub(crate) id: String,
+    pub(crate) kind: String,
+    pub(crate) required: bool,
+    pub(crate) estimated_cost_sec: u64,
+    pub(crate) request_ids: Vec<String>,
 }
 
 /// The live execution envelope visible to deterministic portfolio selection.
