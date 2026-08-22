@@ -718,23 +718,23 @@ def no_standalone_approval_line(text: str, path: pathlib.Path) -> None:
             fail(f"standalone approval line in {path}:{line_number}: {line!r}")
 
 
+REVIEWER_VALUE_HEADINGS = [
+    "## Reporter summary",
+    "## Findings",
+    "## Confirmed findings",
+    "## Verification questions",
+    "## Test proof",
+    "## Proof results",
+    "## Refuted",
+    "## Parked follow-ups",
+    "## Suggested follow-up",
+    "## Evidence gaps",
+    "## Missing evidence",
+]
+
+
 def has_reviewer_value_heading(body: str) -> bool:
-    return any(
-        heading in body
-        for heading in [
-            "## Decision",
-            "## Findings",
-            "## Confirmed findings",
-            "## Verification questions",
-            "## Test proof",
-            "## Proof results",
-            "## Refuted",
-            "## Parked follow-ups",
-            "## Suggested follow-up",
-            "## Evidence gaps",
-            "## Missing evidence",
-        ]
-    )
+    return any(heading in body for heading in REVIEWER_VALUE_HEADINGS)
 
 
 def require_pr_review_body_policy(
@@ -10150,6 +10150,38 @@ def self_test_noise_rule_phrase_parity_with_rust() -> None:
             )
 
 
+def self_test_reviewer_value_heading_parity_with_rust() -> None:
+    """`pr_body_has_reviewer_value` is mirrored Rust<->Python; heading-set
+    drift between them is exactly how run 32557199857 went red (Rust gained
+    `## Reporter summary` in #696/#678, the mirror never did, and an
+    empty-diff artifact-only packet whose only reviewer content was a
+    reporter editorial failed with 'github-review.json body is missing
+    reviewer-value content'). When the Rust source is present (repo CI /
+    local dev), recompute heading parity; consumer self-test runs without
+    the source skip this check."""
+    rust_path = (
+        pathlib.Path(__file__).resolve().parent.parent / "src/review_compiler.rs"
+    )
+    if not rust_path.is_file():
+        return
+    rust = rust_path.read_text(encoding="utf-8")
+    rust_fn = re.search(r"fn pr_body_has_reviewer_value\(.*?\n}", rust, re.S)
+    if rust_fn is None:
+        fail("reviewer-value parity: rust fn pr_body_has_reviewer_value not found")
+    const_match = re.search(r'REPORTER_SUMMARY_HEADING: &str = "([^"]+)"', rust)
+    if const_match is None:
+        fail("reviewer-value parity: REPORTER_SUMMARY_HEADING const not found")
+    rust_headings = set(re.findall(r'"(## [^"]*)"', rust_fn.group(0)))
+    rust_headings.add(const_match.group(1))
+    python_headings = set(REVIEWER_VALUE_HEADINGS)
+    if rust_headings != python_headings:
+        fail(
+            "reviewer-value heading parity drifted: "
+            f"rust-only={sorted(rust_headings - python_headings)!r} "
+            f"python-only={sorted(python_headings - rust_headings)!r}"
+        )
+
+
 def self_test_issue_capture_contract() -> None:
     """Release lane step 4: the action vocabulary is fail-closed - opened/
     failed_to_open are rejected until the broker exists - and the ledger
@@ -14126,6 +14158,7 @@ def run_self_tests() -> None:
     require_run_mode("intelligent-ci", "self-test intelligent-ci mode")
     self_test_claim_graph_contract()
     self_test_artifact_only_post_receipt_contract()
+    self_test_reviewer_value_heading_parity_with_rust()
     self_test_delivery_transaction_contract()
     if secret_leak_marker("OPENCODE=opencodeSecret123456") != "OPENCODE":
         fail("self-test OPENCODE secret assignment was not detected")
