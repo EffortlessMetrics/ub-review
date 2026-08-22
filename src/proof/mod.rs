@@ -116,9 +116,11 @@ pub(crate) struct ProofPortfolioArtifact {
 
 /// One task from the broker's full input catalog (test + build candidates),
 /// published inside the portfolio artifact. Post-#852 the deterministic
-/// focused-test/build floor lives only in the broker, so this catalog is the
-/// only place a downstream verifier can resolve portfolio decisions for
-/// tasks the planner lane never listed.
+/// floor is broker-selected rather than model-planned, so this catalog lets
+/// a downstream verifier resolve every portfolio decision even for
+/// candidates the planner lane never listed. Content-addressed ids can
+/// legitimately appear in both this catalog and planner output; when they
+/// do, both entries must describe the same work.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct ProofPortfolioCandidateTask {
     pub(crate) id: String,

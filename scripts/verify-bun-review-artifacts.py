@@ -4475,8 +4475,9 @@ def require_proof_intent_timeout(intent: dict, index: int) -> None:
 
 def require_proof_candidate_task_entries(proof_portfolio: dict) -> list[dict]:
     """Validate the broker candidate catalog published inside the portfolio
-    artifact. Post-#852 the deterministic focused-test/build floor lives only
-    in this catalog, so it must be present and well-formed for every
+    artifact. Post-#852 the deterministic focused-test/build floor is
+    broker-owned rather than model-planned, so planner output alone cannot
+    enumerate it; this catalog must be present and well-formed for every
     portfolio decision to be resolvable."""
     candidate_tasks = proof_portfolio.get("candidate_tasks")
     if not isinstance(candidate_tasks, list):
@@ -4558,12 +4559,21 @@ def require_proof_resolution_invariants(
         entry_id = entry.get("id") if isinstance(entry, dict) else None
         if not isinstance(entry_id, str) or not entry_id:
             fail(f"proof portfolio candidate task has no string id: {entry!r}")
-        if entry_id in task_by_id:
-            fail(
-                f"proof portfolio candidate task id {entry_id!r} collides with a planner task"
-            )
         if entry_id in candidate_by_id:
             fail(f"proof portfolio contains duplicate candidate task id {entry_id!r}")
+        planner_task = task_by_id.get(entry_id)
+        # Overlap is normal: both universes derive content-addressed ids from
+        # the same command, so e.g. focused-build tasks legitimately appear in
+        # planner output and in this catalog. The planner task stays the
+        # authority below; the ids only have to describe the same work.
+        if planner_task is not None and not proof_task_kind_matches_decision(
+            planner_task.get("kind"), entry.get("kind")
+        ):
+            fail(
+                f"proof portfolio candidate task {entry_id!r} is kind "
+                f"{entry.get('kind')!r} but the planner task has kind "
+                f"{planner_task.get('kind')!r}"
+            )
         candidate_by_id[entry_id] = entry
 
     decision_by_task: dict[str, dict] = {}
@@ -13943,11 +13953,48 @@ def self_test_proof_planner_resolution_contract() -> None:
             {"selected_task_ids": []},
         ),
     )
+    # Focused-build ids are content-addressed from the same command, so the
+    # same id legitimately appears in planner output and in the broker
+    # catalog; agreement on kind keeps it verifiable.
+    build_planner_task = {
+        "id": "proof-build-81dee1e1dd1f",
+        "kind": "focused-build",
+        "request_ids": [],
+    }
+    require_proof_resolution_invariants(
+        [],
+        [],
+        [build_planner_task],
+        [
+            {
+                **broker_candidate,
+                "id": build_planner_task["id"],
+                "kind": build_planner_task["kind"],
+            }
+        ],
+        [],
+        {},
+    )
+    # Planner tasks carry the focused-test family kind while broker
+    # candidates record the execution mode; that relation is agreement too.
+    require_proof_resolution_invariants(
+        [],
+        [],
+        [{**task, "request_ids": []}],
+        [{**broker_candidate, "id": task["id"]}],
+        [],
+        {},
+    )
     expect_self_test_failure(
         "portfolio candidate id collides with planner task",
-        "collides with a planner task",
+        "but the planner task has kind 'focused-test'",
         lambda: require_proof_resolution_invariants(
-            [], [], [{**task, "request_ids": []}], [{**broker_candidate, "id": task["id"]}], [], {},
+            [],
+            [],
+            [{**task, "request_ids": []}],
+            [{**broker_candidate, "id": task["id"], "kind": "focused-build"}],
+            [],
+            {},
         ),
     )
     expect_self_test_failure(
