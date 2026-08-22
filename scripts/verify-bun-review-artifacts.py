@@ -4428,8 +4428,14 @@ def require_proof_planner_artifacts(root: pathlib.Path) -> None:
                 fail(
                     f"review/proof_portfolio.json decision {index} missing string field {field}"
                 )
+    candidate_tasks = require_proof_candidate_task_entries(proof_portfolio)
     require_proof_resolution_invariants(
-        proof_requests, proof_intents, proof_tasks, decisions, proof_portfolio
+        proof_requests,
+        proof_intents,
+        proof_tasks,
+        candidate_tasks,
+        decisions,
+        proof_portfolio,
     )
     lines = [line for line in read_text(root / "proof_tasks.ndjson").splitlines() if line.strip()]
     if len(lines) != len(proof_tasks):
@@ -4467,10 +4473,54 @@ def require_proof_intent_timeout(intent: dict, index: int) -> None:
         )
 
 
+def require_proof_candidate_task_entries(proof_portfolio: dict) -> list[dict]:
+    """Validate the broker candidate catalog published inside the portfolio
+    artifact. Post-#852 the deterministic focused-test/build floor is
+    broker-owned rather than model-planned, so planner output alone cannot
+    enumerate it; this catalog must be present and well-formed for every
+    portfolio decision to be resolvable."""
+    candidate_tasks = proof_portfolio.get("candidate_tasks")
+    if not isinstance(candidate_tasks, list):
+        fail("review/proof_portfolio.json candidate_tasks is not an array")
+    for index, entry in enumerate(candidate_tasks):
+        if not isinstance(entry, dict):
+            fail(f"review/proof_portfolio.json candidate task {index} is not an object")
+        for field in ("id", "kind"):
+            if not isinstance(entry.get(field), str) or not entry[field]:
+                fail(
+                    f"review/proof_portfolio.json candidate task {index} "
+                    f"missing string field {field}"
+                )
+        if not isinstance(entry.get("required"), bool):
+            fail(
+                f"review/proof_portfolio.json candidate task {index} required is not a boolean"
+            )
+        estimated_cost_sec = entry.get("estimated_cost_sec")
+        if (
+            not isinstance(estimated_cost_sec, int)
+            or isinstance(estimated_cost_sec, bool)
+            or estimated_cost_sec < 0
+        ):
+            fail(
+                f"review/proof_portfolio.json candidate task {index} "
+                f"estimated_cost_sec is invalid"
+            )
+        request_ids = entry.get("request_ids")
+        if not isinstance(request_ids, list) or not all(
+            isinstance(request_id, str) and request_id for request_id in request_ids
+        ):
+            fail(
+                f"review/proof_portfolio.json candidate task {index} "
+                f"request_ids is not a string array"
+            )
+    return candidate_tasks
+
+
 def require_proof_resolution_invariants(
     proof_requests: list[dict],
     proof_intents: list[dict],
     proof_tasks: list[dict],
+    candidate_tasks: list[dict],
     decisions: list[dict],
     proof_portfolio: dict,
 ) -> None:
@@ -4504,11 +4554,34 @@ def require_proof_resolution_invariants(
                 )
             request_task_ids.setdefault(request_id, set()).add(task_id)
 
+    candidate_by_id: dict[str, dict] = {}
+    for index, entry in enumerate(candidate_tasks):
+        entry_id = entry.get("id") if isinstance(entry, dict) else None
+        if not isinstance(entry_id, str) or not entry_id:
+            fail(f"proof portfolio candidate task has no string id: {entry!r}")
+        if entry_id in candidate_by_id:
+            fail(f"proof portfolio contains duplicate candidate task id {entry_id!r}")
+        planner_task = task_by_id.get(entry_id)
+        # Overlap is normal: both universes derive content-addressed ids from
+        # the same command, so e.g. focused-build tasks legitimately appear in
+        # planner output and in this catalog. The planner task stays the
+        # authority below; the ids only have to describe the same work.
+        if planner_task is not None and not proof_task_kind_matches_decision(
+            planner_task.get("kind"), entry.get("kind")
+        ):
+            fail(
+                f"proof portfolio candidate task {entry_id!r} is kind "
+                f"{entry.get('kind')!r} but the planner task has kind "
+                f"{planner_task.get('kind')!r}"
+            )
+        candidate_by_id[entry_id] = entry
+
     decision_by_task: dict[str, dict] = {}
     for decision in decisions:
         task_id = decision["task_id"]
         task = task_by_id.get(task_id)
-        if task is None:
+        candidate = candidate_by_id.get(task_id)
+        if task is None and candidate is None:
             fail(f"proof portfolio decision references unknown task {task_id!r}")
         if task_id in decision_by_task:
             fail(f"proof portfolio contains duplicate decision for task {task_id!r}")
@@ -4517,20 +4590,23 @@ def require_proof_resolution_invariants(
             isinstance(request_id, str) and request_id for request_id in decision_request_ids
         ):
             fail(f"proof portfolio decision request_ids is not a string array: {decision!r}")
-        task_request_ids = task.get("request_ids", [])
+        task_request_ids = (task if task is not None else candidate).get("request_ids", [])
         if decision_request_ids != task_request_ids:
             fail(
                 f"proof portfolio decision request_ids do not match task {task_id!r}"
             )
-        if not proof_task_kind_matches_decision(task.get("kind"), decision.get("kind")):
-            fail(f"proof portfolio decision kind does not match task {task_id!r}")
+        if task is not None:
+            if not proof_task_kind_matches_decision(task.get("kind"), decision.get("kind")):
+                fail(f"proof portfolio decision kind does not match task {task_id!r}")
+        elif decision.get("kind") != candidate.get("kind"):
+            fail(f"proof portfolio decision kind does not match candidate task {task_id!r}")
         decision_by_task[task_id] = decision
 
     selected_task_ids = proof_portfolio.get("selected_task_ids", [])
     if len(selected_task_ids) != len(set(selected_task_ids)):
         fail("review/proof_portfolio.json selected_task_ids contains duplicates")
     for task_id in selected_task_ids:
-        if task_id not in task_by_id:
+        if task_id not in task_by_id and task_id not in candidate_by_id:
             fail(f"review/proof_portfolio.json selects unknown task {task_id!r}")
         if task_id not in decision_by_task:
             fail(f"review/proof_portfolio.json selects task without a decision {task_id!r}")
@@ -13815,18 +13891,20 @@ def self_test_proof_planner_resolution_contract() -> None:
     }
     portfolio = {"selected_task_ids": ["proof-task-1"]}
     require_proof_resolution_invariants(
-        [request], [intent], [task], [decision], portfolio
+        [request], [intent], [task], [], [decision], portfolio
     )
     require_proof_resolution_invariants(
         [request],
         [intent],
         [task],
+        [],
         [{**decision, "kind": "focused-red-green"}],
         portfolio,
     )
     require_proof_resolution_invariants(
         [request],
         [{"status": "requested", "resolved_request_ids": ["proof-request-1"]}],
+        [],
         [],
         [],
         {"selected_task_ids": []},
@@ -13836,7 +13914,112 @@ def self_test_proof_planner_resolution_contract() -> None:
         [{"status": "unsupported", "resolved_request_ids": ["proof-request-1"]}],
         [],
         [],
+        [],
         {"selected_task_ids": []},
+    )
+
+    # Post-#852 the deterministic focused floor is broker-owned: a portfolio
+    # with zero planner tasks must still verify through candidate_tasks.
+    broker_candidate = {
+        "id": "proof-head-1e1c35087a81",
+        "kind": "focused-head",
+        "required": False,
+        "estimated_cost_sec": 120,
+        "request_ids": [],
+    }
+    broker_decision = {
+        **decision,
+        "task_id": broker_candidate["id"],
+        "kind": broker_candidate["kind"],
+        "request_ids": [],
+    }
+    require_proof_resolution_invariants(
+        [],
+        [],
+        [],
+        [broker_candidate],
+        [broker_decision],
+        {"selected_task_ids": [broker_candidate["id"]]},
+    )
+    expect_self_test_failure(
+        "portfolio unknown broker-only task",
+        "references unknown task 'proof-head-missing'",
+        lambda: require_proof_resolution_invariants(
+            [],
+            [],
+            [],
+            [broker_candidate],
+            [{**broker_decision, "task_id": "proof-head-missing"}],
+            {"selected_task_ids": []},
+        ),
+    )
+    # Focused-build ids are content-addressed from the same command, so the
+    # same id legitimately appears in planner output and in the broker
+    # catalog; agreement on kind keeps it verifiable.
+    build_planner_task = {
+        "id": "proof-build-81dee1e1dd1f",
+        "kind": "focused-build",
+        "request_ids": [],
+    }
+    require_proof_resolution_invariants(
+        [],
+        [],
+        [build_planner_task],
+        [
+            {
+                **broker_candidate,
+                "id": build_planner_task["id"],
+                "kind": build_planner_task["kind"],
+            }
+        ],
+        [],
+        {},
+    )
+    # Planner tasks carry the focused-test family kind while broker
+    # candidates record the execution mode; that relation is agreement too.
+    require_proof_resolution_invariants(
+        [],
+        [],
+        [{**task, "request_ids": []}],
+        [{**broker_candidate, "id": task["id"]}],
+        [],
+        {},
+    )
+    expect_self_test_failure(
+        "portfolio candidate id collides with planner task",
+        "but the planner task has kind 'focused-test'",
+        lambda: require_proof_resolution_invariants(
+            [],
+            [],
+            [{**task, "request_ids": []}],
+            [{**broker_candidate, "id": task["id"], "kind": "focused-build"}],
+            [],
+            {},
+        ),
+    )
+    expect_self_test_failure(
+        "portfolio candidate kind mismatch",
+        "kind does not match candidate task",
+        lambda: require_proof_resolution_invariants(
+            [],
+            [],
+            [],
+            [broker_candidate],
+            [{**broker_decision, "kind": "focused-build"}],
+            {"selected_task_ids": []},
+        ),
+    )
+    expect_self_test_failure(
+        "portfolio missing candidate catalog",
+        "candidate_tasks is not an array",
+        lambda: require_proof_candidate_task_entries({}),
+    )
+    expect_self_test_failure(
+        "portfolio invalid candidate estimated cost",
+        "estimated_cost_sec is invalid",
+        lambda: require_proof_candidate_task_entries(
+            {"candidate_tasks": [{**broker_candidate, "estimated_cost_sec": -1}]}
+        ),
     )
 
     expect_self_test_failure(
@@ -13846,6 +14029,7 @@ def self_test_proof_planner_resolution_contract() -> None:
             [request],
             [{**intent, "resolved_request_ids": ["proof-request-missing"]}],
             [task],
+            [],
             [decision],
             portfolio,
         ),
@@ -13857,6 +14041,7 @@ def self_test_proof_planner_resolution_contract() -> None:
             [request],
             [{**intent, "status": "unsupported_target"}],
             [task],
+            [],
             [decision],
             portfolio,
         ),
@@ -13873,6 +14058,7 @@ def self_test_proof_planner_resolution_contract() -> None:
             [request],
             [intent],
             [task],
+            [],
             [{**decision, "kind": "focused-build"}],
             portfolio,
         ),

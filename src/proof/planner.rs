@@ -455,6 +455,12 @@ pub(crate) fn write_proof_request_artifacts(
             budget_seconds: total_budget.max_total_seconds,
             remaining_seconds: portfolio.remaining_seconds,
             candidate_count: test_candidates.len() + build_candidates.len(),
+            candidate_tasks: portfolio_candidate_tasks(
+                &test_candidates,
+                &build_candidates,
+                remaining_budget,
+                proof_requests,
+            ),
             selected_task_ids,
             runtime: portfolio.runtime,
             decisions: portfolio.decisions,
@@ -964,6 +970,19 @@ mod tests {
         assert!(proof_plan.contains("merged_requests=2"));
         ensure!(proof_portfolio["schema"] == PROOF_PORTFOLIO_SCHEMA);
         ensure!(proof_portfolio["decisions"].is_array());
+        let portfolio_candidates = proof_portfolio["candidate_tasks"]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("portfolio candidate catalog is not an array"))?;
+        ensure!(
+            proof_portfolio["candidate_count"].as_u64() == Some(portfolio_candidates.len() as u64)
+        );
+        for entry in portfolio_candidates {
+            ensure!(entry["id"].as_str().is_some_and(|id| !id.is_empty()));
+            ensure!(entry["kind"].as_str().is_some_and(|kind| !kind.is_empty()));
+            ensure!(entry["required"].is_boolean());
+            ensure!(entry["estimated_cost_sec"].is_number());
+            ensure!(entry["request_ids"].is_array());
+        }
         ensure!(proof_portfolio["remaining_seconds"].is_number());
         ensure!(proof_portfolio["runtime"]["cpus"].is_number());
         ensure!(proof_portfolio["runtime"]["deadline_remaining_seconds"].is_number());

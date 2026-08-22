@@ -89,7 +89,7 @@ pub(crate) fn run_initial_diff_proof_broker_v0(
         budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
-    write_proof_portfolio_selection_artifact(out, diff, budget, tasks.len(), final_selection)?;
+    write_proof_portfolio_selection_artifact(out, diff, budget, &tasks, &[], &[], final_selection)?;
     Ok(result)
 }
 
@@ -251,10 +251,34 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
     candidates.extend((0..input.test_tasks.len()).map(PortfolioCandidate::Test));
     candidates.extend((0..input.build_tasks.len()).map(PortfolioCandidate::Build));
     candidates.sort_by(|left, right| {
-        portfolio_priority(right, &input, &request_by_id)
-            .cmp(&portfolio_priority(left, &input, &request_by_id))
-            .then_with(|| portfolio_cost(left, &input).cmp(&portfolio_cost(right, &input)))
-            .then_with(|| portfolio_id(left, &input).cmp(portfolio_id(right, &input)))
+        portfolio_priority(*right, input.test_tasks, input.build_tasks, &request_by_id)
+            .cmp(&portfolio_priority(
+                *left,
+                input.test_tasks,
+                input.build_tasks,
+                &request_by_id,
+            ))
+            .then_with(|| {
+                portfolio_cost(
+                    *left,
+                    input.test_tasks,
+                    input.build_tasks,
+                    input.budget.per_command_timeout_sec,
+                )
+                .cmp(&portfolio_cost(
+                    *right,
+                    input.test_tasks,
+                    input.build_tasks,
+                    input.budget.per_command_timeout_sec,
+                ))
+            })
+            .then_with(|| {
+                portfolio_id(*left, input.test_tasks, input.build_tasks).cmp(portfolio_id(
+                    *right,
+                    input.test_tasks,
+                    input.build_tasks,
+                ))
+            })
     });
 
     let mut selected_tests = Vec::new();
@@ -269,19 +293,28 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
         .min(input.runtime.deadline_remaining_seconds);
 
     for candidate in candidates {
-        let (task_id, kind, request_ids, required, estimated_cost_sec) =
-            portfolio_metadata(&candidate, &input, &request_by_id);
+        let candidate_task = portfolio_candidate_fields(
+            candidate,
+            input.test_tasks,
+            input.build_tasks,
+            input.budget.per_command_timeout_sec,
+            &request_by_id,
+        );
         let exact_receipts = input
             .proof_receipts
             .iter()
-            .filter(|receipt| receipt_matches_task_on_head(receipt, &task_id, input.head))
+            .filter(|receipt| receipt_matches_task_on_head(receipt, &candidate_task.id, input.head))
             .collect::<Vec<_>>();
         let shared_receipts = if exact_receipts.is_empty() {
             input
                 .proof_receipts
                 .iter()
                 .filter(|receipt| {
-                    receipt_matches_shared_request_on_head(receipt, &request_ids, input.head)
+                    receipt_matches_shared_request_on_head(
+                        receipt,
+                        &candidate_task.request_ids,
+                        input.head,
+                    )
                 })
                 .collect::<Vec<_>>()
         } else {
@@ -289,8 +322,8 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
         };
         if !exact_receipts.is_empty() {
             decisions.push(portfolio_decision(
-                task_id,
-                kind,
+                candidate_task.id,
+                candidate_task.kind,
                 "answered_by_existing_receipt",
                 format!(
                     "task already has terminal receipt(s): {}",
@@ -301,9 +334,9 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
                         .join(", ")
                 ),
                 PortfolioDecisionMetadata {
-                    required,
-                    estimated_cost_sec,
-                    request_ids,
+                    required: candidate_task.required,
+                    estimated_cost_sec: candidate_task.estimated_cost_sec,
+                    request_ids: candidate_task.request_ids,
                     receipt_ids: exact_receipts
                         .iter()
                         .map(|receipt| receipt.id.clone())
@@ -314,8 +347,8 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
         }
         if !shared_receipts.is_empty() {
             decisions.push(portfolio_decision(
-                task_id,
-                kind,
+                candidate_task.id,
+                candidate_task.kind,
                 "satisfied_by_existing_evidence",
                 format!(
                     "receipt(s) answer the shared request: {}",
@@ -326,9 +359,9 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
                         .join(", ")
                 ),
                 PortfolioDecisionMetadata {
-                    required,
-                    estimated_cost_sec,
-                    request_ids,
+                    required: candidate_task.required,
+                    estimated_cost_sec: candidate_task.estimated_cost_sec,
+                    request_ids: candidate_task.request_ids,
                     receipt_ids: shared_receipts
                         .iter()
                         .map(|receipt| receipt.id.clone())
@@ -337,16 +370,16 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
             ));
             continue;
         }
-        if !candidate_has_open_request(&request_ids, &request_by_id) {
+        if !candidate_has_open_request(&candidate_task.request_ids, &request_by_id) {
             decisions.push(portfolio_decision(
-                task_id,
-                kind,
+                candidate_task.id,
+                candidate_task.kind,
                 "superseded",
                 "all associated requests are already terminal or unavailable".to_owned(),
                 PortfolioDecisionMetadata {
-                    required,
-                    estimated_cost_sec,
-                    request_ids,
+                    required: candidate_task.required,
+                    estimated_cost_sec: candidate_task.estimated_cost_sec,
+                    request_ids: candidate_task.request_ids,
                     receipt_ids: Vec::new(),
                 },
             ));
@@ -355,17 +388,18 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
 
         let is_test = matches!(candidate, PortfolioCandidate::Test(_));
         let file_available = !is_test
-            || selected_files.contains(portfolio_file(&candidate, &input))
+            || selected_files.contains(portfolio_file(candidate, input.test_tasks))
             || selected_files.len() < input.budget.max_focused_test_files;
         let fits_box = portfolio_fits_box(&input.runtime.lease, &input.runtime);
         let fits_budget = used_tasks < input.budget.max_focused_tests
             && file_available
-            && used_seconds.saturating_add(estimated_cost_sec) <= effective_max_seconds;
+            && used_seconds.saturating_add(candidate_task.estimated_cost_sec)
+                <= effective_max_seconds;
         if fits_budget && fits_box {
             used_tasks += 1;
-            used_seconds = used_seconds.saturating_add(estimated_cost_sec);
+            used_seconds = used_seconds.saturating_add(candidate_task.estimated_cost_sec);
             if is_test {
-                selected_files.insert(portfolio_file(&candidate, &input).to_owned());
+                selected_files.insert(portfolio_file(candidate, input.test_tasks).to_owned());
                 if let PortfolioCandidate::Test(index) = candidate {
                     selected_tests.push(input.test_tasks[index].clone());
                 }
@@ -373,24 +407,25 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
                 selected_builds.push(input.build_tasks[index].clone());
             }
             decisions.push(portfolio_decision(
-                task_id,
-                kind,
+                candidate_task.id,
+                candidate_task.kind,
                 "selected",
                 format!(
                     "selected for value-ranked execution; serves {} request(s)",
-                    request_ids.len()
+                    candidate_task.request_ids.len()
                 ),
                 PortfolioDecisionMetadata {
-                    required,
-                    estimated_cost_sec,
-                    request_ids,
+                    required: candidate_task.required,
+                    estimated_cost_sec: candidate_task.estimated_cost_sec,
+                    request_ids: candidate_task.request_ids,
                     receipt_ids: Vec::new(),
                 },
             ));
         } else {
             let deadline_cannot_fit = input.runtime.deadline_remaining_seconds
                 < input.budget.max_total_seconds
-                && estimated_cost_sec > effective_max_seconds.saturating_sub(used_seconds);
+                && candidate_task.estimated_cost_sec
+                    > effective_max_seconds.saturating_sub(used_seconds);
             let status = if !fits_box {
                 "declined_for_box_capacity"
             } else if effective_max_seconds == 0
@@ -406,20 +441,20 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
                 "proof lease does not fit the current runner capacity"
             } else if effective_max_seconds == 0 || deadline_cannot_fit {
                 "hard deadline has expired; proof was safely wound down"
-            } else if required {
+            } else if candidate_task.required {
                 "required floor could not fit inside the remaining safe proof budget"
             } else {
                 "remaining budget was reserved for higher-value candidates"
             };
             decisions.push(portfolio_decision(
-                task_id,
-                kind,
+                candidate_task.id,
+                candidate_task.kind,
                 status,
                 reason.to_owned(),
                 PortfolioDecisionMetadata {
-                    required,
-                    estimated_cost_sec,
-                    request_ids,
+                    required: candidate_task.required,
+                    estimated_cost_sec: candidate_task.estimated_cost_sec,
+                    request_ids: candidate_task.request_ids,
                     receipt_ids: Vec::new(),
                 },
             ));
@@ -449,18 +484,15 @@ fn portfolio_fits_box(lease: &ProofLeaseBudget, runtime: &ProofPortfolioRuntime)
 }
 
 fn portfolio_priority(
-    candidate: &PortfolioCandidate,
-    input: &ProofPortfolioInput<'_>,
+    candidate: PortfolioCandidate,
+    test_tasks: &[FocusedTestTask],
+    build_tasks: &[FocusedBuildTask],
     request_by_id: &BTreeMap<&str, &ProofRequest>,
 ) -> (u8, u8, usize) {
-    let request_ids = portfolio_request_ids(candidate, input);
-    let required = request_ids.iter().any(|id| {
-        request_by_id
-            .get(id.as_str())
-            .is_some_and(|request| request.required)
-    });
+    let request_ids = portfolio_request_ids(candidate, test_tasks, build_tasks);
+    let required = portfolio_required(request_ids, request_by_id);
     let kind_rank = match candidate {
-        PortfolioCandidate::Test(index) => match input.test_tasks[*index].mode {
+        PortfolioCandidate::Test(index) => match test_tasks[index].mode {
             FocusedProofMode::RedGreen => 3,
             FocusedProofMode::HeadOnly => 2,
         },
@@ -469,70 +501,127 @@ fn portfolio_priority(
     (u8::from(required), kind_rank, request_ids.len())
 }
 
-fn portfolio_cost(candidate: &PortfolioCandidate, input: &ProofPortfolioInput<'_>) -> u64 {
+fn portfolio_cost(
+    candidate: PortfolioCandidate,
+    test_tasks: &[FocusedTestTask],
+    build_tasks: &[FocusedBuildTask],
+    per_command_timeout_sec: u64,
+) -> u64 {
     match candidate {
         PortfolioCandidate::Test(index) => {
-            let task = &input.test_tasks[*index];
+            let task = &test_tasks[index];
             task.timeout_sec
-                .unwrap_or(input.budget.per_command_timeout_sec)
-                .min(input.budget.per_command_timeout_sec)
+                .unwrap_or(per_command_timeout_sec)
+                .min(per_command_timeout_sec)
                 .saturating_mul(task.mode.command_count())
         }
-        PortfolioCandidate::Build(index) => input.build_tasks[*index]
-            .timeout_sec
-            .min(input.budget.per_command_timeout_sec),
+        PortfolioCandidate::Build(index) => {
+            build_tasks[index].timeout_sec.min(per_command_timeout_sec)
+        }
     }
 }
 
-fn portfolio_id<'a>(candidate: &PortfolioCandidate, input: &ProofPortfolioInput<'a>) -> &'a str {
+fn portfolio_id<'a>(
+    candidate: PortfolioCandidate,
+    test_tasks: &'a [FocusedTestTask],
+    build_tasks: &'a [FocusedBuildTask],
+) -> &'a str {
     match candidate {
-        PortfolioCandidate::Test(index) => &input.test_tasks[*index].id,
-        PortfolioCandidate::Build(index) => &input.build_tasks[*index].id,
+        PortfolioCandidate::Test(index) => &test_tasks[index].id,
+        PortfolioCandidate::Build(index) => &build_tasks[index].id,
     }
 }
 
-fn portfolio_file<'a>(candidate: &PortfolioCandidate, input: &ProofPortfolioInput<'a>) -> &'a str {
+fn portfolio_kind(candidate: PortfolioCandidate, test_tasks: &[FocusedTestTask]) -> &'static str {
     match candidate {
-        PortfolioCandidate::Test(index) => &input.test_tasks[*index].file,
+        PortfolioCandidate::Test(index) => match test_tasks[index].mode {
+            FocusedProofMode::HeadOnly => "focused-head",
+            FocusedProofMode::RedGreen => "focused-red-green",
+        },
+        PortfolioCandidate::Build(_) => "focused-build",
+    }
+}
+
+fn portfolio_file(candidate: PortfolioCandidate, test_tasks: &[FocusedTestTask]) -> &str {
+    match candidate {
+        PortfolioCandidate::Test(index) => &test_tasks[index].file,
         PortfolioCandidate::Build(_) => "<build>",
     }
 }
 
 fn portfolio_request_ids<'a>(
-    candidate: &PortfolioCandidate,
-    input: &ProofPortfolioInput<'a>,
+    candidate: PortfolioCandidate,
+    test_tasks: &'a [FocusedTestTask],
+    build_tasks: &'a [FocusedBuildTask],
 ) -> &'a [String] {
     match candidate {
-        PortfolioCandidate::Test(index) => &input.test_tasks[*index].request_ids,
-        PortfolioCandidate::Build(index) => &input.build_tasks[*index].request_ids,
+        PortfolioCandidate::Test(index) => &test_tasks[index].request_ids,
+        PortfolioCandidate::Build(index) => &build_tasks[index].request_ids,
     }
 }
 
-fn portfolio_metadata(
-    candidate: &PortfolioCandidate,
-    input: &ProofPortfolioInput<'_>,
+fn portfolio_required(
+    request_ids: &[String],
     request_by_id: &BTreeMap<&str, &ProofRequest>,
-) -> (String, String, Vec<String>, bool, u64) {
-    let request_ids = portfolio_request_ids(candidate, input);
-    let required = request_ids.iter().any(|id| {
+) -> bool {
+    request_ids.iter().any(|id| {
         request_by_id
             .get(id.as_str())
             .is_some_and(|request| request.required)
-    });
-    let kind = match candidate {
-        PortfolioCandidate::Test(index) => match input.test_tasks[*index].mode {
-            FocusedProofMode::HeadOnly => "focused-head",
-            FocusedProofMode::RedGreen => "focused-red-green",
-        },
-        PortfolioCandidate::Build(_) => "focused-build",
-    };
-    (
-        portfolio_id(candidate, input).to_owned(),
-        kind.to_owned(),
-        request_ids.to_vec(),
-        required,
-        portfolio_cost(candidate, input),
-    )
+    })
+}
+
+/// The published identity of one broker candidate. Both the decision records
+/// and the artifact's `candidate_tasks` entries are built from this single
+/// derivation so their metadata cannot drift.
+fn portfolio_candidate_fields(
+    candidate: PortfolioCandidate,
+    test_tasks: &[FocusedTestTask],
+    build_tasks: &[FocusedBuildTask],
+    per_command_timeout_sec: u64,
+    request_by_id: &BTreeMap<&str, &ProofRequest>,
+) -> ProofPortfolioCandidateTask {
+    let request_ids = portfolio_request_ids(candidate, test_tasks, build_tasks).to_vec();
+    ProofPortfolioCandidateTask {
+        id: portfolio_id(candidate, test_tasks, build_tasks).to_owned(),
+        kind: portfolio_kind(candidate, test_tasks).to_owned(),
+        required: portfolio_required(&request_ids, request_by_id),
+        estimated_cost_sec: portfolio_cost(
+            candidate,
+            test_tasks,
+            build_tasks,
+            per_command_timeout_sec,
+        ),
+        request_ids,
+    }
+}
+
+/// Publish the full input catalog (test + build candidates, not just the
+/// selected subset) in decision order so every portfolio decision resolves
+/// against a known task even when its planner lane listed nothing.
+pub(crate) fn portfolio_candidate_tasks(
+    test_tasks: &[FocusedTestTask],
+    build_tasks: &[FocusedBuildTask],
+    budget: ProofBudget,
+    proof_requests: &[ProofRequest],
+) -> Vec<ProofPortfolioCandidateTask> {
+    let request_by_id = proof_requests
+        .iter()
+        .map(|request| (request.id.as_str(), request))
+        .collect::<BTreeMap<_, _>>();
+    (0..test_tasks.len())
+        .map(PortfolioCandidate::Test)
+        .chain((0..build_tasks.len()).map(PortfolioCandidate::Build))
+        .map(|candidate| {
+            portfolio_candidate_fields(
+                candidate,
+                test_tasks,
+                build_tasks,
+                budget.per_command_timeout_sec,
+                &request_by_id,
+            )
+        })
+        .collect()
 }
 
 fn candidate_has_open_request(
@@ -750,7 +839,9 @@ where
         out,
         diff,
         final_budget,
-        test_candidates.len() + build_candidates.len(),
+        &test_candidates,
+        &build_candidates,
+        proof_requests,
         final_selection,
     )?;
     Ok(result)
@@ -860,7 +951,9 @@ pub(crate) fn run_follow_up_proof_broker_v0(
             out,
             diff,
             final_budget,
-            test_candidates.len() + build_candidates.len(),
+            &test_candidates,
+            &build_candidates,
+            proof_requests,
             final_selection,
         )?;
     }
@@ -875,7 +968,9 @@ fn write_proof_portfolio_selection_artifact(
     out: &Path,
     diff: &DiffContext,
     budget: ProofBudget,
-    candidate_count: usize,
+    test_candidates: &[FocusedTestTask],
+    build_candidates: &[FocusedBuildTask],
+    proof_requests: &[ProofRequest],
     selection: ProofPortfolioSelection,
 ) -> Result<()> {
     let review_dir = out.join("review");
@@ -886,12 +981,15 @@ fn write_proof_portfolio_selection_artifact(
         .map(|task| task.id.clone())
         .chain(selection.build_tasks.iter().map(|task| task.id.clone()))
         .collect::<Vec<_>>();
+    let candidate_tasks =
+        portfolio_candidate_tasks(test_candidates, build_candidates, budget, proof_requests);
     let artifact = ProofPortfolioArtifact {
         schema: PROOF_PORTFOLIO_SCHEMA,
         phase: "broker-final",
         head: diff.head.clone(),
         budget_seconds: budget.max_total_seconds,
-        candidate_count,
+        candidate_count: candidate_tasks.len(),
+        candidate_tasks,
         selected_task_ids,
         remaining_seconds: selection.remaining_seconds,
         runtime: selection.runtime,
@@ -1920,9 +2018,26 @@ mod tests {
                 .as_array()
                 .is_some_and(|tasks| tasks.is_empty())
         );
+        let candidate_tasks = artifact["candidate_tasks"]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("missing final portfolio candidate catalog"))?;
+        ensure!(candidate_tasks.len() == 2);
+        ensure!(
+            artifact["candidate_count"].as_u64() == Some(candidate_tasks.len() as u64),
+            "candidate_count must equal the published candidate catalog"
+        );
         let decisions = artifact["decisions"]
             .as_array()
             .ok_or_else(|| anyhow::anyhow!("missing final portfolio decisions"))?;
+        for decision in decisions {
+            let task_id = decision["task_id"].as_str().unwrap_or_default();
+            let entry = candidate_tasks
+                .iter()
+                .find(|entry| entry["id"].as_str() == Some(task_id))
+                .ok_or_else(|| anyhow::anyhow!("decision {task_id} missing from catalog"))?;
+            ensure!(entry["kind"] == decision["kind"]);
+            ensure!(entry["request_ids"] == decision["request_ids"]);
+        }
         let test_decision = decisions
             .iter()
             .find(|decision| decision["task_id"].as_str() == Some(test_candidates[0].id.as_str()))

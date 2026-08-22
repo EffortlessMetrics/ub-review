@@ -24869,3 +24869,544 @@ kind = "exposure_gap"
 finding_id = "probe:src_gate.rs:field_construction:0dd3914f"
 owner = "ub-review/core"
 reason = "Twin of the src/gate.rs GateOutcome field-declaration no_static_path lead above (ripr-swarm#1055): same new-field family, same unit/integration/verifier pinning. Re-verify after any edit to GateOutcome."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:9260a7e4"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:29bdb1c8"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:7cb8c1b8"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:28790c97"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:d4a75b14"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:bc7cef99"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:29bdb1c8.2"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:cfaafb08"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:7fd18852"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:28790c97.2"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:df4b4e24"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:d4a75b14.2"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:28790c97.3"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:df4b4e24.2"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:7cb8c1b8.2"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:521167f7"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:cfaafb08.2"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:873a9026"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:side_effect:76d64bb5"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:4ef19d25"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:2cf3f658"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:side_effect:5377ac70"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:873a9026.2"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:side_effect:76d64bb5.2"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:4ef19d25.2"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:2cf3f658.2"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:side_effect:5377ac70.2"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:873a9026.3"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:side_effect:76d64bb5.3"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:4ef19d25.3"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:2cf3f658.3"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:side_effect:5377ac70.3"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:651120e4"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:6880774f"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:873a9026.4"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:side_effect:76d64bb5.4"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:4ef19d25.4"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:2cf3f658.4"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:side_effect:5377ac70.4"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:0bc9ec57"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:873a9026.5"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:side_effect:76d64bb5.5"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:4ef19d25.5"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:2cf3f658.5"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:side_effect:5377ac70.5"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:ee3622a2"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:2cce38fd"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:match_arm:14b06108"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:match_arm:5c4391ac"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:match_arm:40fd807d"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:match_arm:26793a7b"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:match_arm:176511cf"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:2a54234a"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:match_arm:6dc7dac4"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:93bcdd87"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:3da25795"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:23267606"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:return_value:44404828"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:d22a58fc"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:c5428e1b"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:bcd7eeeb"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:6e5ebe4f"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:61e83711"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:return_value:090d8658"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:16db723f"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:1ebb0e2b"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:cccafd5e"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:9e8200c2"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:cdc28f10"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:23688c25"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:3a9a7f38"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:02a61998"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:bc7d80ef"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: select_proof_portfolio decision records and the artifact's candidate_tasks entries now share a single portfolio_candidate_fields derivation. The colocated broker tests pin every decision status (answered_by_existing_receipt, satisfied_by_existing_evidence, superseded, selected, deferred_by_safe_wind_down, declined_for_box_capacity) with request_ids and receipt_ids through run_request_proof_broker_v0_with_runners fixtures, and broker_replans_after_discriminating_test_receipt_before_build_wind_down asserts each written decision matches its candidate_tasks entry kind-for-kind and request-id-for-request-id. RIPR 0.10.0 still classifies these intermediate construction/effect sites as weakly exposed or reachable_unrevealed because the discriminating assertions live at the artifact boundary rather than on the intermediate expression. Content-addressed receipt; re-verify after edits to src/proof/broker.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_mod.rs:call_deletion:d627fbd3"
+owner = "ub-review/core"
+reason = "Portfolio candidate catalog: the additive candidate_tasks field and the ProofPortfolioCandidateTask entry struct are Serialize-only serde surfaces, so RIPR 0.10.0 finds no static test path through the derived impls. The written review/proof_portfolio.json catalog is pinned by the colocated planner test asserting candidate_count equals the catalog length and each entry carries id/kind/required/estimated_cost_sec/request_ids, and by the artifact verifier candidate-task validation plus self-test fixtures. Content-addressed receipt; re-verify after edits to src/proof/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_mod.rs:field_construction:c289bafa"
+owner = "ub-review/core"
+reason = "Portfolio candidate catalog: the additive candidate_tasks field and the ProofPortfolioCandidateTask entry struct are Serialize-only serde surfaces, so RIPR 0.10.0 finds no static test path through the derived impls. The written review/proof_portfolio.json catalog is pinned by the colocated planner test asserting candidate_count equals the catalog length and each entry carries id/kind/required/estimated_cost_sec/request_ids, and by the artifact verifier candidate-task validation plus self-test fixtures. Content-addressed receipt; re-verify after edits to src/proof/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_mod.rs:call_deletion:9b9227ae"
+owner = "ub-review/core"
+reason = "Portfolio candidate catalog: the additive candidate_tasks field and the ProofPortfolioCandidateTask entry struct are Serialize-only serde surfaces, so RIPR 0.10.0 finds no static test path through the derived impls. The written review/proof_portfolio.json catalog is pinned by the colocated planner test asserting candidate_count equals the catalog length and each entry carries id/kind/required/estimated_cost_sec/request_ids, and by the artifact verifier candidate-task validation plus self-test fixtures. Content-addressed receipt; re-verify after edits to src/proof/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_mod.rs:call_deletion:e17102b1"
+owner = "ub-review/core"
+reason = "Portfolio candidate catalog: the additive candidate_tasks field and the ProofPortfolioCandidateTask entry struct are Serialize-only serde surfaces, so RIPR 0.10.0 finds no static test path through the derived impls. The written review/proof_portfolio.json catalog is pinned by the colocated planner test asserting candidate_count equals the catalog length and each entry carries id/kind/required/estimated_cost_sec/request_ids, and by the artifact verifier candidate-task validation plus self-test fixtures. Content-addressed receipt; re-verify after edits to src/proof/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_mod.rs:field_construction:6826e589"
+owner = "ub-review/core"
+reason = "Portfolio candidate catalog: the additive candidate_tasks field and the ProofPortfolioCandidateTask entry struct are Serialize-only serde surfaces, so RIPR 0.10.0 finds no static test path through the derived impls. The written review/proof_portfolio.json catalog is pinned by the colocated planner test asserting candidate_count equals the catalog length and each entry carries id/kind/required/estimated_cost_sec/request_ids, and by the artifact verifier candidate-task validation plus self-test fixtures. Content-addressed receipt; re-verify after edits to src/proof/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_mod.rs:call_deletion:f390fc3c"
+owner = "ub-review/core"
+reason = "Portfolio candidate catalog: the additive candidate_tasks field and the ProofPortfolioCandidateTask entry struct are Serialize-only serde surfaces, so RIPR 0.10.0 finds no static test path through the derived impls. The written review/proof_portfolio.json catalog is pinned by the colocated planner test asserting candidate_count equals the catalog length and each entry carries id/kind/required/estimated_cost_sec/request_ids, and by the artifact verifier candidate-task validation plus self-test fixtures. Content-addressed receipt; re-verify after edits to src/proof/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_mod.rs:field_construction:4c11f24f"
+owner = "ub-review/core"
+reason = "Portfolio candidate catalog: the additive candidate_tasks field and the ProofPortfolioCandidateTask entry struct are Serialize-only serde surfaces, so RIPR 0.10.0 finds no static test path through the derived impls. The written review/proof_portfolio.json catalog is pinned by the colocated planner test asserting candidate_count equals the catalog length and each entry carries id/kind/required/estimated_cost_sec/request_ids, and by the artifact verifier candidate-task validation plus self-test fixtures. Content-addressed receipt; re-verify after edits to src/proof/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_mod.rs:call_deletion:2e3dc137"
+owner = "ub-review/core"
+reason = "Portfolio candidate catalog: the additive candidate_tasks field and the ProofPortfolioCandidateTask entry struct are Serialize-only serde surfaces, so RIPR 0.10.0 finds no static test path through the derived impls. The written review/proof_portfolio.json catalog is pinned by the colocated planner test asserting candidate_count equals the catalog length and each entry carries id/kind/required/estimated_cost_sec/request_ids, and by the artifact verifier candidate-task validation plus self-test fixtures. Content-addressed receipt; re-verify after edits to src/proof/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_mod.rs:field_construction:db0e22c5"
+owner = "ub-review/core"
+reason = "Portfolio candidate catalog: the additive candidate_tasks field and the ProofPortfolioCandidateTask entry struct are Serialize-only serde surfaces, so RIPR 0.10.0 finds no static test path through the derived impls. The written review/proof_portfolio.json catalog is pinned by the colocated planner test asserting candidate_count equals the catalog length and each entry carries id/kind/required/estimated_cost_sec/request_ids, and by the artifact verifier candidate-task validation plus self-test fixtures. Content-addressed receipt; re-verify after edits to src/proof/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_mod.rs:call_deletion:5a23e049"
+owner = "ub-review/core"
+reason = "Portfolio candidate catalog: the additive candidate_tasks field and the ProofPortfolioCandidateTask entry struct are Serialize-only serde surfaces, so RIPR 0.10.0 finds no static test path through the derived impls. The written review/proof_portfolio.json catalog is pinned by the colocated planner test asserting candidate_count equals the catalog length and each entry carries id/kind/required/estimated_cost_sec/request_ids, and by the artifact verifier candidate-task validation plus self-test fixtures. Content-addressed receipt; re-verify after edits to src/proof/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_mod.rs:field_construction:5efe5b6e"
+owner = "ub-review/core"
+reason = "Portfolio candidate catalog: the additive candidate_tasks field and the ProofPortfolioCandidateTask entry struct are Serialize-only serde surfaces, so RIPR 0.10.0 finds no static test path through the derived impls. The written review/proof_portfolio.json catalog is pinned by the colocated planner test asserting candidate_count equals the catalog length and each entry carries id/kind/required/estimated_cost_sec/request_ids, and by the artifact verifier candidate-task validation plus self-test fixtures. Content-addressed receipt; re-verify after edits to src/proof/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_mod.rs:call_deletion:2ac1907b"
+owner = "ub-review/core"
+reason = "Portfolio candidate catalog: the additive candidate_tasks field and the ProofPortfolioCandidateTask entry struct are Serialize-only serde surfaces, so RIPR 0.10.0 finds no static test path through the derived impls. The written review/proof_portfolio.json catalog is pinned by the colocated planner test asserting candidate_count equals the catalog length and each entry carries id/kind/required/estimated_cost_sec/request_ids, and by the artifact verifier candidate-task validation plus self-test fixtures. Content-addressed receipt; re-verify after edits to src/proof/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_mod.rs:field_construction:47ece7c7"
+owner = "ub-review/core"
+reason = "Portfolio candidate catalog: the additive candidate_tasks field and the ProofPortfolioCandidateTask entry struct are Serialize-only serde surfaces, so RIPR 0.10.0 finds no static test path through the derived impls. The written review/proof_portfolio.json catalog is pinned by the colocated planner test asserting candidate_count equals the catalog length and each entry carries id/kind/required/estimated_cost_sec/request_ids, and by the artifact verifier candidate-task validation plus self-test fixtures. Content-addressed receipt; re-verify after edits to src/proof/mod.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:field_construction:ffb5ec4d"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: write_proof_request_artifacts now publishes candidate_tasks next to the decisions it already wrote, derived through the same shared candidate-field derivation the broker uses. proof_request_artifacts_group_duplicate_commands_once asserts the written catalog array, candidate_count consistency, and per-entry id/kind/required/estimated_cost_sec/request_ids shapes. RIPR 0.10.0 reports the construction site as weakly exposed because assertions observe the written artifact rather than this expression. Content-addressed receipt; re-verify after edits to src/proof/planner.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:field_construction:7149d34d"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: write_proof_request_artifacts now publishes candidate_tasks next to the decisions it already wrote, derived through the same shared candidate-field derivation the broker uses. proof_request_artifacts_group_duplicate_commands_once asserts the written catalog array, candidate_count consistency, and per-entry id/kind/required/estimated_cost_sec/request_ids shapes. RIPR 0.10.0 reports the construction site as weakly exposed because assertions observe the written artifact rather than this expression. Content-addressed receipt; re-verify after edits to src/proof/planner.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:field_construction:9302bda2"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: write_proof_request_artifacts now publishes candidate_tasks next to the decisions it already wrote, derived through the same shared candidate-field derivation the broker uses. proof_request_artifacts_group_duplicate_commands_once asserts the written catalog array, candidate_count consistency, and per-entry id/kind/required/estimated_cost_sec/request_ids shapes. RIPR 0.10.0 reports the construction site as weakly exposed because assertions observe the written artifact rather than this expression. Content-addressed receipt; re-verify after edits to src/proof/planner.rs or a RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:field_construction:e375491b"
+owner = "ub-review/proof-broker"
+reason = "Portfolio candidate catalog: write_proof_request_artifacts now publishes candidate_tasks next to the decisions it already wrote, derived through the same shared candidate-field derivation the broker uses. proof_request_artifacts_group_duplicate_commands_once asserts the written catalog array, candidate_count consistency, and per-entry id/kind/required/estimated_cost_sec/request_ids shapes. RIPR 0.10.0 reports the construction site as weakly exposed because assertions observe the written artifact rather than this expression. Content-addressed receipt; re-verify after edits to src/proof/planner.rs or a RIPR upgrade."
+
