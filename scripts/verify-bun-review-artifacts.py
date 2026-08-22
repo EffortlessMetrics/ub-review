@@ -910,6 +910,29 @@ def effective_summary_only_body(root: pathlib.Path) -> str:
     return value if value in SUMMARY_ONLY_BODY_VALUES else "suppress"
 
 
+def effective_posting_engine(root: pathlib.Path) -> str:
+    """`[review].posting_engine` from the run's effective-config.json.
+
+    Missing, unreadable, or empty values fall back to the conservative Rust
+    default `github-step-summary`, which keeps the post-receipt expectation
+    strict for packets that never declared an artifact-only posture.
+    """
+    path = root / "effective-config.json"
+    if not path.is_file():
+        return "github-step-summary"
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+        return "github-step-summary"
+    if not isinstance(config, dict):
+        return "github-step-summary"
+    review = config.get("review")
+    if not isinstance(review, dict):
+        return "github-step-summary"
+    value = review.get("posting_engine")
+    return value if isinstance(value, str) and value else "github-step-summary"
+
+
 def pr_body_bullet_count(body: str) -> int:
     return sum(
         1
@@ -9147,6 +9170,11 @@ def require_post_receipt(root: pathlib.Path) -> None:
                 and skip.get("review_payload_status") in SKIPPED_REVIEW_PAYLOAD_STATUSES
             ):
                 return
+        # An artifact-only run contract is prepare-only: the workflow never
+        # invokes the post command, so neither receipt can exist. The packet's
+        # own effective config is the evidence of that posture.
+        if effective_posting_engine(root) == "artifact":
+            return
         fail("neither post-result.json nor post-error.json exists")
     if post_result.exists():
         receipt = load_json(post_result)
@@ -9673,6 +9701,34 @@ def require_no_secret_markers(root: pathlib.Path) -> None:
 def write_self_test_json(path: pathlib.Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value), encoding="utf-8")
+
+
+def self_test_artifact_only_post_receipt_contract() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        write_self_test_json(
+            root / "effective-config.json",
+            {"review": {"posting_engine": "artifact"}},
+        )
+        require_post_receipt(root)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        write_self_test_json(
+            root / "effective-config.json",
+            {"review": {"posting_engine": "github-step-summary"}},
+        )
+        expect_self_test_failure(
+            "artifact-only post receipt",
+            "neither post-result.json nor post-error.json exists",
+            lambda: require_post_receipt(root),
+        )
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        expect_self_test_failure(
+            "missing effective-config post receipt",
+            "neither post-result.json nor post-error.json exists",
+            lambda: require_post_receipt(root),
+        )
 
 
 def self_test_empty_candidate_artifacts_without_dir() -> None:
@@ -14069,6 +14125,7 @@ def run_self_tests() -> None:
     require_run_mode("review-byok", "self-test review-byok mode")
     require_run_mode("intelligent-ci", "self-test intelligent-ci mode")
     self_test_claim_graph_contract()
+    self_test_artifact_only_post_receipt_contract()
     self_test_delivery_transaction_contract()
     if secret_leak_marker("OPENCODE=opencodeSecret123456") != "OPENCODE":
         fail("self-test OPENCODE secret assignment was not detected")
