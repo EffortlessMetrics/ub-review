@@ -20,7 +20,11 @@ jobs:
   backfill:
     name: Quality telemetry backfill
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The lane downloads up to 100 gate packets sequentially, so runtime
+    # scales with gate traffic in the window; 20 minutes killed both the
+    # 2026-08-22 scheduled run (24m38s) and its manual re-dispatch (20m41s)
+    # after the release-queue merges grew that traffic.
+    timeout-minutes: 45
     env:
       UB_REVIEW_QUALITY_WINDOW_DAYS: 30
     steps:
