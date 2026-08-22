@@ -3862,7 +3862,7 @@ fn cmd_post(args: PostArgs) -> Result<()> {
 fn read_repair_queue(
     sensor_dir: &Path,
     artifacts: &UnsafeReviewGate,
-) -> std::collections::BTreeMap<String, RepairQueueEntry> {
+) -> std::collections::BTreeMap<(String, String), RepairQueueEntry> {
     let out_dir = sensor_dir.join(UNSAFE_REVIEW_OUTPUT_SUBDIR);
     let rq_path = artifacts
         .artifacts
@@ -3877,14 +3877,92 @@ fn read_repair_queue(
         Ok(r) => r,
         Err(_) => return std::collections::BTreeMap::new(),
     };
-    let mut by_card: std::collections::BTreeMap<String, RepairQueueEntry> =
+    let mut by_card_and_family: std::collections::BTreeMap<(String, String), RepairQueueEntry> =
         std::collections::BTreeMap::new();
     for entries in rq.buckets.into_values() {
         for entry in entries {
-            by_card.entry(entry.card_id.clone()).or_insert(entry);
+            let key = (entry.card_id.clone(), entry.operation_family.clone());
+            by_card_and_family.entry(key).or_insert(entry);
         }
     }
-    by_card
+    by_card_and_family
+}
+
+fn repair_queue_entry_for_comment<'a>(
+    entry: &UnsafeReviewCommentPlanEntry,
+    repair_queue: &'a std::collections::BTreeMap<(String, String), RepairQueueEntry>,
+) -> RepairQueueDisposition<'a> {
+    let (Some(card_id), Some(operation_family)) =
+        (entry.card_id.as_deref(), entry.operation_family.as_deref())
+    else {
+        return RepairQueueDisposition::Missing;
+    };
+    if let Some(repair_entry) = repair_queue.get(&(card_id.to_owned(), operation_family.to_owned()))
+    {
+        return RepairQueueDisposition::Matched(repair_entry);
+    }
+    if repair_queue
+        .keys()
+        .any(|(candidate_card_id, _)| candidate_card_id == card_id)
+    {
+        RepairQueueDisposition::FamilyMismatch
+    } else {
+        RepairQueueDisposition::Missing
+    }
+}
+
+enum RepairQueueDisposition<'a> {
+    Matched(&'a RepairQueueEntry),
+    Missing,
+    FamilyMismatch,
+}
+
+fn render_repair_queue_advisory(
+    entry: &UnsafeReviewCommentPlanEntry,
+    repair_queue: &std::collections::BTreeMap<(String, String), RepairQueueEntry>,
+) -> (String, String, Option<String>) {
+    let family_label = entry
+        .operation_family
+        .as_deref()
+        .map(|family| format!("\n\n**Operation family**: `{family}`"))
+        .unwrap_or_default();
+    match repair_queue_entry_for_comment(entry, repair_queue) {
+        RepairQueueDisposition::Matched(rq_entry) => {
+            let bucket = rq_entry
+                .bucket_reason
+                .as_deref()
+                .unwrap_or("see repair-queue.json");
+            let operation_line = rq_entry
+                .operation
+                .as_deref()
+                .map(|op| format!("\n\n**Operation**: `{op}`"))
+                .unwrap_or_default();
+            let evidence_lines = rq_entry
+                .missing_evidence
+                .iter()
+                .map(|e| format!("  - {e}"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            let rq_context = if evidence_lines.is_empty() {
+                format!("\n\n**Repair class**: {bucket}{operation_line}")
+            } else {
+                format!(
+                    "\n\n**Repair class**: {bucket}{operation_line}\n\n**Missing evidence**:\n{evidence_lines}"
+                )
+            };
+            (family_label, rq_context, rq_entry.suggestion())
+        }
+        RepairQueueDisposition::Missing => (
+            family_label,
+            "\n\n**Repair guidance**: no matching repair-queue entry for this card and operation family; no suggestion emitted.".to_owned(),
+            None,
+        ),
+        RepairQueueDisposition::FamilyMismatch => (
+            family_label,
+            "\n\n**Repair guidance**: repair-queue entry exists for this card but a different operation family; guidance is not borrowed across families and no suggestion emitted.".to_owned(),
+            None,
+        ),
+    }
 }
 
 /// Build `GitHubReviewComment` entries from unsafe-review `comment-plan.json`
@@ -3959,41 +4037,12 @@ fn build_unsafe_review_inline_comments(
             .as_deref()
             .map(|id| format!(" (`{id}`)"))
             .unwrap_or_default();
-        // Optional: if the repair queue has an entry for this card, surface the
-        // bucket reason, operation, and missing evidence as additional context
-        // (guidance only, not a suggestion block).
-        let rq_entry = entry.card_id.as_deref().and_then(|id| repair_queue.get(id));
-        let rq_context = rq_entry
-            .map(|rq_entry| {
-                let bucket = rq_entry
-                    .bucket_reason
-                    .as_deref()
-                    .unwrap_or("see repair-queue.json");
-                let operation_line = rq_entry
-                    .operation
-                    .as_deref()
-                    .map(|op| format!("\n\n**Operation**: `{op}`"))
-                    .unwrap_or_default();
-                let evidence_lines = rq_entry
-                    .missing_evidence
-                    .iter()
-                    .map(|e| format!("  - {e}"))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                if evidence_lines.is_empty() {
-                    format!("\n\n**Repair class**: {bucket}{operation_line}")
-                } else {
-                    format!(
-                        "\n\n**Repair class**: {bucket}{operation_line}\n\n**Missing evidence**:\n{evidence_lines}"
-                    )
-                }
-            })
-            .unwrap_or_default();
-        let suggestion = rq_entry.and_then(RepairQueueEntry::suggestion);
+        let (family_label, rq_context, suggestion) =
+            render_repair_queue_advisory(entry, &repair_queue);
         let body = format!(
             "[unsafe-review]{card_label} **{gap}**\n\n\
              **Next action**: {action}\n\n\
-             **Trust boundary** (advisory): {trust}{rq_context}\n\n\
+             **Trust boundary** (advisory): {trust}{family_label}{rq_context}\n\n\
              _Suggestion sourced from unsafe-review advisory output. \
              Apply only after reviewer verification. \
              Inline comments are advisory — they do not change the merge decision._"
@@ -4077,34 +4126,8 @@ fn unsafe_review_comment_plan_candidates(
             .map(|id| format!(" (`{id}`)"))
             .unwrap_or_default();
         let trust = entry.trust_boundary.as_deref().unwrap_or(gate_trust);
-        let rq_entry = entry.card_id.as_deref().and_then(|id| repair_queue.get(id));
-        let rq_context = rq_entry
-            .map(|rq_entry| {
-                let bucket = rq_entry
-                    .bucket_reason
-                    .as_deref()
-                    .unwrap_or("see repair-queue.json");
-                let operation_line = rq_entry
-                    .operation
-                    .as_deref()
-                    .map(|op| format!("\n\n**Operation**: `{op}`"))
-                    .unwrap_or_default();
-                let evidence_lines = rq_entry
-                    .missing_evidence
-                    .iter()
-                    .map(|e| format!("  - {e}"))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                if evidence_lines.is_empty() {
-                    format!("\n\n**Repair class**: {bucket}{operation_line}")
-                } else {
-                    format!(
-                        "\n\n**Repair class**: {bucket}{operation_line}\n\n**Missing evidence**:\n{evidence_lines}"
-                    )
-                }
-            })
-            .unwrap_or_default();
-        let suggestion = rq_entry.and_then(RepairQueueEntry::suggestion);
+        let (family_label, rq_context, suggestion) =
+            render_repair_queue_advisory(entry, &repair_queue);
         // The 155-character advisory footer this template used to repeat on
         // every card was pure boilerplate on a source line and pushed the
         // standard card past `INLINE_COMMENT_MAX_REVIEWER_CHARS`. The advisory
@@ -4114,7 +4137,7 @@ fn unsafe_review_comment_plan_candidates(
             &format!(
                 "**{gap}**{card_label}\n\n\
                  **Next action**: {action}\n\n\
-                 **Trust boundary** (advisory): {trust}{rq_context}\n\n\
+                 **Trust boundary** (advisory): {trust}{family_label}{rq_context}\n\n\
                  _Advisory: verify before applying._"
             ),
             1_100,
@@ -7971,7 +7994,11 @@ max_new_unsuppressed_findings = 0
         fs::create_dir_all(&gate_dir)?;
         fs::write(
             gate_dir.join("unsafe-review-gate.json"),
-            r#"{"schema_version":"unsafe-review-gate/v1","status":"advisory"}"#,
+            r#"{"schema_version":"unsafe-review-gate/v1","status":"advisory","artifacts":{"comment_plan":"comment-plan.json"}}"#,
+        )?;
+        fs::write(
+            gate_dir.join("comment-plan.json"),
+            r#"{"schema_version":"0.1","comments":[]}"#,
         )?;
 
         let issues = collect_sensor_evidence_issues(&out, &plan);
@@ -18215,8 +18242,13 @@ index 1111111..2222222 100644
             r#"{
                 "schema_version": "unsafe-review-gate/v1",
                 "status": "advisory",
+                "artifacts": {"comment_plan": "comment-plan.json"},
                 "required_floor_wall_seconds": 45.25
             }"#,
+        )?;
+        fs::write(
+            unsafe_review_dir.join("comment-plan.json"),
+            r#"{"schema_version":"0.1","comments":[]}"#,
         )?;
 
         let mut review = test_review_artifacts();
@@ -23781,7 +23813,23 @@ index 1111111..2222222 100644
         )?;
         fs::write(
             out_dir.join("comment-plan.json"),
-            r#"[{"card_id": "c1", "path": "src/ffi.rs", "line": 99, "changed_line": true, "coverage_gap": "transmute without invariant check", "confirmation_state": "unconfirmed"}]"#,
+            r#"{
+                "schema_version": "0.1",
+                "tool": "unsafe-review",
+                "mode": "plan_only",
+                "policy": "advisory",
+                "comments": [{
+                    "card_id": "c1",
+                    "path": "src/ffi.rs",
+                    "line": 99,
+                    "changed_line": true,
+                    "coverage_gap": "transmute without invariant check",
+                    "confirmation_state": "unconfirmed",
+                    "operation_family": "transmute",
+                    "trust_boundary": "static unsafe-review coverage evidence; not proof, not a merge verdict"
+                }],
+                "trust_boundary": "static unsafe-review coverage evidence; not proof, not a merge verdict"
+            }"#,
         )?;
         let block = super::render_unsafe_review_lane_evidence(&sensor_dir, "ok");
         assert!(block.contains("advisory"), "trust boundary must appear");
@@ -23842,7 +23890,45 @@ index 1111111..2222222 100644
                 "tool_version": "0.3.4"
             }"#,
         )?;
-        fs::write(out_dir.join("comment-plan.json"), comment_plan_json)?;
+        // Keep the call sites compact while writing the real 0.3.x object
+        // envelope.  The older fixtures below pass only the comments array;
+        // this test helper adds the producer envelope and its required
+        // identity fields.  Production ingestion never performs this
+        // compatibility conversion.
+        let legacy_entries: serde_json::Value = serde_json::from_str(comment_plan_json)?;
+        let Some(entries) = legacy_entries.as_array() else {
+            anyhow::bail!("comment-plan fixture must contain an entries array");
+        };
+        let comments = entries
+            .iter()
+            .map(|entry| {
+                let mut object = entry.as_object().cloned().unwrap_or_default();
+                object
+                    .entry("operation_family".to_owned())
+                    .or_insert_with(|| serde_json::Value::String("unknown".to_owned()));
+                object
+                    .entry("trust_boundary".to_owned())
+                    .or_insert_with(|| {
+                        serde_json::Value::String(
+                        "static unsafe-review coverage evidence; not proof, not a merge verdict"
+                            .to_owned(),
+                    )
+                    });
+                serde_json::Value::Object(object)
+            })
+            .collect::<Vec<_>>();
+        let envelope = serde_json::json!({
+            "schema_version": "0.1",
+            "tool": "unsafe-review",
+            "mode": "plan_only",
+            "policy": "advisory",
+            "comments": comments,
+            "trust_boundary": "static unsafe-review coverage evidence; not proof, not a merge verdict"
+        });
+        fs::write(
+            out_dir.join("comment-plan.json"),
+            serde_json::to_vec_pretty(&envelope)?,
+        )?;
         if let Some(rq) = repair_queue_json {
             fs::write(out_dir.join("repair-queue.json"), rq)?;
         }
@@ -24059,7 +24145,8 @@ index 1111111..2222222 100644
                 "changed_line": true,
                 "coverage_gap": "raw_pointer_read without alignment guard",
                 "selection_reason": "changed line in unsafe block",
-                "confirmation_state": "unconfirmed"
+                "confirmation_state": "unconfirmed",
+                "operation_family": "unknown"
             }]"#,
             Some(
                 r#"{
@@ -24067,6 +24154,7 @@ index 1111111..2222222 100644
                 "buckets": {
                     "repairable_by_guard": [{
                         "card_id": "card-compiler-suggest",
+                        "operation_family": "unknown",
                         "bucket_reason": "guard_evidence_missing",
                         "applicable_edit": {
                             "suggestion_text": "let header = guarded_header_read(ptr)?;"
@@ -24255,6 +24343,7 @@ index 1111111..2222222 100644
             "buckets": {
                 "repairable_by_guard": [{
                     "card_id": "card-001",
+                    "operation_family": "unknown",
                     "class": "guard_missing",
                     "priority": "high",
                     "confidence": "medium",
@@ -24278,6 +24367,7 @@ index 1111111..2222222 100644
                 "changed_line": true,
                 "coverage_gap": "raw_pointer_read without alignment guard",
                 "confirmation_state": "unconfirmed",
+                "operation_family": "unknown",
                 "trust_boundary": "static unsafe-review coverage evidence; not proof, not a merge verdict"
             }]"#,
             Some(repair_queue),
@@ -24320,6 +24410,54 @@ index 1111111..2222222 100644
         Ok(())
     }
 
+    #[test]
+    fn build_unsafe_review_inline_comments_requires_matching_operation_family() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        let repair_queue = r#"{
+            "schema_version": "0.1",
+            "buckets": {
+                "repairable_by_guard": [{
+                    "card_id": "card-family",
+                    "operation_family": "other_family",
+                    "bucket_reason": "wrong_family_should_not_join",
+                    "operation": "unsafe { *ptr }"
+                }]
+            }
+        }"#;
+        write_inline_comment_fixtures(
+            &out_dir,
+            r#"[{
+                "card_id": "card-family",
+                "path": "src/lib.rs",
+                "line": 8,
+                "changed_line": true,
+                "coverage_gap": "family-specific guard missing",
+                "confirmation_state": "unconfirmed",
+                "operation_family": "wanted_family",
+                "trust_boundary": "static unsafe-review coverage evidence; not proof, not a merge verdict"
+            }]"#,
+            Some(repair_queue),
+        )?;
+        let comments = super::build_unsafe_review_inline_comments(
+            &sensor_dir,
+            &std::collections::BTreeSet::new(),
+            &unsafe_review_right_side_lines("src/lib.rs", 8),
+            8,
+        );
+        assert_eq!(comments.len(), 1);
+        assert!(comments[0].body.contains("wanted_family"));
+        assert!(!comments[0].body.contains("wrong_family_should_not_join"));
+        assert!(
+            comments[0]
+                .body
+                .contains("different operation family; guidance is not borrowed")
+        );
+        assert!(comments[0].suggestion.is_none());
+        Ok(())
+    }
+
     /// Future repair-queue producers may provide concrete replacement text.
     /// Only then can ub-review prepare a GitHub suggestion block; guidance
     /// fields alone are still never promoted into edits.
@@ -24335,6 +24473,7 @@ index 1111111..2222222 100644
             "buckets": {
                 "repairable_by_guard": [{
                     "card_id": "card-suggest-001",
+                    "operation_family": "unknown",
                     "operation": "unsafe { ptr.cast::<Header>().read() }",
                     "missing_evidence": ["Missing visible local guard"],
                     "bucket_reason": "guard_evidence_missing",
@@ -24352,7 +24491,8 @@ index 1111111..2222222 100644
                 "changed_line": true,
                 "coverage_gap": "raw_pointer_read without alignment guard",
                 "selection_reason": "changed line in unsafe block",
-                "confirmation_state": "unconfirmed"
+                "confirmation_state": "unconfirmed",
+                "operation_family": "unknown"
             }]"#,
             Some(repair_queue),
         )?;
@@ -24413,6 +24553,11 @@ index 1111111..2222222 100644
         );
         assert_eq!(comments[0].path, "src/ffi.rs");
         assert_eq!(comments[0].line, 12);
+        assert!(
+            comments[0]
+                .body
+                .contains("no matching repair-queue entry for this card and operation family")
+        );
         assert!(comments[0].suggestion.is_none());
         Ok(())
     }
@@ -24553,8 +24698,15 @@ index 1111111..2222222 100644
             r#"{
                 "schema_version": "unsafe-review-gate/v1",
                 "status": "advisory",
-                "artifacts": {"repair_queue": "repair-queue.json"}
+                "artifacts": {
+                    "comment_plan": "comment-plan.json",
+                    "repair_queue": "repair-queue.json"
+                }
             }"#,
+        )?;
+        fs::write(
+            out_dir.join("comment-plan.json"),
+            r#"{"schema_version":"0.1","comments":[]}"#,
         )?;
         fs::write(
             out_dir.join("repair-queue.json"),
@@ -24563,17 +24715,20 @@ index 1111111..2222222 100644
                 "buckets": {
                     "repairable_by_guard": [{
                         "card_id": "cid-1",
+                        "operation_family": "unknown",
                         "operation": "unsafe { *ptr }",
                         "missing_evidence": ["needs alignment proof"],
                         "bucket_reason": "guard_evidence_missing"
                     }],
                     "requires_witness_receipt": [{
                         "card_id": "cid-1",
+                        "operation_family": "unknown",
                         "operation": "unsafe { *ptr }",
                         "missing_evidence": ["no witness receipt"],
                         "bucket_reason": "witness_receipt_missing"
                     }, {
                         "card_id": "cid-2",
+                        "operation_family": "unknown",
                         "operation": "unsafe { slice::from_raw_parts(p, n) }",
                         "missing_evidence": ["length not verified"],
                         "bucket_reason": "witness_receipt_missing"
@@ -24589,7 +24744,7 @@ index 1111111..2222222 100644
         assert_eq!(map.len(), 2, "two distinct card_ids expected");
         // cid-1 should keep the first bucket hit (repairable_by_guard).
         let e1 = map
-            .get("cid-1")
+            .get(&("cid-1".to_owned(), "unknown".to_owned()))
             .ok_or_else(|| anyhow::anyhow!("cid-1 missing"))?;
         assert_eq!(
             e1.bucket_reason.as_deref(),
@@ -24599,7 +24754,7 @@ index 1111111..2222222 100644
         assert_eq!(e1.missing_evidence.len(), 1);
         // cid-2 only appears in requires_witness_receipt.
         let e2 = map
-            .get("cid-2")
+            .get(&("cid-2".to_owned(), "unknown".to_owned()))
             .ok_or_else(|| anyhow::anyhow!("cid-2 missing"))?;
         assert_eq!(e2.bucket_reason.as_deref(), Some("witness_receipt_missing"));
         Ok(())
@@ -24619,8 +24774,15 @@ index 1111111..2222222 100644
             r#"{
                 "schema_version": "unsafe-review-gate/v1",
                 "status": "advisory",
-                "artifacts": {"repair_queue": "repair-queue.json"}
+                "artifacts": {
+                    "comment_plan": "comment-plan.json",
+                    "repair_queue": "repair-queue.json"
+                }
             }"#,
+        )?;
+        fs::write(
+            out_dir.join("comment-plan.json"),
+            r#"{"schema_version":"0.1","comments":[]}"#,
         )?;
         let artifacts = super::read_unsafe_review_artifacts(&sensor_dir)
             .map_err(|gap| anyhow::anyhow!("expected ingested artifacts, got gap: {gap:?}"))?;

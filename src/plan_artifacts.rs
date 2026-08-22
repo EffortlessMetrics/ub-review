@@ -122,6 +122,10 @@ pub(crate) fn resolved_profile_artifact(config: &Config, profile: &Profile) -> s
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct RepairQueueEntry {
     pub(crate) card_id: String,
+    /// Opaque unsafe-review operation family.  Repair joins are keyed by both
+    /// card ID and family so a reused card ID cannot borrow another family's
+    /// guidance.
+    pub(crate) operation_family: String,
     /// Bucket reason explains why this entry landed in its bucket.
     #[serde(default)]
     pub(crate) bucket_reason: Option<String>,
