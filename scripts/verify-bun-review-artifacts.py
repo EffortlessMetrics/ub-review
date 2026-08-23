@@ -4240,6 +4240,11 @@ def follow_up_question_text(disposition: str, evidence_need: str) -> str:
 def expected_candidate_records(review: dict) -> list[dict]:
     candidates: list[dict] = []
     for comment in review.get("inline_comments", []):
+        suggestion = comment.get("suggestion")
+        # Mirrors build_candidate_records in src/candidate.rs: the fingerprint
+        # folds six fields, with an absent click-to-apply suggestion hashed as
+        # the empty string, and the record serializes `suggestion` only when
+        # present.
         fingerprint = hashlib.sha256(
             (
                 "inline-comment\n"
@@ -4247,26 +4252,28 @@ def expected_candidate_records(review: dict) -> list[dict]:
                 f"{comment.get('path')}\n"
                 f"{comment.get('line')}\n"
                 f"{comment.get('body')}\n"
-                f"{comment.get('evidence')}"
+                f"{comment.get('evidence')}\n"
+                f"{suggestion if suggestion is not None else ''}"
             ).encode("utf-8")
         ).hexdigest()
-        candidates.append(
-            {
-                "schema": "ub-review.candidate.v1",
-                "id": f"candidate-{len(candidates):04}-{fingerprint[:12]}",
-                "lane": comment.get("lane"),
-                "source": "inline-comment",
-                "status": "accepted-inline",
-                "disposition": "inline",
-                "severity": comment.get("severity"),
-                "confidence": comment.get("confidence"),
-                "claim": comment.get("body"),
-                "evidence": comment.get("evidence"),
-                "path": comment.get("path"),
-                "line": comment.get("line"),
-                "side": comment.get("side"),
-            }
-        )
+        record = {
+            "schema": "ub-review.candidate.v1",
+            "id": f"candidate-{len(candidates):04}-{fingerprint[:12]}",
+            "lane": comment.get("lane"),
+            "source": "inline-comment",
+            "status": "accepted-inline",
+            "disposition": "inline",
+            "severity": comment.get("severity"),
+            "confidence": comment.get("confidence"),
+            "claim": comment.get("body"),
+            "evidence": comment.get("evidence"),
+            "path": comment.get("path"),
+            "line": comment.get("line"),
+            "side": comment.get("side"),
+        }
+        if suggestion is not None:
+            record["suggestion"] = suggestion
+        candidates.append(record)
     for finding in review.get("summary_only_findings", []):
         fingerprint = hashlib.sha256(
             (
@@ -9819,6 +9826,124 @@ def self_test_missing_nonempty_candidate_dir_fails() -> None:
         require_candidate_artifacts(root, review)
 
 
+def self_test_candidate_record_suggestion_parity_with_rust_contract() -> None:
+    review = {
+        "inline_comments": [
+            {
+                "lane": "architecture",
+                "severity": "medium",
+                "confidence": "high",
+                "path": "src/main.rs",
+                "line": 12,
+                "side": "RIGHT",
+                "body": "Confirm the focused proof reaches the changed branch.",
+                "evidence": "self-test candidate fixture",
+                "suggestion": "assert_eq!(active_len(3), 3);",
+            },
+            {
+                "lane": "tests-oracle",
+                "severity": "low",
+                "confidence": "medium",
+                "path": "src/lib.rs",
+                "line": 7,
+                "side": "RIGHT",
+                "body": "Pin the unchanged default delivery path.",
+                "evidence": "self-test candidate fixture",
+            },
+        ],
+        "summary_only_findings": [
+            {
+                "lane": "contract-mirror",
+                "severity": "low",
+                "confidence": "medium",
+                "reason": "Mirror-only observation without a diff anchor.",
+                "evidence": "self-test candidate fixture",
+            }
+        ],
+    }
+    candidates = expected_candidate_records(review)
+    if len(candidates) != 3:
+        fail("candidate derivation lost or duplicated a review surface")
+    suggested_id_tail = hashlib.sha256(
+        (
+            "inline-comment\n"
+            "architecture\n"
+            "src/main.rs\n"
+            "12\n"
+            "Confirm the focused proof reaches the changed branch.\n"
+            "self-test candidate fixture\n"
+            "assert_eq!(active_len(3), 3);"
+        ).encode("utf-8")
+    ).hexdigest()[:12]
+    if candidates[0]["id"] != f"candidate-0000-{suggested_id_tail}":
+        fail("inline candidate id does not fold the suggestion into the fingerprint")
+    if candidates[0].get("suggestion") != "assert_eq!(active_len(3), 3);":
+        fail("inline candidate record dropped its suggestion surface")
+    if "suggestion" in candidates[1] or "suggestion" in candidates[2]:
+        fail("suggestion surfaced on a candidate whose review comment has none")
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        write_self_test_json(root / "review/candidates.json", candidates)
+        (root / "candidates.ndjson").write_text(
+            "\n".join(json.dumps(candidate) for candidate in candidates) + "\n",
+            encoding="utf-8",
+        )
+        candidate_dir = root / "candidates"
+        candidate_dir.mkdir()
+        for candidate in candidates:
+            write_self_test_json(
+                candidate_dir / f"{sanitize_artifact_name(candidate['id'])}.json",
+                candidate,
+            )
+        require_candidate_artifacts(root, review)
+
+
+def self_test_stale_suggestionless_candidate_fingerprint_fails() -> None:
+    review = {
+        "inline_comments": [
+            {
+                "lane": "architecture",
+                "severity": "medium",
+                "confidence": "high",
+                "path": "src/main.rs",
+                "line": 12,
+                "side": "RIGHT",
+                "body": "Confirm the focused proof reaches the changed branch.",
+                "evidence": "self-test candidate fixture",
+                "suggestion": "assert_eq!(active_len(3), 3);",
+            }
+        ],
+        "summary_only_findings": [],
+    }
+    stale_fingerprint = hashlib.sha256(
+        (
+            "inline-comment\n"
+            f"{review['inline_comments'][0]['lane']}\n"
+            f"{review['inline_comments'][0]['path']}\n"
+            f"{review['inline_comments'][0]['line']}\n"
+            f"{review['inline_comments'][0]['body']}\n"
+            f"{review['inline_comments'][0]['evidence']}"
+        ).encode("utf-8")
+    ).hexdigest()
+    stale = [dict(expected_candidate_records(review)[0])]
+    stale[0]["id"] = f"candidate-0000-{stale_fingerprint[:12]}"
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        write_self_test_json(root / "review/candidates.json", stale)
+        (root / "candidates.ndjson").write_text(
+            "\n".join(json.dumps(candidate) for candidate in stale) + "\n",
+            encoding="utf-8",
+        )
+        candidate_dir = root / "candidates"
+        candidate_dir.mkdir()
+        for candidate in stale:
+            write_self_test_json(
+                candidate_dir / f"{sanitize_artifact_name(candidate['id'])}.json",
+                candidate,
+            )
+        require_candidate_artifacts(root, review)
+
+
 def self_test_coverage_sidecar_receipts() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         root = pathlib.Path(temp_dir)
@@ -14817,6 +14942,12 @@ def run_self_tests() -> None:
         "non-empty candidate artifacts without directory",
         "missing candidates directory",
         self_test_missing_nonempty_candidate_dir_fails,
+    )
+    self_test_candidate_record_suggestion_parity_with_rust_contract()
+    expect_self_test_failure(
+        "candidate fingerprint omitting the suggestion field",
+        "review/candidates.json does not match review candidate surfaces",
+        self_test_stale_suggestionless_candidate_fingerprint_fails,
     )
     self_test_coverage_sidecar_receipts()
     self_test_non_discriminating_routes_as_missing_evidence()
