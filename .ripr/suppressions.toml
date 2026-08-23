@@ -25738,3 +25738,25 @@ kind = "exposure_gap"
 finding_id = "probe:src_main.rs:return_value:f10afaf2.2"
 owner = "ub-review/core"
 reason = "Twin of the repair-queue disposition join false-negative above: sibling match-arm/return probe with identical colocated exact-oracle coverage. Content-addressed receipt; re-verify after any edit to the repair-queue helpers in src/main.rs."
+
+# PR #921 ripr suppression ledger validator batch: content-addressed receipts
+# for the validate_ripr_suppressions error-path and return probes whose
+# colocated temp-root fixtures assert every branch with exact-message oracles.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:8a4f7825"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on the suppressions[i] non-table guard (#921): the as_table().with_context()? error path builds the `must be a table` detail whose exact message is asserted by ripr_suppression_ledger_policy_rejects_non_table_entries. ripr attributes tests at file granularity and scores the site weakly exposed although the branch has an exact-value oracle. Content-addressed receipt; re-verify after any edit to validate_ripr_suppressions in xtask/src/main.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:error_path:11136926"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on the required-field bail (#921): this bail! renders the `missing non-empty string {field}` gap pinned character-exactly by ripr_suppression_ledger_policy_rejects_missing_required_field and ripr_suppression_ledger_policy_rejects_whitespace_only_required_field across every required field name. ripr scores the construction weakly exposed because assertions observe the formatted gap value rather than this expression. Content-addressed receipt; re-verify after any edit to validate_ripr_suppressions in xtask/src/main.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:0d044538"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on validate_ripr_suppressions' Ok arm (#921): the happy-path return is reached only after every structural guard passes, and ripr_suppression_ledger_policy_accepts_well_formed_entries asserts exactly that outcome on a well-formed two-entry ledger, while check_policy wiring keeps returning the populated PolicyReport consumed by policy-check and policy-inventory. ripr scores the arm weakly exposed because its file-level attribution cannot link the fixture to this return. Content-addressed receipt; re-verify after any edit to validate_ripr_suppressions or check_policy in xtask/src/main.rs."

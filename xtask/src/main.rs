@@ -2507,6 +2507,214 @@ mod tests {
         Ok(())
     }
 
+    fn write_ripr_suppressions(root: &Path, text: &str) -> Result<()> {
+        let dir = root.join(".ripr");
+        fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
+        fs::write(dir.join("suppressions.toml"), text)
+            .with_context(|| format!("write {}", root.join(".ripr/suppressions.toml").display()))
+    }
+
+    #[test]
+    fn ripr_suppression_ledger_policy_accepts_well_formed_entries() -> Result<()> {
+        let root = temp_repo_root("ripr-ledger-ok")?;
+        write_ripr_suppressions(
+            &root,
+            r#"
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_demo.rs:call_deletion:aaaa1111"
+owner = "ub-review/core"
+reason = "pinned by colocated exact-oracle coverage"
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_other.rs:return_value:bbbb2222"
+owner = "ub-review/proof-broker"
+reason = "serialize-only surface with artifact-boundary assertions"
+"#,
+        )?;
+
+        validate_ripr_suppressions(&root)?;
+
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
+    #[test]
+    fn ripr_suppression_ledger_policy_rejects_headerless_append() -> Result<()> {
+        let root = temp_repo_root("ripr-ledger-headerless")?;
+        write_ripr_suppressions(
+            &root,
+            r#"schema_version = 1
+
+kind = "exposure_gap"
+finding_id = "probe:src_demo.rs:call_deletion:cccc3333"
+owner = "ub-review/core"
+reason = "orphaned keys outside any table header"
+"#,
+        )?;
+
+        let error = match validate_ripr_suppressions(&root) {
+            Ok(()) => bail!("policy accepted a header-less suppression append"),
+            Err(error) => error,
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("must define a [[suppressions]] array"),
+            "{error:#}"
+        );
+
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
+    #[test]
+    fn ripr_suppression_ledger_policy_rejects_missing_required_field() -> Result<()> {
+        let root = temp_repo_root("ripr-ledger-missing-field")?;
+        write_ripr_suppressions(
+            &root,
+            r#"
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_demo.rs:match_arm:dddd4444"
+owner = ""
+reason = "empty owner violates the suppression-health contract"
+"#,
+        )?;
+
+        let error = match validate_ripr_suppressions(&root) {
+            Ok(()) => bail!("policy accepted an empty required suppression field"),
+            Err(error) => error,
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("missing non-empty string `owner`"),
+            "{error:#}"
+        );
+
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
+    #[test]
+    fn ripr_suppression_ledger_policy_rejects_duplicate_finding_id() -> Result<()> {
+        let root = temp_repo_root("ripr-ledger-duplicate")?;
+        let entry = r#"
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_demo.rs:error_path:eeee5555"
+owner = "ub-review/core"
+reason = "first receipt for this finding identity"
+"#;
+        let duplicate_reason = "second receipt must fail the uniqueness contract";
+        write_ripr_suppressions(
+            &root,
+            &format!(
+                "{entry}[[suppressions]]\nkind = \"exposure_gap\"\nfinding_id = \"probe:src_demo.rs:error_path:eeee5555\"\nowner = \"ub-review/core\"\nreason = \"{duplicate_reason}\"\n"
+            ),
+        )?;
+
+        let error = match validate_ripr_suppressions(&root) {
+            Ok(()) => bail!("policy accepted a duplicate suppression finding_id"),
+            Err(error) => error,
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("duplicate finding_id `probe:src_demo.rs:error_path:eeee5555`"),
+            "{error:#}"
+        );
+
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
+    #[test]
+    fn ripr_suppression_ledger_policy_rejects_non_table_entries() -> Result<()> {
+        let root = temp_repo_root("ripr-ledger-non-table")?;
+        write_ripr_suppressions(&root, "suppressions = [1]\n")?;
+
+        let error = match validate_ripr_suppressions(&root) {
+            Ok(()) => bail!("policy accepted a non-table suppression entry"),
+            Err(error) => error,
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("suppressions[0] must be a table"),
+            "{error:#}"
+        );
+
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
+    #[test]
+    fn ripr_suppression_ledger_policy_rejects_whitespace_only_required_field() -> Result<()> {
+        let root = temp_repo_root("ripr-ledger-whitespace")?;
+        write_ripr_suppressions(
+            &root,
+            r#"
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_demo.rs:return_value:ffff6666"
+owner = "   "
+reason = "whitespace-only owner violates the suppression-health contract"
+"#,
+        )?;
+
+        let error = match validate_ripr_suppressions(&root) {
+            Ok(()) => bail!("policy accepted a whitespace-only required suppression field"),
+            Err(error) => error,
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("missing non-empty string `owner`"),
+            "{error:#}"
+        );
+
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
+    #[test]
+    fn ripr_suppression_ledger_policy_rejects_malformed_toml() -> Result<()> {
+        let root = temp_repo_root("ripr-ledger-bad-toml")?;
+        write_ripr_suppressions(&root, "suppressions = [\n")?;
+
+        let error = match validate_ripr_suppressions(&root) {
+            Ok(()) => bail!("policy accepted malformed TOML"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("as TOML"), "{error:#}");
+
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
+    #[test]
+    fn ripr_suppression_ledger_policy_rejects_non_array_suppressions_key() -> Result<()> {
+        let root = temp_repo_root("ripr-ledger-non-array")?;
+        write_ripr_suppressions(&root, "suppressions = 3\n")?;
+
+        let error = match validate_ripr_suppressions(&root) {
+            Ok(()) => bail!("policy accepted a non-array suppressions key"),
+            Err(error) => error,
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("must define a [[suppressions]] array"),
+            "{error:#}"
+        );
+
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
     #[test]
     fn precommit_out_dir_starts_fresh() -> Result<()> {
         let root = temp_repo_root("precommit-out")?;
@@ -2959,8 +3167,53 @@ fn check_policy(root: &Path) -> Result<PolicyReport> {
     validate_ci_lanes(&policy_dir.join("ci-lanes.toml"), &mut report)?;
     validate_ci_risk_packs(&policy_dir.join("ci-risk-packs.toml"), &mut report)?;
     validate_bun_gate_pin(root)?;
+    validate_ripr_suppressions(root)?;
 
     Ok(report)
+}
+
+/// Strict structural check for the ripr suppression ledger. The hosted gate
+/// tolerates a malformed ledger long enough to publish green runs, which is
+/// how a header-less `[[suppressions]]` append corrupted main between #846
+/// and #850 and stayed broken until #855 repaired it; parse failures here are
+/// loud instead.
+fn validate_ripr_suppressions(root: &Path) -> Result<()> {
+    let path = root.join(".ripr").join("suppressions.toml");
+    let text = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+    let parsed: Value =
+        toml::from_str(&text).with_context(|| format!("parse {} as TOML", path.display()))?;
+    let entries = parsed.get("suppressions").and_then(Value::as_array).with_context(|| {
+        format!(
+            "{} must define a [[suppressions]] array; a header-less append leaves finding_id keys orphaned outside any table",
+            path.display()
+        )
+    })?;
+    let mut seen_finding_ids = BTreeSet::new();
+    for (index, entry) in entries.iter().enumerate() {
+        let table = entry
+            .as_table()
+            .with_context(|| format!("{} suppressions[{index}] must be a table", path.display()))?;
+        for field in ["kind", "finding_id", "owner", "reason"] {
+            let present = table
+                .get(field)
+                .and_then(Value::as_str)
+                .is_some_and(|value| !value.trim().is_empty());
+            if !present {
+                bail!(
+                    "{} suppressions[{index}] missing non-empty string `{field}`",
+                    path.display()
+                );
+            }
+        }
+        let finding_id = table
+            .get("finding_id")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        if !seen_finding_ids.insert(finding_id.to_owned()) {
+            bail!("{} has duplicate finding_id `{finding_id}`", path.display());
+        }
+    }
+    Ok(())
 }
 
 const BUN_GATE_PIN_FILES: &[&str] = &[
