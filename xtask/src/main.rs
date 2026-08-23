@@ -2681,6 +2681,41 @@ reason = "whitespace-only owner violates the suppression-health contract"
     }
 
     #[test]
+    fn ripr_suppression_ledger_policy_rejects_malformed_toml() -> Result<()> {
+        let root = temp_repo_root("ripr-ledger-bad-toml")?;
+        write_ripr_suppressions(&root, "suppressions = [\n")?;
+
+        let error = match validate_ripr_suppressions(&root) {
+            Ok(()) => bail!("policy accepted malformed TOML"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("as TOML"), "{error:#}");
+
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
+    #[test]
+    fn ripr_suppression_ledger_policy_rejects_non_array_suppressions_key() -> Result<()> {
+        let root = temp_repo_root("ripr-ledger-non-array")?;
+        write_ripr_suppressions(&root, "suppressions = 3\n")?;
+
+        let error = match validate_ripr_suppressions(&root) {
+            Ok(()) => bail!("policy accepted a non-array suppressions key"),
+            Err(error) => error,
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("must define a [[suppressions]] array"),
+            "{error:#}"
+        );
+
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
+    #[test]
     fn precommit_out_dir_starts_fresh() -> Result<()> {
         let root = temp_repo_root("precommit-out")?;
         let out_dir = root.join("target/precommit");
