@@ -26,8 +26,6 @@ jobs:
     env:
       CANDIDATE_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
       CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
-      CARGO_TARGET_DIR: ${{ runner.temp }}/ub-review-independent-target
-      RECEIPT_DIR: ${{ runner.temp }}/ub-review-independent-baseline
     steps:
       - name: Checkout exact candidate revision without credentials
         uses: actions/checkout@v5
@@ -36,6 +34,13 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Set isolated runtime paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/ub-review-independent-target" >> "$GITHUB_ENV"
+          echo "RECEIPT_DIR=$RUNNER_TEMP/ub-review-independent-baseline" >> "$GITHUB_ENV"
 
       - name: Verify exact candidate identity
         shell: bash
