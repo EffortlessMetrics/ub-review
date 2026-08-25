@@ -332,6 +332,7 @@ fn cmd_worker(args: WorkerArgs) -> Result<()> {
         env: env_map,
     };
     let lease = ResourceLease {
+        revision: None,
         schema: crate::artifacts::RESOURCE_LEASE_SCHEMA.to_owned(),
         id: format!("worker-lease-{}", request.id),
         kind: kind_str.clone(),
@@ -374,6 +375,7 @@ fn cmd_worker(args: WorkerArgs) -> Result<()> {
     // focused_head_receipt / focused_build_receipt produce, stamped with the
     // base/head identity and requesters from the v2 request.
     let receipt = ProofReceipt {
+        revision: None,
         schema: crate::artifacts::PROOF_RECEIPT_SCHEMA.to_owned(),
         id: request.id.clone(),
         kind: kind_str.clone(),
@@ -520,6 +522,7 @@ mod worker_proof_tests {
             env: BTreeMap::new(),
         };
         let lease = ResourceLease {
+            revision: None,
             schema: crate::artifacts::RESOURCE_LEASE_SCHEMA.to_owned(),
             id: "worker-lease-req-1".to_owned(),
             kind: "focused-test".to_owned(),
@@ -570,6 +573,7 @@ mod worker_proof_tests {
 
         // Assemble the canonical ProofReceipt exactly as cmd_worker does.
         let receipt = ProofReceipt {
+            revision: None,
             schema: crate::artifacts::PROOF_RECEIPT_SCHEMA.to_owned(),
             id: "req-1".to_owned(),
             kind: "focused-test".to_owned(),
@@ -5178,8 +5182,8 @@ fn write_review_artifacts(
         &review.proof_receipts,
     );
     write_witness_artifacts(out, &witnesses)?;
-    write_proof_receipt_artifacts(out, &review.proof_receipts)?;
-    write_resource_lease_artifacts(out, &review.resource_leases)?;
+    write_proof_receipt_artifacts(out, &review.proof_receipts, revision)?;
+    write_resource_lease_artifacts(out, &review.resource_leases, revision)?;
     review.proof_requests =
         terminalize_proof_requests(&diff.head, &review.proof_requests, &review.proof_receipts);
     let mut active_claim_graph = build_active_claim_graph(
@@ -9589,8 +9593,8 @@ index 1111111..2222222 100644
         assert_eq!(receipts[1].commands[0].status, "passed");
         assert_eq!(receipts[1].commands[1].status, "failed");
 
-        write_proof_receipt_artifacts(&out, &receipts)?;
-        write_resource_lease_artifacts(&out, &resource_leases)?;
+        write_proof_receipt_artifacts(&out, &receipts, None)?;
+        write_resource_lease_artifacts(&out, &resource_leases, None)?;
         write_proof_request_artifacts(
             &out,
             &diff,
@@ -9737,6 +9741,7 @@ index 1111111..2222222 100644
             status: "requested".to_owned(),
         }];
         let existing_leases = vec![ResourceLease {
+            revision: None,
             schema: "ub-review.resource_lease.v1".to_owned(),
             id: "lease-proof-red-green-existing".to_owned(),
             kind: "focused-test".to_owned(),
@@ -18639,6 +18644,7 @@ index 1111111..2222222 100644
         receipt.commands[0].command = request.command.clone();
         receipt.commands[0].duration_ms = 1_234;
         let lease = ResourceLease {
+            revision: None,
             schema: super::RESOURCE_LEASE_SCHEMA.to_owned(),
             id: format!("lease-{}", receipt.id),
             kind: "focused-build".to_owned(),
@@ -20133,6 +20139,7 @@ index 1111111..2222222 100644
         let proof_receipts = vec![confirmed_receipt, missing_receipt];
         let resource_leases = vec![
             ResourceLease {
+                revision: None,
                 schema: "ub-review.resource_lease.v1".to_owned(),
                 id: "lease-proof-confirmed".to_owned(),
                 kind: "focused-test".to_owned(),
@@ -20149,6 +20156,7 @@ index 1111111..2222222 100644
                 command: Some("bun test test/js/bun/md/md-edge-cases.test.ts".to_owned()),
             },
             ResourceLease {
+                revision: None,
                 schema: "ub-review.resource_lease.v1".to_owned(),
                 id: "lease-proof-timeout".to_owned(),
                 kind: "focused-test".to_owned(),
@@ -20687,6 +20695,7 @@ index 1111111..2222222 100644
         late_receipt.request_ids = vec!["proof-follow-up-1".to_owned()];
         late_receipt.reason = "HEAD passed; base+tests failed after follow-up proof.".to_owned();
         let late_lease = ResourceLease {
+            revision: None,
             schema: "ub-review.resource_lease.v1".to_owned(),
             id: "lease-proof-follow-up-late".to_owned(),
             kind: "focused-test".to_owned(),
@@ -23363,6 +23372,7 @@ index 1111111..2222222 100644
 
     pub(crate) fn test_proof_receipt(result: &str, command_status: &str) -> ProofReceipt {
         ProofReceipt {
+            revision: None,
             schema: "ub-review.proof_receipt.v1".to_owned(),
             id: "proof-red-green-test".to_owned(),
             kind: "focused-head".to_owned(),
@@ -23392,6 +23402,7 @@ index 1111111..2222222 100644
 
     fn test_red_green_proof_receipt(result: &str, base_status: &str) -> ProofReceipt {
         ProofReceipt {
+            revision: None,
             schema: "ub-review.proof_receipt.v1".to_owned(),
             id: "proof-red-green-test".to_owned(),
             kind: "focused-red-green".to_owned(),

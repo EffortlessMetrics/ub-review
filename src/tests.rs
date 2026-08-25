@@ -253,6 +253,7 @@ fn red_green_receipt(
     request_ids: Vec<String>,
 ) -> ProofReceipt {
     ProofReceipt {
+        revision: None,
         schema: "ub-review.proof_receipt.v1".to_owned(),
         id: id.to_owned(),
         kind: "focused-red-green".to_owned(),

@@ -113,6 +113,7 @@ mod tests {
 
     fn test_lease(kind: &str, status: &str, timeout_sec: u64) -> ResourceLease {
         ResourceLease {
+            revision: None,
             schema: "ub-review.resource_lease.v1".to_owned(),
             id: format!("lease-{kind}-{status}-{timeout_sec}"),
             kind: kind.to_owned(),

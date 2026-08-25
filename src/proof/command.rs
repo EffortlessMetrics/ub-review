@@ -301,6 +301,7 @@ pub(crate) fn focused_build_receipt(
     reason: String,
 ) -> ProofReceipt {
     ProofReceipt {
+        revision: None,
         schema: PROOF_RECEIPT_SCHEMA.to_owned(),
         id: task.id.clone(),
         kind: "focused-build".to_owned(),
@@ -323,6 +324,7 @@ pub(crate) fn focused_head_receipt(
     reason: String,
 ) -> ProofReceipt {
     ProofReceipt {
+        revision: None,
         schema: PROOF_RECEIPT_SCHEMA.to_owned(),
         id: task.id.clone(),
         kind: "focused-head".to_owned(),
@@ -345,6 +347,7 @@ pub(crate) fn focused_red_green_receipt(
     reason: String,
 ) -> ProofReceipt {
     ProofReceipt {
+        revision: None,
         schema: PROOF_RECEIPT_SCHEMA.to_owned(),
         id: task.id.clone(),
         kind: "focused-red-green".to_owned(),
@@ -385,6 +388,7 @@ mod tests {
 
     fn granted_lease(id: &str) -> ResourceLease {
         ResourceLease {
+            revision: None,
             schema: RESOURCE_LEASE_SCHEMA.to_owned(),
             id: id.to_owned(),
             kind: "focused-test".to_owned(),

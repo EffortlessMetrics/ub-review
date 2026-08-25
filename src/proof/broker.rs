@@ -1169,6 +1169,7 @@ pub(crate) fn focused_test_resource_lease(
     reason: &str,
 ) -> ResourceLease {
     ResourceLease {
+        revision: None,
         schema: RESOURCE_LEASE_SCHEMA.to_owned(),
         id: format!("lease-{}", task.id),
         kind: "focused-test".to_owned(),
@@ -1209,6 +1210,7 @@ pub(crate) fn focused_build_resource_lease(
     reason: &str,
 ) -> ResourceLease {
     ResourceLease {
+        revision: None,
         schema: RESOURCE_LEASE_SCHEMA.to_owned(),
         id: format!("lease-{}", task.id),
         kind: "focused-build".to_owned(),
@@ -1246,6 +1248,7 @@ where
 {
     let lease_budget = proof_lease_budget(profile)?;
     let resource_lease = ResourceLease {
+        revision: None,
         schema: RESOURCE_LEASE_SCHEMA.to_owned(),
         id: format!("sanitizer-lease-{}", target.len()),
         kind: "sanitizer-witness".to_owned(),
@@ -1314,6 +1317,7 @@ where
 
     Ok((
         ProofReceipt {
+            revision: None,
             schema: PROOF_RECEIPT_SCHEMA.to_owned(),
             id: format!("sanitizer-receipt-{}", target.len()),
             kind: "sanitizer-witness".to_owned(),
@@ -1359,6 +1363,7 @@ fn skip_receipt(
     lease.reason = reason.to_owned();
     (
         ProofReceipt {
+            revision: None,
             schema: PROOF_RECEIPT_SCHEMA.to_owned(),
             id: format!("sanitizer-receipt-{}", target.len()),
             kind: "sanitizer-witness".to_owned(),
@@ -1544,6 +1549,7 @@ mod tests {
 
     fn test_receipt(id: &str, request_ids: Vec<String>, result: &str) -> ProofReceipt {
         ProofReceipt {
+            revision: None,
             schema: PROOF_RECEIPT_SCHEMA.to_owned(),
             id: id.to_owned(),
             kind: "focused-red-green".to_owned(),
@@ -2075,6 +2081,7 @@ mod tests {
             .next()
             .ok_or_else(|| anyhow::anyhow!("request did not resolve to a focused test"))?;
         let receipt = ProofReceipt {
+            revision: None,
             schema: PROOF_RECEIPT_SCHEMA.to_owned(),
             id: task.id.clone(),
             kind: "focused-red-green".to_owned(),
@@ -2157,6 +2164,7 @@ mod tests {
             .next()
             .ok_or_else(|| anyhow::anyhow!("changed test did not produce an initial task"))?;
         let initial_receipt = ProofReceipt {
+            revision: None,
             schema: PROOF_RECEIPT_SCHEMA.to_owned(),
             id: initial_task.id.clone(),
             kind: "focused-red-green".to_owned(),

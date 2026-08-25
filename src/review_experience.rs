@@ -823,6 +823,7 @@ mod tests {
             .map(|topic| topic.claim_id.clone())
             .ok_or_else(|| "reply claim was not produced by the production graph".to_owned())?;
         let proof_receipt = ProofReceipt {
+            revision: None,
             schema: "ub-review.proof_receipt.v1".to_owned(),
             id: "fixture-focused-parser-proof".to_owned(),
             kind: "focused-test".to_owned(),
@@ -1116,6 +1117,7 @@ mod tests {
         skipped_homework.fingerprint = "unrelated-proof-gap".to_owned();
         observations.push(skipped_homework);
         let skipped_receipt = ProofReceipt {
+            revision: None,
             schema: "ub-review.proof_receipt.v1".to_owned(),
             id: "fixture-unrelated-skipped-proof".to_owned(),
             kind: "focused-test".to_owned(),
