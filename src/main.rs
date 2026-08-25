@@ -6465,11 +6465,14 @@ mod tests {
     }
 
     #[test]
-    fn ub_review_gate_workflow_matches_self_profile_post_policy() {
-        // Dogfood posture: the self gate runs on every PR pass so a required
-        // check exists for every head SHA, but review posting is reserved for
-        // opened/ready_for_review; synchronize and reopened passes stay
-        // gate-only so push storms do not become an inbox tax.
+    fn ub_review_gate_workflow_pins_contained_candidate_posture() {
+        // Contained dogfood posture (#946): the self gate still runs on
+        // every PR pass so a required check exists for every head SHA, but
+        // the candidate head is untrusted - it runs model-off and
+        // artifact-only with no provider credentials, PR/check write, or
+        // OIDC authority, for every event type. Grouped reviews stay owned
+        // by trusted contexts; [gate].post_review_on remains the admission
+        // policy those contexts apply.
         let workflow = include_str!("../.github/workflows/ub-review-gate.yml");
         let profile = include_str!("../.ub-review.toml");
         assert!(
@@ -6478,17 +6481,15 @@ mod tests {
         );
         assert!(
             profile.contains("post_review_on = [\"opened\", \"ready_for_review\"]"),
-            "self config should post reviews on opened/ready_for_review only"
+            "self config should keep reserving review posting for opened/ready_for_review admission"
         );
         assert!(
-            workflow.contains(
-                "posting: ${{ github.event_name == 'pull_request' && 'review' || 'artifact-only' }}"
-            ),
-            "posting expression should post the grouped review on every PR pass"
+            workflow.contains("posting: artifact-only"),
+            "the candidate head never posts reviews; grouped posting belongs to trusted contexts"
         );
         assert!(
             workflow.contains("run-pass: auto"),
-            "run-pass must stay auto so synchronize/reopened resolve to first-class passes that the [gate].post_review_on policy can admit"
+            "run-pass must stay auto so synchronize/reopened resolve to first-class passes under the contained posture"
         );
         assert!(
             workflow.contains(
@@ -6501,8 +6502,8 @@ mod tests {
             "synchronize passes must collapse push storms via concurrency"
         );
         assert!(
-            workflow.contains("model-mode: auto"),
-            "every PR pass should keep normal model routing"
+            workflow.contains("model-mode: off"),
+            "the candidate head runs model-off; provider credentials must not reach untrusted execution"
         );
     }
 
