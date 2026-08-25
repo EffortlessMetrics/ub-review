@@ -25760,3 +25760,278 @@ kind = "exposure_gap"
 finding_id = "probe:xtask_src_main.rs:return_value:0d044538"
 owner = "ub-review/core"
 reason = "RIPR discriminate false-negative on validate_ripr_suppressions' Ok arm (#921): the happy-path return is reached only after every structural guard passes, and ripr_suppression_ledger_policy_accepts_well_formed_entries asserts exactly that outcome on a well-formed two-entry ledger, while check_policy wiring keeps returning the populated PolicyReport consumed by policy-check and policy-inventory. ripr scores the arm weakly exposed because its file-level attribution cannot link the fixture to this return. Content-addressed receipt; re-verify after any edit to validate_ripr_suppressions or check_policy in xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:4c3d0474"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:bf149f04"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:11396fad"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:predicate:4ef91755"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:return_value:11bd9bec"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:field_construction:3267d1ea"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:field_construction:8d20ec26"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:field_construction:9fbe4383"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:f3c7af5d"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:field_construction:798d54af"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:field_construction:3866fe81"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:return_value:7522f86f"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:return_value:e18a1193"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:field_construction:3a5c18d7"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:return_value:1d7d2d5d"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:3d8ec015"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:f7434ca7"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:6c809c6f"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:a8e15765"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:43356a38"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:db499124"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:return_value:f513cdc1"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:f72378a6"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:7c0454d9"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:3bb6d101"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:return_value:a3b1508c"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:return_value:c0c80026"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:02495ba5"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:0bfe1721"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:00fa73fc"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:return_value:e13ddc0e"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:field_construction:b92e6202"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:return_value:0a7cbd72"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:field_construction:db0cd021"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:field_construction:8ad746db"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:field_construction:c570b43a"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:field_construction:c20fcd39"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:field_construction:2ce901ba"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:field_construction:00eb546e"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:field_construction:7dadba1c"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:field_construction:d561f476"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:8f30b644"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:72f0f622"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:4eac7b43"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:b5baac72"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_identity.rs:match_arm:c6dde987"
+owner = "ub-review/core"
+reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
