@@ -61,56 +61,56 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          set -o pipefail
-          cargo fmt --all -- --check 2>&1 | tee "$RECEIPT_DIR/cargo-fmt.log"
+          set -euo pipefail
+          cargo fmt --all -- --check
 
       - name: Check workspace
         id: check
         continue-on-error: true
         shell: bash
         run: |
-          set -o pipefail
-          cargo check --workspace --all-targets --locked 2>&1 | tee "$RECEIPT_DIR/cargo-check.log"
+          set -euo pipefail
+          cargo check --workspace --all-targets --locked
 
       - name: Run Clippy
         id: clippy
         continue-on-error: true
         shell: bash
         run: |
-          set -o pipefail
-          cargo clippy --workspace --all-targets --locked -- -D warnings 2>&1 | tee "$RECEIPT_DIR/cargo-clippy.log"
+          set -euo pipefail
+          cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Run workspace tests
         id: test
         continue-on-error: true
         shell: bash
         run: |
-          set -o pipefail
-          cargo test --workspace --all-targets --locked 2>&1 | tee "$RECEIPT_DIR/cargo-test.log"
+          set -euo pipefail
+          cargo test --workspace --all-targets --locked
 
       - name: Build documentation
         id: doc
         continue-on-error: true
         shell: bash
         run: |
-          set -o pipefail
-          cargo doc --workspace --no-deps --locked 2>&1 | tee "$RECEIPT_DIR/cargo-doc.log"
+          set -euo pipefail
+          cargo doc --workspace --no-deps --locked
 
       - name: Check repository policy
         id: policy
         continue-on-error: true
         shell: bash
         run: |
-          set -o pipefail
-          cargo xtask policy-check 2>&1 | tee "$RECEIPT_DIR/policy-check.log"
+          set -euo pipefail
+          cargo xtask policy-check
 
       - name: Verify artifact verifier self-test
         id: verifier
         continue-on-error: true
         shell: bash
         run: |
-          set -o pipefail
-          python scripts/verify-bun-review-artifacts.py --self-test 2>&1 | tee "$RECEIPT_DIR/artifact-verifier-self-test.log"
+          set -euo pipefail
+          python scripts/verify-bun-review-artifacts.py --self-test
 
       - name: Write exact-head baseline receipt
         if: always()
@@ -144,6 +144,15 @@ jobs:
               candidate_sha: $candidate_sha,
               trusted_workflow_sha: $workflow_sha,
               workflow_source: "protected-base",
+              commands: [
+                "cargo fmt --all -- --check",
+                "cargo check --workspace --all-targets --locked",
+                "cargo clippy --workspace --all-targets --locked -- -D warnings",
+                "cargo test --workspace --all-targets --locked",
+                "cargo doc --workspace --no-deps --locked",
+                "cargo xtask policy-check",
+                "python scripts/verify-bun-review-artifacts.py --self-test"
+              ],
               checks: {
                 cargo_fmt: $fmt,
                 cargo_check: $check,

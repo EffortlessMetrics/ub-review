@@ -140,8 +140,8 @@ fn independent_baseline_uses_base_owned_orchestration_and_exact_candidate_checko
         "python scripts/verify-bun-review-artifacts.py --self-test",
     ] {
         ensure!(
-            INDEPENDENT_WORKFLOW.matches(command).count() == 1,
-            "trusted command list must contain exactly one `{command}`"
+            INDEPENDENT_WORKFLOW.matches(command).count() == 2,
+            "trusted command must appear once for execution and once in the receipt: `{command}`"
         );
     }
 
