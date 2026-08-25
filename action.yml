@@ -365,8 +365,13 @@ runs:
           fi
           mkdir -p "$cargo_target_dir"
 
+          lockfile="$workdir/Cargo.lock"
+          if [[ -L "$lockfile" || ! -f "$lockfile" ]]; then
+            echo "::error::source install requires a committed regular Cargo.lock at $lockfile"
+            exit 1
+          fi
+
           echo "::group::Build ub-review from action source"
-          cargo generate-lockfile --manifest-path "$workdir/Cargo.toml"
           cargo build --manifest-path "$workdir/Cargo.toml" --locked --release --target-dir "$cargo_target_dir"
           echo "::endgroup::"
 

@@ -83,9 +83,9 @@ ub-review runner"):
   malformed `release-version` or `release-asset` input, which fails the job in
   `validate_release_request` before any URL is constructed;
 - `source` is the deterministic fallback: copy the action source into
-  `RUNNER_TEMP`, `cargo generate-lockfile`, then
-  `cargo build --locked --release`, honoring a caller-set
-  `CARGO_TARGET_DIR`.
+  `RUNNER_TEMP`, require the copied `Cargo.lock` to be a regular non-symlink
+  file, then run `cargo build --locked --release` without regenerating the
+  lockfile, honoring a caller-set `CARGO_TARGET_DIR`.
 
 Release request constraints (action.yml `validate_release_request`,
 `download_release_binary`): `release-version` defaults to the action ref
@@ -263,6 +263,9 @@ doctor pins              CORE_REVIEW_TOOLS = tokmd, cargo-allow, ripr,
   the job rather than silently changing install policy; the extracted
   candidate must be an executable named `ub-review` and report the requested
   release identity before it is accepted (action.yml).
+- Source mode requires the copied `Cargo.lock` to be a regular non-symlink
+  file before Cargo executes. Missing or invalid lockfile shapes fail before
+  build; a stale lockfile fails through Cargo's `--locked` behavior.
 - Release request inputs are validated before any URL is constructed: bare
   file names only, restricted charset, no traversal (action.yml
   `validate_release_request`); the release workflow refuses malformed tags
@@ -353,8 +356,10 @@ UB_REVIEW_TOOL_BUNDLE=core bash scripts/install-gh-runner-tools.sh
                                         # idempotent sensor install
 ub-review cache warm --profile gh-runner --base origin/main
                                         # writes base+rules manifests
-cargo generate-lockfile && cargo build --locked --release
-                                        # the exact action source fallback
+test -f Cargo.lock && ! test -L Cargo.lock &&
+  cargo build --manifest-path Cargo.toml --locked --release
+                                        # committed lock admission + build;
+                                        # no resolver mutation
 scripts/smoke-local.sh                  # doctor -> init -> plan -> dry-run
 actionlint .github/workflows/release-binary.yml
 ```
