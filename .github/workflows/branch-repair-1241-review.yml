@@ -54,38 +54,44 @@ jobs:
 
           spec = Path("docs/specs/UB-REVIEW-SPEC-0010-release-install.md")
           text = spec.read_text()
-          old_install = """- `source` is the deterministic fallback: copy the action source into
-  `RUNNER_TEMP`, `cargo generate-lockfile`, then
-  `cargo build --locked --release`, honoring a caller-set
-  `CARGO_TARGET_DIR`.
-"""
-          new_install = """- `source` is the deterministic fallback: copy the action source into
-  `RUNNER_TEMP`, require the copied `Cargo.lock` to be a regular non-symlink
-  file, then run `cargo build --locked --release` without regenerating the
-  lockfile, honoring a caller-set `CARGO_TARGET_DIR`.
-"""
+          old_install = (
+              "- `source` is the deterministic fallback: copy the action source into\n"
+              "  `RUNNER_TEMP`, `cargo generate-lockfile`, then\n"
+              "  `cargo build --locked --release`, honoring a caller-set\n"
+              "  `CARGO_TARGET_DIR`.\n"
+          )
+          new_install = (
+              "- `source` is the deterministic fallback: copy the action source into\n"
+              "  `RUNNER_TEMP`, require the copied `Cargo.lock` to be a regular non-symlink\n"
+              "  file, then run `cargo build --locked --release` without regenerating the\n"
+              "  lockfile, honoring a caller-set `CARGO_TARGET_DIR`.\n"
+          )
           if text.count(old_install) != 1:
               raise SystemExit("canonical source-install paragraph did not match exactly once")
           text = text.replace(old_install, new_install)
 
-          old_command = """cargo generate-lockfile && cargo build --locked --release
-                                        # the exact action source fallback
-"""
-          new_command = """test -f Cargo.lock && ! test -L Cargo.lock &&
-  cargo build --manifest-path Cargo.toml --locked --release
-                                        # committed lock admission + build;
-                                        # no resolver mutation
-"""
+          old_command = (
+              "cargo generate-lockfile && cargo build --locked --release\n"
+              "                                        # the exact action source fallback\n"
+          )
+          new_command = (
+              "test -f Cargo.lock && ! test -L Cargo.lock &&\n"
+              "  cargo build --manifest-path Cargo.toml --locked --release\n"
+              "                                        # committed lock admission + build;\n"
+              "                                        # no resolver mutation\n"
+          )
           if text.count(old_command) != 1:
               raise SystemExit("canonical source validation command did not match exactly once")
           text = text.replace(old_command, new_command)
 
-          fail_closed_anchor = """- Release request inputs are validated before any URL is constructed: bare
-"""
-          source_fail_closed = """- Source mode requires the copied `Cargo.lock` to be a regular non-symlink
-  file before Cargo executes. Missing or invalid lockfile shapes fail before
-  build; a stale lockfile fails through Cargo's `--locked` behavior.
-"""
+          fail_closed_anchor = (
+              "- Release request inputs are validated before any URL is constructed: bare\n"
+          )
+          source_fail_closed = (
+              "- Source mode requires the copied `Cargo.lock` to be a regular non-symlink\n"
+              "  file before Cargo executes. Missing or invalid lockfile shapes fail before\n"
+              "  build; a stale lockfile fails through Cargo's `--locked` behavior.\n"
+          )
           if text.count(fail_closed_anchor) != 1:
               raise SystemExit("fail-closed insertion anchor did not match exactly once")
           text = text.replace(fail_closed_anchor, source_fail_closed + fail_closed_anchor)
@@ -96,10 +102,10 @@ jobs:
           bash -n fixtures/action-source-lockfile/contract.sh
           cargo test --locked --test cli \
             source_runner_requires_committed_regular_lockfile_before_locked_build -- --exact
-          cargo xtask policy-check
-          git diff --check
 
           rm .github/workflows/branch-repair-1241-review.yml
+          cargo xtask policy-check
+          git diff --check
 
           python - <<'PYCODE'
           import subprocess
