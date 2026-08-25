@@ -6465,11 +6465,12 @@ mod tests {
     }
 
     #[test]
-    fn ub_review_gate_workflow_matches_self_profile_post_policy() {
-        // Dogfood posture: the self gate runs on every PR pass so a required
-        // check exists for every head SHA, but review posting is reserved for
-        // opened/ready_for_review; synchronize and reopened passes stay
-        // gate-only so push storms do not become an inbox tax.
+    fn ub_review_gate_workflow_uses_contained_candidate_posture() {
+        // The candidate self gate still reports on every PR head, but #1240
+        // removed provider credentials and PR-write delivery from that
+        // candidate-controlled job. Posting policy remains declared for the
+        // eventual independent gate; this workflow stays model-off and
+        // artifact-only until that authority boundary exists.
         let workflow = include_str!("../.github/workflows/ub-review-gate.yml");
         let profile = include_str!("../.ub-review.toml");
         assert!(
@@ -6478,17 +6479,15 @@ mod tests {
         );
         assert!(
             profile.contains("post_review_on = [\"opened\", \"ready_for_review\"]"),
-            "self config should post reviews on opened/ready_for_review only"
+            "self config should retain the eventual independent-gate posting policy"
         );
         assert!(
-            workflow.contains(
-                "posting: ${{ github.event_name == 'pull_request' && 'review' || 'artifact-only' }}"
-            ),
-            "posting expression should post the grouped review on every PR pass"
+            workflow.contains("posting: artifact-only"),
+            "candidate-controlled self gate must not deliver a PR review"
         );
         assert!(
             workflow.contains("run-pass: auto"),
-            "run-pass must stay auto so synchronize/reopened resolve to first-class passes that the [gate].post_review_on policy can admit"
+            "run-pass must preserve the exact pull-request event identity"
         );
         assert!(
             workflow.contains(
@@ -6501,8 +6500,8 @@ mod tests {
             "synchronize passes must collapse push storms via concurrency"
         );
         assert!(
-            workflow.contains("model-mode: auto"),
-            "every PR pass should keep normal model routing"
+            workflow.contains("model-mode: off"),
+            "candidate-controlled self gate must not receive model credentials"
         );
     }
 
