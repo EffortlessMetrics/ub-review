@@ -54,6 +54,7 @@ pub(crate) use enable::*;
 mod promotion;
 pub(crate) use promotion::*;
 mod claim_graph;
+mod revision_identity;
 pub(crate) use claim_graph::*;
 mod compiler_reconciliation;
 pub(crate) use compiler_reconciliation::*;
