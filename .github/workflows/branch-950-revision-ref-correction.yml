@@ -1,0 +1,484 @@
+name: temporary
+
+on:
+  push:
+    branches: [feat/950-revision-binding]
+    paths: [.github/workflows/branch-950-revision-ref-correction.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/950-revision-binding
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          components: rustfmt,clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Correct RevisionRef object identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one replacement target, found {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          identity = Path("src/revision_identity.rs")
+          text = identity.read_text()
+          old_ref = '''/// Packet-level immutable reference stamped into derived artifacts (A1.3,
+          /// #950).
+          ///
+          /// `digest` is the cross-artifact join key (the identity digest of the
+          /// admitted revision); `reviewed_commit` is the exact git commit object the
+          /// run reviewed, for consumers that must bind to a real object (delivery
+          /// exact-head checks); `semantics` preserves the candidate-head versus
+          /// merge-result distinction end to end. Legacy symbolic `head` labels stay
+          /// display-only next to this.
+          #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+          pub(crate) struct RevisionRef {
+              pub(crate) digest: String,
+              pub(crate) semantics: String,
+              pub(crate) reviewed_commit: String,
+          }
+
+          impl RevisionRef {
+              pub(crate) fn from_admission(admission: &crate::revision_admission::RevisionAdmission) -> Self {
+                  Self {
+                      digest: admission.identity_digest.clone(),
+                      semantics: admission.semantics.clone(),
+                      reviewed_commit: admission.reviewed_commit_oid.clone(),
+                  }
+              }
+
+              /// Shape-checks a ref read back from an artifact. Cross-artifact
+              /// enforcement against the admitting packet is A1.4's job; this only
+              /// makes malformed refs visible.
+              pub(crate) fn validate(&self) -> Result<()> {
+                  validate_sha256(&self.digest, "revision digest")?;
+                  if self.semantics != "candidate_head" && self.semantics != "merge_result" {
+                      bail!("unknown revision ref semantics `{}`", self.semantics);
+                  }
+                  let parsed = Oid::parse(&self.reviewed_commit)?;
+                  if parsed.is_null() {
+                      bail!("revision ref reviewed_commit is a null object id");
+                  }
+                  Ok(())
+              }
+          }
+          '''
+          new_ref = '''/// Packet-level immutable reference stamped into derived artifacts (A1.3,
+          /// #950).
+          ///
+          /// `digest` is the cross-artifact join key. `head_commit` is the exact
+          /// pull-request head used for GitHub delivery and re-anchoring;
+          /// `reviewed_commit` is the exact object the analysis covered (the head for
+          /// `candidate_head`, the synthetic merge for `merge_result`). Keeping both
+          /// prevents analysis identity from being mistaken for delivery authority.
+          #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+          pub(crate) struct RevisionRef {
+              pub(crate) digest: String,
+              pub(crate) semantics: String,
+              pub(crate) base_commit: String,
+              pub(crate) head_commit: String,
+              pub(crate) reviewed_commit: String,
+          }
+
+          impl RevisionRef {
+              pub(crate) fn from_admission(admission: &crate::revision_admission::RevisionAdmission) -> Self {
+                  Self {
+                      digest: admission.identity_digest.clone(),
+                      semantics: admission.semantics.clone(),
+                      base_commit: admission.base_commit_oid.clone(),
+                      head_commit: admission.head_commit_oid.clone(),
+                      reviewed_commit: admission.reviewed_commit_oid.clone(),
+                  }
+              }
+
+              /// Shape-checks a ref read back from an artifact. Cross-artifact
+              /// enforcement against the admitting packet is A1.4's job; this only
+              /// makes malformed or internally contradictory refs visible.
+              pub(crate) fn validate(&self) -> Result<()> {
+                  validate_sha256(&self.digest, "revision digest")?;
+                  let base = Oid::parse(&self.base_commit)
+                      .map_err(|error| anyhow::anyhow!("revision ref base_commit: {error}"))?;
+                  let head = Oid::parse(&self.head_commit)
+                      .map_err(|error| anyhow::anyhow!("revision ref head_commit: {error}"))?;
+                  let reviewed = Oid::parse(&self.reviewed_commit)
+                      .map_err(|error| anyhow::anyhow!("revision ref reviewed_commit: {error}"))?;
+                  if base.is_null() || head.is_null() || reviewed.is_null() {
+                      bail!("revision ref commit fields cannot contain a null object id");
+                  }
+                  let widths = [base.id.len(), head.id.len(), reviewed.id.len()];
+                  if widths[0] != widths[1] || widths[0] != widths[2] {
+                      bail!("revision ref mixes object-id widths: {widths:?}");
+                  }
+                  match self.semantics.as_str() {
+                      "candidate_head" if self.head_commit == self.reviewed_commit => {}
+                      "candidate_head" => bail!(
+                          "candidate_head revision ref must review the pull-request head exactly"
+                      ),
+                      "merge_result" if self.head_commit != self.reviewed_commit => {}
+                      "merge_result" => bail!(
+                          "merge_result revision ref must distinguish pull-request head from synthetic merge"
+                      ),
+                      other => bail!("unknown revision ref semantics `{other}`"),
+                  }
+                  Ok(())
+              }
+          }
+          '''
+          if old_ref not in text:
+              raise SystemExit("src/revision_identity.rs: RevisionRef block drifted")
+          text = text.replace(old_ref, new_ref, 1)
+          old_impl = '''impl RevisionIdentity {
+              /// Validates and constructs an identity from resolved object ids.
+          '''
+          new_impl = '''impl RevisionIdentity {
+              pub(crate) fn base_commit_oid(&self) -> &str {
+                  self.base.commit_oid()
+              }
+
+              pub(crate) fn head_commit_oid(&self) -> &str {
+                  self.head.commit_oid()
+              }
+
+              pub(crate) fn reviewed_commit_oid(&self) -> &str {
+                  self.reviewed.commit_oid()
+              }
+
+              pub(crate) fn semantics_key(&self) -> &'static str {
+                  self.semantics.as_str()
+              }
+
+              /// Validates and constructs an identity from resolved object ids.
+          '''
+          if text.count(old_impl) != 1:
+              raise SystemExit("src/revision_identity.rs: identity impl insertion point drifted")
+          identity.write_text(text.replace(old_impl, new_impl, 1))
+
+          replace_once(
+              "src/revision_admission.rs",
+              '''    /// `"candidate_head"` or `"merge_result"`, mirroring the canonical form.
+              pub(crate) semantics: String,
+              /// Exact git commit object the run reviewed (the identity's reviewed
+              /// pair), for consumers that bind to real objects such as delivery
+              /// exact-head checks.
+              pub(crate) reviewed_commit_oid: String,
+              /// Resolved PR-head commit when hosted metadata was supplied.
+              #[serde(default)]
+              pub(crate) pr_head_commit: Option<String>,
+          ''',
+              '''    /// `"candidate_head"` or `"merge_result"`, mirroring the canonical form.
+              pub(crate) semantics: String,
+              /// Exact base-side commit from the admitted identity.
+              #[serde(default)]
+              pub(crate) base_commit_oid: String,
+              /// Exact pull-request head commit from the admitted identity.
+              #[serde(default)]
+              pub(crate) head_commit_oid: String,
+              /// Exact git commit object the run reviewed (head or synthetic merge).
+              #[serde(default)]
+              pub(crate) reviewed_commit_oid: String,
+              /// Resolved PR-head commit when hosted metadata was supplied.
+              #[serde(default)]
+              pub(crate) pr_head_commit: Option<String>,
+          ''',
+          )
+          replace_once(
+              "src/revision_admission.rs",
+              '''    let identity = RevisionIdentity::new(
+                  base,
+                  head,
+                  reviewed.clone(),
+                  merge,
+                  semantics,
+          ''',
+              '''    let base_commit_oid = base.commit_oid().to_owned();
+              let head_commit_oid = head.commit_oid().to_owned();
+              let reviewed_commit_oid = reviewed.commit_oid().to_owned();
+              let identity = RevisionIdentity::new(
+                  base,
+                  head,
+                  reviewed.clone(),
+                  merge,
+                  semantics,
+          ''',
+          )
+          replace_once(
+              "src/revision_admission.rs",
+              '''        identity_digest: identity.identity_digest(),
+                  semantics: semantics.as_str().to_owned(),
+                  reviewed_commit_oid: reviewed.commit_oid().to_owned(),
+                  pr_head_commit,
+          ''',
+              '''        identity_digest: identity.identity_digest(),
+                  semantics: semantics.as_str().to_owned(),
+                  base_commit_oid,
+                  head_commit_oid,
+                  reviewed_commit_oid,
+                  pr_head_commit,
+          ''',
+          )
+          replace_once(
+              "src/revision_admission.rs",
+              '''        if parsed.canonical_form() != self.identity_canonical {
+                      bail!("revision admission canonical form is not normalized");
+                  }
+                  Ok(())
+          ''',
+              '''        if parsed.canonical_form() != self.identity_canonical {
+                      bail!("revision admission canonical form is not normalized");
+                  }
+                  let stored_objects = [
+                      self.base_commit_oid.as_str(),
+                      self.head_commit_oid.as_str(),
+                      self.reviewed_commit_oid.as_str(),
+                  ];
+                  if stored_objects.iter().all(|value| value.is_empty()) {
+                      return Ok(());
+                  }
+                  if self.base_commit_oid != parsed.base_commit_oid()
+                      || self.head_commit_oid != parsed.head_commit_oid()
+                      || self.reviewed_commit_oid != parsed.reviewed_commit_oid()
+                      || self.semantics != parsed.semantics_key()
+                  {
+                      bail!("revision admission object fields do not match its canonical identity");
+                  }
+                  if self
+                      .pr_head_commit
+                      .as_deref()
+                      .is_some_and(|commit| commit != parsed.head_commit_oid())
+                  {
+                      bail!("revision admission pull-request head does not match its canonical identity");
+                  }
+                  Ok(())
+          ''',
+          )
+          replace_once(
+              "src/revision_admission.rs",
+              '''        let r = crate::RevisionRef::from_admission(&admission);
+                  assert_eq!(r.semantics, "merge_result");
+                  assert_eq!(r.reviewed_commit, merge);
+                  r.validate()?;
+
+                  // A tampered digest is visible: shape validation rejects it.
+                  let mut forged = r.clone();
+                  forged.digest = "z".repeat(64);
+                  assert!(forged.validate().is_err());
+
+                  // A different revision produces a different join key.
+                  let other = admit_revision(
+                      repo.root(),
+                      "main",
+                      &pr_head,
+                      Some(&pr_head),
+                      &files_vec(),
+                      &sample_patch(),
+                  )?;
+                  assert_ne!(crate::RevisionRef::from_admission(&other).digest, r.digest);
+          ''',
+              '''        let r = crate::RevisionRef::from_admission(&admission);
+                  assert_eq!(r.semantics, "merge_result");
+                  assert_eq!(r.base_commit, base_tip);
+                  assert_eq!(r.head_commit, pr_head);
+                  assert_eq!(r.reviewed_commit, merge);
+                  assert_ne!(r.head_commit, r.reviewed_commit);
+                  r.validate()?;
+
+                  // Delivery authority cannot be replaced with the synthetic merge.
+                  let mut wrong_head = r.clone();
+                  wrong_head.head_commit = wrong_head.reviewed_commit.clone();
+                  assert!(wrong_head.validate().is_err());
+
+                  // A tampered digest is visible: shape validation rejects it.
+                  let mut forged = r.clone();
+                  forged.digest = "z".repeat(64);
+                  assert!(forged.validate().is_err());
+
+                  // A candidate-head revision uses the same immutable object for
+                  // head and reviewed authority, but has a different join key.
+                  let other = admit_revision(
+                      repo.root(),
+                      "main",
+                      &pr_head,
+                      Some(&pr_head),
+                      &files_vec(),
+                      &sample_patch(),
+                  )?;
+                  let candidate = crate::RevisionRef::from_admission(&other);
+                  assert_eq!(candidate.semantics, "candidate_head");
+                  assert_eq!(candidate.head_commit, candidate.reviewed_commit);
+                  candidate.validate()?;
+                  assert_ne!(candidate.digest, r.digest);
+          ''',
+          )
+
+          replace_once(
+              "src/github_delivery.rs",
+              '''        // A1.3 (#950): the immutable revision reference is authoritative.
+                  // Its reviewed_commit is the exact git object the run admitted, so
+                  // delivery binds to that instead of any symbolic label.
+                  if let Some(revision) = graph.get("revision") {
+                      let commit = revision
+                          .get("reviewed_commit")
+                          .and_then(serde_json::Value::as_str)
+                          .filter(|value| !value.trim().is_empty())
+                          .ok_or_else(|| {
+                              anyhow::anyhow!("claim graph revision reference is missing reviewed_commit")
+                          })?;
+                      return Ok(Some(commit.to_owned()));
+                  }
+          ''',
+              '''        // A1.3 (#950): GitHub delivery binds to the immutable PR
+                  // head, not necessarily the object the analysis reviewed. In
+                  // merge-result mode `reviewed_commit` is a synthetic merge while
+                  // `head_commit` remains the exact pull-request head GitHub accepts.
+                  if let Some(revision) = graph.get("revision") {
+                      let commit = revision
+                          .get("head_commit")
+                          .and_then(serde_json::Value::as_str)
+                          .filter(|value| !value.trim().is_empty())
+                          .ok_or_else(|| {
+                              anyhow::anyhow!("claim graph revision reference is missing head_commit")
+                          })?;
+                      return Ok(Some(commit.to_owned()));
+                  }
+          ''',
+          )
+          replace_once(
+              "src/github_delivery.rs",
+              '''    fn delivery_head_prefers_immutable_revision_over_legacy_label() -> Result<()> {
+                  // A1.3: the revision reference is authoritative; the legacy
+                  // head_sha label may be a symbolic `HEAD` and must not win.
+                  let graph = serde_json::json!({
+                      "schema": "ub-review.claim_graph.v1",
+                      "head_sha": "HEAD",
+                      "revision": {
+                          "digest": "a".repeat(64),
+                          "semantics": "merge_result",
+                          "reviewed_commit": "b".repeat(40),
+                      },
+                      "topics": [],
+                  });
+          ''',
+              '''    fn delivery_head_prefers_pr_head_over_reviewed_merge_and_legacy_label() -> Result<()> {
+                  // A1.3: the revision reference is authoritative; delivery uses
+                  // the PR head even when analysis covered a synthetic merge.
+                  let graph = serde_json::json!({
+                      "schema": "ub-review.claim_graph.v1",
+                      "head_sha": "HEAD",
+                      "revision": {
+                          "digest": "a".repeat(64),
+                          "semantics": "merge_result",
+                          "base_commit": "c".repeat(40),
+                          "head_commit": "d".repeat(40),
+                          "reviewed_commit": "b".repeat(40),
+                      },
+                      "topics": [],
+                  });
+          ''',
+          )
+          replace_once(
+              "src/github_delivery.rs",
+              '''        let expected = read_expected_delivery_head(&review, Some(&graph))?
+                      .ok_or_else(|| anyhow::anyhow!("immutable revision must bind the delivery head"))?;
+                  assert_eq!(expected, "b".repeat(40));
+          ''',
+              '''        let expected = read_expected_delivery_head(&review, Some(&graph))?
+                      .ok_or_else(|| anyhow::anyhow!("immutable revision must bind the delivery head"))?;
+                  assert_eq!(expected, "d".repeat(40));
+                  assert_ne!(expected, "b".repeat(40));
+          ''',
+          )
+
+          verifier = Path("scripts/verify-bun-review-artifacts.py")
+          text = verifier.read_text()
+          old_python = '''    commit = value.get("reviewed_commit")
+              if not isinstance(commit, str) or len(commit) not in (40, 64):
+                  fail(f"{label} revision reviewed_commit must be a git object id")
+          '''
+          new_python = '''    commits = {
+                  field: value.get(field)
+                  for field in ("base_commit", "head_commit", "reviewed_commit")
+              }
+              for field, commit in commits.items():
+                  if (
+                      not isinstance(commit, str)
+                      or len(commit) not in (40, 64)
+                      or any(c not in "0123456789abcdef" for c in commit)
+                      or set(commit) == {"0"}
+                  ):
+                      fail(f"{label} revision {field} must be a non-null lowercase git object id")
+              if len({len(commit) for commit in commits.values()}) != 1:
+                  fail(f"{label} revision commit fields mix object-id widths")
+              if value.get("semantics") == "candidate_head" and commits["head_commit"] != commits["reviewed_commit"]:
+                  fail(f"{label} candidate_head revision must review head_commit")
+              if value.get("semantics") == "merge_result" and commits["head_commit"] == commits["reviewed_commit"]:
+                  fail(f"{label} merge_result revision must distinguish head and reviewed commits")
+          '''
+          if text.count(old_python) != 1:
+              raise SystemExit("verifier revision-ref shape block drifted")
+          text = text.replace(old_python, new_python, 1)
+          old_join = '''            if graph["revision"].get("digest") != outcome_revision.get("digest"):
+                          fail(
+                              "gate_outcome.json revision digest does not join "
+                              "claim_graph.json revision digest"
+                          )
+          '''
+          new_join = '''            if graph["revision"] != outcome_revision:
+                          fail(
+                              "gate_outcome.json revision reference does not join "
+                              "claim_graph.json revision reference"
+                          )
+          '''
+          if text.count(old_join) != 1:
+              raise SystemExit("verifier revision join block drifted")
+          verifier.write_text(text.replace(old_join, new_join, 1))
+          PY
+
+      - name: Format
+        run: cargo fmt --all
+
+      - name: Focused revision-ref tests
+        run: |
+          cargo test --locked revision_ref_joins_admission_and_validates_shape
+          cargo test --locked delivery_head_prefers_pr_head_over_reviewed_merge_and_legacy_label
+
+      - name: Verifier self-test
+        run: python scripts/verify-bun-review-artifacts.py --self-test
+
+      - name: Full Rust validation
+        run: |
+          cargo check --workspace --all-targets --locked
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo test --workspace --all-targets --locked
+
+      - name: Policy
+        run: cargo xtask policy-check
+
+      - name: Commit correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name EffortlessSteven
+          git config user.email git@effortlesssteven.com
+          git add src/revision_identity.rs src/revision_admission.rs src/github_delivery.rs scripts/verify-bun-review-artifacts.py
+          git commit -m "fix(revision): separate reviewed commit from delivery head"
+          git push origin HEAD:feat/950-revision-binding
