@@ -6,6 +6,8 @@ root="$(mktemp -d)"
 trap 'rm -rf "$root"' EXIT
 runner="$root/source-runner.sh"
 
+# Execute the production resolver body rather than reimplementing its branch
+# logic in the fixture. The named surrounding steps bound the extracted block.
 awk '
   /^    - name: Resolve ub-review runner$/ { in_step = 1; next }
   in_step && /^      run: \|$/ { capture = 1; next }
@@ -21,6 +23,8 @@ if [[ ! -s "$runner" ]]; then
   exit 1
 fi
 
+# Record the one permitted Cargo invocation, synthesize the expected binary,
+# and reproduce Cargo's stale-lock exit without network or compiler work.
 make_fake_cargo() {
   local bin_dir="$1"
   mkdir -p "$bin_dir"
@@ -55,6 +59,8 @@ CARGO
   chmod +x "$bin_dir/cargo"
 }
 
+# Run one isolated lockfile shape through the real source resolver and assert
+# both the exit contract and whether Cargo was admitted at all.
 run_case() {
   local name="$1"
   local lock_shape="$2"
@@ -68,6 +74,7 @@ run_case() {
   local output_file="$case_root/github-output"
   local target="$case_root/target-cache"
   local output="$case_root/output.txt"
+  local status
 
   mkdir -p "$action_root" "$runner_root"
   cat > "$action_root/Cargo.toml" <<'TOML'
