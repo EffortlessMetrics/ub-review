@@ -54,9 +54,10 @@ pub(crate) use enable::*;
 mod promotion;
 pub(crate) use promotion::*;
 mod claim_graph;
-mod revision_admission;
-mod revision_identity;
 pub(crate) use claim_graph::*;
+mod revision_identity;
+pub(crate) use revision_identity::RevisionRef;
+mod revision_admission;
 pub(crate) use revision_admission::*;
 mod compiler_reconciliation;
 pub(crate) use compiler_reconciliation::*;
@@ -3768,6 +3769,13 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         args.review.out.join("running-summary.md"),
         &preliminary_summary,
     )?;
+    // A1.3 (#950): one immutable reference joins every stamped artifact
+    // (claim graph, gate outcome, delivery exact-head) to the admitted
+    // revision.
+    let revision_ref = RevisionRef::from_admission(&revision);
+    revision_ref
+        .validate()
+        .context("admitted revision reference")?;
     let gate_outcome = write_review_artifacts(
         &args.review.root,
         &args.review.out,
@@ -3775,6 +3783,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         &diff,
         &box_state,
         &plan,
+        Some(&revision_ref),
         &preliminary_summary,
         pr_thread_context,
         &args,
@@ -4280,6 +4289,7 @@ fn write_review_artifacts(
     diff: &DiffContext,
     box_state: &BoxState,
     plan: &Plan,
+    revision: Option<&RevisionRef>,
     running_summary: &str,
     pr_thread_context: PrThreadContext,
     args: &RunArgs,
@@ -4773,7 +4783,8 @@ fn write_review_artifacts(
     // before the final compiler consumes the review surface with claims,
     // evidence, conflicts, and current-head delivery state. The graph is bound
     // to the exact reviewed head so state from another head cannot certify it.
-    let shadow_claim_graph = build_shadow_claim_graph(&diff.head);
+    let mut shadow_claim_graph = build_shadow_claim_graph(&diff.head);
+    shadow_claim_graph.revision = revision.cloned();
     write_claim_graph(out, &shadow_claim_graph)?;
     let proof_receipts = proof_result.proof_receipts;
     let resource_leases = proof_result.resource_leases;
@@ -5045,7 +5056,7 @@ fn write_review_artifacts(
     let compiler_input_summary_only_findings = compiler_summary_only_findings.clone();
     let mut compiler_observations = review.observations.clone();
     compiler_observations.extend(follow_up_evidence.observations.clone());
-    let pre_compile_claim_graph = build_active_claim_graph(
+    let mut pre_compile_claim_graph = build_active_claim_graph(
         &diff.head,
         &compiler_observations,
         &compiler_inline_comments,
@@ -5085,6 +5096,7 @@ fn write_review_artifacts(
                 compiler_reconciliation_failure(&diff.head, format!("{error:#}"))
             }
         };
+    pre_compile_claim_graph.revision = revision.cloned();
     write_claim_graph(out, &pre_compile_claim_graph)?;
     artifact_writers::write_compiler_reconciliation_artifact(out, &compiler_reconciliation)?;
     write_final_compiler_input_artifact(
@@ -5185,6 +5197,7 @@ fn write_review_artifacts(
         &resolved_away_candidates,
         &review.pr_thread_context,
     );
+    active_claim_graph.revision = revision.cloned();
     write_claim_graph(out, &active_claim_graph)?;
     write_proof_request_artifacts(
         out,
@@ -5205,7 +5218,7 @@ fn write_review_artifacts(
     // policy. Only affects the gate when config.gate.review_forward == true.
     // Same resolution object as the compiler — no second latest-turn search.
     let reporter_gate = reporter_resolution.gate_input();
-    let gate_outcome = build_gate_outcome(GateOutcomeInput {
+    let mut gate_outcome = build_gate_outcome(GateOutcomeInput {
         args,
         config,
         plan,
@@ -5217,6 +5230,7 @@ fn write_review_artifacts(
         missing_or_failed_model_evidence: &review.missing_or_failed_model_evidence,
         reporter_gate,
     });
+    gate_outcome.revision = revision.cloned();
     if (gate_outcome.conclusion == "fail" || gate_outcome.conclusion == "inconclusive")
         && review_payload_status == "skipped_empty_smoke"
     {
@@ -14981,6 +14995,7 @@ required_proof_unprooven = true
             &diff,
             &test_box_state(),
             &plan,
+            None,
             "running summary",
             test_pr_thread_context(),
             &args,
@@ -15203,6 +15218,7 @@ required_proof_unprooven = true
             &diff,
             &test_box_state(),
             &plan,
+            None,
             "running summary",
             test_pr_thread_context(),
             &args,
@@ -17764,6 +17780,7 @@ index 1111111..2222222 100644
             &diff,
             &test_box_state(),
             &plan,
+            None,
             "running summary",
             test_pr_thread_context(),
             &args,
@@ -17833,6 +17850,7 @@ index 1111111..2222222 100644
             &diff,
             &test_box_state(),
             &plan,
+            None,
             "running summary",
             test_pr_thread_context(),
             &args,
@@ -17907,6 +17925,7 @@ index 1111111..2222222 100644
             &diff,
             &test_box_state(),
             &plan,
+            None,
             "running summary",
             test_pr_thread_context(),
             &args,
@@ -18666,6 +18685,7 @@ index 1111111..2222222 100644
             sensor_coverage: super::gate_truth::GateSensorCoverage::default(),
             model_coverage: super::gate_truth::GateModelCoverage::default(),
             not_proven_reasons: Vec::new(),
+            revision: None,
         };
 
         let ledger = super::build_fill_ledger(super::FillLedgerInput {

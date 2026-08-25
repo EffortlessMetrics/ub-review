@@ -26,6 +26,10 @@ pub(crate) struct RevisionAdmission {
     pub(crate) identity_digest: String,
     /// `"candidate_head"` or `"merge_result"`, mirroring the canonical form.
     pub(crate) semantics: String,
+    /// Exact git commit object the run reviewed (the identity's reviewed
+    /// pair), for consumers that bind to real objects such as delivery
+    /// exact-head checks.
+    pub(crate) reviewed_commit_oid: String,
     /// Resolved PR-head commit when hosted metadata was supplied.
     #[serde(default)]
     pub(crate) pr_head_commit: Option<String>,
@@ -121,6 +125,7 @@ pub(crate) fn admit_revision(
         identity_canonical: identity.canonical_form(),
         identity_digest: identity.identity_digest(),
         semantics: semantics.as_str().to_owned(),
+        reviewed_commit_oid: reviewed.commit_oid().to_owned(),
         pr_head_commit,
         worktree_dirty,
     })
@@ -496,6 +501,43 @@ mod tests {
         // Dirt does not move the committed identity.
         assert_eq!(clean.identity_digest, dirty.identity_digest);
         assert_eq!(clean.pr_head_commit.as_deref(), Some(head.as_str()));
+        Ok(())
+    }
+
+    #[test]
+    fn revision_ref_joins_admission_and_validates_shape() -> Result<()> {
+        let repo = init_repo()?;
+        let (base_tip, pr_head) = divergent_commits(&repo)?;
+        let merge = synthetic_merge(&repo, &base_tip, &pr_head)?;
+        let admission = admit_revision(
+            repo.root(),
+            "main",
+            &merge,
+            Some(&pr_head),
+            &files_vec(),
+            &sample_patch(),
+        )?;
+
+        let r = crate::RevisionRef::from_admission(&admission);
+        assert_eq!(r.semantics, "merge_result");
+        assert_eq!(r.reviewed_commit, merge);
+        r.validate()?;
+
+        // A tampered digest is visible: shape validation rejects it.
+        let mut forged = r.clone();
+        forged.digest = "z".repeat(64);
+        assert!(forged.validate().is_err());
+
+        // A different revision produces a different join key.
+        let other = admit_revision(
+            repo.root(),
+            "main",
+            &pr_head,
+            Some(&pr_head),
+            &files_vec(),
+            &sample_patch(),
+        )?;
+        assert_ne!(crate::RevisionRef::from_admission(&other).digest, r.digest);
         Ok(())
     }
 

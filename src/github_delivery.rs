@@ -442,6 +442,22 @@ fn read_expected_delivery_head(
 ) -> Result<Option<String>> {
     if !review.comments.is_empty() {
         let graph = claim_graph.ok_or_else(|| anyhow::anyhow!("claim graph is required"))?;
+        // A1.3 (#950): the immutable revision reference is authoritative.
+        // Its reviewed_commit is the exact git object the run admitted, so
+        // delivery binds to that instead of any symbolic label.
+        if let Some(revision) = graph.get("revision") {
+            let commit = revision
+                .get("reviewed_commit")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| {
+                    anyhow::anyhow!("claim graph revision reference is missing reviewed_commit")
+                })?;
+            return Ok(Some(commit.to_owned()));
+        }
+        // Legacy fallback: head_sha may carry a symbolic label (`HEAD`),
+        // which is weak authority kept only for pre-A1.3 packets. It must
+        // never be mistaken for immutable identity (A1.4 enforces).
         let head = graph
             .get("head_sha")
             .and_then(serde_json::Value::as_str)
@@ -1925,6 +1941,47 @@ mod tests {
                 .join("review/delivery-reply-receipts.json")
                 .exists()
         );
+        Ok(())
+    }
+
+    #[test]
+    fn delivery_head_prefers_immutable_revision_over_legacy_label() -> Result<()> {
+        // A1.3: the revision reference is authoritative; the legacy
+        // head_sha label may be a symbolic `HEAD` and must not win.
+        let graph = serde_json::json!({
+            "schema": "ub-review.claim_graph.v1",
+            "head_sha": "HEAD",
+            "revision": {
+                "digest": "a".repeat(64),
+                "semantics": "merge_result",
+                "reviewed_commit": "b".repeat(40),
+            },
+            "topics": [],
+        });
+        let review = crate::GitHubReview {
+            event: String::new(),
+            body: String::new(),
+            comments: vec![crate::GitHubReviewComment {
+                path: "src/lib.rs".to_owned(),
+                line: 1,
+                side: "RIGHT".to_owned(),
+                body: "exact body".to_owned(),
+                suggestion: None,
+            }],
+        };
+        let expected = read_expected_delivery_head(&review, Some(&graph))?
+            .ok_or_else(|| anyhow::anyhow!("immutable revision must bind the delivery head"))?;
+        assert_eq!(expected, "b".repeat(40));
+
+        // Pre-A1.3 packets keep working through the weak legacy label.
+        let legacy = serde_json::json!({
+            "schema": "ub-review.claim_graph.v1",
+            "head_sha": "abc123",
+            "topics": [],
+        });
+        let expected = read_expected_delivery_head(&review, Some(&legacy))?
+            .ok_or_else(|| anyhow::anyhow!("legacy head label still binds"))?;
+        assert_eq!(expected, "abc123");
         Ok(())
     }
 

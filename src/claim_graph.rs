@@ -21,7 +21,13 @@ pub(crate) struct ClaimGraph {
     pub(crate) schema: &'static str,
     /// Exact commit this graph describes. State from another head cannot
     /// suppress, certify, or inherit delivery for the current review.
+    /// Legacy symbolic labels (`HEAD`, branch names) here are display-only;
+    /// the immutable reference lives in `revision`.
     pub(crate) head_sha: String,
+    /// Immutable revision reference (A1.3): digest join key plus the exact
+    /// reviewed commit. Stamped by the run once admission has resolved it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) revision: Option<crate::RevisionRef>,
     /// All claims in the graph.
     pub(crate) claims: Vec<ClaimNode>,
     /// Current-head review topics compiled from claims, threads, and receipts.
@@ -368,6 +374,7 @@ pub(crate) fn build_shadow_claim_graph(head_sha: &str) -> ClaimGraph {
     ClaimGraph {
         schema: CLAIM_GRAPH_SCHEMA,
         head_sha: head_sha.to_owned(),
+        revision: None,
         claims: Vec::new(),
         topics: Vec::new(),
         conflicts: Vec::new(),
@@ -468,6 +475,7 @@ pub(crate) fn build_claim_graph_from_inputs(head_sha: &str, claims: &[ClaimInput
     ClaimGraph {
         schema: CLAIM_GRAPH_SCHEMA,
         head_sha: head_sha.to_owned(),
+        revision: None,
         claims: nodes,
         topics: Vec::new(),
         conflicts,
@@ -777,6 +785,12 @@ pub(crate) fn check_causal_relevance(relevance: &RelevancePath) -> RelevanceChec
 
 /// Write the claim graph artifact.
 pub(crate) fn write_claim_graph(out: &Path, graph: &ClaimGraph) -> anyhow::Result<()> {
+    if let Some(revision) = &graph.revision {
+        // Stamped refs must be well-formed before they reach the packet:
+        // downstream joins (delivery exact-head, verifier cross-checks)
+        // trust this object.
+        revision.validate()?;
+    }
     let path = out.join("review").join("claim_graph.json");
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
@@ -788,6 +802,38 @@ pub(crate) fn write_claim_graph(out: &Path, graph: &ClaimGraph) -> anyhow::Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stamped_revision_ref_is_visible_in_the_artifact() -> anyhow::Result<()> {
+        let out = tempfile::tempdir()?;
+        let mut graph = build_shadow_claim_graph("abc123");
+        assert!(graph.revision.is_none());
+        graph.revision = Some(crate::RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        });
+        write_claim_graph(out.path(), &graph)?;
+        let written: serde_json::Value = serde_json::from_slice(&std::fs::read(
+            out.path().join("review").join("claim_graph.json"),
+        )?)?;
+        assert_eq!(
+            written["revision"]["digest"],
+            "a".repeat(64),
+            "the immutable join key must be visible to packet consumers"
+        );
+        assert_eq!(written["revision"]["reviewed_commit"], "b".repeat(40));
+
+        // A malformed stamp fails the write instead of poisoning the packet.
+        let mut broken = build_shadow_claim_graph("abc123");
+        broken.revision = Some(crate::RevisionRef {
+            digest: "short".to_owned(),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        });
+        assert!(write_claim_graph(out.path(), &broken).is_err());
+        Ok(())
+    }
 
     #[test]
     fn shadow_claim_graph_is_empty_by_default() {

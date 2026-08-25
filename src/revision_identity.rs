@@ -8,6 +8,7 @@
 //! human-readable names used to reach them.
 
 use anyhow::{Result, bail};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest as ShaDigest, Sha256};
 
 /// Domain separator for object identifiers accepted by this contract.
@@ -119,6 +120,47 @@ pub(crate) struct RevisionIdentity {
 
 /// Canonical-form version bumped on any breaking layout change.
 const CANONICAL_VERSION: &str = "ub-review.revision-identity.v1";
+
+/// Packet-level immutable reference stamped into derived artifacts (A1.3,
+/// #950).
+///
+/// `digest` is the cross-artifact join key (the identity digest of the
+/// admitted revision); `reviewed_commit` is the exact git commit object the
+/// run reviewed, for consumers that must bind to a real object (delivery
+/// exact-head checks); `semantics` preserves the candidate-head versus
+/// merge-result distinction end to end. Legacy symbolic `head` labels stay
+/// display-only next to this.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct RevisionRef {
+    pub(crate) digest: String,
+    pub(crate) semantics: String,
+    pub(crate) reviewed_commit: String,
+}
+
+impl RevisionRef {
+    pub(crate) fn from_admission(admission: &crate::revision_admission::RevisionAdmission) -> Self {
+        Self {
+            digest: admission.identity_digest.clone(),
+            semantics: admission.semantics.clone(),
+            reviewed_commit: admission.reviewed_commit_oid.clone(),
+        }
+    }
+
+    /// Shape-checks a ref read back from an artifact. Cross-artifact
+    /// enforcement against the admitting packet is A1.4's job; this only
+    /// makes malformed refs visible.
+    pub(crate) fn validate(&self) -> Result<()> {
+        validate_sha256(&self.digest, "revision digest")?;
+        if self.semantics != "candidate_head" && self.semantics != "merge_result" {
+            bail!("unknown revision ref semantics `{}`", self.semantics);
+        }
+        let parsed = Oid::parse(&self.reviewed_commit)?;
+        if parsed.is_null() {
+            bail!("revision ref reviewed_commit is a null object id");
+        }
+        Ok(())
+    }
+}
 
 /// Domain separator hashed ahead of the canonical form.
 const DIGEST_DOMAIN: &str = "ub-review.revision-identity.digest.v1";
