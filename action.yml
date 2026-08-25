@@ -89,6 +89,10 @@ inputs:
     description: 'Run pass identity: auto, opened, reopened, ready_for_review, synchronize, pull_request_other, or manual. Auto maps pull_request opened, reopened, ready_for_review, and synchronize to the matching pass; when posting=review, a pass posts the grouped review only if the profile lists its event action in [gate].post_review_on.'
     default: auto
     required: false
+  pr-head-sha:
+    description: 'Pull-request head SHA from hosted event metadata (github.event.pull_request.head.sha). Required to admit a GitHub-style synthetic merge checkout as merge_result; without it a two-parent reviewed checkout fails admission instead of being relabeled.'
+    default: ''
+    required: false
   github-token:
     description: GitHub token used to seed PR-thread context and, when posting=review, submit the grouped PR review.
     default: ''
@@ -652,6 +656,7 @@ runs:
         UB_REVIEW_OPENCODE_API_KEY: ${{ inputs['opencode-api-key'] }}
         UB_REVIEW_OPENCODE_API_URL: ${{ inputs['opencode-api-url'] }}
         UB_REVIEW_GITHUB_EVENT_ACTION: ${{ github.event.action }}
+        UB_REVIEW_PR_HEAD_SHA: ${{ inputs['pr-head-sha'] }}
       run: |
         set -euo pipefail
         extra=()
