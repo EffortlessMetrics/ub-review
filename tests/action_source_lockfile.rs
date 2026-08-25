@@ -1,7 +1,3 @@
-use std::fs;
-use std::path::Path;
-use std::process::{Command, Output};
-
 use anyhow::{Context, Result, ensure};
 
 const ACTION: &str = include_str!("../action.yml");
@@ -47,7 +43,10 @@ fn source_runner_requires_committed_regular_lockfile_before_locked_build() -> Re
 
 #[cfg(unix)]
 mod unix {
+    use std::fs;
     use std::os::unix::fs::{PermissionsExt, symlink};
+    use std::path::Path;
+    use std::process::{Command, Output};
 
     use super::*;
 
