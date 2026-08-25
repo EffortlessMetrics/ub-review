@@ -42,7 +42,14 @@ candidate tests, manifests, build scripts, policy code, or verifier code are
 trusted. The released stable-coordinator and hostile-head-safe job split in
 #876/#814 own that stronger boundary.
 
-Merging the workflow does not change branch protection. Making
-`ub-review/independent-baseline` required, replacing `ub-review/gate`, or
-retiring either check is a separate maintainer-authorized operation with its
-own receipt.
+Merging the workflow does not change branch protection. The check remains
+advisory until a separate maintainer-authorized operation records the exact
+external rule and rollback.
+
+Do **not** promote `ub-review/independent-baseline` through a legacy required
+status-check name alone. A pull-request workflow can mint the same job/check
+name, so the name is not an independent authority identity. Any temporary
+promotion must use GitHub's required-workflow ruleset bound to the
+protected-default-branch `.github/workflows/independent-baseline.yml` (or an
+equivalent identity the candidate cannot mint). Replacing `ub-review/gate` or
+retiring either workflow remains a later, separately authorized operation.
