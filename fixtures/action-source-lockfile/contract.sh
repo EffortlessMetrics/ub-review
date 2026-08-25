@@ -7,7 +7,7 @@ trap 'rm -rf "$root"' EXIT
 runner="$root/source-runner.sh"
 
 # Execute the production resolver body rather than reimplementing its branch
-# logic in the fixture. The named surrounding steps bound the extracted block.
+# logic in the fixture. Named surrounding steps fail closed if that block moves.
 awk '
   /^    - name: Resolve ub-review runner$/ { in_step = 1; next }
   in_step && /^      run: \|$/ { capture = 1; next }
