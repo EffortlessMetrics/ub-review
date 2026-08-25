@@ -1,0 +1,98 @@
+name: temporary-950-admission-consistency-v2
+
+on:
+  push:
+    branches: [feat/950-revision-binding]
+    paths: [.github/workflows/branch-950-admission-consistency-v2.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/950-revision-binding
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          components: rustfmt,clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Apply admission validation without forbidden test panics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/branch-950-admission-consistency.yml').read_text()
+          body = workflow.split("          python - <<'PY'\n", 1)[1].split("\n          PY\n", 1)[0]
+          script = "\n".join(
+              line[10:] if line.startswith("          ") else line
+              for line in body.splitlines()
+          )
+          exec(compile(script, 'branch-950-admission-consistency.py', 'exec'))
+
+          path = Path('src/revision_admission.rs')
+          text = path.read_text()
+          replacements = [
+              (
+                  '''        let semantics_error = wrong_semantics
+                      .validate()
+                      .expect_err("legacy compatibility cannot override canonical semantics");
+          ''',
+                  '''        let Err(semantics_error) = wrong_semantics.validate() else {
+                      bail!("legacy compatibility unexpectedly overrode canonical semantics");
+                  };
+          ''',
+              ),
+              (
+                  '''        let head_error = wrong_head
+                      .validate()
+                      .expect_err("legacy compatibility cannot override canonical PR head");
+          ''',
+                  '''        let Err(head_error) = wrong_head.validate() else {
+                      bail!("legacy compatibility unexpectedly overrode canonical PR head");
+                  };
+          ''',
+              ),
+          ]
+          for old, new in replacements:
+              if text.count(old) != 1:
+                  raise SystemExit(f'expected one test panic target, found {text.count(old)}')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+
+      - name: Format
+        run: cargo fmt --all
+
+      - name: Focused admission tests
+        run: |
+          cargo test --locked legacy_admission_fields_cannot_override_canonical_semantics_or_pr_head
+          cargo test --locked revision_ref_joins_admission_and_validates_shape
+
+      - name: Full validation
+        run: |
+          cargo check --workspace --all-targets --locked
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo test --workspace --all-targets --locked
+          python scripts/verify-bun-review-artifacts.py --self-test
+          cargo xtask policy-check
+
+      - name: Commit source correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name EffortlessSteven
+          git config user.email git@effortlesssteven.com
+          git add src/revision_admission.rs
+          git commit -m "fix(revision): validate legacy admission identity fields"
+          git push origin HEAD:feat/950-revision-binding
