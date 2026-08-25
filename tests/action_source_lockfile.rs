@@ -35,7 +35,7 @@ fn source_runner_requires_committed_regular_lockfile_before_locked_build() {
 #[test]
 fn source_runner_lockfile_contract_executes_end_to_end() {
     let output = Command::new("bash")
-        .arg("tests/fixtures/action-source-lockfile.sh")
+        .arg("fixtures/action-source-lockfile/contract.sh")
         .arg("action.yml")
         .output()
         .expect("execute source lockfile fixture");
