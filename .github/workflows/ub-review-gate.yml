@@ -74,7 +74,9 @@ jobs:
         if: always()
         with:
           name: ub-review-gate
-          path: target/ub-review
+          path: |
+            target/ub-review
+            src/main.rs
           if-no-files-found: error
 
   # Coverage publication remains telemetry, but its OIDC permission is isolated
