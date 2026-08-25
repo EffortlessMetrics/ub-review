@@ -28,7 +28,7 @@ fn candidate_gate_job_is_model_off_artifact_only_and_without_privileged_inputs()
     let gate = job_section(WORKFLOW, "gate", Some("coverage-upload"))?;
 
     for required in [
-        "permissions:\n      contents: read\n      actions: read",
+        "permissions:\n      contents: read",
         "persist-credentials: false",
         "uses: ./",
         "posting: artifact-only",
@@ -43,6 +43,7 @@ fn candidate_gate_job_is_model_off_artifact_only_and_without_privileged_inputs()
     }
 
     for forbidden in [
+        "actions: read",
         "pull-requests: write",
         "checks: write",
         "id-token: write",
