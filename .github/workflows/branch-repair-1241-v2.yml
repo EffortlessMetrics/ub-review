@@ -1,0 +1,107 @@
+name: temporary PR 1241 repair v2
+
+on:
+  push:
+    branches:
+      - codex/893-source-lockfile
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temporary-pr-1241-repair-v2
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          components: rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Apply and verify bounded proof repair
+        run: |
+          set -euo pipefail
+          python - <<'PYCODE'
+          import base64
+          import re
+          from pathlib import Path
+
+          payload = Path('.github/workflows/branch-repair-1241.yml').read_text()
+
+          def decode(name: str) -> bytes:
+              match = re.search(rf'^\s+{name}: (\S+)$', payload, re.MULTILINE)
+              if not match:
+                  raise SystemExit(f'missing repair payload {name}')
+              return base64.b64decode(match.group(1))
+
+          main = Path('src/main.rs')
+          text = main.read_text()
+          start_marker = '    #[test]\n    fn ub_review_gate_workflow_matches_self_profile_post_policy()'
+          new_marker = '    #[test]\n    fn ub_review_gate_workflow_uses_contained_candidate_posture()'
+          end_marker = '\n    #[test]\n    fn ub_review_self_profile_loads_baseline_gate_tools()'
+          start = text.find(start_marker)
+          if start >= 0:
+              end = text.find(end_marker, start)
+              if end < 0:
+                  raise SystemExit('self-gate assertion end marker is missing')
+              text = text[:start] + decode('MAIN_BLOCK_B64').decode() + text[end:]
+              main.write_text(text)
+          elif new_marker not in text:
+              raise SystemExit('neither stale nor repaired self-gate assertion exists')
+
+          Path('tests/action_source_lockfile.rs').write_bytes(decode('RUST_TEST_B64'))
+          fixture = Path('tests/fixtures/action-source-lockfile.sh')
+          fixture.parent.mkdir(parents=True, exist_ok=True)
+          fixture.write_bytes(decode('SHELL_FIXTURE_B64'))
+          PYCODE
+
+          cargo fmt --all
+          bash -n tests/fixtures/action-source-lockfile.sh
+          cargo test --locked --test action_source_lockfile
+          cargo test --locked -p ub-review --bin ub-review \
+            tests::ub_review_gate_workflow_uses_contained_candidate_posture -- --exact
+          git diff --check
+
+          python - <<'PYCODE'
+          import subprocess
+
+          expected = {
+              'src/main.rs',
+              'tests/action_source_lockfile.rs',
+              'tests/fixtures/action-source-lockfile.sh',
+          }
+          changed = set(subprocess.check_output(
+              ['git', 'diff', '--name-only'], text=True
+          ).splitlines())
+          changed.update(subprocess.check_output(
+              ['git', 'ls-files', '--others', '--exclude-standard'], text=True
+          ).splitlines())
+          if changed and changed != expected:
+              raise SystemExit(f'unexpected repair surface: {sorted(changed)}')
+          if not changed:
+              Path('/tmp/ub-review-repair-noop').touch()
+          PYCODE
+
+          if [[ -e /tmp/ub-review-repair-noop ]]; then
+            echo 'bounded repair already applied and verified'
+            exit 0
+          fi
+
+          git config user.name 'EffortlessSteven'
+          git config user.email 'git@effortlesssteven.com'
+          git add src/main.rs tests/action_source_lockfile.rs \
+            tests/fixtures/action-source-lockfile.sh
+          git commit -m 'test(ci): align source lock proof with contained gate'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
