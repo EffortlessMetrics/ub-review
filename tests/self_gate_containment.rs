@@ -1,6 +1,8 @@
 use anyhow::{Context, Result, ensure};
 
 const WORKFLOW: &str = include_str!("../.github/workflows/ub-review-gate.yml");
+const INDEPENDENT_WORKFLOW: &str =
+    include_str!("../.github/workflows/independent-baseline.yml");
 
 fn job_section<'a>(workflow: &'a str, job: &str, next_job: Option<&str>) -> Result<&'a str> {
     let start_marker = format!("\n  {job}:\n");
@@ -99,5 +101,68 @@ fn coverage_oidc_is_isolated_in_a_non_candidate_telemetry_job() -> Result<()> {
         );
     }
 
+    Ok(())
+}
+
+#[test]
+fn independent_baseline_uses_base_owned_orchestration_and_exact_candidate_checkout() -> Result<()> {
+    ensure!(
+        INDEPENDENT_WORKFLOW.starts_with("name: ub-review/independent-baseline\n"),
+        "independent check must expose one stable check name"
+    );
+    ensure!(
+        INDEPENDENT_WORKFLOW.contains("\n  pull_request_target:\n"),
+        "workflow definition must come from the protected base branch"
+    );
+    for required in [
+        "permissions:\n  contents: read",
+        "repository: ${{ github.event.pull_request.head.repo.full_name }}",
+        "ref: ${{ github.event.pull_request.head.sha }}",
+        "persist-credentials: false",
+        "actual_sha=\"$(git rev-parse HEAD)\"",
+        "workflow_source: \"protected-base\"",
+        "Enforce independent baseline",
+        "actions/upload-artifact@v7",
+    ] {
+        ensure!(
+            INDEPENDENT_WORKFLOW.contains(required),
+            "independent baseline is missing `{required}`"
+        );
+    }
+
+    for command in [
+        "cargo fmt --all -- --check",
+        "cargo check --workspace --all-targets --locked",
+        "cargo clippy --workspace --all-targets --locked -- -D warnings",
+        "cargo test --workspace --all-targets --locked",
+        "cargo doc --workspace --no-deps --locked",
+        "cargo xtask policy-check",
+        "python scripts/verify-bun-review-artifacts.py --self-test",
+    ] {
+        ensure!(
+            INDEPENDENT_WORKFLOW.matches(command).count() == 1,
+            "trusted command list must contain exactly one `{command}`"
+        );
+    }
+
+    for forbidden in [
+        "uses: ./",
+        "github-token:",
+        "github.token",
+        "secrets.",
+        "pull-requests: write",
+        "checks: write",
+        "actions: write",
+        "id-token: write",
+        "Swatinem/rust-cache",
+        "actions/cache",
+        "gate_outcome.json",
+        "ub-review gate-check",
+    ] {
+        ensure!(
+            !INDEPENDENT_WORKFLOW.contains(forbidden),
+            "independent baseline must not contain `{forbidden}`"
+        );
+    }
     Ok(())
 }
