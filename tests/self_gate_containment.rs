@@ -104,7 +104,7 @@ fn coverage_oidc_is_isolated_in_a_non_candidate_telemetry_job() -> Result<()> {
 }
 
 #[test]
-fn independent_baseline_uses_base_owned_orchestration_and_exact_candidate_checkout() -> Result<()> {
+fn independent_baseline_isolates_candidate_evidence_from_trusted_finalization() -> Result<()> {
     ensure!(
         INDEPENDENT_WORKFLOW.starts_with("name: ub-review/independent-baseline\n"),
         "independent check must expose one stable check name"
@@ -113,22 +113,82 @@ fn independent_baseline_uses_base_owned_orchestration_and_exact_candidate_checko
         INDEPENDENT_WORKFLOW.contains("\n  pull_request_target:\n"),
         "workflow definition must come from the protected base branch"
     );
+
+    let evidence = job_section(INDEPENDENT_WORKFLOW, "evidence", Some("finalize"))?;
+    let finalize = job_section(INDEPENDENT_WORKFLOW, "finalize", None)?;
+
     for required in [
-        "permissions:\n  contents: read",
+        "name: independent evidence / ${{ matrix.check }}",
+        "fail-fast: false",
+        "check: [fmt, check, clippy, test, doc, policy, verifier]",
         "repository: ${{ github.event.pull_request.head.repo.full_name }}",
         "ref: ${{ github.event.pull_request.head.sha }}",
         "persist-credentials: false",
-        "Set isolated runtime paths",
-        "CARGO_TARGET_DIR=$RUNNER_TEMP/ub-review-independent-target",
-        "RECEIPT_DIR=$RUNNER_TEMP/ub-review-independent-baseline",
         "actual_sha=\"$(git rev-parse HEAD)\"",
-        "workflow_source: \"protected-base\"",
-        "Enforce independent baseline",
-        "actions/upload-artifact@v7",
+        "export CARGO_TARGET_DIR=\"$RUNNER_TEMP/ub-review-independent-${CHECK}-target\"",
+        "Run one fixed deterministic check",
     ] {
         ensure!(
-            INDEPENDENT_WORKFLOW.contains(required),
-            "independent baseline is missing `{required}`"
+            evidence.contains(required),
+            "independent evidence matrix is missing `{required}`"
+        );
+    }
+
+    for forbidden in [
+        "receipt.json",
+        "actions/upload-artifact",
+        "needs.evidence.result",
+        "Enforce independent baseline",
+        "github-token:",
+        "github.token",
+        "secrets.",
+        "pull-requests: write",
+        "checks: write",
+        "actions: write",
+        "id-token: write",
+        "Swatinem/rust-cache",
+        "actions/cache",
+        "gate_outcome.json",
+        "ub-review gate-check",
+    ] {
+        ensure!(
+            !evidence.contains(forbidden),
+            "candidate evidence job must not contain `{forbidden}`"
+        );
+    }
+
+    for required in [
+        "name: ub-review/independent-baseline",
+        "needs: evidence",
+        "if: ${{ always() }}",
+        "EVIDENCE_RESULT: ${{ needs.evidence.result }}",
+        "Write trusted exact-head baseline receipt",
+        "evidence_topology: \"isolated-matrix-jobs\"",
+        "actions/upload-artifact@v7",
+        "Enforce independent baseline",
+    ] {
+        ensure!(
+            finalize.contains(required),
+            "trusted finalizer is missing `{required}`"
+        );
+    }
+
+    for forbidden in [
+        "actions/checkout",
+        "repository: ${{ github.event.pull_request.head.repo.full_name }}",
+        "git rev-parse",
+        "uses: ./",
+        "github-token:",
+        "github.token",
+        "secrets.",
+        "pull-requests: write",
+        "checks: write",
+        "actions: write",
+        "id-token: write",
+    ] {
+        ensure!(
+            !finalize.contains(forbidden),
+            "trusted finalizer must not contain `{forbidden}`"
         );
     }
 
@@ -143,30 +203,9 @@ fn independent_baseline_uses_base_owned_orchestration_and_exact_candidate_checko
     ] {
         ensure!(
             INDEPENDENT_WORKFLOW.matches(command).count() == 2,
-            "trusted command must appear once for execution and once in the receipt: `{command}`"
+            "fixed command must appear once in execution and once in the trusted receipt: `{command}`"
         );
     }
 
-    for forbidden in [
-        "uses: ./",
-        "github-token:",
-        "github.token",
-        "secrets.",
-        "pull-requests: write",
-        "checks: write",
-        "actions: write",
-        "id-token: write",
-        "CARGO_TARGET_DIR: ${{ runner.temp }}",
-        "RECEIPT_DIR: ${{ runner.temp }}",
-        "Swatinem/rust-cache",
-        "actions/cache",
-        "gate_outcome.json",
-        "ub-review gate-check",
-    ] {
-        ensure!(
-            !INDEPENDENT_WORKFLOW.contains(forbidden),
-            "independent baseline must not contain `{forbidden}`"
-        );
-    }
     Ok(())
 }
