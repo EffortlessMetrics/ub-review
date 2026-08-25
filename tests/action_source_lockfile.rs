@@ -1,3 +1,4 @@
+#[cfg(unix)]
 use std::process::Command;
 
 const ACTION: &str = include_str!("../action.yml");
