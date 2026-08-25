@@ -1,0 +1,124 @@
+name: temporary PR 1241 review repair
+
+on:
+  push:
+    branches:
+      - codex/893-source-lockfile
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temporary-pr-1241-review-repair
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          components: rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Apply review-backed scope repair
+        run: |
+          set -euo pipefail
+          python - <<'PYCODE'
+          from pathlib import Path
+
+          standalone = Path("tests/action_source_lockfile.rs")
+          source = standalone.read_text()
+          marker = "/// Pins source-install admission"
+          start = source.find(marker)
+          if start < 0:
+              raise SystemExit("source-lock test marker is missing")
+          block = source[start:].strip()
+
+          cli = Path("tests/cli.rs")
+          cli_text = cli.read_text()
+          function = "fn source_runner_requires_committed_regular_lockfile_before_locked_build()"
+          if function in cli_text:
+              raise SystemExit("source-lock test is already present in tests/cli.rs")
+          cli.write_text(cli_text.rstrip() + "\n\n" + block + "\n")
+          standalone.unlink()
+
+          spec = Path("docs/specs/UB-REVIEW-SPEC-0010-release-install.md")
+          text = spec.read_text()
+          old_install = """- `source` is the deterministic fallback: copy the action source into
+  `RUNNER_TEMP`, `cargo generate-lockfile`, then
+  `cargo build --locked --release`, honoring a caller-set
+  `CARGO_TARGET_DIR`.
+"""
+          new_install = """- `source` is the deterministic fallback: copy the action source into
+  `RUNNER_TEMP`, require the copied `Cargo.lock` to be a regular non-symlink
+  file, then run `cargo build --locked --release` without regenerating the
+  lockfile, honoring a caller-set `CARGO_TARGET_DIR`.
+"""
+          if text.count(old_install) != 1:
+              raise SystemExit("canonical source-install paragraph did not match exactly once")
+          text = text.replace(old_install, new_install)
+
+          old_command = """cargo generate-lockfile && cargo build --locked --release
+                                        # the exact action source fallback
+"""
+          new_command = """test -f Cargo.lock && ! test -L Cargo.lock &&
+  cargo build --manifest-path Cargo.toml --locked --release
+                                        # committed lock admission + build;
+                                        # no resolver mutation
+"""
+          if text.count(old_command) != 1:
+              raise SystemExit("canonical source validation command did not match exactly once")
+          text = text.replace(old_command, new_command)
+
+          fail_closed_anchor = """- Release request inputs are validated before any URL is constructed: bare
+"""
+          source_fail_closed = """- Source mode requires the copied `Cargo.lock` to be a regular non-symlink
+  file before Cargo executes. Missing or invalid lockfile shapes fail before
+  build; a stale lockfile fails through Cargo's `--locked` behavior.
+"""
+          if text.count(fail_closed_anchor) != 1:
+              raise SystemExit("fail-closed insertion anchor did not match exactly once")
+          text = text.replace(fail_closed_anchor, source_fail_closed + fail_closed_anchor)
+          spec.write_text(text)
+          PYCODE
+
+          cargo fmt --all
+          bash -n fixtures/action-source-lockfile/contract.sh
+          cargo test --locked --test cli \
+            source_runner_requires_committed_regular_lockfile_before_locked_build -- --exact
+          cargo xtask policy-check
+          git diff --check
+
+          rm .github/workflows/branch-repair-1241-review.yml
+
+          python - <<'PYCODE'
+          import subprocess
+
+          expected = {
+              "D\t.github/workflows/branch-repair-1241-review.yml",
+              "M\tdocs/specs/UB-REVIEW-SPEC-0010-release-install.md",
+              "M\ttests/cli.rs",
+              "D\ttests/action_source_lockfile.rs",
+          }
+          actual = set(subprocess.check_output(
+              ["git", "diff", "--name-status"], text=True
+          ).splitlines())
+          if actual != expected:
+              raise SystemExit(f"unexpected review-repair surface: {sorted(actual)}")
+          PYCODE
+
+          git config user.name "EffortlessSteven"
+          git config user.email "git@effortlesssteven.com"
+          git add -A
+          git commit -m "test(ci): align source lock proof and spec"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
