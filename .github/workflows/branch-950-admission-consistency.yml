@@ -1,0 +1,168 @@
+name: temporary-950-admission-consistency
+
+on:
+  push:
+    branches: [feat/950-revision-binding]
+    paths: [.github/workflows/branch-950-admission-consistency.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/950-revision-binding
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          components: rustfmt,clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Enforce top-level admission identity before legacy object fallback
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/revision_admission.rs')
+          text = path.read_text()
+          old = '''        let stored_objects = [
+                      self.base_commit_oid.as_str(),
+                      self.head_commit_oid.as_str(),
+                      self.reviewed_commit_oid.as_str(),
+                  ];
+                  if stored_objects.iter().all(|value| value.is_empty()) {
+                      return Ok(());
+                  }
+                  if self.base_commit_oid != parsed.base_commit_oid()
+                      || self.head_commit_oid != parsed.head_commit_oid()
+                      || self.reviewed_commit_oid != parsed.reviewed_commit_oid()
+                      || self.semantics != parsed.semantics_key()
+                  {
+                      bail!("revision admission object fields do not match its canonical identity");
+                  }
+                  if self
+                      .pr_head_commit
+                      .as_deref()
+                      .is_some_and(|commit| commit != parsed.head_commit_oid())
+                  {
+                      bail!("revision admission pull-request head does not match its canonical identity");
+                  }
+                  Ok(())
+          '''
+          new = '''        if self.semantics != parsed.semantics_key() {
+                      bail!("revision admission semantics do not match its canonical identity");
+                  }
+                  if self
+                      .pr_head_commit
+                      .as_deref()
+                      .is_some_and(|commit| commit != parsed.head_commit_oid())
+                  {
+                      bail!("revision admission pull-request head does not match its canonical identity");
+                  }
+                  let stored_objects = [
+                      self.base_commit_oid.as_str(),
+                      self.head_commit_oid.as_str(),
+                      self.reviewed_commit_oid.as_str(),
+                  ];
+                  if stored_objects.iter().all(|value| value.is_empty()) {
+                      return Ok(());
+                  }
+                  if self.base_commit_oid != parsed.base_commit_oid()
+                      || self.head_commit_oid != parsed.head_commit_oid()
+                      || self.reviewed_commit_oid != parsed.reviewed_commit_oid()
+                  {
+                      bail!("revision admission object fields do not match its canonical identity");
+                  }
+                  Ok(())
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f'validation target count={text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          marker = '''    #[test]
+              fn revision_ref_joins_admission_and_validates_shape() -> Result<()> {
+          '''
+          test = '''    #[test]
+              fn legacy_admission_fields_cannot_override_canonical_semantics_or_pr_head() -> Result<()> {
+                  let repo = init_repo()?;
+                  let (base_tip, pr_head) = divergent_commits(&repo)?;
+                  let merge = synthetic_merge(&repo, &base_tip, &pr_head)?;
+                  let admission = admit_revision(
+                      repo.root(),
+                      "main",
+                      &merge,
+                      Some(&pr_head),
+                      &files_vec(),
+                      &sample_patch(),
+                  )?;
+
+                  let mut legacy = admission.clone();
+                  legacy.base_commit_oid.clear();
+                  legacy.head_commit_oid.clear();
+                  legacy.reviewed_commit_oid.clear();
+                  legacy.validate()?;
+
+                  let mut wrong_semantics = legacy.clone();
+                  wrong_semantics.semantics = "candidate_head".to_owned();
+                  let semantics_error = wrong_semantics
+                      .validate()
+                      .expect_err("legacy compatibility cannot override canonical semantics");
+                  assert!(
+                      semantics_error.to_string().contains("semantics do not match"),
+                      "{semantics_error}"
+                  );
+
+                  let mut wrong_head = legacy;
+                  wrong_head.pr_head_commit = Some("f".repeat(40));
+                  let head_error = wrong_head
+                      .validate()
+                      .expect_err("legacy compatibility cannot override canonical PR head");
+                  assert!(
+                      head_error.to_string().contains("pull-request head does not match"),
+                      "{head_error}"
+                  );
+                  Ok(())
+              }
+
+              #[test]
+              fn revision_ref_joins_admission_and_validates_shape() -> Result<()> {
+          '''
+          if text.count(marker) != 1:
+              raise SystemExit(f'test insertion target count={text.count(marker)}')
+          path.write_text(text.replace(marker, test, 1))
+          PY
+
+      - name: Format
+        run: cargo fmt --all
+
+      - name: Focused admission tests
+        run: |
+          cargo test --locked legacy_admission_fields_cannot_override_canonical_semantics_or_pr_head
+          cargo test --locked revision_ref_joins_admission_and_validates_shape
+
+      - name: Full validation
+        run: |
+          cargo check --workspace --all-targets --locked
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo test --workspace --all-targets --locked
+          python scripts/verify-bun-review-artifacts.py --self-test
+          cargo xtask policy-check
+
+      - name: Commit source correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name EffortlessSteven
+          git config user.email git@effortlesssteven.com
+          git add src/revision_admission.rs
+          git commit -m "fix(revision): validate legacy admission identity fields"
+          git push origin HEAD:feat/950-revision-binding
