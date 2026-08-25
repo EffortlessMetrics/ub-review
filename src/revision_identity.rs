@@ -867,4 +867,212 @@ mod tests {
         assert_eq!(RevisionIdentity::from_canonical(&crlf)?, baseline);
         Ok(())
     }
+
+    /// Extracts a rejection message without panic-family calls.
+    trait ExpectErrMessage {
+        fn expect_err_message(self) -> String;
+    }
+
+    impl<T> ExpectErrMessage for Result<T> {
+        fn expect_err_message(self) -> String {
+            match self {
+                Err(err) => err.to_string(),
+                Ok(_) => String::from("expected rejection but construction succeeded"),
+            }
+        }
+    }
+
+    #[test]
+    fn contract_surface_pins_tokens_labels_and_rejection_messages() -> Result<()> {
+        // Every semantics arm's canonical token is pinned exactly, so a
+        // rename silently breaks the serialized contract instead of
+        // drifting both sides together.
+        assert_eq!(ReviewSemantics::CandidateHead.as_str(), "candidate_head");
+        assert_eq!(ReviewSemantics::MergeResult.as_str(), "merge_result");
+        assert_eq!(
+            ReviewSemantics::parse("candidate_head")?,
+            ReviewSemantics::CandidateHead
+        );
+        assert_eq!(
+            ReviewSemantics::parse("merge_result")?,
+            ReviewSemantics::MergeResult
+        );
+        let Err(unknown_semantics) = ReviewSemantics::parse("synthetic") else {
+            bail!("unknown review semantics must be rejected");
+        };
+        assert!(
+            unknown_semantics
+                .to_string()
+                .contains("unknown review semantics `synthetic`"),
+            "{unknown_semantics}"
+        );
+
+        // Every validation arm's message is pinned so the rejection reason
+        // stays diagnosable at the admission boundary.
+        let rejections: Vec<(&str, String)> = vec![
+            (
+                "short commit id",
+                raw_identity(
+                    "abc123",
+                    &oid40(0x02),
+                    &oid40(0x03),
+                    &oid40(0x04),
+                    &oid40(0x03),
+                    &oid40(0x04),
+                    None,
+                    ReviewSemantics::CandidateHead,
+                    &digest64(0x10),
+                    &digest64(0x20),
+                )
+                .expect_err_message(),
+            ),
+            (
+                "null base commit",
+                raw_identity(
+                    &"0".repeat(40),
+                    &oid40(0x02),
+                    &oid40(0x03),
+                    &oid40(0x04),
+                    &oid40(0x03),
+                    &oid40(0x04),
+                    None,
+                    ReviewSemantics::CandidateHead,
+                    &digest64(0x10),
+                    &digest64(0x20),
+                )
+                .expect_err_message(),
+            ),
+            (
+                "mixed object-id widths",
+                raw_identity(
+                    &digest64(0x30),
+                    &digest64(0x31),
+                    &oid40(0x03),
+                    &oid40(0x04),
+                    &oid40(0x03),
+                    &oid40(0x04),
+                    None,
+                    ReviewSemantics::CandidateHead,
+                    &digest64(0x10),
+                    &digest64(0x20),
+                )
+                .expect_err_message(),
+            ),
+            (
+                "candidate_head carrying a synthetic merge",
+                raw_identity(
+                    &oid40(0x01),
+                    &oid40(0x02),
+                    &oid40(0x03),
+                    &oid40(0x04),
+                    &oid40(0x03),
+                    &oid40(0x04),
+                    Some((&oid40(0x05), &oid40(0x06))),
+                    ReviewSemantics::CandidateHead,
+                    &digest64(0x10),
+                    &digest64(0x20),
+                )
+                .expect_err_message(),
+            ),
+            (
+                "merge_result without a synthetic merge",
+                raw_identity(
+                    &oid40(0x01),
+                    &oid40(0x02),
+                    &oid40(0x03),
+                    &oid40(0x04),
+                    &oid40(0x03),
+                    &oid40(0x04),
+                    None,
+                    ReviewSemantics::MergeResult,
+                    &digest64(0x10),
+                    &digest64(0x20),
+                )
+                .expect_err_message(),
+            ),
+            (
+                "candidate_head reviewing something else",
+                raw_identity(
+                    &oid40(0x01),
+                    &oid40(0x02),
+                    &oid40(0x03),
+                    &oid40(0x04),
+                    &oid40(0x07),
+                    &oid40(0x08),
+                    None,
+                    ReviewSemantics::CandidateHead,
+                    &digest64(0x10),
+                    &digest64(0x20),
+                )
+                .expect_err_message(),
+            ),
+            (
+                "short changed-paths digest",
+                raw_identity(
+                    &oid40(0x01),
+                    &oid40(0x02),
+                    &oid40(0x03),
+                    &oid40(0x04),
+                    &oid40(0x03),
+                    &oid40(0x04),
+                    None,
+                    ReviewSemantics::CandidateHead,
+                    &digest64(0x10)[..63],
+                    &digest64(0x20),
+                )
+                .expect_err_message(),
+            ),
+        ];
+        let expected_fragments = [
+            "expected 40 or 64 chars",
+            "null object id cannot identify a revision side",
+            "mixed object-id widths",
+            "candidate_head identity carries a synthetic merge",
+            "merge_result identity requires a synthetic merge",
+            "candidate_head must review the pr-head exactly",
+            "changed-paths digest: expected 64 hex chars",
+        ];
+        for ((name, message), fragment) in rejections.iter().zip(expected_fragments) {
+            assert!(
+                message.contains(fragment),
+                "{name}: `{message}` lacks `{fragment}`"
+            );
+        }
+        assert_eq!(rejections.len(), expected_fragments.len());
+
+        // The canonical form pins every labeled field, the version line,
+        // and both merge postures.
+        let candidate = candidate_identity()?;
+        let candidate_form = candidate.canonical_form();
+        assert!(
+            candidate_form.starts_with("ub-review.revision-identity.v1\n"),
+            "{candidate_form}"
+        );
+        for label in [
+            "semantics=candidate_head",
+            "base=",
+            "head=",
+            "reviewed=",
+            "merge=-",
+            "changed_paths=",
+            "diff=",
+        ] {
+            assert!(
+                candidate_form.contains(label),
+                "canonical form lacks `{label}`"
+            );
+        }
+        let merge = merge_identity()?;
+        let merge_form = merge.canonical_form();
+        assert!(!merge_form.contains("merge=-"), "{merge_form}");
+        assert!(merge_form.starts_with("ub-review.revision-identity.v1\n"));
+
+        // The three digest flavors are domain-separated: identical input
+        // bytes under different domains must not collide.
+        let as_paths = RevisionIdentity::changed_paths_digest(["src/a.rs"]);
+        let as_diff = RevisionIdentity::diff_digest(b"src/a.rs");
+        assert_ne!(as_paths, as_diff);
+
+        Ok(())
+    }
 }
