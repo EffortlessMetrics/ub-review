@@ -1,8 +1,7 @@
 use anyhow::{Context, Result, ensure};
 
 const WORKFLOW: &str = include_str!("../.github/workflows/ub-review-gate.yml");
-const INDEPENDENT_WORKFLOW: &str =
-    include_str!("../.github/workflows/independent-baseline.yml");
+const INDEPENDENT_WORKFLOW: &str = include_str!("../.github/workflows/independent-baseline.yml");
 
 fn job_section<'a>(workflow: &'a str, job: &str, next_job: Option<&str>) -> Result<&'a str> {
     let start_marker = format!("\n  {job}:\n");
