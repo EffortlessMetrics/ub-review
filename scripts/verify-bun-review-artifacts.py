@@ -1940,6 +1940,28 @@ def require_review(
     return review
 
 
+def _require_revision_ref(value, label: str) -> None:
+    """A1.3 (#950): shape-check an immutable revision reference.
+
+    Presence is optional while A1.4 owns enforcement; when present it must be
+    well-formed so cross-artifact joins are trustworthy.
+    """
+    if not isinstance(value, dict):
+        fail(f"{label} revision reference must be an object")
+    digest = value.get("digest")
+    if (
+        not isinstance(digest, str)
+        or len(digest) != 64
+        or any(c not in "0123456789abcdef" for c in digest)
+    ):
+        fail(f"{label} revision digest must be 64 lowercase hex chars")
+    if value.get("semantics") not in {"candidate_head", "merge_result"}:
+        fail(f"{label} revision semantics is invalid: {value.get('semantics')!r}")
+    commit = value.get("reviewed_commit")
+    if not isinstance(commit, str) or len(commit) not in (40, 64):
+        fail(f"{label} revision reviewed_commit must be a git object id")
+
+
 def require_claim_graph(root: pathlib.Path) -> None:
     graph = load_json(root / "review/claim_graph.json")
     if not isinstance(graph, dict):
@@ -1970,6 +1992,9 @@ def require_claim_graph(root: pathlib.Path) -> None:
             fail(f"claim_graph.json {field} must be an array")
     if graph.get("mode") not in {"active", "shadow"}:
         fail(f"claim_graph.json mode is invalid: {graph.get('mode')!r}")
+    graph_revision = graph.get("revision")
+    if graph_revision is not None:
+        _require_revision_ref(graph_revision, "claim_graph.json")
     adjudicated_loser_ids = {
         conflict.get("loser")
         for conflict in graph.get("conflicts", [])
@@ -7097,6 +7122,16 @@ def require_gate_outcome(root: pathlib.Path) -> None:
         fail(
             f"gate outcome {conclusion} conclusion requires at least one reason"
         )
+    outcome_revision = outcome.get("revision")
+    if outcome_revision is not None:
+        _require_revision_ref(outcome_revision, "gate_outcome.json")
+        graph = load_json(root / "review/claim_graph.json")
+        if isinstance(graph, dict) and graph.get("revision") is not None:
+            if graph["revision"].get("digest") != outcome_revision.get("digest"):
+                fail(
+                    "gate_outcome.json revision digest does not join "
+                    "claim_graph.json revision digest"
+                )
     for index, reason in enumerate(reasons):
         if not isinstance(reason, dict):
             fail(f"gate outcome reason {index + 1} is not an object")

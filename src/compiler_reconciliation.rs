@@ -482,6 +482,7 @@ mod tests {
         ClaimGraph {
             schema: crate::artifacts::CLAIM_GRAPH_SCHEMA,
             head_sha: "HEAD".to_owned(),
+            revision: None,
             claims: Vec::new(),
             topics: vec![ReviewTopic {
                 claim_id: claim_id.clone(),
@@ -579,6 +580,7 @@ mod tests {
         let graph = ClaimGraph {
             schema: crate::artifacts::CLAIM_GRAPH_SCHEMA,
             head_sha: "HEAD".to_owned(),
+            revision: None,
             claims: Vec::new(),
             topics: vec![ReviewTopic {
                 claim_id: claim_id.clone(),

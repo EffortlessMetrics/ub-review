@@ -235,6 +235,7 @@ pub(crate) fn build_active_claim_graph(
     let mut graph = ClaimGraph {
         schema: crate::artifacts::CLAIM_GRAPH_SCHEMA,
         head_sha: head_sha.to_owned(),
+        revision: None,
         claims,
         topics: topic_values,
         conflicts: Vec::new(),

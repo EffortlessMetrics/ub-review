@@ -291,6 +291,11 @@ pub(crate) struct GateOutcome {
     pub(crate) sensor_coverage: GateSensorCoverage,
     pub(crate) model_coverage: GateModelCoverage,
     pub(crate) not_proven_reasons: Vec<String>,
+    /// Immutable revision reference (A1.3): the admitted revision this
+    /// outcome adjudicates. Legacy `base`/`head` labels elsewhere stay
+    /// display-only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) revision: Option<crate::RevisionRef>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -678,6 +683,9 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
         sensor_coverage: truth.sensor_coverage,
         model_coverage: truth.model_coverage,
         not_proven_reasons: truth.not_proven_reasons,
+        // Stamped by the run (write_review_artifacts) once admission has
+        // resolved the immutable revision; builders and fixtures stay None.
+        revision: None,
     }
 }
 
