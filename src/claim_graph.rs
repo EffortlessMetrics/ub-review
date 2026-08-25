@@ -811,6 +811,8 @@ mod tests {
         graph.revision = Some(crate::RevisionRef {
             digest: "a".repeat(64),
             semantics: "candidate_head".to_owned(),
+            base_commit: "c".repeat(40),
+            head_commit: "b".repeat(40),
             reviewed_commit: "b".repeat(40),
         });
         write_claim_graph(out.path(), &graph)?;
@@ -829,6 +831,8 @@ mod tests {
         broken.revision = Some(crate::RevisionRef {
             digest: "short".to_owned(),
             semantics: "candidate_head".to_owned(),
+            base_commit: "c".repeat(40),
+            head_commit: "b".repeat(40),
             reviewed_commit: "b".repeat(40),
         });
         assert!(write_claim_graph(out.path(), &broken).is_err());

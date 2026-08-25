@@ -26,9 +26,14 @@ pub(crate) struct RevisionAdmission {
     pub(crate) identity_digest: String,
     /// `"candidate_head"` or `"merge_result"`, mirroring the canonical form.
     pub(crate) semantics: String,
-    /// Exact git commit object the run reviewed (the identity's reviewed
-    /// pair), for consumers that bind to real objects such as delivery
-    /// exact-head checks.
+    /// Exact base-side commit from the admitted identity.
+    #[serde(default)]
+    pub(crate) base_commit_oid: String,
+    /// Exact pull-request head commit from the admitted identity.
+    #[serde(default)]
+    pub(crate) head_commit_oid: String,
+    /// Exact git commit object the run reviewed (head or synthetic merge).
+    #[serde(default)]
     pub(crate) reviewed_commit_oid: String,
     /// Resolved PR-head commit when hosted metadata was supplied.
     #[serde(default)]
@@ -111,6 +116,9 @@ pub(crate) fn admit_revision(
         }
     };
 
+    let base_commit_oid = base.commit_oid().to_owned();
+    let head_commit_oid = head.commit_oid().to_owned();
+    let reviewed_commit_oid = reviewed.commit_oid().to_owned();
     let identity = RevisionIdentity::new(
         base,
         head,
@@ -125,7 +133,9 @@ pub(crate) fn admit_revision(
         identity_canonical: identity.canonical_form(),
         identity_digest: identity.identity_digest(),
         semantics: semantics.as_str().to_owned(),
-        reviewed_commit_oid: reviewed.commit_oid().to_owned(),
+        base_commit_oid,
+        head_commit_oid,
+        reviewed_commit_oid,
         pr_head_commit,
         worktree_dirty,
     })
@@ -143,6 +153,28 @@ impl RevisionAdmission {
         }
         if parsed.canonical_form() != self.identity_canonical {
             bail!("revision admission canonical form is not normalized");
+        }
+        let stored_objects = [
+            self.base_commit_oid.as_str(),
+            self.head_commit_oid.as_str(),
+            self.reviewed_commit_oid.as_str(),
+        ];
+        if stored_objects.iter().all(|value| value.is_empty()) {
+            return Ok(());
+        }
+        if self.base_commit_oid != parsed.base_commit_oid()
+            || self.head_commit_oid != parsed.head_commit_oid()
+            || self.reviewed_commit_oid != parsed.reviewed_commit_oid()
+            || self.semantics != parsed.semantics_key()
+        {
+            bail!("revision admission object fields do not match its canonical identity");
+        }
+        if self
+            .pr_head_commit
+            .as_deref()
+            .is_some_and(|commit| commit != parsed.head_commit_oid())
+        {
+            bail!("revision admission pull-request head does not match its canonical identity");
         }
         Ok(())
     }
@@ -520,15 +552,24 @@ mod tests {
 
         let r = crate::RevisionRef::from_admission(&admission);
         assert_eq!(r.semantics, "merge_result");
+        assert_eq!(r.base_commit, base_tip);
+        assert_eq!(r.head_commit, pr_head);
         assert_eq!(r.reviewed_commit, merge);
+        assert_ne!(r.head_commit, r.reviewed_commit);
         r.validate()?;
+
+        // Delivery authority cannot be replaced with the synthetic merge.
+        let mut wrong_head = r.clone();
+        wrong_head.head_commit = wrong_head.reviewed_commit.clone();
+        assert!(wrong_head.validate().is_err());
 
         // A tampered digest is visible: shape validation rejects it.
         let mut forged = r.clone();
         forged.digest = "z".repeat(64);
         assert!(forged.validate().is_err());
 
-        // A different revision produces a different join key.
+        // A candidate-head revision uses the same immutable object for
+        // head and reviewed authority, but has a different join key.
         let other = admit_revision(
             repo.root(),
             "main",
@@ -537,7 +578,11 @@ mod tests {
             &files_vec(),
             &sample_patch(),
         )?;
-        assert_ne!(crate::RevisionRef::from_admission(&other).digest, r.digest);
+        let candidate = crate::RevisionRef::from_admission(&other);
+        assert_eq!(candidate.semantics, "candidate_head");
+        assert_eq!(candidate.head_commit, candidate.reviewed_commit);
+        candidate.validate()?;
+        assert_ne!(candidate.digest, r.digest);
         Ok(())
     }
 

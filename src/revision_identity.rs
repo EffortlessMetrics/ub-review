@@ -124,16 +124,17 @@ const CANONICAL_VERSION: &str = "ub-review.revision-identity.v1";
 /// Packet-level immutable reference stamped into derived artifacts (A1.3,
 /// #950).
 ///
-/// `digest` is the cross-artifact join key (the identity digest of the
-/// admitted revision); `reviewed_commit` is the exact git commit object the
-/// run reviewed, for consumers that must bind to a real object (delivery
-/// exact-head checks); `semantics` preserves the candidate-head versus
-/// merge-result distinction end to end. Legacy symbolic `head` labels stay
-/// display-only next to this.
+/// `digest` is the cross-artifact join key. `head_commit` is the exact
+/// pull-request head used for GitHub delivery and re-anchoring;
+/// `reviewed_commit` is the exact object the analysis covered (the head for
+/// `candidate_head`, the synthetic merge for `merge_result`). Keeping both
+/// prevents analysis identity from being mistaken for delivery authority.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct RevisionRef {
     pub(crate) digest: String,
     pub(crate) semantics: String,
+    pub(crate) base_commit: String,
+    pub(crate) head_commit: String,
     pub(crate) reviewed_commit: String,
 }
 
@@ -142,21 +143,40 @@ impl RevisionRef {
         Self {
             digest: admission.identity_digest.clone(),
             semantics: admission.semantics.clone(),
+            base_commit: admission.base_commit_oid.clone(),
+            head_commit: admission.head_commit_oid.clone(),
             reviewed_commit: admission.reviewed_commit_oid.clone(),
         }
     }
 
     /// Shape-checks a ref read back from an artifact. Cross-artifact
     /// enforcement against the admitting packet is A1.4's job; this only
-    /// makes malformed refs visible.
+    /// makes malformed or internally contradictory refs visible.
     pub(crate) fn validate(&self) -> Result<()> {
         validate_sha256(&self.digest, "revision digest")?;
-        if self.semantics != "candidate_head" && self.semantics != "merge_result" {
-            bail!("unknown revision ref semantics `{}`", self.semantics);
+        let base = Oid::parse(&self.base_commit)
+            .map_err(|error| anyhow::anyhow!("revision ref base_commit: {error}"))?;
+        let head = Oid::parse(&self.head_commit)
+            .map_err(|error| anyhow::anyhow!("revision ref head_commit: {error}"))?;
+        let reviewed = Oid::parse(&self.reviewed_commit)
+            .map_err(|error| anyhow::anyhow!("revision ref reviewed_commit: {error}"))?;
+        if base.is_null() || head.is_null() || reviewed.is_null() {
+            bail!("revision ref commit fields cannot contain a null object id");
         }
-        let parsed = Oid::parse(&self.reviewed_commit)?;
-        if parsed.is_null() {
-            bail!("revision ref reviewed_commit is a null object id");
+        let widths = [base.id.len(), head.id.len(), reviewed.id.len()];
+        if widths[0] != widths[1] || widths[0] != widths[2] {
+            bail!("revision ref mixes object-id widths: {widths:?}");
+        }
+        match self.semantics.as_str() {
+            "candidate_head" if self.head_commit == self.reviewed_commit => {}
+            "candidate_head" => {
+                bail!("candidate_head revision ref must review the pull-request head exactly")
+            }
+            "merge_result" if self.head_commit != self.reviewed_commit => {}
+            "merge_result" => bail!(
+                "merge_result revision ref must distinguish pull-request head from synthetic merge"
+            ),
+            other => bail!("unknown revision ref semantics `{other}`"),
         }
         Ok(())
     }
@@ -172,6 +192,22 @@ const CHANGED_PATHS_DOMAIN: &str = "ub-review.revision-identity.changed-paths.v1
 const DIFF_DIGEST_DOMAIN: &str = "ub-review.revision-identity.diff.v1";
 
 impl RevisionIdentity {
+    pub(crate) fn base_commit_oid(&self) -> &str {
+        self.base.commit_oid()
+    }
+
+    pub(crate) fn head_commit_oid(&self) -> &str {
+        self.head.commit_oid()
+    }
+
+    pub(crate) fn reviewed_commit_oid(&self) -> &str {
+        self.reviewed.commit_oid()
+    }
+
+    pub(crate) fn semantics_key(&self) -> &'static str {
+        self.semantics.as_str()
+    }
+
     /// Validates and constructs an identity from resolved object ids.
     ///
     /// All object ids must share one width (all sha1 or all sha256): mixing

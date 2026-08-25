@@ -442,16 +442,17 @@ fn read_expected_delivery_head(
 ) -> Result<Option<String>> {
     if !review.comments.is_empty() {
         let graph = claim_graph.ok_or_else(|| anyhow::anyhow!("claim graph is required"))?;
-        // A1.3 (#950): the immutable revision reference is authoritative.
-        // Its reviewed_commit is the exact git object the run admitted, so
-        // delivery binds to that instead of any symbolic label.
+        // A1.3 (#950): GitHub delivery binds to the immutable PR
+        // head, not necessarily the object the analysis reviewed. In
+        // merge-result mode `reviewed_commit` is a synthetic merge while
+        // `head_commit` remains the exact pull-request head GitHub accepts.
         if let Some(revision) = graph.get("revision") {
             let commit = revision
-                .get("reviewed_commit")
+                .get("head_commit")
                 .and_then(serde_json::Value::as_str)
                 .filter(|value| !value.trim().is_empty())
                 .ok_or_else(|| {
-                    anyhow::anyhow!("claim graph revision reference is missing reviewed_commit")
+                    anyhow::anyhow!("claim graph revision reference is missing head_commit")
                 })?;
             return Ok(Some(commit.to_owned()));
         }
@@ -1945,15 +1946,17 @@ mod tests {
     }
 
     #[test]
-    fn delivery_head_prefers_immutable_revision_over_legacy_label() -> Result<()> {
-        // A1.3: the revision reference is authoritative; the legacy
-        // head_sha label may be a symbolic `HEAD` and must not win.
+    fn delivery_head_prefers_pr_head_over_reviewed_merge_and_legacy_label() -> Result<()> {
+        // A1.3: the revision reference is authoritative; delivery uses
+        // the PR head even when analysis covered a synthetic merge.
         let graph = serde_json::json!({
             "schema": "ub-review.claim_graph.v1",
             "head_sha": "HEAD",
             "revision": {
                 "digest": "a".repeat(64),
                 "semantics": "merge_result",
+                "base_commit": "c".repeat(40),
+                "head_commit": "d".repeat(40),
                 "reviewed_commit": "b".repeat(40),
             },
             "topics": [],
@@ -1971,7 +1974,8 @@ mod tests {
         };
         let expected = read_expected_delivery_head(&review, Some(&graph))?
             .ok_or_else(|| anyhow::anyhow!("immutable revision must bind the delivery head"))?;
-        assert_eq!(expected, "b".repeat(40));
+        assert_eq!(expected, "d".repeat(40));
+        assert_ne!(expected, "b".repeat(40));
 
         // Pre-A1.3 packets keep working through the weak legacy label.
         let legacy = serde_json::json!({

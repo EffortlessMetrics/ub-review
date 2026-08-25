@@ -1957,9 +1957,24 @@ def _require_revision_ref(value, label: str) -> None:
         fail(f"{label} revision digest must be 64 lowercase hex chars")
     if value.get("semantics") not in {"candidate_head", "merge_result"}:
         fail(f"{label} revision semantics is invalid: {value.get('semantics')!r}")
-    commit = value.get("reviewed_commit")
-    if not isinstance(commit, str) or len(commit) not in (40, 64):
-        fail(f"{label} revision reviewed_commit must be a git object id")
+    commits = {
+        field: value.get(field)
+        for field in ("base_commit", "head_commit", "reviewed_commit")
+    }
+    for field, commit in commits.items():
+        if (
+            not isinstance(commit, str)
+            or len(commit) not in (40, 64)
+            or any(c not in "0123456789abcdef" for c in commit)
+            or set(commit) == {"0"}
+        ):
+            fail(f"{label} revision {field} must be a non-null lowercase git object id")
+    if len({len(commit) for commit in commits.values()}) != 1:
+        fail(f"{label} revision commit fields mix object-id widths")
+    if value.get("semantics") == "candidate_head" and commits["head_commit"] != commits["reviewed_commit"]:
+        fail(f"{label} candidate_head revision must review head_commit")
+    if value.get("semantics") == "merge_result" and commits["head_commit"] == commits["reviewed_commit"]:
+        fail(f"{label} merge_result revision must distinguish head and reviewed commits")
 
 
 def require_claim_graph(root: pathlib.Path) -> None:
@@ -7127,10 +7142,10 @@ def require_gate_outcome(root: pathlib.Path) -> None:
         _require_revision_ref(outcome_revision, "gate_outcome.json")
         graph = load_json(root / "review/claim_graph.json")
         if isinstance(graph, dict) and graph.get("revision") is not None:
-            if graph["revision"].get("digest") != outcome_revision.get("digest"):
+            if graph["revision"] != outcome_revision:
                 fail(
-                    "gate_outcome.json revision digest does not join "
-                    "claim_graph.json revision digest"
+                    "gate_outcome.json revision reference does not join "
+                    "claim_graph.json revision reference"
                 )
     for index, reason in enumerate(reasons):
         if not isinstance(reason, dict):
