@@ -29,7 +29,10 @@ fn source_runner_requires_committed_regular_lockfile_before_locked_build() {
         guard, missing,
         "source runner must reject symlinked and non-regular lockfiles"
     );
-    assert_ne!(build, missing, "source runner must execute one locked build");
+    assert_ne!(
+        build, missing,
+        "source runner must execute one locked build"
+    );
     assert!(
         lockfile < guard && guard < build,
         "lock admission must precede Cargo execution"
