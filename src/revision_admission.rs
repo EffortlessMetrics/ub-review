@@ -154,6 +154,16 @@ impl RevisionAdmission {
         if parsed.canonical_form() != self.identity_canonical {
             bail!("revision admission canonical form is not normalized");
         }
+        if self.semantics != parsed.semantics_key() {
+            bail!("revision admission semantics do not match its canonical identity");
+        }
+        if self
+            .pr_head_commit
+            .as_deref()
+            .is_some_and(|commit| commit != parsed.head_commit_oid())
+        {
+            bail!("revision admission pull-request head does not match its canonical identity");
+        }
         let stored_objects = [
             self.base_commit_oid.as_str(),
             self.head_commit_oid.as_str(),
@@ -165,16 +175,8 @@ impl RevisionAdmission {
         if self.base_commit_oid != parsed.base_commit_oid()
             || self.head_commit_oid != parsed.head_commit_oid()
             || self.reviewed_commit_oid != parsed.reviewed_commit_oid()
-            || self.semantics != parsed.semantics_key()
         {
             bail!("revision admission object fields do not match its canonical identity");
-        }
-        if self
-            .pr_head_commit
-            .as_deref()
-            .is_some_and(|commit| commit != parsed.head_commit_oid())
-        {
-            bail!("revision admission pull-request head does not match its canonical identity");
         }
         Ok(())
     }
@@ -533,6 +535,52 @@ mod tests {
         // Dirt does not move the committed identity.
         assert_eq!(clean.identity_digest, dirty.identity_digest);
         assert_eq!(clean.pr_head_commit.as_deref(), Some(head.as_str()));
+        Ok(())
+    }
+
+    #[test]
+    fn legacy_admission_fields_cannot_override_canonical_semantics_or_pr_head() -> Result<()> {
+        let repo = init_repo()?;
+        let (base_tip, pr_head) = divergent_commits(&repo)?;
+        let merge = synthetic_merge(&repo, &base_tip, &pr_head)?;
+        let admission = admit_revision(
+            repo.root(),
+            "main",
+            &merge,
+            Some(&pr_head),
+            &files_vec(),
+            &sample_patch(),
+        )?;
+
+        let mut legacy = admission.clone();
+        legacy.base_commit_oid.clear();
+        legacy.head_commit_oid.clear();
+        legacy.reviewed_commit_oid.clear();
+        legacy.validate()?;
+
+        let mut wrong_semantics = legacy.clone();
+        wrong_semantics.semantics = "candidate_head".to_owned();
+        let Err(semantics_error) = wrong_semantics.validate() else {
+            bail!("legacy compatibility unexpectedly overrode canonical semantics");
+        };
+        assert!(
+            semantics_error
+                .to_string()
+                .contains("semantics do not match"),
+            "{semantics_error}"
+        );
+
+        let mut wrong_head = legacy;
+        wrong_head.pr_head_commit = Some("f".repeat(40));
+        let Err(head_error) = wrong_head.validate() else {
+            bail!("legacy compatibility unexpectedly overrode canonical PR head");
+        };
+        assert!(
+            head_error
+                .to_string()
+                .contains("pull-request head does not match"),
+            "{head_error}"
+        );
         Ok(())
     }
 
