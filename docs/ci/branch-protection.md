@@ -30,17 +30,24 @@ summary.
 
 `.github/workflows/independent-baseline.yml` is a temporary self-hosting
 containment check. It uses `pull_request_target` so GitHub loads the workflow
-and fixed command list from the protected base branch, then checks out the
-exact pull-request head SHA only for deterministic build and test execution.
-The candidate executes with a read-only token posture, no repository secrets,
-no OIDC permission, no persisted checkout credentials, and no shared build
-cache.
+and fixed command list from the protected base branch. Each deterministic
+command runs in its own fresh matrix job against the exact pull-request head
+SHA. Candidate code therefore cannot use a successful build script to rewrite
+the executable path for a later check.
+
+A separate no-checkout finalizer consumes only GitHub-owned matrix job status,
+writes the bounded receipt, uploads it, and enforces the result. It never
+inherits candidate-written `$GITHUB_ENV`, `$GITHUB_PATH`, workspace files, or
+process state. Candidate evidence jobs use a read-only token posture, no
+repository secrets, no OIDC permission, no persisted checkout credentials,
+and no shared build cache.
 
 This check proves that a pull-request head cannot replace the deciding command
-list or substitute its own `gate_outcome.json`. It does **not** prove that
-candidate tests, manifests, build scripts, policy code, or verifier code are
-trusted. The released stable-coordinator and hostile-head-safe job split in
-#876/#814 own that stronger boundary.
+list, contaminate trusted finalization, or substitute its own
+`gate_outcome.json`. It does **not** prove that candidate tests, manifests,
+build scripts, policy code, or verifier code are trusted inside their own
+isolated evidence job. The released stable-coordinator and hostile-head-safe
+job split in #876/#814 own that stronger boundary.
 
 Merging the workflow does not change branch protection. The check remains
 advisory until a separate maintainer-authorized operation records the exact
