@@ -1,6 +1,6 @@
 [package]
 name = "ub-review"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 # Pinned to match rust-toolchain.toml and action.yml (all three must move
 # together — #610). Standardized to the full semver "1.95.0" spelling.

@@ -7,7 +7,10 @@ SHA). The first GitHub Release archive (`v0.1.0`, Linux x64 + checksums)
 shipped 2026-07-18; its tag-push publish job failed on a missing release
 notes file and the assets were completed manually, outside the validated
 candidate-receipt contract. `v0.1.1` is the first cut published end to end
-by the autonomous tag machinery — see issue #343 and SPEC-0010.
+by the autonomous tag machinery — see issue #343 and SPEC-0010. `v0.1.2`
+is the first patch cut on that machinery, carrying the candidate-suggestion
+fingerprint parity fix (#922) and the fail-closed ripr suppression-ledger
+validator (#921).
 
 Current supported shape:
 
