@@ -40,22 +40,12 @@ fn source_runner_requires_committed_regular_lockfile_before_locked_build() {
     );
 
     #[cfg(unix)]
-    {
-        let (success, stdout, stderr) = match Command::new("bash")
+    assert!(
+        Command::new("bash")
             .arg("fixtures/action-source-lockfile/contract.sh")
             .arg("action.yml")
-            .output()
-        {
-            Ok(output) => (
-                output.status.success(),
-                String::from_utf8_lossy(&output.stdout).into_owned(),
-                String::from_utf8_lossy(&output.stderr).into_owned(),
-            ),
-            Err(error) => (false, String::new(), error.to_string()),
-        };
-        assert!(
-            success,
-            "source lockfile fixture failed\nstdout:\n{stdout}\nstderr:\n{stderr}"
-        );
-    }
+            .status()
+            .is_ok_and(|status| status.success()),
+        "source lockfile fixture failed"
+    );
 }
