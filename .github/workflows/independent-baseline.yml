@@ -2,9 +2,9 @@ name: ub-review/independent-baseline
 
 # Temporary self-hosting containment (#947). `pull_request_target` loads this
 # workflow from the protected base branch, then checks out the exact candidate
-# SHA only for ordinary deterministic build/test execution. The candidate runs
-# with no secrets, write token, OIDC, persisted checkout credentials, or shared
-# build cache. This is not the full hostile-head-safe coordinator boundary.
+# SHA only in isolated deterministic evidence jobs. A fresh no-checkout job
+# aggregates GitHub-owned job results, writes the receipt, and enforces the
+# outcome. This is not the full hostile-head-safe coordinator boundary.
 on:
   pull_request_target:
     types: [opened, reopened, ready_for_review, synchronize]
@@ -17,12 +17,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  baseline:
-    name: ub-review/independent-baseline
+  evidence:
+    name: independent evidence / ${{ matrix.check }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [fmt, check, clippy, test, doc, policy, verifier]
     env:
       CANDIDATE_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
       CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
@@ -35,25 +39,15 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Set isolated runtime paths
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/ub-review-independent-target" >> "$GITHUB_ENV"
-          echo "RECEIPT_DIR=$RUNNER_TEMP/ub-review-independent-baseline" >> "$GITHUB_ENV"
-
       - name: Verify exact candidate identity
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RECEIPT_DIR"
           actual_sha="$(git rev-parse HEAD)"
           if [[ "$actual_sha" != "$CANDIDATE_SHA" ]]; then
             echo "expected candidate $CANDIDATE_SHA, checked out $actual_sha" >&2
             exit 1
           fi
-          printf '%s\n' "$actual_sha" > "$RECEIPT_DIR/candidate-sha.txt"
-          printf '%s\n' "$CANDIDATE_REPOSITORY" > "$RECEIPT_DIR/candidate-repository.txt"
 
       - name: Install fixed Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -61,94 +55,74 @@ jobs:
           toolchain: 1.95.0
           components: rustfmt,clippy
 
-      - name: Check formatting
-        id: fmt
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo fmt --all -- --check
-
-      - name: Check workspace
-        id: check
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo check --workspace --all-targets --locked
-
-      - name: Run Clippy
-        id: clippy
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo clippy --workspace --all-targets --locked -- -D warnings
-
-      - name: Run workspace tests
-        id: test
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo test --workspace --all-targets --locked
-
-      - name: Build documentation
-        id: doc
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo doc --workspace --no-deps --locked
-
-      - name: Check repository policy
-        id: policy
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo xtask policy-check
-
-      - name: Verify artifact verifier self-test
-        id: verifier
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          python scripts/verify-bun-review-artifacts.py --self-test
-
-      - name: Write exact-head baseline receipt
-        if: always()
+      - name: Run one fixed deterministic check
         shell: bash
         env:
-          FMT_OUTCOME: ${{ steps.fmt.outcome }}
-          CHECK_OUTCOME: ${{ steps.check.outcome }}
-          CLIPPY_OUTCOME: ${{ steps.clippy.outcome }}
-          TEST_OUTCOME: ${{ steps.test.outcome }}
-          DOC_OUTCOME: ${{ steps.doc.outcome }}
-          POLICY_OUTCOME: ${{ steps.policy.outcome }}
-          VERIFIER_OUTCOME: ${{ steps.verifier.outcome }}
+          CHECK: ${{ matrix.check }}
         run: |
           set -euo pipefail
-          mkdir -p "$RECEIPT_DIR"
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/ub-review-independent-${CHECK}-target"
+          case "$CHECK" in
+            fmt)
+              cargo fmt --all -- --check
+              ;;
+            check)
+              cargo check --workspace --all-targets --locked
+              ;;
+            clippy)
+              cargo clippy --workspace --all-targets --locked -- -D warnings
+              ;;
+            test)
+              cargo test --workspace --all-targets --locked
+              ;;
+            doc)
+              cargo doc --workspace --no-deps --locked
+              ;;
+            policy)
+              cargo xtask policy-check
+              ;;
+            verifier)
+              python scripts/verify-bun-review-artifacts.py --self-test
+              ;;
+            *)
+              echo "unknown independent baseline check: $CHECK" >&2
+              exit 2
+              ;;
+          esac
+
+  finalize:
+    name: ub-review/independent-baseline
+    needs: evidence
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      CANDIDATE_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+      EVIDENCE_RESULT: ${{ needs.evidence.result }}
+    steps:
+      - name: Write trusted exact-head baseline receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          receipt_dir="$RUNNER_TEMP/ub-review-independent-baseline"
+          mkdir -p "$receipt_dir"
           jq -n \
             --arg schema "ub-review.independent_baseline.v1" \
             --arg candidate_repository "$CANDIDATE_REPOSITORY" \
             --arg candidate_sha "$CANDIDATE_SHA" \
             --arg workflow_sha "${{ github.sha }}" \
-            --arg fmt "$FMT_OUTCOME" \
-            --arg check "$CHECK_OUTCOME" \
-            --arg clippy "$CLIPPY_OUTCOME" \
-            --arg test "$TEST_OUTCOME" \
-            --arg doc "$DOC_OUTCOME" \
-            --arg policy "$POLICY_OUTCOME" \
-            --arg verifier "$VERIFIER_OUTCOME" \
+            --arg evidence_result "$EVIDENCE_RESULT" \
             '{
               schema: $schema,
               candidate_repository: $candidate_repository,
               candidate_sha: $candidate_sha,
               trusted_workflow_sha: $workflow_sha,
               workflow_source: "protected-base",
+              evidence_topology: "isolated-matrix-jobs",
+              evidence_result: $evidence_result,
               commands: [
                 "cargo fmt --all -- --check",
                 "cargo check --workspace --all-targets --locked",
@@ -157,56 +131,24 @@ jobs:
                 "cargo doc --workspace --no-deps --locked",
                 "cargo xtask policy-check",
                 "python scripts/verify-bun-review-artifacts.py --self-test"
-              ],
-              checks: {
-                cargo_fmt: $fmt,
-                cargo_check: $check,
-                cargo_clippy: $clippy,
-                cargo_test: $test,
-                cargo_doc: $doc,
-                policy_check: $policy,
-                artifact_verifier_self_test: $verifier
-              }
-            }' > "$RECEIPT_DIR/receipt.json"
-
-      - name: Enforce independent baseline
-        if: always()
-        shell: bash
-        env:
-          FMT_OUTCOME: ${{ steps.fmt.outcome }}
-          CHECK_OUTCOME: ${{ steps.check.outcome }}
-          CLIPPY_OUTCOME: ${{ steps.clippy.outcome }}
-          TEST_OUTCOME: ${{ steps.test.outcome }}
-          DOC_OUTCOME: ${{ steps.doc.outcome }}
-          POLICY_OUTCOME: ${{ steps.policy.outcome }}
-          VERIFIER_OUTCOME: ${{ steps.verifier.outcome }}
-        run: |
-          set -euo pipefail
-          failed=0
-          for outcome in \
-            "$FMT_OUTCOME" \
-            "$CHECK_OUTCOME" \
-            "$CLIPPY_OUTCOME" \
-            "$TEST_OUTCOME" \
-            "$DOC_OUTCOME" \
-            "$POLICY_OUTCOME" \
-            "$VERIFIER_OUTCOME"
-          do
-            if [[ "$outcome" != "success" ]]; then
-              failed=1
-            fi
-          done
-          if [[ "$failed" -ne 0 ]]; then
-            echo "independent baseline failed for exact candidate $CANDIDATE_SHA" >&2
-            cat "$RECEIPT_DIR/receipt.json" >&2
-            exit 1
-          fi
+              ]
+            }' > "$receipt_dir/receipt.json"
 
       - name: Upload independent baseline receipt
-        if: always()
+        if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
           name: independent-baseline-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
           path: ${{ runner.temp }}/ub-review-independent-baseline
           if-no-files-found: error
           retention-days: 7
+
+      - name: Enforce independent baseline
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$EVIDENCE_RESULT" != "success" ]]; then
+            echo "independent baseline evidence ended $EVIDENCE_RESULT for exact candidate $CANDIDATE_SHA" >&2
+            exit 1
+          fi
