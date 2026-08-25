@@ -54,8 +54,10 @@ pub(crate) use enable::*;
 mod promotion;
 pub(crate) use promotion::*;
 mod claim_graph;
+mod revision_admission;
 mod revision_identity;
 pub(crate) use claim_graph::*;
+pub(crate) use revision_admission::*;
 mod compiler_reconciliation;
 pub(crate) use compiler_reconciliation::*;
 mod review_topics;
@@ -3615,7 +3617,7 @@ fn cmd_cache_warm(args: CacheWarmArgs) -> Result<()> {
 }
 
 fn cmd_plan(args: PlanArgs) -> Result<()> {
-    let (config, diff, box_state, plan) =
+    let (config, diff, box_state, plan, revision) =
         prepare_plan(&args.review, args.allow_heavy, &args.selectors)?;
     print_plan(&plan, &box_state);
     if args.write {
@@ -3625,6 +3627,7 @@ fn cmd_plan(args: PlanArgs) -> Result<()> {
             &diff,
             &box_state,
             &plan,
+            Some(&revision),
             PlanArtifactSelectors {
                 run_args: None,
                 selectors: &args.selectors,
@@ -3648,7 +3651,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
     let run_started = Instant::now();
     let mut args = normalize_run_args(args)?;
     let run_pass = resolved_run_pass(args.run_pass);
-    let (mut config, diff, box_state, plan) =
+    let (mut config, diff, box_state, plan, revision) =
         prepare_plan(&args.review, args.allow_heavy, &args.selectors)?;
     // #719: apply the user-facing review-mode preset (advisory/gate/strict)
     // when set. This overrides --mode, --fail-on-gate, and
@@ -3670,6 +3673,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         &diff,
         &box_state,
         &plan,
+        Some(&revision),
         PlanArtifactSelectors {
             run_args: Some(&args),
             selectors: &args.selectors,
@@ -23574,6 +23578,7 @@ index 1111111..2222222 100644
                 root: Path::new(".").to_path_buf(),
                 base: "HEAD~1".to_owned(),
                 head: "HEAD".to_owned(),
+                pr_head_sha: None,
                 config: Path::new(".ub-review.toml").to_path_buf(),
                 out,
                 profile: None,

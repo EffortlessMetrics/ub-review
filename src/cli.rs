@@ -450,6 +450,11 @@ pub(crate) struct ReviewArgs {
     /// Head ref.
     #[arg(long, default_value = "HEAD", env = "UB_REVIEW_HEAD")]
     pub(crate) head: String,
+    /// Pull-request head SHA from hosted event metadata. Required to admit a
+    /// GitHub-style synthetic merge checkout as `merge_result`; without it a
+    /// two-parent reviewed commit is an explicit admission failure.
+    #[arg(long, env = "UB_REVIEW_PR_HEAD_SHA")]
+    pub(crate) pr_head_sha: Option<String>,
     /// Config path.
     #[arg(long, default_value = ".ub-review.toml", env = "UB_REVIEW_CONFIG")]
     pub(crate) config: PathBuf,

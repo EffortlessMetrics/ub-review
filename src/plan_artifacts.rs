@@ -7,7 +7,7 @@ pub(crate) fn prepare_plan(
     args: &ReviewArgs,
     allow_heavy: bool,
     selectors: &SelectorArgs,
-) -> Result<(Config, DiffContext, BoxState, Plan)> {
+) -> Result<(Config, DiffContext, BoxState, Plan, RevisionAdmission)> {
     validate_selector_syntax(selectors)?;
     let config = Config::load_or_default(
         &args.config,
@@ -16,9 +16,28 @@ pub(crate) fn prepare_plan(
     let profile = config.selected_profile()?;
     let box_state = BoxState::detect()?;
     let diff = DiffContext::from_git(&args.root, &args.base, &args.head)?;
+    // A1.2 (#949): admit the exact reviewed revision next to the diff so the
+    // digests bind to the same changed-file set and patch. Ambiguity here is
+    // an explicit evidence failure, never a relabeled identity. Hosted
+    // non-PR events render the workflow expression as an empty string, which
+    // means "no metadata" exactly like an unset variable.
+    let pr_head_sha = args
+        .pr_head_sha
+        .as_deref()
+        .map(str::trim)
+        .filter(|sha| !sha.is_empty());
+    let revision = admit_revision(
+        &args.root,
+        &args.base,
+        &args.head,
+        pr_head_sha,
+        &diff.changed_files,
+        &diff.patch,
+    )?;
+    revision.validate()?;
     let mut plan = build_plan(&config, profile, &box_state, &diff, &args.root, allow_heavy);
     apply_plan_selectors(&mut plan, selectors)?;
-    Ok((config, diff, box_state, plan))
+    Ok((config, diff, box_state, plan, revision))
 }
 
 pub(crate) fn write_plan_artifacts(
@@ -27,6 +46,7 @@ pub(crate) fn write_plan_artifacts(
     diff: &DiffContext,
     box_state: &BoxState,
     plan: &Plan,
+    revision: Option<&RevisionAdmission>,
     selectors: PlanArtifactSelectors<'_>,
 ) -> Result<()> {
     fs::create_dir_all(out.join("input"))?;
@@ -61,6 +81,12 @@ pub(crate) fn write_plan_artifacts(
         out.join("input/diff-context.json"),
         serde_json::to_vec_pretty(diff)?,
     )?;
+    if let Some(admission) = revision {
+        fs::write(
+            out.join("input/revision-admission.json"),
+            serde_json::to_vec_pretty(admission)?,
+        )?;
+    }
     fs::write(
         out.join("input/changed-files.txt"),
         diff.changed_files.join("\n"),

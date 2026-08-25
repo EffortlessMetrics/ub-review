@@ -6,13 +6,6 @@
 //! behavior. Symbolic ref labels are deliberately absent: two admissions
 //! that point at the same objects share one identity regardless of the
 //! human-readable names used to reach them.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "slice A1.1 lands the pure value contract ahead of its first consumer; A1.2 Git admission resolves into these types and removes this expectation"
-    )
-)]
 
 use anyhow::{Result, bail};
 use sha2::{Digest as ShaDigest, Sha256};
@@ -30,7 +23,7 @@ pub(crate) enum ReviewSemantics {
 }
 
 impl ReviewSemantics {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             ReviewSemantics::CandidateHead => "candidate_head",
             ReviewSemantics::MergeResult => "merge_result",
@@ -54,6 +47,11 @@ pub(crate) struct CommitTree {
 }
 
 impl CommitTree {
+    /// Validated commit object id.
+    pub(crate) fn commit_oid(&self) -> &str {
+        self.commit.as_str()
+    }
+
     /// Validates and constructs one commit/tree side of an identity.
     pub(crate) fn new(label: &str, commit: &str, tree: &str) -> Result<Self> {
         let commit = Oid::parse(commit).map_err(|e| anyhow::anyhow!("{label} commit: {e}"))?;

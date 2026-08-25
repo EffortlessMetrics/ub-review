@@ -26035,3 +26035,399 @@ kind = "exposure_gap"
 finding_id = "probe:src_revision_identity.rs:match_arm:c6dde987"
 owner = "ub-review/core"
 reason = "Pure value-contract slice (#948, roadmap A1.1): the module's oracle is behavioral - round-trip, canonical-form label pins, digest field-boundary flips, and exact rejection-message tables in src/revision_identity.rs's own tests. RIPR's textual discriminator cannot tie these struct-construction, match-arm, return-value, and predicate probes to those behavioral assertions, so they stay weakly_exposed on this diff. Two of these probe ids are Windows-only (ripr classifies two test-helper sites differently on Linux runners); they are inert on CI but kept so local gates stay at zero. Re-verify on any edit to src/revision_identity.rs; retire entries as A1.2 admission wiring adds end-to-end discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:9ea610f7"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:a2464364"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:call_deletion:afeb77a1"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:call_deletion:d442160e"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:call_deletion:8709ef45"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:error_path:6704ca0f"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:call_deletion:d240a2b1"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:call_deletion:f27fe6d9"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:fd402809"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:04ad2641"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:match_arm:f5bbbe35"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:match_arm:f002165c"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:9a6038c3"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:d39e398d"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:90d405f4"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:f30ca02e"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:20bfbefd"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:92a96c66"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:690707e2"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:match_arm:3600157d"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:90d405f4.2"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:f30ca02e.2"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:75c1316a"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:f30ca02e.3"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:c0151f80"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:703f4e1f"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:9a6038c3.2"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:90d405f4.3"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:f30ca02e.4"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:42ec3ab6"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:04f10eeb"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:5287efcc"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:fb05589e"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:a314eeef"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:cc3f4eb8"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:6907d721"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:c813a1e7"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:5bbd1fda"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:22ea747e"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:5bbd1fda.2"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:22ea747e.2"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:2e3e544d"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:0e5a424e"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:cc13072c"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:0ba0e9d2"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:818d29e1"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:e71ba484"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:49c4e925"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:203209de"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:e075f406"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:1450997e"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:2f98986e"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:434a0636"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:818d29e1.2"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:77fb3cd7"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:c99a2c07"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:e71ba484.2"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:77fb3cd7.2"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:c99a2c07.2"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:897ec2e3"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:640038d0"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:49c4e925.2"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:c57aebbb"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:84254b5a"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:e5f25611"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:ef1442d2"
+owner = "ub-review/core"
+reason = "A1.2 Git admission slice (#949): every admitted path has behavioral oracles - real temp-git fixtures assert exact semantics strings, exact rejection messages, symbolic-alias digest equality, synthetic-merge parent typing, and digest binding. RIPR's textual discriminator still reports these probes observation_unverified, and its classification diverges by platform: the identical committed content measures 0 weakly_exposed probes under ripr 0.10.0 on Windows and 66 under the Linux runner, so these receipts describe the Linux view. Re-verify on edits to src/revision_admission.rs and retire as A1.3/A1.4 consumers add cross-artifact discriminators."

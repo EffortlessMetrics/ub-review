@@ -58,6 +58,9 @@ jobs:
           allow-heavy: 'true'
           root: .
           base: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.event.pull_request.base.ref) || 'origin/main' }}
+          # A1.2 (#949): exact PR-head metadata so the synthetic merge checkout
+          # is admitted as merge_result instead of failing as ambiguous.
+          pr-head-sha: ${{ github.event.pull_request.head.sha }}
           out: target/ub-review
           posting: artifact-only
           model-mode: off
