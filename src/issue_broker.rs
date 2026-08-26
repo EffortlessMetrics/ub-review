@@ -443,6 +443,7 @@ pub(crate) fn resolved_candidate_records(
     follow_up_results: &[FollowUpResult],
     follow_up_outputs: &[FollowUpOutputRecord],
     prior_resolved_candidates: &[ResolvedCandidateRecord],
+    current_revision: Option<&crate::RevisionRef>,
 ) -> Vec<ResolvedCandidateRecord> {
     let follow_up_result_task_ids = follow_up_results
         .iter()
@@ -458,7 +459,12 @@ pub(crate) fn resolved_candidate_records(
                         && output.candidate_ids.iter().any(|id| id == &candidate.id)
                 })
                 .collect::<Vec<_>>();
-            resolved_candidate_record(candidate, &linked_outputs, prior_resolved_candidates)
+            resolved_candidate_record(
+                candidate,
+                &linked_outputs,
+                prior_resolved_candidates,
+                current_revision,
+            )
         })
         .collect()
 }
@@ -514,12 +520,18 @@ pub(crate) fn resolved_candidate_record(
     candidate: &CandidateRecord,
     follow_up_outputs: &[&FollowUpOutputRecord],
     prior_resolved_candidates: &[ResolvedCandidateRecord],
+    current_revision: Option<&crate::RevisionRef>,
 ) -> ResolvedCandidateRecord {
     let follow_up_task_ids = unique_follow_up_values(follow_up_outputs, |output| &output.task_id);
     let follow_up_stages = unique_follow_up_values(follow_up_outputs, |output| &output.stage);
     let follow_up_statuses = unique_follow_up_values(follow_up_outputs, |output| &output.status);
     let (resolved_status, resolved_disposition, resolution_source, reason, evidence) =
-        resolve_candidate_from_follow_ups(candidate, follow_up_outputs, prior_resolved_candidates);
+        resolve_candidate_from_follow_ups(
+            candidate,
+            follow_up_outputs,
+            prior_resolved_candidates,
+            current_revision,
+        );
     let mut source_artifacts = vec![
         "review/candidates.json".to_owned(),
         "review/follow_up_results.json".to_owned(),
@@ -538,6 +550,7 @@ pub(crate) fn resolved_candidate_record(
         resolved_status,
         resolved_disposition,
         resolution_source,
+        revision: current_revision.cloned(),
         source_artifacts,
         reason,
         follow_up_task_ids,
@@ -568,6 +581,7 @@ pub(crate) fn resolve_candidate_from_follow_ups(
     candidate: &CandidateRecord,
     follow_up_outputs: &[&FollowUpOutputRecord],
     prior_resolved_candidates: &[ResolvedCandidateRecord],
+    current_revision: Option<&crate::RevisionRef>,
 ) -> (String, String, String, String, Vec<String>) {
     let mut signals = resolved_candidate_signals(follow_up_outputs);
     if !signals.is_empty() {
@@ -597,21 +611,46 @@ pub(crate) fn resolve_candidate_from_follow_ups(
         );
     }
 
-    if let Some(prior) =
-        prior_resolved_candidate_for_candidate(candidate, prior_resolved_candidates)
-    {
-        let mut evidence = vec![format!(
-            "Prior resolved candidate `{}` had disposition `{}`",
-            prior.candidate_id, prior.resolved_disposition
-        )];
-        evidence.extend(prior.evidence.clone());
-        return (
-            "resolved".to_owned(),
-            prior.resolved_disposition.clone(),
-            "prior-resolved-candidates".to_owned(),
-            "prior pass resolved the same candidate surface".to_owned(),
-            evidence,
-        );
+    match prior_resolution_for_candidate(candidate, prior_resolved_candidates, current_revision) {
+        PriorResolution::Authoritative(prior) => {
+            let mut evidence = vec![format!(
+                "Prior resolved candidate `{}` had disposition `{}`",
+                prior.candidate_id, prior.resolved_disposition
+            )];
+            evidence.extend(prior.evidence.clone());
+            return (
+                "resolved".to_owned(),
+                prior.resolved_disposition.clone(),
+                "prior-resolved-candidates".to_owned(),
+                "prior pass resolved the same candidate surface".to_owned(),
+                evidence,
+            );
+        }
+        PriorResolution::StaleRejected { prior_digest } => {
+            // A1.4: fingerprint matched, revision did not. The stale prior
+            // never resolves; the row records why with a reason token.
+            let current_digest = current_revision.map(|r| r.digest.as_str());
+            return (
+                "unchanged".to_owned(),
+                candidate.disposition.clone(),
+                "candidate".to_owned(),
+                "[stale_revision] prior resolved candidate matches the candidate \
+                 fingerprint but was admitted for a different revision; it cannot \
+                 satisfy current-run resolution"
+                    .to_owned(),
+                vec![
+                    format!(
+                        "[stale_revision] current digest: {}",
+                        current_digest.unwrap_or("<none>")
+                    ),
+                    format!(
+                        "[stale_revision] prior digest: {}",
+                        prior_digest.as_deref().unwrap_or("<legacy-unstamped>")
+                    ),
+                ],
+            );
+        }
+        PriorResolution::None => {}
     }
 
     if follow_up_outputs.is_empty() {
@@ -659,19 +698,55 @@ pub(crate) fn resolve_candidate_from_follow_ups(
     }
 }
 
-pub(crate) fn prior_resolved_candidate_for_candidate<'a>(
+/// Outcome of consulting prior resolved candidates for one candidate.
+enum PriorResolution<'a> {
+    /// A prior record joins this revision exactly; reuse it.
+    Authoritative(&'a ResolvedCandidateRecord),
+    /// A fingerprint match exists but belongs to another (or no recorded)
+    /// revision: rejected under A1.4 - stale evidence never resolves.
+    StaleRejected {
+        prior_digest: Option<String>,
+    },
+    None,
+}
+
+fn prior_resolution_for_candidate<'a>(
     candidate: &CandidateRecord,
     prior_resolved_candidates: &'a [ResolvedCandidateRecord],
-) -> Option<&'a ResolvedCandidateRecord> {
-    let candidate_fingerprint = candidate_id_fingerprint(&candidate.id)?;
-    prior_resolved_candidates.iter().find(|prior| {
-        prior.resolved_status == "resolved"
+    current: Option<&crate::RevisionRef>,
+) -> PriorResolution<'a> {
+    let candidate_fingerprint = match candidate_id_fingerprint(&candidate.id) {
+        Some(fingerprint) => fingerprint,
+        None => return PriorResolution::None,
+    };
+    let mut stale = None;
+    for prior in prior_resolved_candidates {
+        if !(prior.resolved_status == "resolved"
             && matches!(prior.resolved_disposition.as_str(), "refuted" | "dropped")
             && prior.lane == candidate.lane
             && prior.source == candidate.source
             && prior.original_status == candidate.status
-            && candidate_id_fingerprint(&prior.candidate_id) == Some(candidate_fingerprint)
-    })
+            && candidate_id_fingerprint(&prior.candidate_id) == Some(candidate_fingerprint))
+        {
+            continue;
+        }
+        match (current, prior.revision.as_ref()) {
+            // No current identity: fixture/legacy context only.
+            (None, _) => return PriorResolution::Authoritative(prior),
+            // Prior without a ref cannot satisfy current-revision reuse.
+            (Some(_), None) => stale = Some(PriorResolution::StaleRejected { prior_digest: None }),
+            // Exact digest join required.
+            (Some(current_ref), Some(prior_ref)) => {
+                if prior_ref.digest == current_ref.digest {
+                    return PriorResolution::Authoritative(prior);
+                }
+                stale = Some(PriorResolution::StaleRejected {
+                    prior_digest: Some(prior_ref.digest.clone()),
+                });
+            }
+        }
+    }
+    stale.unwrap_or(PriorResolution::None)
 }
 
 pub(crate) fn candidate_id_fingerprint(id: &str) -> Option<&str> {
