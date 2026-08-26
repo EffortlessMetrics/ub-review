@@ -9,8 +9,9 @@ permissions:
 
 jobs:
   probe:
+    if: ${{ github.event.head_commit.message != 'fix(revision): separate analysis object from delivery head' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
         with:
@@ -20,30 +21,48 @@ jobs:
         with:
           toolchain: 1.95.0
           components: rustfmt,clippy
-      - name: Apply reviewed correction without committing
+      - uses: Swatinem/rust-cache@v2
+      - name: Apply reviewed correction and admission consistency guard
         shell: bash
         run: |
           set -euo pipefail
-          if ! git cherry-pick --no-commit df16a6effe5a19cbdd0fe290ccfeb27b988f5178; then
-            echo '::error::reviewed correction conflicts with current main'
-            git status --short
-            git diff --name-only --diff-filter=U
-            exit 1
-          fi
-      - name: Format and compile current integration
+          git cherry-pick --no-commit \
+            df16a6effe5a19cbdd0fe290ccfeb27b988f5178 \
+            e44a23b73e231b3190f92dc48ed0e6b34777700c
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/claim_graph.rs')
+          text = path.read_text()
+          old = '''            Some(&crate::RevisionRef {
+                          digest: "c".repeat(64),
+                          semantics: "merge_result".to_owned(),
+                          reviewed_commit: "d".repeat(64),
+                      }),
+          '''.replace('              ', '')
+          new = '''            Some(&crate::RevisionRef {
+                          digest: "c".repeat(64),
+                          semantics: "merge_result".to_owned(),
+                          base_commit: "a".repeat(64),
+                          head_commit: "b".repeat(64),
+                          reviewed_commit: "d".repeat(64),
+                      }),
+          '''.replace('              ', '')
+          if text.count(old) != 1:
+              raise SystemExit(f'row-stamp revision literal count={text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Full validation
         shell: bash
         run: |
           set -euo pipefail
           cargo fmt --all
+          cargo fmt --all -- --check
           cargo check --workspace --all-targets --locked
           cargo clippy --workspace --all-targets --locked -- -D warnings
-      - name: Run focused revision and delivery tests
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo test --locked revision_ref_joins_admission_and_validates_shape
-          cargo test --locked delivery_head_prefers_pr_head_over_reviewed_merge_and_legacy_label
+          cargo test --workspace --all-targets --locked
           python scripts/verify-bun-review-artifacts.py --self-test
+          cargo xtask policy-check
       - name: Commit integrated correction
         shell: bash
         run: |
