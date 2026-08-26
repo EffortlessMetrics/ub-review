@@ -4866,6 +4866,16 @@ fn write_review_artifacts(
         resource_leases,
         body: preliminary_surface.artifact_body,
     };
+    // A1.3 (#950): stamp the admitted revision onto every receipt and lease
+    // row once, immediately after assembly, so all downstream serializers
+    // (orchestrator plan, final compiler input, review.json, receipt
+    // artifacts) embed joined rows.
+    for row in &mut review.proof_receipts {
+        row.revision = revision.cloned();
+    }
+    for row in &mut review.resource_leases {
+        row.revision = revision.cloned();
+    }
     let observations = combined_observations(&review);
     let observation_summary = observation_summary_artifacts(&observations);
     let orchestrator_plan = build_orchestrator_plan(
@@ -5267,15 +5277,6 @@ fn write_review_artifacts(
         elapsed,
         args,
     });
-
-    // A1.3 (#950): keep the review.json embedded rows joined to the packet
-    // revision exactly like the standalone receipt/lease artifacts.
-    for row in &mut review.proof_receipts {
-        row.revision = revision.cloned();
-    }
-    for row in &mut review.resource_leases {
-        row.revision = revision.cloned();
-    }
 
     fs::write(
         review_dir.join("review.json"),
