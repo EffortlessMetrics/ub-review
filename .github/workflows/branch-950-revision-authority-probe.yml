@@ -1,0 +1,55 @@
+name: temporary-950-revision-authority-probe
+
+on:
+  push:
+    branches: [fix/950-revision-authority]
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: fix/950-revision-authority
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          components: rustfmt,clippy
+      - name: Apply reviewed correction without committing
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git cherry-pick --no-commit df16a6effe5a19cbdd0fe290ccfeb27b988f5178; then
+            echo '::error::reviewed correction conflicts with current main'
+            git status --short
+            git diff --name-only --diff-filter=U
+            exit 1
+          fi
+      - name: Format and compile current integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          cargo check --workspace --all-targets --locked
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Run focused revision and delivery tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked revision_ref_joins_admission_and_validates_shape
+          cargo test --locked delivery_head_prefers_pr_head_over_reviewed_merge_and_legacy_label
+          python scripts/verify-bun-review-artifacts.py --self-test
+      - name: Commit integrated correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name EffortlessSteven
+          git config user.email git@effortlesssteven.com
+          git add scripts/verify-bun-review-artifacts.py src/claim_graph.rs src/github_delivery.rs src/revision_admission.rs src/revision_identity.rs
+          git commit -m 'fix(revision): separate analysis object from delivery head'
+          git push origin HEAD:fix/950-revision-authority
