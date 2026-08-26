@@ -1962,6 +1962,115 @@ def _require_revision_ref(value, label: str) -> None:
         fail(f"{label} revision reviewed_commit must be a git object id")
 
 
+REVISION_ADMISSION_SCHEMA = "ub-review.revision_admission.v1"
+_REVISION_CANONICAL_VERSION = "ub-review.revision-identity.v1"
+_REVISION_DIGEST_DOMAIN = b"ub-review.revision-identity.digest.v1"
+_REVISION_SEMANTICS = {"candidate_head", "merge_result"}
+
+
+def load_revision_binding(root: pathlib.Path) -> "dict | None":
+    """A1.4 enforcement anchor.
+
+    Every current run admits its revision into input/revision-admission.json
+    (fail-closed, slice A1.2). When that file exists, all stamped artifact
+    references must join it exactly. Its absence marks a legacy packet:
+    inspectable, but visibly non-authoritative (legacy notice printed).
+    """
+    path = root / "input/revision-admission.json"
+    if not path.exists():
+        print(
+            "[legacy_symbolic_only] no revision-admission.json; packet is "
+            "verified as legacy compatibility evidence only"
+        )
+        return None
+    admission = load_json(path)
+    if not isinstance(admission, dict) or admission.get("schema") != REVISION_ADMISSION_SCHEMA:
+        fail("[missing_strong_binding] revision-admission.json schema invalid")
+    canonical = admission.get("identity_canonical")
+    if (
+        not isinstance(canonical, str)
+        or not canonical.startswith(_REVISION_CANONICAL_VERSION + "\n")
+    ):
+        fail("[missing_strong_binding] revision-admission canonical form missing or wrong version")
+    semantics_line = None
+    for line in canonical.strip().split("\n"):
+        if line.startswith("semantics="):
+            semantics_line = line[len("semantics=") :]
+    if semantics_line not in _REVISION_SEMANTICS:
+        fail("[semantics_mismatch] canonical form carries invalid semantics")
+    for field in ("changed_paths=", "diff="):
+        start = canonical.find(field)
+        value = canonical[start + len(field) :].split("\n")[0] if start >= 0 else ""
+        if len(value) != 64 or any(c not in "0123456789abcdef" for c in value):
+            fail(f"[bad_tree_diff_digest] canonical {field[:-1]} digest malformed")
+    recomputed = hashlib.sha256(
+        _REVISION_DIGEST_DOMAIN + b"\x00" + canonical.encode("utf-8")
+    ).hexdigest()
+    claimed = admission.get("identity_digest")
+    if claimed != recomputed:
+        fail(
+            f"[forged_identity_digest] identity_digest {claimed!r} does not "
+            f"match recomputed {recomputed}"
+        )
+    commit = admission.get("reviewed_commit_oid")
+    if not isinstance(commit, str) or len(commit) not in (40, 64):
+        fail("[missing_strong_binding] reviewed_commit_oid must be a git object id")
+    return {
+        "digest": claimed,
+        "semantics": semantics_line,
+        "reviewed_commit": commit,
+    }
+
+
+def require_joined_revision(value, label: str, binding: dict) -> None:
+    """Strict A1.4 join of an artifact's revision ref to the admitted triple."""
+    if value is None:
+        fail(f"[missing_strong_binding] {label} must carry the packet revision reference")
+    if not isinstance(value, dict):
+        fail(f"{label} revision reference must be an object")
+    if value.get("digest") != binding["digest"]:
+        fail(f"[stale_revision] {label} digest does not join the admitted revision")
+    if value.get("semantics") != binding["semantics"]:
+        fail(f"[semantics_mismatch] {label} semantics differs from the admitted revision")
+    if value.get("reviewed_commit") != binding["reviewed_commit"]:
+        fail(f"[stale_revision] {label} reviewed_commit does not join the admitted revision")
+
+
+def require_revision_coherence(root: pathlib.Path) -> None:
+    """A1.4: when the packet admits a revision, every remaining stamped
+    surface (model stages, review.json embedded rows) must join it too."""
+    binding = load_revision_binding(root)
+    if binding is None:
+        return
+    stages = load_json(root / "review/model_stages.json")
+    if not isinstance(stages, list):
+        fail("model_stages.json is not an array")
+    for index, record in enumerate(stages):
+        row_revision = (
+            record.get("revision") if isinstance(record, dict) else None
+        )
+        if row_revision is None:
+            fail(
+                f"[missing_strong_binding] model_stages.json[{index}] must carry "
+                "the packet revision reference"
+            )
+        else:
+            require_joined_revision(
+                row_revision, f"model_stages.json[{index}]", binding
+            )
+    review = load_json(root / "review/review.json")
+    for field in ("proof_receipts", "resource_leases"):
+        rows = review.get(field) if isinstance(review, dict) else None
+        if not isinstance(rows, list):
+            fail(f"review.json {field} is not an array")
+        for index, row in enumerate(rows):
+            require_joined_revision(
+                row.get("revision") if isinstance(row, dict) else None,
+                f"review.json {field}[{index}]",
+                binding,
+            )
+
+
 def require_claim_graph(root: pathlib.Path) -> None:
     graph = load_json(root / "review/claim_graph.json")
     if not isinstance(graph, dict):
@@ -1975,7 +2084,10 @@ def require_claim_graph(root: pathlib.Path) -> None:
     if not isinstance(head_sha, str) or not head_sha.strip():
         fail("claim_graph.json head_sha is empty")
     graph_revision = graph.get("revision")
-    if graph_revision is not None:
+    binding = load_revision_binding(root)
+    if binding is not None:
+        require_joined_revision(graph_revision, "claim_graph.json", binding)
+    elif graph_revision is not None:
         _require_revision_ref(graph_revision, "claim_graph.json")
     metrics = load_json(root / "review/metrics.json")
     if not isinstance(metrics, dict) or metrics.get("head") != head_sha:
@@ -1997,9 +2109,14 @@ def require_claim_graph(root: pathlib.Path) -> None:
                 "digest"
             ) != graph_revision.get("digest"):
                 fail(
-                    f"proof_receipts.json[{index}] revision digest does not "
+                    f"[stale_revision] proof_receipts.json[{index}] revision digest does not "
                     "join claim_graph.json revision digest"
                 )
+        elif binding is not None:
+            fail(
+                f"[missing_strong_binding] proof_receipts.json[{index}] must carry "
+                "the packet revision reference"
+            )
     claims = graph.get("claims")
     topics = graph.get("topics")
     if not isinstance(claims, list) or not isinstance(topics, list):
@@ -2529,6 +2646,9 @@ def require_cost_receipt(root: pathlib.Path, metrics: dict) -> None:
     require_non_negative_int(receipt, "ub-review-cost.json cap_minutes", "cap_minutes")
     if not isinstance(receipt.get("fallback_used"), bool):
         fail("ub-review-cost.json fallback_used is not a boolean")
+    binding = load_revision_binding(root)
+    if binding is not None:
+        require_joined_revision(receipt.get("revision"), "ub-review-cost.json", binding)
 
     required_floor = require_optional_non_negative_number(
         receipt, "ub-review-cost.json required_floor_wall_seconds", "required_floor_wall_seconds"
@@ -3585,7 +3705,8 @@ def require_orchestrator_plan(root: pathlib.Path) -> None:
     if not isinstance(routes, list):
         fail("review/receipt_routes.json routes is not an array")
     # A1.3 (#950): when the routing envelope carries the packet's immutable
-    # revision, it must join claim_graph.json.
+    # revision, it must join claim_graph.json. A1.4: when the packet is a
+    # current run (admission present), the join is mandatory.
     if isinstance(receipt_routes, dict) and receipt_routes.get("revision") is not None:
         _require_revision_ref(receipt_routes["revision"], "receipt_routes.json")
         graph = load_json(root / "review/claim_graph.json")
@@ -3594,9 +3715,14 @@ def require_orchestrator_plan(root: pathlib.Path) -> None:
                 "digest"
             ):
                 fail(
-                    "receipt_routes.json revision digest does not join "
-                    "claim_graph.json revision digest"
+                    "[stale_revision] receipt_routes.json revision digest does not "
+                    "join claim_graph.json revision digest"
                 )
+    binding = load_revision_binding(root)
+    if binding is not None:
+        require_joined_revision(
+            receipt_routes.get("revision"), "receipt_routes.json", binding
+        )
     follow_up_receipt_ids = {
         route.get("receipt_id")
         for route in routes
@@ -7150,7 +7276,10 @@ def require_gate_outcome(root: pathlib.Path) -> None:
             f"gate outcome {conclusion} conclusion requires at least one reason"
         )
     outcome_revision = outcome.get("revision")
-    if outcome_revision is not None:
+    binding = load_revision_binding(root)
+    if binding is not None:
+        require_joined_revision(outcome_revision, "gate_outcome.json", binding)
+    elif outcome_revision is not None:
         _require_revision_ref(outcome_revision, "gate_outcome.json")
         graph = load_json(root / "review/claim_graph.json")
         if isinstance(graph, dict) and graph.get("revision") is not None:
@@ -13913,6 +14042,142 @@ def self_test_sanitize_artifact_name_bounds_long_values() -> None:
         fail("artifact name sanitizer changed the canonical byte mapping")
 
 
+def self_test_revision_binding_enforcement() -> None:
+    """A1.4: the admitted revision anchors verification; forged, stale,
+    mismatched-semantics and unbound artifacts are rejected with reason
+    tokens, while legacy packets stay inspectable."""
+    digest_a = "a" * 64
+    digest_f = "f" * 64
+    commit = "b" * 40
+
+    def canonical(semantics: str = "candidate_head") -> str:
+        return (
+            "ub-review.revision-identity.v1\n"
+            f"semantics={semantics}\n"
+            "base=" + "1" * 40 + " " + "2" * 40 + "\n"
+            "head=" + "3" * 40 + " " + "4" * 40 + "\n"
+            "reviewed=" + "3" * 40 + " " + "4" * 40 + "\n"
+            "merge=-\n"
+            "changed_paths=" + digest_a + "\n"
+            "diff=" + digest_a + "\n"
+        )
+
+    def base_root(
+        claimed: str | None = None,
+        graph_overrides: dict | None = None,
+        admission_semantics: str = "candidate_head",
+        graph_ref_semantics: str | None = None,
+        forged: bool = False,
+    ) -> pathlib.Path:
+        root = pathlib.Path(tempfile.mkdtemp())
+        # The admitted join key is whatever the admission file claims; the
+        # forged variant corrupts the canonical text so recomputation moves.
+        admission_digest = None
+        if claimed is not None:
+            admission_digest = (
+                digest_f
+                if forged
+                else _recompute_identity_digest(canonical(admission_semantics))
+            )
+        graph_revision = None
+        if admission_digest is not None:
+            graph_revision = {
+                "digest": admission_digest,
+                "semantics": graph_ref_semantics or admission_semantics,
+                "reviewed_commit": commit,
+            }
+        graph = {
+            "schema": CLAIM_GRAPH_SCHEMA,
+            "head_sha": "HEAD",
+            "revision": graph_revision,
+            "claims": [],
+            "topics": [],
+            "conflicts": [],
+            "evidence_gaps": [],
+            "mode": "shadow",
+        }
+        if graph_overrides:
+            graph.update(graph_overrides)
+        write_self_test_json(root / "review/claim_graph.json", graph)
+        write_self_test_json(root / "review/metrics.json", {"head": "HEAD"})
+        write_self_test_json(root / "review/proof_receipts.json", [])
+        if claimed is not None:
+            canonical_text = canonical(admission_semantics)
+            if forged:
+                canonical_text = canonical_text.replace(
+                    "changed_paths=" + digest_a, "changed_paths=" + digest_f
+                )
+            write_self_test_json(
+                root / "input/revision-admission.json",
+                {
+                    "schema": REVISION_ADMISSION_SCHEMA,
+                    "identity_canonical": canonical_text,
+                    "identity_digest": claimed,
+                    "semantics": admission_semantics,
+                    "reviewed_commit_oid": commit,
+                    "pr_head_commit": None,
+                    "worktree_dirty": False,
+                },
+            )
+        return root
+
+    # Positive: a well-formed admission joins every stamped surface.
+    require_claim_graph(base_root(claimed=_recompute_identity_digest(canonical())))
+
+    # Forged: the claimed digest does not match recomputation.
+    expect_self_test_failure(
+        "forged identity digest",
+        "[forged_identity_digest]",
+        lambda: require_claim_graph(
+            base_root(claimed=_recompute_identity_digest(canonical()), forged=True)
+        ),
+    )
+    # Stale: graph ref points at another revision.
+    expect_self_test_failure(
+        "stale graph revision",
+        "[stale_revision] claim_graph.json digest",
+        lambda: require_claim_graph(
+            base_root(
+                claimed=_recompute_identity_digest(canonical()),
+                graph_overrides={"revision": graph_ref_variant(digest_f)},
+            )
+        ),
+    )
+    # Unbound: current packet without the required reference.
+    expect_self_test_failure(
+        "missing strong binding on current packet",
+        "[missing_strong_binding] claim_graph.json",
+        lambda: require_claim_graph(
+            base_root(
+                claimed=_recompute_identity_digest(canonical()),
+                graph_overrides={"revision": None},
+            )
+        ),
+    )
+    # Semantics mismatch: joining digest, wrong review posture.
+    expect_self_test_failure(
+        "semantics mismatch",
+        "[semantics_mismatch] claim_graph.json semantics",
+        lambda: require_claim_graph(
+            base_root(
+                claimed=_recompute_identity_digest(canonical()),
+                graph_ref_semantics="merge_result",
+            )
+        ),
+    )
+
+
+def _recompute_identity_digest(canonical: str) -> str:
+    return hashlib.sha256(
+        _REVISION_DIGEST_DOMAIN + b"\x00" + canonical.encode("utf-8")
+    ).hexdigest()
+
+
+def graph_ref_variant(digest: str, semantics: str = "candidate_head") -> dict:
+    commit = "b" * 40
+    return {"digest": digest, "semantics": semantics, "reviewed_commit": commit}
+
+
 def self_test_claim_graph_contract() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         root = pathlib.Path(temp_dir)
@@ -14344,6 +14609,7 @@ def run_self_tests() -> None:
     require_run_mode("review-byok", "self-test review-byok mode")
     require_run_mode("intelligent-ci", "self-test intelligent-ci mode")
     self_test_claim_graph_contract()
+    self_test_revision_binding_enforcement()
     self_test_artifact_only_post_receipt_contract()
     self_test_reviewer_value_heading_parity_with_rust()
     self_test_delivery_transaction_contract()
@@ -15286,6 +15552,7 @@ def main(argv: list[str]) -> int:
     require_claim_graph(root)
     metrics = require_metrics(root, review)
     require_cost_receipt(root, metrics)
+    require_revision_coherence(root)
     require_floor_trend(root)
     require_fill_ledger(root)
     require_quality_receipt(root, metrics, review)
