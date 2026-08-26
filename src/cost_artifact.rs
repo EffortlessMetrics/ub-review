@@ -10,8 +10,11 @@ pub(crate) fn write_cost_receipt_artifact(
     metrics: &ReviewMetrics,
     review: &ReviewArtifacts,
     follow_up_results: &[FollowUpResult],
+    revision: Option<&crate::RevisionRef>,
 ) -> Result<CostReceipt> {
-    let receipt = build_cost_receipt(root, out, config, metrics, review, follow_up_results);
+    let mut receipt = build_cost_receipt(root, out, config, metrics, review, follow_up_results);
+    // A1.3 (#950): join the cost envelope to the packet's immutable revision.
+    receipt.revision = revision.cloned();
     fs::write(
         out.join("review").join("ub-review-cost.json"),
         serde_json::to_vec_pretty(&receipt)?,
@@ -55,6 +58,7 @@ pub(crate) fn build_cost_receipt(
     CostReceipt {
         schema: COST_RECEIPT_SCHEMA,
         run_id: cost_run_id(metrics),
+        revision: None,
         runner_kind: runner_kind(),
         target_minutes: config.gate.target_minutes,
         cap_minutes: config.gate.hard_timeout_minutes,

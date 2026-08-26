@@ -505,6 +505,44 @@ mod tests {
     }
 
     #[test]
+    fn candidate_and_merge_packets_stay_distinct_end_to_end() -> Result<()> {
+        let repo = init_repo()?;
+        let (base_tip, pr_head) = divergent_commits(&repo)?;
+        let merge = synthetic_merge(&repo, &base_tip, &pr_head)?;
+        let files = files_vec();
+        let patch = sample_patch();
+
+        let candidate = admit_revision(
+            repo.root(),
+            "main",
+            &pr_head,
+            Some(&pr_head),
+            &files,
+            &patch,
+        )?;
+        let merge_result =
+            admit_revision(repo.root(), "main", &merge, Some(&pr_head), &files, &patch)?;
+        let candidate_ref = crate::RevisionRef::from_admission(&candidate);
+        let merge_ref = crate::RevisionRef::from_admission(&merge_result);
+
+        // Distinct semantics survive into the join keys.
+        assert_eq!(candidate_ref.semantics, "candidate_head");
+        assert_eq!(merge_ref.semantics, "merge_result");
+        assert_ne!(candidate_ref.digest, merge_ref.digest);
+        candidate_ref.validate()?;
+        merge_ref.validate()?;
+
+        // The same reviewed content under different semantics produces two
+        // deterministic, reproducible packet identities.
+        let again = admit_revision(repo.root(), "main", &merge, Some(&pr_head), &files, &patch)?;
+        assert_eq!(
+            crate::RevisionRef::from_admission(&again).digest,
+            merge_ref.digest
+        );
+        Ok(())
+    }
+
+    #[test]
     fn revision_ref_joins_admission_and_validates_shape() -> Result<()> {
         let repo = init_repo()?;
         let (base_tip, pr_head) = divergent_commits(&repo)?;

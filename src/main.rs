@@ -1160,6 +1160,9 @@ struct ReviewMetrics {
 struct CostReceipt {
     schema: &'static str,
     run_id: String,
+    /// Immutable revision reference (A1.3): stamped at artifact write time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    revision: Option<RevisionRef>,
     runner_kind: String,
     target_minutes: u64,
     cap_minutes: u64,
@@ -2384,6 +2387,9 @@ struct ModelStageRecord {
     response_shape: Option<String>,
     #[serde(default)]
     cache_usage: ModelCacheUsage,
+    /// Immutable revision reference (A1.3): stamped at artifact write time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    revision: Option<RevisionRef>,
 }
 
 #[derive(Debug, Serialize)]
@@ -4948,7 +4954,7 @@ fn write_review_artifacts(
         .iter()
         .filter(|candidate| resolved_away_candidate_ids.contains(&candidate.id))
         .collect::<Vec<_>>();
-    write_model_stage_artifacts(out, &review.model_lanes, &follow_up_results, args)?;
+    write_model_stage_artifacts(out, &review.model_lanes, &follow_up_results, args, revision)?;
     write_shared_context_cache_artifacts(
         out,
         &shared_context,
@@ -5286,8 +5292,15 @@ fn write_review_artifacts(
         review_dir.join("metrics.json"),
         serde_json::to_vec_pretty(&metrics)?,
     )?;
-    let cost_receipt =
-        write_cost_receipt_artifact(root, out, config, &metrics, &review, &follow_up_results)?;
+    let cost_receipt = write_cost_receipt_artifact(
+        root,
+        out,
+        config,
+        &metrics,
+        &review,
+        &follow_up_results,
+        revision,
+    )?;
     write_floor_trend_artifact(out, &cost_receipt)?;
     let fill_ledger = write_fill_ledger_artifact(FillLedgerInput {
         out,
@@ -18387,6 +18400,7 @@ index 1111111..2222222 100644
         let cost = super::CostReceipt {
             schema: super::COST_RECEIPT_SCHEMA,
             run_id: "local-abc123".to_owned(),
+            revision: None,
             runner_kind: "local".to_owned(),
             target_minutes: 30,
             cap_minutes: 60,
@@ -20574,7 +20588,13 @@ index 1111111..2222222 100644
         assert_eq!(records[4].stage, "tertiary");
         assert_eq!(records[4].task_id.as_deref(), Some("follow-tertiary"));
 
-        super::write_model_stage_artifacts(temp.path(), &model_lanes, &follow_up_results, &args)?;
+        super::write_model_stage_artifacts(
+            temp.path(),
+            &model_lanes,
+            &follow_up_results,
+            &args,
+            None,
+        )?;
         let written: serde_json::Value =
             serde_json::from_slice(&fs::read(temp.path().join("review/model_stages.json"))?)?;
         let lines = fs::read_to_string(temp.path().join("model_stages.ndjson"))?;
