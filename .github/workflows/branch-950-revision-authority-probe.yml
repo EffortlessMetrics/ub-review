@@ -22,14 +22,14 @@ jobs:
           components: rustfmt,clippy
       - uses: Swatinem/rust-cache@v2
       - name: Apply reviewed correction
-        if: ${{ github.event.head_commit.message != 'fix(revision): separate analysis object from delivery head' }}
+        if: "${{ github.event.head_commit.message != 'fix(revision): separate analysis object from delivery head' }}"
         shell: bash
         run: |
           set -euo pipefail
           git cherry-pick --no-commit df16a6effe5a19cbdd0fe290ccfeb27b988f5178
           python .github/scripts/branch-950-revision-authority.py
       - name: Full validation
-        if: ${{ github.event.head_commit.message != 'fix(revision): separate analysis object from delivery head' }}
+        if: "${{ github.event.head_commit.message != 'fix(revision): separate analysis object from delivery head' }}"
         shell: bash
         run: |
           set -euo pipefail
@@ -41,7 +41,7 @@ jobs:
           python scripts/verify-bun-review-artifacts.py --self-test
           cargo xtask policy-check
       - name: Commit integrated correction
-        if: ${{ github.event.head_commit.message != 'fix(revision): separate analysis object from delivery head' }}
+        if: "${{ github.event.head_commit.message != 'fix(revision): separate analysis object from delivery head' }}"
         shell: bash
         run: |
           set -euo pipefail
