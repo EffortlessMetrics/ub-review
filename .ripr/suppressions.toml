@@ -26485,3 +26485,185 @@ kind = "exposure_gap"
 finding_id = "probe:src_work_queue.rs:call_deletion:cb484b20"
 owner = "ub-review/core"
 reason = "A1.3 row-stamp slice (#950): the write-time stamping closures clone each row and overwrite the revision ref uniformly, which is behaviorally asserted by receipt_rows_are_stamped_with_the_packet_revision_at_write_time (rows enter unstamped, leave the writer joined to the packet ref). RIPR's Linux-side discriminator marks these clone/call sites observation_unverified while Windows classifies the same committed content as strongly exposed (#1247). Re-verify on edits to src/work_queue.rs writers; retire at A1.4 enforcement."
+
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:return_value:bc16d84d"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:call_deletion:34d662c8"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:call_deletion:271fb1de"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:call_deletion:26ce97f9"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:match_arm:564ede87"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:match_arm:598f17e9"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:return_value:f3aedae6"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:match_arm:98af0f06"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:call_deletion:a098b1dc"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:return_value:36fcc24f"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:call_deletion:7ce6651f"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:return_value:2bc8bc5b"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:return_value:7dc72c94"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:return_value:723c3bae"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:return_value:723c3bae.2"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:return_value:83c07769"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:return_value:f3aedae6.2"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:match_arm:8a2ddcc1"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:call_deletion:542ace10"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:return_value:edb59fb8"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:match_arm:38fce464"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:match_arm:92e05fe3"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:match_arm:4527b402"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:match_arm:62ce45b1"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:match_arm:4357b6f9"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:match_arm:e26ed137"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:match_arm:091d9c86"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:call_deletion:ed67a33a"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_issue_broker.rs:return_value:14c5eba6"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:c7d4b33e"
+owner = "ub-review/core"
+reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
+
