@@ -3584,6 +3584,19 @@ def require_orchestrator_plan(root: pathlib.Path) -> None:
     routes = receipt_routes.get("routes") if isinstance(receipt_routes, dict) else None
     if not isinstance(routes, list):
         fail("review/receipt_routes.json routes is not an array")
+    # A1.3 (#950): when the routing envelope carries the packet's immutable
+    # revision, it must join claim_graph.json.
+    if isinstance(receipt_routes, dict) and receipt_routes.get("revision") is not None:
+        _require_revision_ref(receipt_routes["revision"], "receipt_routes.json")
+        graph = load_json(root / "review/claim_graph.json")
+        if isinstance(graph, dict) and graph.get("revision") is not None:
+            if graph["revision"].get("digest") != receipt_routes["revision"].get(
+                "digest"
+            ):
+                fail(
+                    "receipt_routes.json revision digest does not join "
+                    "claim_graph.json revision digest"
+                )
     follow_up_receipt_ids = {
         route.get("receipt_id")
         for route in routes
