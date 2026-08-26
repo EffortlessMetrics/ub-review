@@ -5268,6 +5268,15 @@ fn write_review_artifacts(
         args,
     });
 
+    // A1.3 (#950): keep the review.json embedded rows joined to the packet
+    // revision exactly like the standalone receipt/lease artifacts.
+    for row in &mut review.proof_receipts {
+        row.revision = revision.cloned();
+    }
+    for row in &mut review.resource_leases {
+        row.revision = revision.cloned();
+    }
+
     fs::write(
         review_dir.join("review.json"),
         serde_json::to_vec_pretty(&review)?,
