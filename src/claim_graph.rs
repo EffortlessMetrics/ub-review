@@ -836,6 +836,45 @@ mod tests {
     }
 
     #[test]
+    fn receipt_rows_are_stamped_with_the_packet_revision_at_write_time() -> anyhow::Result<()> {
+        let out = tempfile::tempdir()?;
+        let receipts = vec![crate::ProofReceipt {
+            schema: crate::artifacts::PROOF_RECEIPT_SCHEMA.to_owned(),
+            id: "proof-x".to_owned(),
+            kind: "cargo-check".to_owned(),
+            base: "base".to_owned(),
+            head: "HEAD".to_owned(),
+            revision: None,
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: vec!["required".to_owned()],
+            request_ids: vec!["req-1".to_owned()],
+            commands: Vec::new(),
+            result: "passed".to_owned(),
+            reason: String::new(),
+        }];
+        assert!(receipts[0].revision.is_none());
+
+        crate::write_proof_receipt_artifacts(
+            out.path(),
+            &receipts,
+            Some(&crate::RevisionRef {
+                digest: "c".repeat(64),
+                semantics: "merge_result".to_owned(),
+                reviewed_commit: "d".repeat(64),
+            }),
+        )?;
+        let written: serde_json::Value = serde_json::from_slice(&std::fs::read(
+            out.path().join("review").join("proof_receipts.json"),
+        )?)?;
+        assert_eq!(
+            written[0]["revision"]["digest"],
+            "c".repeat(64),
+            "rows must join the packet's immutable revision after the write"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn shadow_claim_graph_is_empty_by_default() {
         let graph = build_shadow_claim_graph("abc123");
         assert_eq!(graph.schema, "ub-review.claim_graph.v1");

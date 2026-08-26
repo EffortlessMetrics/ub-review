@@ -465,7 +465,12 @@ pub(crate) struct ProofReceipt {
     pub(crate) id: String,
     pub(crate) kind: String,
     pub(crate) base: String,
+    /// Legacy head label; display/compatibility only next to `revision`.
     pub(crate) head: String,
+    /// Immutable revision reference (A1.3): stamped uniformly at artifact
+    /// write time from the admitted revision, so every row joins the packet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) revision: Option<crate::RevisionRef>,
     pub(crate) test_patch_mode: String,
     pub(crate) requested_by: Vec<String>,
     pub(crate) request_ids: Vec<String>,
@@ -508,6 +513,10 @@ pub(crate) struct ResourceLease {
     pub(crate) worktree: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) command: Option<String>,
+    /// Immutable revision reference (A1.3): stamped uniformly at artifact
+    /// write time from the admitted revision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) revision: Option<crate::RevisionRef>,
 }
 
 #[derive(Clone, Debug, Serialize)]

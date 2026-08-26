@@ -1974,6 +1974,9 @@ def require_claim_graph(root: pathlib.Path) -> None:
     head_sha = graph.get("head_sha")
     if not isinstance(head_sha, str) or not head_sha.strip():
         fail("claim_graph.json head_sha is empty")
+    graph_revision = graph.get("revision")
+    if graph_revision is not None:
+        _require_revision_ref(graph_revision, "claim_graph.json")
     metrics = load_json(root / "review/metrics.json")
     if not isinstance(metrics, dict) or metrics.get("head") != head_sha:
         fail("claim_graph.json head_sha does not match metrics.json head")
@@ -1983,6 +1986,20 @@ def require_claim_graph(root: pathlib.Path) -> None:
     for index, receipt in enumerate(proof_receipts):
         if not isinstance(receipt, dict) or receipt.get("head") != head_sha:
             fail(f"proof_receipts.json[{index}] head does not match claim graph head")
+        # A1.3 (#950): row-level revision refs, when stamped, must join the
+        # packet's immutable revision. Mixed-revision rows are visible here.
+        row_revision = (
+            receipt.get("revision") if isinstance(receipt, dict) else None
+        )
+        if row_revision is not None:
+            _require_revision_ref(row_revision, f"proof_receipts.json[{index}]")
+            if graph_revision is not None and row_revision.get(
+                "digest"
+            ) != graph_revision.get("digest"):
+                fail(
+                    f"proof_receipts.json[{index}] revision digest does not "
+                    "join claim_graph.json revision digest"
+                )
     claims = graph.get("claims")
     topics = graph.get("topics")
     if not isinstance(claims, list) or not isinstance(topics, list):
@@ -1992,9 +2009,6 @@ def require_claim_graph(root: pathlib.Path) -> None:
             fail(f"claim_graph.json {field} must be an array")
     if graph.get("mode") not in {"active", "shadow"}:
         fail(f"claim_graph.json mode is invalid: {graph.get('mode')!r}")
-    graph_revision = graph.get("revision")
-    if graph_revision is not None:
-        _require_revision_ref(graph_revision, "claim_graph.json")
     adjudicated_loser_ids = {
         conflict.get("loser")
         for conflict in graph.get("conflicts", [])

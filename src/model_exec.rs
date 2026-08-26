@@ -2250,6 +2250,7 @@ mod receipt_reconsideration_tests {
     #[test]
     fn reconsideration_prompt_is_answer_shaped_and_claim_linked() {
         let receipt = ProofReceipt {
+            revision: None,
             schema: "proof".to_owned(),
             id: "receipt-1".to_owned(),
             kind: "focused-test".to_owned(),

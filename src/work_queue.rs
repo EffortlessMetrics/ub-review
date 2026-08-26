@@ -325,15 +325,27 @@ pub(crate) fn focused_proof_task_purpose(plan: &FocusedProofPlan) -> String {
 pub(crate) fn write_proof_receipt_artifacts(
     out: &Path,
     proof_receipts: &[ProofReceipt],
+    revision: Option<&crate::RevisionRef>,
 ) -> Result<()> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    // A1.3 (#950): stamp every row with the admitted revision at write time,
+    // so producers cannot emit rows that escape the packet's immutable join
+    // key regardless of where the receipt was constructed.
+    let stamped: Vec<ProofReceipt> = proof_receipts
+        .iter()
+        .map(|receipt| {
+            let mut row = receipt.clone();
+            row.revision = revision.cloned();
+            row
+        })
+        .collect();
     fs::write(
         review_dir.join("proof_receipts.json"),
-        serde_json::to_vec_pretty(proof_receipts)?,
+        serde_json::to_vec_pretty(&stamped)?,
     )?;
     let mut ndjson = String::new();
-    for receipt in proof_receipts {
+    for receipt in &stamped {
         ndjson.push_str(&serde_json::to_string(receipt)?);
         ndjson.push('\n');
     }
@@ -344,16 +356,26 @@ pub(crate) fn write_proof_receipt_artifacts(
 pub(crate) fn write_resource_lease_artifacts(
     out: &Path,
     resource_leases: &[ResourceLease],
+    revision: Option<&crate::RevisionRef>,
 ) -> Result<()> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    // A1.3 (#950): stamp rows uniformly at write time (see receipts writer).
+    let stamped: Vec<ResourceLease> = resource_leases
+        .iter()
+        .map(|lease| {
+            let mut row = lease.clone();
+            row.revision = revision.cloned();
+            row
+        })
+        .collect();
     fs::write(
         review_dir.join("resource_leases.json"),
-        serde_json::to_vec_pretty(resource_leases)?,
+        serde_json::to_vec_pretty(&stamped)?,
     )?;
 
     let mut ndjson = String::new();
-    for lease in resource_leases {
+    for lease in &stamped {
         ndjson.push_str(&serde_json::to_string(lease)?);
         ndjson.push('\n');
     }
@@ -361,11 +383,11 @@ pub(crate) fn write_resource_lease_artifacts(
 
     let mut plan = String::new();
     plan.push_str("# Resource lease plan\n\n");
-    if resource_leases.is_empty() {
+    if stamped.is_empty() {
         plan.push_str("No local proof leases were requested in this packet.\n");
     } else {
         plan.push_str("## Focused proof leases\n\n");
-        for lease in resource_leases {
+        for lease in &stamped {
             plan.push_str(&format!(
                 "- `{}` kind=`{}` consumer=`{}` status=`{}` cpu=`{}` memory_mb=`{}` disk_mb=`{}` timeout_sec=`{}` network=`{}` scratch=`{}`",
                 lease.id,
