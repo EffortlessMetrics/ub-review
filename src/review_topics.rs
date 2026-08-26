@@ -910,6 +910,7 @@ mod tests {
             suggestion: None,
         };
         let unrelated = ProofReceipt {
+            revision: None,
             schema: "proof".to_owned(),
             id: "receipt-unrelated".to_owned(),
             kind: "focused-test".to_owned(),
@@ -1058,6 +1059,7 @@ mod tests {
             source: "tests".to_owned(),
         };
         let receipt = ProofReceipt {
+            revision: None,
             schema: "proof".to_owned(),
             id: "proof-refutation-1".to_owned(),
             kind: "focused-test".to_owned(),
@@ -1163,6 +1165,7 @@ mod tests {
             source: "test".to_owned(),
         };
         let receipt = ProofReceipt {
+            revision: None,
             schema: "proof".to_owned(),
             id: "proof-disposition".to_owned(),
             kind: "focused-test".to_owned(),
@@ -1290,6 +1293,7 @@ mod tests {
             source: "test".to_owned(),
         };
         let stale_receipt = ProofReceipt {
+            revision: None,
             schema: "proof".to_owned(),
             id: "proof-stale-head".to_owned(),
             kind: "focused-test".to_owned(),
@@ -1843,6 +1847,7 @@ mod tests {
             source: "tests".to_owned(),
         };
         let receipt = ProofReceipt {
+            revision: None,
             schema: "proof".to_owned(),
             id: "proof-reply-plan".to_owned(),
             kind: "focused-test".to_owned(),

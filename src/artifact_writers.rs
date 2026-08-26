@@ -94,8 +94,13 @@ pub(crate) fn write_model_stage_artifacts(
     model_lanes: &[ModelLaneReceipt],
     follow_up_results: &[FollowUpResult],
     args: &RunArgs,
+    revision: Option<&crate::RevisionRef>,
 ) -> Result<()> {
-    let records = model_stage_records(model_lanes, follow_up_results, args);
+    let mut records = model_stage_records(model_lanes, follow_up_results, args);
+    // A1.3 (#950): stamp every stage row with the packet's immutable revision.
+    for record in &mut records {
+        record.revision = revision.cloned();
+    }
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
     fs::write(
@@ -183,6 +188,7 @@ pub(crate) fn model_lane_stage_record(receipt: &ModelLaneReceipt) -> ModelStageR
         http_status: receipt.http_status,
         response_shape: receipt.response_shape.clone(),
         cache_usage: receipt.cache_usage.clone(),
+        revision: None,
     }
 }
 

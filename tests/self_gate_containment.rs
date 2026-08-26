@@ -113,6 +113,10 @@ fn independent_baseline_isolates_candidate_evidence_from_trusted_finalization() 
         INDEPENDENT_WORKFLOW.contains("\n  pull_request_target:\n"),
         "workflow definition must come from the protected base branch"
     );
+    ensure!(
+        !INDEPENDENT_WORKFLOW.contains("\n  pull_request:\n"),
+        "candidate-owned pull_request orchestration must not share this workflow"
+    );
 
     let evidence = job_section(INDEPENDENT_WORKFLOW, "evidence", Some("finalize"))?;
     let finalize = job_section(INDEPENDENT_WORKFLOW, "finalize", None)?;
@@ -121,10 +125,12 @@ fn independent_baseline_isolates_candidate_evidence_from_trusted_finalization() 
         "name: independent evidence / ${{ matrix.check }}",
         "fail-fast: false",
         "check: [fmt, check, clippy, test, doc, policy, verifier]",
+        "uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
         "repository: ${{ github.event.pull_request.head.repo.full_name }}",
         "ref: ${{ github.event.pull_request.head.sha }}",
         "persist-credentials: false",
         "actual_sha=\"$(git rev-parse HEAD)\"",
+        "uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772",
         "export CARGO_TARGET_DIR=\"$RUNNER_TEMP/ub-review-independent-${CHECK}-target\"",
         "Run one fixed deterministic check",
     ] {
@@ -164,7 +170,8 @@ fn independent_baseline_isolates_candidate_evidence_from_trusted_finalization() 
         "EVIDENCE_RESULT: ${{ needs.evidence.result }}",
         "Write trusted exact-head baseline receipt",
         "evidence_topology: \"isolated-matrix-jobs\"",
-        "actions/upload-artifact@v7",
+        "uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+        "path: ${{ runner.temp }}/ub-review-independent-baseline",
         "Enforce independent baseline",
     ] {
         ensure!(
@@ -198,12 +205,24 @@ fn independent_baseline_isolates_candidate_evidence_from_trusted_finalization() 
         "cargo clippy --workspace --all-targets --locked -- -D warnings",
         "cargo test --workspace --all-targets --locked",
         "cargo doc --workspace --no-deps --locked",
-        "cargo xtask policy-check",
+        "cargo run --locked --package xtask -- policy-check",
         "python scripts/verify-bun-review-artifacts.py --self-test",
     ] {
         ensure!(
             INDEPENDENT_WORKFLOW.matches(command).count() == 2,
             "fixed command must appear once in execution and once in the trusted receipt: `{command}`"
+        );
+    }
+
+    for forbidden in [
+        "actions/checkout@v5",
+        "dtolnay/rust-toolchain@master",
+        "actions/upload-artifact@v7",
+        "cargo xtask policy-check",
+    ] {
+        ensure!(
+            !INDEPENDENT_WORKFLOW.contains(forbidden),
+            "independent workflow must not retain mutable or unlocked reference `{forbidden}`"
         );
     }
 

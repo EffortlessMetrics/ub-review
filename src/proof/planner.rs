@@ -1606,6 +1606,7 @@ index 1111111..2222222 100644
             },
         ];
         let receipt = ProofReceipt {
+            revision: None,
             schema: PROOF_RECEIPT_SCHEMA.to_owned(),
             id: "receipt-primary".to_owned(),
             kind: "focused-head".to_owned(),
@@ -1693,6 +1694,7 @@ index 1111111..2222222 100644
                 status: "requested".to_owned(),
             };
             let receipt = ProofReceipt {
+                revision: None,
                 schema: PROOF_RECEIPT_SCHEMA.to_owned(),
                 id: format!("receipt-{index}"),
                 kind: "focused-head".to_owned(),
@@ -1732,6 +1734,7 @@ index 1111111..2222222 100644
             status: "requested".to_owned(),
         };
         let receipt = ProofReceipt {
+            revision: None,
             schema: PROOF_RECEIPT_SCHEMA.to_owned(),
             id: "receipt-previous-head".to_owned(),
             kind: "focused-head".to_owned(),
@@ -1895,6 +1898,7 @@ index 1111111..2222222 100644
     #[test]
     fn receipt_routes_capture_initial_model_and_follow_up_consumers() {
         let initial = ProofReceipt {
+            revision: None,
             schema: "ub-review.proof_receipt.v1".to_owned(),
             id: "proof-initial".to_owned(),
             kind: "focused-red-green".to_owned(),
@@ -1908,6 +1912,7 @@ index 1111111..2222222 100644
             reason: "HEAD passed; base+tests failed".to_owned(),
         };
         let model_request = ProofReceipt {
+            revision: None,
             schema: "ub-review.proof_receipt.v1".to_owned(),
             id: "proof-model".to_owned(),
             kind: "focused-build".to_owned(),
@@ -1921,6 +1926,7 @@ index 1111111..2222222 100644
             reason: "focused build passed".to_owned(),
         };
         let follow_up = ProofReceipt {
+            revision: None,
             schema: "ub-review.proof_receipt.v1".to_owned(),
             id: "proof-follow-up".to_owned(),
             kind: "focused-head".to_owned(),
@@ -1934,6 +1940,7 @@ index 1111111..2222222 100644
             reason: "budget exhausted".to_owned(),
         };
         let lease = ResourceLease {
+            revision: None,
             schema: "ub-review.resource_lease.v1".to_owned(),
             id: "lease-proof-initial".to_owned(),
             kind: "focused-test".to_owned(),

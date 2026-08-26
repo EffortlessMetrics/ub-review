@@ -26449,3 +26449,39 @@ kind = "exposure_gap"
 finding_id = "probe:src_revision_identity.rs:return_value:5dba4ee6"
 owner = "ub-review/core"
 reason = "A1.3 propagation slice (#950 stage 1): the referenced sites carry behavioral oracles - the claim-graph stamp write rejects malformed refs (stamped_revision_ref_is_visible_in_the_artifact), the delivery preference test pins immutable-ref-over-symbolic-label behavior, and the gate outcome join is asserted by the verifier cross-check. RIPR's Linux-side textual discriminator still marks them observation_unverified while Windows classifies the same committed content as strongly exposed (#1247). Re-verify on edits; retire as A1.4 enforcement adds cross-artifact discriminators."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue.rs:call_deletion:2fd3322b"
+owner = "ub-review/core"
+reason = "A1.3 row-stamp slice (#950): the write-time stamping closures clone each row and overwrite the revision ref uniformly, which is behaviorally asserted by receipt_rows_are_stamped_with_the_packet_revision_at_write_time (rows enter unstamped, leave the writer joined to the packet ref). RIPR's Linux-side discriminator marks these clone/call sites observation_unverified while Windows classifies the same committed content as strongly exposed (#1247). Re-verify on edits to src/work_queue.rs writers; retire at A1.4 enforcement."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue.rs:call_deletion:1981e4e3"
+owner = "ub-review/core"
+reason = "A1.3 row-stamp slice (#950): the write-time stamping closures clone each row and overwrite the revision ref uniformly, which is behaviorally asserted by receipt_rows_are_stamped_with_the_packet_revision_at_write_time (rows enter unstamped, leave the writer joined to the packet ref). RIPR's Linux-side discriminator marks these clone/call sites observation_unverified while Windows classifies the same committed content as strongly exposed (#1247). Re-verify on edits to src/work_queue.rs writers; retire at A1.4 enforcement."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue.rs:call_deletion:ed814725"
+owner = "ub-review/core"
+reason = "A1.3 row-stamp slice (#950): the write-time stamping closures clone each row and overwrite the revision ref uniformly, which is behaviorally asserted by receipt_rows_are_stamped_with_the_packet_revision_at_write_time (rows enter unstamped, leave the writer joined to the packet ref). RIPR's Linux-side discriminator marks these clone/call sites observation_unverified while Windows classifies the same committed content as strongly exposed (#1247). Re-verify on edits to src/work_queue.rs writers; retire at A1.4 enforcement."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue.rs:call_deletion:376fe8e7"
+owner = "ub-review/core"
+reason = "A1.3 row-stamp slice (#950): the write-time stamping closures clone each row and overwrite the revision ref uniformly, which is behaviorally asserted by receipt_rows_are_stamped_with_the_packet_revision_at_write_time (rows enter unstamped, leave the writer joined to the packet ref). RIPR's Linux-side discriminator marks these clone/call sites observation_unverified while Windows classifies the same committed content as strongly exposed (#1247). Re-verify on edits to src/work_queue.rs writers; retire at A1.4 enforcement."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue.rs:call_deletion:de11211f"
+owner = "ub-review/core"
+reason = "A1.3 row-stamp slice (#950): the write-time stamping closures clone each row and overwrite the revision ref uniformly, which is behaviorally asserted by receipt_rows_are_stamped_with_the_packet_revision_at_write_time (rows enter unstamped, leave the writer joined to the packet ref). RIPR's Linux-side discriminator marks these clone/call sites observation_unverified while Windows classifies the same committed content as strongly exposed (#1247). Re-verify on edits to src/work_queue.rs writers; retire at A1.4 enforcement."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue.rs:call_deletion:cb484b20"
+owner = "ub-review/core"
+reason = "A1.3 row-stamp slice (#950): the write-time stamping closures clone each row and overwrite the revision ref uniformly, which is behaviorally asserted by receipt_rows_are_stamped_with_the_packet_revision_at_write_time (rows enter unstamped, leave the writer joined to the packet ref). RIPR's Linux-side discriminator marks these clone/call sites observation_unverified while Windows classifies the same committed content as strongly exposed (#1247). Re-verify on edits to src/work_queue.rs writers; retire at A1.4 enforcement."

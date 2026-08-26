@@ -572,6 +572,7 @@ mod tests {
         )?;
         // A proof receipt matching the lane
         let proof_receipt = crate::ProofReceipt {
+            revision: None,
             schema: "ub-review.proof_receipt.v1".to_owned(),
             id: "proof-red-green-abc".to_owned(),
             kind: "focused-red-green".to_owned(),

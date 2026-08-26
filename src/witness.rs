@@ -22,6 +22,7 @@ pub(crate) fn follow_up_stage_record(result: &FollowUpResult) -> ModelStageRecor
         http_status: result.http_status,
         response_shape: result.response_shape.clone(),
         cache_usage: result.cache_usage.clone(),
+        revision: None,
     }
 }
 

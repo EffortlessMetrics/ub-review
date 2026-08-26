@@ -32,7 +32,7 @@ jobs:
       CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       - name: Checkout exact candidate revision without credentials
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
@@ -50,7 +50,7 @@ jobs:
           fi
 
       - name: Install fixed Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
         with:
           toolchain: 1.95.0
           components: rustfmt,clippy
@@ -79,7 +79,7 @@ jobs:
               cargo doc --workspace --no-deps --locked
               ;;
             policy)
-              cargo xtask policy-check
+              cargo run --locked --package xtask -- policy-check
               ;;
             verifier)
               python scripts/verify-bun-review-artifacts.py --self-test
@@ -129,14 +129,14 @@ jobs:
                 "cargo clippy --workspace --all-targets --locked -- -D warnings",
                 "cargo test --workspace --all-targets --locked",
                 "cargo doc --workspace --no-deps --locked",
-                "cargo xtask policy-check",
+                "cargo run --locked --package xtask -- policy-check",
                 "python scripts/verify-bun-review-artifacts.py --self-test"
               ]
             }' > "$receipt_dir/receipt.json"
 
       - name: Upload independent baseline receipt
         if: ${{ always() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: independent-baseline-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
           path: ${{ runner.temp }}/ub-review-independent-baseline

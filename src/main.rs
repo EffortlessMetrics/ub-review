@@ -332,6 +332,7 @@ fn cmd_worker(args: WorkerArgs) -> Result<()> {
         env: env_map,
     };
     let lease = ResourceLease {
+        revision: None,
         schema: crate::artifacts::RESOURCE_LEASE_SCHEMA.to_owned(),
         id: format!("worker-lease-{}", request.id),
         kind: kind_str.clone(),
@@ -374,6 +375,7 @@ fn cmd_worker(args: WorkerArgs) -> Result<()> {
     // focused_head_receipt / focused_build_receipt produce, stamped with the
     // base/head identity and requesters from the v2 request.
     let receipt = ProofReceipt {
+        revision: None,
         schema: crate::artifacts::PROOF_RECEIPT_SCHEMA.to_owned(),
         id: request.id.clone(),
         kind: kind_str.clone(),
@@ -520,6 +522,7 @@ mod worker_proof_tests {
             env: BTreeMap::new(),
         };
         let lease = ResourceLease {
+            revision: None,
             schema: crate::artifacts::RESOURCE_LEASE_SCHEMA.to_owned(),
             id: "worker-lease-req-1".to_owned(),
             kind: "focused-test".to_owned(),
@@ -570,6 +573,7 @@ mod worker_proof_tests {
 
         // Assemble the canonical ProofReceipt exactly as cmd_worker does.
         let receipt = ProofReceipt {
+            revision: None,
             schema: crate::artifacts::PROOF_RECEIPT_SCHEMA.to_owned(),
             id: "req-1".to_owned(),
             kind: "focused-test".to_owned(),
@@ -1156,6 +1160,9 @@ struct ReviewMetrics {
 struct CostReceipt {
     schema: &'static str,
     run_id: String,
+    /// Immutable revision reference (A1.3): stamped at artifact write time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    revision: Option<RevisionRef>,
     runner_kind: String,
     target_minutes: u64,
     cap_minutes: u64,
@@ -2380,6 +2387,9 @@ struct ModelStageRecord {
     response_shape: Option<String>,
     #[serde(default)]
     cache_usage: ModelCacheUsage,
+    /// Immutable revision reference (A1.3): stamped at artifact write time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    revision: Option<RevisionRef>,
 }
 
 #[derive(Debug, Serialize)]
@@ -4862,6 +4872,16 @@ fn write_review_artifacts(
         resource_leases,
         body: preliminary_surface.artifact_body,
     };
+    // A1.3 (#950): stamp the admitted revision onto every receipt and lease
+    // row once, immediately after assembly, so all downstream serializers
+    // (orchestrator plan, final compiler input, review.json, receipt
+    // artifacts) embed joined rows.
+    for row in &mut review.proof_receipts {
+        row.revision = revision.cloned();
+    }
+    for row in &mut review.resource_leases {
+        row.revision = revision.cloned();
+    }
     let observations = combined_observations(&review);
     let observation_summary = observation_summary_artifacts(&observations);
     let orchestrator_plan = build_orchestrator_plan(
@@ -4934,7 +4954,7 @@ fn write_review_artifacts(
         .iter()
         .filter(|candidate| resolved_away_candidate_ids.contains(&candidate.id))
         .collect::<Vec<_>>();
-    write_model_stage_artifacts(out, &review.model_lanes, &follow_up_results, args)?;
+    write_model_stage_artifacts(out, &review.model_lanes, &follow_up_results, args, revision)?;
     write_shared_context_cache_artifacts(
         out,
         &shared_context,
@@ -5178,8 +5198,8 @@ fn write_review_artifacts(
         &review.proof_receipts,
     );
     write_witness_artifacts(out, &witnesses)?;
-    write_proof_receipt_artifacts(out, &review.proof_receipts)?;
-    write_resource_lease_artifacts(out, &review.resource_leases)?;
+    write_proof_receipt_artifacts(out, &review.proof_receipts, revision)?;
+    write_resource_lease_artifacts(out, &review.resource_leases, revision)?;
     review.proof_requests =
         terminalize_proof_requests(&diff.head, &review.proof_requests, &review.proof_receipts);
     let mut active_claim_graph = build_active_claim_graph(
@@ -5272,8 +5292,15 @@ fn write_review_artifacts(
         review_dir.join("metrics.json"),
         serde_json::to_vec_pretty(&metrics)?,
     )?;
-    let cost_receipt =
-        write_cost_receipt_artifact(root, out, config, &metrics, &review, &follow_up_results)?;
+    let cost_receipt = write_cost_receipt_artifact(
+        root,
+        out,
+        config,
+        &metrics,
+        &review,
+        &follow_up_results,
+        revision,
+    )?;
     write_floor_trend_artifact(out, &cost_receipt)?;
     let fill_ledger = write_fill_ledger_artifact(FillLedgerInput {
         out,
@@ -9589,8 +9616,8 @@ index 1111111..2222222 100644
         assert_eq!(receipts[1].commands[0].status, "passed");
         assert_eq!(receipts[1].commands[1].status, "failed");
 
-        write_proof_receipt_artifacts(&out, &receipts)?;
-        write_resource_lease_artifacts(&out, &resource_leases)?;
+        write_proof_receipt_artifacts(&out, &receipts, None)?;
+        write_resource_lease_artifacts(&out, &resource_leases, None)?;
         write_proof_request_artifacts(
             &out,
             &diff,
@@ -9737,6 +9764,7 @@ index 1111111..2222222 100644
             status: "requested".to_owned(),
         }];
         let existing_leases = vec![ResourceLease {
+            revision: None,
             schema: "ub-review.resource_lease.v1".to_owned(),
             id: "lease-proof-red-green-existing".to_owned(),
             kind: "focused-test".to_owned(),
@@ -18372,6 +18400,7 @@ index 1111111..2222222 100644
         let cost = super::CostReceipt {
             schema: super::COST_RECEIPT_SCHEMA,
             run_id: "local-abc123".to_owned(),
+            revision: None,
             runner_kind: "local".to_owned(),
             target_minutes: 30,
             cap_minutes: 60,
@@ -18639,6 +18668,7 @@ index 1111111..2222222 100644
         receipt.commands[0].command = request.command.clone();
         receipt.commands[0].duration_ms = 1_234;
         let lease = ResourceLease {
+            revision: None,
             schema: super::RESOURCE_LEASE_SCHEMA.to_owned(),
             id: format!("lease-{}", receipt.id),
             kind: "focused-build".to_owned(),
@@ -20133,6 +20163,7 @@ index 1111111..2222222 100644
         let proof_receipts = vec![confirmed_receipt, missing_receipt];
         let resource_leases = vec![
             ResourceLease {
+                revision: None,
                 schema: "ub-review.resource_lease.v1".to_owned(),
                 id: "lease-proof-confirmed".to_owned(),
                 kind: "focused-test".to_owned(),
@@ -20149,6 +20180,7 @@ index 1111111..2222222 100644
                 command: Some("bun test test/js/bun/md/md-edge-cases.test.ts".to_owned()),
             },
             ResourceLease {
+                revision: None,
                 schema: "ub-review.resource_lease.v1".to_owned(),
                 id: "lease-proof-timeout".to_owned(),
                 kind: "focused-test".to_owned(),
@@ -20556,7 +20588,13 @@ index 1111111..2222222 100644
         assert_eq!(records[4].stage, "tertiary");
         assert_eq!(records[4].task_id.as_deref(), Some("follow-tertiary"));
 
-        super::write_model_stage_artifacts(temp.path(), &model_lanes, &follow_up_results, &args)?;
+        super::write_model_stage_artifacts(
+            temp.path(),
+            &model_lanes,
+            &follow_up_results,
+            &args,
+            None,
+        )?;
         let written: serde_json::Value =
             serde_json::from_slice(&fs::read(temp.path().join("review/model_stages.json"))?)?;
         let lines = fs::read_to_string(temp.path().join("model_stages.ndjson"))?;
@@ -20687,6 +20725,7 @@ index 1111111..2222222 100644
         late_receipt.request_ids = vec!["proof-follow-up-1".to_owned()];
         late_receipt.reason = "HEAD passed; base+tests failed after follow-up proof.".to_owned();
         let late_lease = ResourceLease {
+            revision: None,
             schema: "ub-review.resource_lease.v1".to_owned(),
             id: "lease-proof-follow-up-late".to_owned(),
             kind: "focused-test".to_owned(),
@@ -23363,6 +23402,7 @@ index 1111111..2222222 100644
 
     pub(crate) fn test_proof_receipt(result: &str, command_status: &str) -> ProofReceipt {
         ProofReceipt {
+            revision: None,
             schema: "ub-review.proof_receipt.v1".to_owned(),
             id: "proof-red-green-test".to_owned(),
             kind: "focused-head".to_owned(),
@@ -23392,6 +23432,7 @@ index 1111111..2222222 100644
 
     fn test_red_green_proof_receipt(result: &str, base_status: &str) -> ProofReceipt {
         ProofReceipt {
+            revision: None,
             schema: "ub-review.proof_receipt.v1".to_owned(),
             id: "proof-red-green-test".to_owned(),
             kind: "focused-red-green".to_owned(),

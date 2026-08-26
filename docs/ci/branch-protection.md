@@ -46,8 +46,8 @@ This check proves that a pull-request head cannot replace the deciding command
 list, contaminate trusted finalization, or substitute its own
 `gate_outcome.json`. It does **not** prove that candidate tests, manifests,
 build scripts, policy code, or verifier code are trusted inside their own
-isolated evidence job. The released stable-coordinator and hostile-head-safe
-job split in #876/#814 own that stronger boundary.
+isolated evidence job. The released stable coordinator and hostile-head-safe
+job split tracked by issues `#876` and `#814` own that stronger boundary.
 
 Merging the workflow does not change branch protection. The check remains
 advisory until a separate maintainer-authorized operation records the exact
