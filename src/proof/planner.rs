@@ -573,11 +573,13 @@ pub(crate) fn receipt_route_consumers(receipt: &ProofReceipt) -> Vec<String> {
 pub(crate) fn write_receipt_route_artifacts(
     out: &Path,
     routes: &[ReceiptRouteArtifact],
+    revision: Option<&crate::RevisionRef>,
 ) -> Result<()> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
     let artifact = ReceiptRoutesArtifact {
         schema: RECEIPT_ROUTES_SCHEMA,
+        revision: revision.cloned(),
         source_artifacts: vec!["review/proof_receipts.json", "review/resource_leases.json"],
         routes,
     };

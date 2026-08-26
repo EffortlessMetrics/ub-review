@@ -1723,6 +1723,10 @@ struct WorkEventArtifact {
 #[derive(Clone, Debug, Serialize)]
 struct ReceiptRoutesArtifact<'a> {
     schema: &'static str,
+    /// Immutable revision reference (A1.3): the admitted revision every
+    /// routed receipt belongs to.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    revision: Option<RevisionRef>,
     source_artifacts: Vec<&'static str>,
     routes: &'a [ReceiptRouteArtifact],
 }
@@ -5011,7 +5015,7 @@ fn write_review_artifacts(
         "completed",
     )?;
     let receipt_routes = receipt_route_artifacts(&review.proof_receipts, &review.resource_leases);
-    write_receipt_route_artifacts(out, &receipt_routes)?;
+    write_receipt_route_artifacts(out, &receipt_routes, revision)?;
     // Release lane step 4: lane-emitted follow-up candidates become the
     // issue-capture artifacts. v0 is artifact-only - no PR-body rendering,
     // no GitHub side effects; classification is the whole pipeline.
