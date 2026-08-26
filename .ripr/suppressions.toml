@@ -26667,3 +26667,316 @@ finding_id = "probe:src_main.rs:return_value:c7d4b33e"
 owner = "ub-review/core"
 reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
 
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:2a9396e6"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:7287f4ae"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:ca667ccb"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:ef4a4e7e"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:12660294"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:f000f81e"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:31b03a71"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:e132bf37"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:field_construction:6616f937"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:efbc7048"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:ecb885a8"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:error_path:93380399"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:d95311ab"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:error_path:93380399.2"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:return_value:46463adb"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:c614460d"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:67d871a9"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:3f5f2d3b"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:error_path:4e26177f"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:return_value:591647ba"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:error_path:1c55e97f"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:error_path:93380399.3"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:bfd5cded"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:55ebb247"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:61af9e95"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:d5372889"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:1dfc29ec"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:dc747372"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:f363baa2"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:4686d8eb"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:f9b930e7"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:73316311"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:error_path:400b527d"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:return_value:2fa672c9"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:027928fd"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:error_path:6f752bd3"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:return_value:cc9065d9"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:error_path:fe96c140"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:return_value:676761d9"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:error_path:7f31d099"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:error_path:a6a5482f"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:8b7bc67f"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:3d8f24f4"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:d5ce953d"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:b25b5595"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:7f4f48f4"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:edb32d00"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:62824e54"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:field_construction:527528d0"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:return_value:55061a51"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:field_construction:b5c495e9"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:return_value:fcc39d0c"
+owner = "ub-review/core"
+reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
+
