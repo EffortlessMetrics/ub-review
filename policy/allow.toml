@@ -123,7 +123,7 @@ glob = "fixtures/**/*"
 category = "fixtures"
 language = "mixed"
 owner = "ub-review/tests"
-reason = "Fixture projects and provider payloads are consumed by integration tests and packet-contract checks."
+reason = "Fixture projects and provider payloads are consumed by integration tests and packet-contract checks. Reviewed 2026-08-27 for issue #961: the authority-incident corpus retains 12 byte-identical, manifest-digested JSON artifacts from exact-head hosted PRs #915/#916/#921 under a 64 KiB budget; the Rust loader rejects inventory, path, digest, size, secret/private-payload, schema, and evidence-pointer drift."
 created = "2026-06-03"
 review_after = "2026-09-03"
 

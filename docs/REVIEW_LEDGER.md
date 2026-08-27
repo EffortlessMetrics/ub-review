@@ -50,6 +50,16 @@ When a mirror side moves, the deterministic check that settles parity is the
 verifier (self-test or full-tree); flag the pair, do not adjudicate parity by
 argument.
 
+## Retained authority incidents
+
+`fixtures/authority-incidents/manifest.json` indexes the byte-identical minimal
+artifact corpus from exact-head hosted PRs #915, #916, and #921. The generic
+loader in `tests/authority_incidents.rs` owns path confinement, file inventory,
+SHA-256, size-budget, secret/private-payload, and evidence-pointer checks. #957
+must consume the manifest rather than hard-code incident directories. These are
+historical contradiction inputs, not current schema authority or passing
+goldens; see `docs/AUTHORITY_INCIDENT_FIXTURES.md`.
+
 ## Gate semantics invariants
 
 - Reason kinds: required-proof, tool-gate, required-sensor,

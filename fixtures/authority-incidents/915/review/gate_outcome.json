@@ -1,0 +1,40 @@
+{
+  "schema": "ub-review.gate_outcome.v1",
+  "conclusion": "pass",
+  "terminal_status": "needs-reviewer-attention",
+  "analysis_result": "findings",
+  "publication_result": "posted",
+  "gate_result": "pass",
+  "reasons": [],
+  "required_proof": {
+    "matched": 3,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 3
+  },
+  "tool_gates": {
+    "evaluated": 1,
+    "passed": 1,
+    "failed": 0
+  },
+  "evidence_gaps_blocking": 0,
+  "evidence_gaps_advisory": 2,
+  "sensor_coverage": {
+    "required_total": 10,
+    "required_completed": 10,
+    "optional_total": 2,
+    "optional_completed": 2,
+    "failed": 0,
+    "timed_out": 0,
+    "skipped": 0
+  },
+  "model_coverage": {
+    "lanes_total": 15,
+    "lanes_usable": 14,
+    "budget_exhausted_lanes": 1,
+    "budget_exhausted": true
+  },
+  "not_proven_reasons": [
+    "required-proof: 3 of 3 required proof requests produced no passing receipt"
+  ]
+}

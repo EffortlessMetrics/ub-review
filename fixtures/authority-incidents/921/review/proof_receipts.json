@@ -1,0 +1,89 @@
+[
+  {
+    "schema": "ub-review.proof_receipt.v1",
+    "id": "proof-head-1e1c35087a81",
+    "kind": "focused-head",
+    "base": "origin/main",
+    "head": "HEAD",
+    "test_patch_mode": "head-only",
+    "requested_by": [
+      "impact-planner"
+    ],
+    "request_ids": [],
+    "commands": [
+      {
+        "side": "head",
+        "command": "cargo test --locked --package ub-review --test cli_contract",
+        "env": {},
+        "status": "passed",
+        "exit_code": 0,
+        "timed_out": false,
+        "timeout_sec": 600,
+        "duration_ms": 118160,
+        "stdout": "proof/proof-head-1e1c35087a81/head/stdout.txt",
+        "stderr": "proof/proof-head-1e1c35087a81/head/stderr.txt",
+        "reason": "completed"
+      }
+    ],
+    "result": "head_passed",
+    "reason": "HEAD proof passed: completed"
+  },
+  {
+    "schema": "ub-review.proof_receipt.v1",
+    "id": "proof-head-350e6d4af38f",
+    "kind": "focused-head",
+    "base": "origin/main",
+    "head": "HEAD",
+    "test_patch_mode": "head-only",
+    "requested_by": [
+      "impact-planner"
+    ],
+    "request_ids": [],
+    "commands": [
+      {
+        "side": "head",
+        "command": "cargo test --locked --package xtask --test smoke_base_cli",
+        "env": {},
+        "status": "passed",
+        "exit_code": 0,
+        "timed_out": false,
+        "timeout_sec": 600,
+        "duration_ms": 1047,
+        "stdout": "proof/proof-head-350e6d4af38f/head/stdout.txt",
+        "stderr": "proof/proof-head-350e6d4af38f/head/stderr.txt",
+        "reason": "completed"
+      }
+    ],
+    "result": "head_passed",
+    "reason": "HEAD proof passed: completed"
+  },
+  {
+    "schema": "ub-review.proof_receipt.v1",
+    "id": "proof-head-46be498ef577",
+    "kind": "focused-head",
+    "base": "origin/main",
+    "head": "HEAD",
+    "test_patch_mode": "head-only",
+    "requested_by": [
+      "impact-planner"
+    ],
+    "request_ids": [],
+    "commands": [
+      {
+        "side": "head",
+        "command": "cargo test --locked --package ub-review --test cli",
+        "env": {},
+        "status": "passed",
+        "exit_code": 0,
+        "timed_out": false,
+        "timeout_sec": 600,
+        "duration_ms": 10396,
+        "stdout": "proof/proof-head-46be498ef577/head/stdout.txt",
+        "stderr": "proof/proof-head-46be498ef577/head/stderr.txt",
+        "reason": "completed"
+      }
+    ],
+    "result": "head_passed",
+    "reason": "HEAD proof passed: completed"
+  }
+]

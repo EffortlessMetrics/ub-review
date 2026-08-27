@@ -1,0 +1,112 @@
+{
+  "schema": "ub-review.proof_portfolio.v1",
+  "phase": "broker-final",
+  "head": "HEAD",
+  "budget_seconds": 0,
+  "remaining_seconds": 0,
+  "candidate_count": 4,
+  "candidate_tasks": [
+    {
+      "id": "proof-red-green-52444b14b02c",
+      "kind": "focused-red-green",
+      "required": false,
+      "estimated_cost_sec": 600,
+      "request_ids": [
+        "proof-0003-9e907e07f2f3"
+      ]
+    },
+    {
+      "id": "proof-build-81dee1e1dd1f",
+      "kind": "focused-build",
+      "required": true,
+      "estimated_cost_sec": 600,
+      "request_ids": [
+        "proof-0000-291419f6f509"
+      ]
+    },
+    {
+      "id": "proof-build-f5e93291b352",
+      "kind": "focused-build",
+      "required": true,
+      "estimated_cost_sec": 600,
+      "request_ids": [
+        "proof-0001-d97c389baa65"
+      ]
+    },
+    {
+      "id": "proof-build-58fe49dac211",
+      "kind": "focused-build",
+      "required": true,
+      "estimated_cost_sec": 300,
+      "request_ids": [
+        "proof-0002-d2ae3e742e84"
+      ]
+    }
+  ],
+  "selected_task_ids": [],
+  "runtime": {
+    "cpus": 4,
+    "free_mem_mb": 14971,
+    "free_disk_mb": 85861,
+    "load_1m": 3.04,
+    "github_actions": true,
+    "deadline_remaining_seconds": 3466,
+    "lease": {
+      "cpu": 4,
+      "memory_mb": 4096,
+      "disk_mb": 2048,
+      "network": false,
+      "scratch": true
+    }
+  },
+  "decisions": [
+    {
+      "task_id": "proof-build-58fe49dac211",
+      "kind": "focused-build",
+      "status": "deferred_by_safe_wind_down",
+      "reason": "hard deadline has expired; proof was safely wound down",
+      "required": true,
+      "estimated_cost_sec": 300,
+      "request_ids": [
+        "proof-0002-d2ae3e742e84"
+      ],
+      "receipt_ids": []
+    },
+    {
+      "task_id": "proof-build-81dee1e1dd1f",
+      "kind": "focused-build",
+      "status": "deferred_by_safe_wind_down",
+      "reason": "hard deadline has expired; proof was safely wound down",
+      "required": true,
+      "estimated_cost_sec": 600,
+      "request_ids": [
+        "proof-0000-291419f6f509"
+      ],
+      "receipt_ids": []
+    },
+    {
+      "task_id": "proof-build-f5e93291b352",
+      "kind": "focused-build",
+      "status": "deferred_by_safe_wind_down",
+      "reason": "hard deadline has expired; proof was safely wound down",
+      "required": true,
+      "estimated_cost_sec": 600,
+      "request_ids": [
+        "proof-0001-d97c389baa65"
+      ],
+      "receipt_ids": []
+    },
+    {
+      "task_id": "proof-red-green-52444b14b02c",
+      "kind": "focused-red-green",
+      "status": "deferred_by_safe_wind_down",
+      "reason": "hard deadline has expired; proof was safely wound down",
+      "required": false,
+      "estimated_cost_sec": 600,
+      "request_ids": [
+        "proof-0003-9e907e07f2f3"
+      ],
+      "receipt_ids": []
+    }
+  ]
+}
