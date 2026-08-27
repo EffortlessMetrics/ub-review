@@ -31804,3 +31804,63 @@ kind = "exposure_gap"
 finding_id = "probe:tests_authority_incidents.rs:return_value:331c2f46"
 owner = "ub-review/tests"
 reason = "RIPR 0.10.0 integration-test and fallible anyhow::ensure! attribution false-negative (ripr-swarm#1054/#1055). Six executable Rust tests pin the exact corpus success path, three hosted contradiction shapes, and eleven negative mutation classes for digest, inventory, path, schema, size, sensitive payload, and evidence-pointer drift. These probes are inside the test-only loader and fixture copier, not production behavior. Re-verify after semantic edits to tests/authority_incidents.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_authority_incidents.rs:call_deletion:0ef753c3"
+owner = "ub-review/tests"
+reason = "RIPR 0.10.0 integration-test and fallible anyhow::ensure! attribution false-negative (ripr-swarm#1054/#1055). Six executable Rust tests pin the exact corpus success path, three hosted contradiction shapes, and eleven negative mutation classes for digest, inventory, path, schema, size, sensitive payload, and evidence-pointer drift. These probes are inside the test-only loader and fixture copier, not production behavior. Re-verify after semantic edits to tests/authority_incidents.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_authority_incidents.rs:call_deletion:11b82567"
+owner = "ub-review/tests"
+reason = "RIPR 0.10.0 integration-test and fallible anyhow::ensure! attribution false-negative (ripr-swarm#1054/#1055). Six executable Rust tests pin the exact corpus success path, three hosted contradiction shapes, and eleven negative mutation classes for digest, inventory, path, schema, size, sensitive payload, and evidence-pointer drift. These probes are inside the test-only loader and fixture copier, not production behavior. Re-verify after semantic edits to tests/authority_incidents.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_authority_incidents.rs:call_deletion:36e3e405"
+owner = "ub-review/tests"
+reason = "RIPR 0.10.0 integration-test and fallible anyhow::ensure! attribution false-negative (ripr-swarm#1054/#1055). Six executable Rust tests pin the exact corpus success path, three hosted contradiction shapes, and eleven negative mutation classes for digest, inventory, path, schema, size, sensitive payload, and evidence-pointer drift. These probes are inside the test-only loader and fixture copier, not production behavior. Re-verify after semantic edits to tests/authority_incidents.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_authority_incidents.rs:call_deletion:6477e6cf"
+owner = "ub-review/tests"
+reason = "RIPR 0.10.0 integration-test and fallible anyhow::ensure! attribution false-negative (ripr-swarm#1054/#1055). Six executable Rust tests pin the exact corpus success path, three hosted contradiction shapes, and eleven negative mutation classes for digest, inventory, path, schema, size, sensitive payload, and evidence-pointer drift. These probes are inside the test-only loader and fixture copier, not production behavior. Re-verify after semantic edits to tests/authority_incidents.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_authority_incidents.rs:call_deletion:8eec458b"
+owner = "ub-review/tests"
+reason = "RIPR 0.10.0 integration-test and fallible anyhow::ensure! attribution false-negative (ripr-swarm#1054/#1055). Six executable Rust tests pin the exact corpus success path, three hosted contradiction shapes, and eleven negative mutation classes for digest, inventory, path, schema, size, sensitive payload, and evidence-pointer drift. These probes are inside the test-only loader and fixture copier, not production behavior. Re-verify after semantic edits to tests/authority_incidents.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_authority_incidents.rs:call_deletion:9fc78562"
+owner = "ub-review/tests"
+reason = "RIPR 0.10.0 integration-test and fallible anyhow::ensure! attribution false-negative (ripr-swarm#1054/#1055). Six executable Rust tests pin the exact corpus success path, three hosted contradiction shapes, and eleven negative mutation classes for digest, inventory, path, schema, size, sensitive payload, and evidence-pointer drift. These probes are inside the test-only loader and fixture copier, not production behavior. Re-verify after semantic edits to tests/authority_incidents.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_authority_incidents.rs:call_deletion:a59a7e54"
+owner = "ub-review/tests"
+reason = "RIPR 0.10.0 integration-test and fallible anyhow::ensure! attribution false-negative (ripr-swarm#1054/#1055). Six executable Rust tests pin the exact corpus success path, three hosted contradiction shapes, and eleven negative mutation classes for digest, inventory, path, schema, size, sensitive payload, and evidence-pointer drift. These probes are inside the test-only loader and fixture copier, not production behavior. Re-verify after semantic edits to tests/authority_incidents.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_authority_incidents.rs:call_deletion:d74d8f50"
+owner = "ub-review/tests"
+reason = "RIPR 0.10.0 integration-test and fallible anyhow::ensure! attribution false-negative (ripr-swarm#1054/#1055). Six executable Rust tests pin the exact corpus success path, three hosted contradiction shapes, and eleven negative mutation classes for digest, inventory, path, schema, size, sensitive payload, and evidence-pointer drift. These probes are inside the test-only loader and fixture copier, not production behavior. Re-verify after semantic edits to tests/authority_incidents.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_authority_incidents.rs:predicate:a8b72a73"
+owner = "ub-review/tests"
+reason = "RIPR 0.10.0 integration-test and fallible anyhow::ensure! attribution false-negative (ripr-swarm#1054/#1055). Six executable Rust tests pin the exact corpus success path, three hosted contradiction shapes, and eleven negative mutation classes for digest, inventory, path, schema, size, sensitive payload, and evidence-pointer drift. These probes are inside the test-only loader and fixture copier, not production behavior. Re-verify after semantic edits to tests/authority_incidents.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_authority_incidents.rs:return_value:e7c71b9b"
+owner = "ub-review/tests"
+reason = "RIPR 0.10.0 integration-test and fallible anyhow::ensure! attribution false-negative (ripr-swarm#1054/#1055). Six executable Rust tests pin the exact corpus success path, three hosted contradiction shapes, and eleven negative mutation classes for digest, inventory, path, schema, size, sensitive payload, and evidence-pointer drift. These probes are inside the test-only loader and fixture copier, not production behavior. Re-verify after semantic edits to tests/authority_incidents.rs."
