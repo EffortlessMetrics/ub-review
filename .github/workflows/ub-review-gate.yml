@@ -1,113 +1,19 @@
 name: ub-review/gate
 
-# Contained candidate dogfood posture (#946): the pull-request head may still
-# build and execute its own Action so we can inspect exact-head packets, but it
-# receives no provider credentials, PR/check write authority, or OIDC authority.
-# It runs model-off and artifact-only. This is not independent gate authority;
-# #947 and the later #876/#814 trust boundary own that progression.
+# Disposable #947 negative control. This candidate-owned workflow deliberately
+# claims success while the protected-base independent baseline checks the real
+# candidate content. The proof PR is closed without merge.
 on:
   pull_request:
     types: [opened, reopened, ready_for_review, synchronize]
-  workflow_dispatch:
 
-# Every job declares its own minimum token permissions. In particular, the
-# candidate-controlled gate job does not inherit the coverage uploader's OIDC
-# authority.
 permissions: {}
-
-concurrency:
-  group: ub-review-gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
 
 jobs:
   gate:
     name: ub-review/gate
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
+    permissions: {}
     steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.95.0
-          components: rustfmt,clippy
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-
-      # The leased coverage sensor runs `cargo llvm-cov` inside the contained
-      # candidate job. Its lcov receipt remains in the uploaded packet.
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-
-      - name: Run contained candidate ub-review gate
-        uses: ./
-        with:
-          config: .ub-review.toml
-          profile: gh-runner-full
-          runtime-profile: gh-runner-full
-          mode: intelligent-ci
-          run-pass: auto
-          # Lease the heavy witness classes so the enabled coverage sensor runs.
-          allow-heavy: 'true'
-          root: .
-          base: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.event.pull_request.base.ref) || 'origin/main' }}
-          # A1.2 (#949): exact PR-head metadata so the synthetic merge checkout
-          # is admitted as merge_result instead of failing as ambiguous.
-          pr-head-sha: ${{ github.event.pull_request.head.sha }}
-          out: target/ub-review
-          posting: artifact-only
-          model-mode: off
-          depth: ${{ github.event_name == 'workflow_dispatch' && 'deep' || 'standard' }}
-
-      - name: Verify ub-review artifacts
-        if: always()
-        run: >
-          python scripts/verify-bun-review-artifacts.py target/ub-review
-          --expected-review-profile ub-review-self
-          --expected-repo-kind ub-review
-
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: ub-review-gate
-          path: |
-            target/ub-review
-            src/main.rs
-          if-no-files-found: error
-
-  # Coverage publication remains telemetry, but its OIDC permission is isolated
-  # in a job that downloads the packet and never checks out or executes the
-  # pull-request head. Failure to download or upload remains non-blocking.
-  coverage-upload:
-    name: coverage telemetry
-    needs: gate
-    if: always()
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-      id-token: write
-    steps:
-      - name: Download ub-review packet
-        id: packet
-        continue-on-error: true
-        uses: actions/download-artifact@v5
-        with:
-          name: ub-review-gate
-          path: target/ub-review
-
-      - name: Upload coverage
-        if: steps.packet.outcome == 'success'
-        continue-on-error: true
-        uses: codecov/codecov-action@v7
-        with:
-          use_oidc: true
-          files: target/ub-review/sensors/coverage/lcov.info
-          fail_ci_if_error: false
+      - name: Claim candidate self-gate success
+        run: echo "candidate-owned ub-review/gate deliberately reports success"
