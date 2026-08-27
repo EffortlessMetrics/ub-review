@@ -30,6 +30,7 @@ impl TaskId {
 
 /// Why the task entered the ledger.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) enum TaskSource {
     Required,
     Configured,

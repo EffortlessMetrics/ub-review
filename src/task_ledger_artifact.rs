@@ -227,6 +227,7 @@ fn replay_event_stream(
             "[source_digest_mismatch] event {} bytes are not canonical",
             record.sequence
         );
+        validate_canonical_event_strings(&record.event)?;
         validate_receipt_references(&record.event)?;
         if let TaskEvent::Proposed { revision, .. } = &record.event {
             ensure!(
@@ -275,6 +276,19 @@ fn replay_event_stream(
         source_digest: domain_digest(STREAM_DIGEST_DOMAIN, bytes),
         tasks,
     })
+}
+
+fn validate_canonical_event_strings(event: &TaskEvent) -> Result<()> {
+    let value = match event {
+        TaskEvent::ReceiptCreationFailed { reason, .. }
+        | TaskEvent::TerminallyDeclined { reason, .. } => reason,
+        _ => return Ok(()),
+    };
+    ensure!(
+        !value.is_empty() && value.trim() == value,
+        "[missing_strong_binding] event reason must be canonical and non-empty"
+    );
+    Ok(())
 }
 
 /// Keep v1 revision strictness local to this wire format. Other artifact
@@ -679,7 +693,12 @@ mod tests {
             verify_task_ledger_artifacts(&invalid, &valid.snapshot_json, &revision),
             "[invalid_receipt_reference]",
         )?;
-        for hostile in ["C:/outside.json", ".git/config", "receipts/bad\nname.json"] {
+        for hostile in [
+            "C:/outside.json",
+            ".git/config",
+            "receipts/bad\nname.json",
+            "receipts/bad\u{85}name.json",
+        ] {
             let hostile_bytes =
                 encode_event_records(&revision, &completed_inputs(&revision, hostile)?)?;
             error_contains(
@@ -733,6 +752,38 @@ mod tests {
             verify_task_ledger_artifacts(&conflicting_bytes, &valid.snapshot_json, &revision),
             "[conflicting_consumer]",
         )?;
+
+        let whitespace_reason = vec![
+            input(
+                &id,
+                TaskEvent::Proposed {
+                    revision: revision.clone(),
+                    source: TaskSource::Worker,
+                    limits: TaskExecutionLimits::new(1_000)?,
+                },
+            ),
+            input(
+                &id,
+                TaskEvent::TerminallyDeclined {
+                    at: MonotonicInstant::from_millis(1),
+                    disposition: TaskNonExecutionDisposition::Refused,
+                    reason: " policy ".to_owned(),
+                    existing_receipt: None,
+                },
+            ),
+        ];
+        error_contains(
+            build_task_ledger_artifacts(&revision, &whitespace_reason).map(|_| ()),
+            "[missing_strong_binding]",
+        )?;
+
+        let nested_source = serde_json::from_str::<TaskEvent>(
+            r#"{"Proposed":{"revision":{"digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","semantics":"candidate_head","reviewed_commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"source":{"ReviewerTurn":{"model_on":true,"future":true}},"limits":{"timeout_ceiling_ms":1000}}}"#,
+        );
+        ensure!(
+            nested_source.is_err(),
+            "nested task-source additions must fail v1"
+        );
         Ok(())
     }
 }

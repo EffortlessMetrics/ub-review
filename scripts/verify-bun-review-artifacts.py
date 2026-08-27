@@ -13,7 +13,7 @@ import pathlib
 import re
 import sys
 import tempfile
-from typing import Any, Callable
+from typing import Any, Callable, NoReturn
 
 
 SENSORS = ["tokmd", "cargo-allow", "ripr", "unsafe-review", "ast-grep", "actionlint"]
@@ -170,7 +170,7 @@ SAFE_SECRET_VALUE_WORDS = {
 }
 
 
-def fail(message: str) -> None:
+def fail(message: str) -> NoReturn:
     print(f"verify-bun-review-artifacts: {message}", file=sys.stderr)
     raise SystemExit(1)
 
@@ -2101,7 +2101,7 @@ def _task_ledger_receipt_reference(value) -> str:
         "\\" in reference
         or ":" in reference
         or reference.startswith("/")
-        or any(ord(char) < 32 or ord(char) == 127 for char in reference)
+        or any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in reference)
     ):
         fail(
             "[invalid_receipt_reference] receipt reference must be an "
@@ -2204,10 +2204,6 @@ def _task_ledger_event(value) -> tuple[str, dict | None, object]:
     if expected is None:
         fail(f"[unsupported_schema] unknown task event {kind!r}")
     _task_ledger_strict_fields(payload, expected, f"{kind} event")
-    canonical = {}
-    for field in expected:
-        # Reordered below into Rust declaration order.
-        canonical[field] = payload[field]
     if kind == "Proposed":
         limits = payload["limits"]
         _task_ledger_strict_fields(limits, {"timeout_ceiling_ms"}, "task limits")
@@ -2262,8 +2258,10 @@ def _task_ledger_event(value) -> tuple[str, dict | None, object]:
             "reason": _task_ledger_nonempty(payload["reason"], "terminal reason"),
             "existing_receipt": receipt,
         }
-    else:
+    elif expected == {"at"}:
         canonical = {"at": _task_ledger_u64(payload["at"], f"{kind} at")}
+    else:
+        fail(f"[unsupported_schema] task event {kind!r} has no canonical encoding")
     return kind, canonical, {kind: canonical}
 
 
@@ -16100,12 +16098,31 @@ def self_test_task_ledger_contract() -> None:
         "[invalid_receipt_reference]",
         lambda: _task_ledger_receipt_reference("../outside.json"),
     )
-    for hostile_reference in ("C:/outside.json", ".git/config", "bad\nname.json"):
+    for hostile_reference in (
+        "C:/outside.json",
+        ".git/config",
+        "bad\nname.json",
+        "bad\u0085name.json",
+    ):
         expect_self_test_failure(
             "task-ledger hostile external receipt reference",
             "[invalid_receipt_reference]",
             lambda value=hostile_reference: _task_ledger_receipt_reference(value),
         )
+    expect_self_test_failure(
+        "task-ledger noncanonical failure reason",
+        "[missing_strong_binding]",
+        lambda: _task_ledger_event(
+            {"ReceiptCreationFailed": {"at": 45, "reason": " disk full "}}
+        ),
+    )
+    expect_self_test_failure(
+        "task-ledger nested source addition",
+        "[unsupported_schema]",
+        lambda: _task_ledger_source(
+            {"ReviewerTurn": {"model_on": True, "future": True}}
+        ),
+    )
     expect_self_test_failure(
         "task-ledger Python integer exceeds Rust u64",
         "[invalid_timing]",

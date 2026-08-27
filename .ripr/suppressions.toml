@@ -31354,3 +31354,33 @@ kind = "exposure_gap"
 finding_id = "probe:src_task_ledger_artifact.rs:return_value:9b6709f8"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 cfg(test) and fallible-helper attribution false-negative (ripr-swarm#1054/#1055). Four co-located fallible Rust tests plus the Python verifier self-test pin cross-language golden bytes and success/failure branches for replay, digest/order/revision binding, strict schemas, terminal release, receipt paths, consumers, and forged snapshots. Re-verify after semantic edits to task-ledger artifacts."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:match_arm:23844671"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cfg(test) and fallible-helper attribution false-negative (ripr-swarm#1054/#1055). Four co-located fallible Rust tests plus the Python verifier self-test pin cross-language golden bytes and success/failure branches for replay, digest/order/revision binding, strict schemas, terminal release, receipt paths, consumers, and forged snapshots. Re-verify after semantic edits to task-ledger artifacts."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:match_arm:935ef5e9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cfg(test) and fallible-helper attribution false-negative (ripr-swarm#1054/#1055). Four co-located fallible Rust tests plus the Python verifier self-test pin cross-language golden bytes and success/failure branches for replay, digest/order/revision binding, strict schemas, terminal release, receipt paths, consumers, and forged snapshots. Re-verify after semantic edits to task-ledger artifacts."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:match_arm:bff90af9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cfg(test) and fallible-helper attribution false-negative (ripr-swarm#1054/#1055). Four co-located fallible Rust tests plus the Python verifier self-test pin cross-language golden bytes and success/failure branches for replay, digest/order/revision binding, strict schemas, terminal release, receipt paths, consumers, and forged snapshots. Re-verify after semantic edits to task-ledger artifacts."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:b1f0e2fc"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cfg(test) and fallible-helper attribution false-negative (ripr-swarm#1054/#1055). Four co-located fallible Rust tests plus the Python verifier self-test pin cross-language golden bytes and success/failure branches for replay, digest/order/revision binding, strict schemas, terminal release, receipt paths, consumers, and forged snapshots. Re-verify after semantic edits to task-ledger artifacts."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:return_value:88a67cbf"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cfg(test) and fallible-helper attribution false-negative (ripr-swarm#1054/#1055). Four co-located fallible Rust tests plus the Python verifier self-test pin cross-language golden bytes and success/failure branches for replay, digest/order/revision binding, strict schemas, terminal release, receipt paths, consumers, and forged snapshots. Re-verify after semantic edits to task-ledger artifacts."
