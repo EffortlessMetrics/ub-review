@@ -30067,3 +30067,90 @@ kind = "exposure_gap"
 finding_id = "probe:src_revision_admission.rs:call_deletion:bf1a0e4c"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+
+# Issue #1257: one shared Cargo-target owner in the bounded sensor pool.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:4d46c380"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 extracted-worker/cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The fallible sensor_pool_routes_shared_cargo_targets_to_one_ordered_queue test pins exact Cargo-versus-independent partition order and worker counts at 5, 1, and 0 budgets; the 22-test sensor suite and 1,145-pass workspace run cover queue execution and receipts. Re-verify after edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:9befdf69"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 extracted-worker/cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The fallible sensor_pool_routes_shared_cargo_targets_to_one_ordered_queue test pins exact Cargo-versus-independent partition order and worker counts at 5, 1, and 0 budgets; the 22-test sensor suite and 1,145-pass workspace run cover queue execution and receipts. Re-verify after edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:7c7bdc85"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 extracted-worker/cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The fallible sensor_pool_routes_shared_cargo_targets_to_one_ordered_queue test pins exact Cargo-versus-independent partition order and worker counts at 5, 1, and 0 budgets; the 22-test sensor suite and 1,145-pass workspace run cover queue execution and receipts. Re-verify after edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:edbf1781"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 extracted-worker/cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The fallible sensor_pool_routes_shared_cargo_targets_to_one_ordered_queue test pins exact Cargo-versus-independent partition order and worker counts at 5, 1, and 0 budgets; the 22-test sensor suite and 1,145-pass workspace run cover queue execution and receipts. Re-verify after edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:6ca24f41"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 extracted-worker/cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The fallible sensor_pool_routes_shared_cargo_targets_to_one_ordered_queue test pins exact Cargo-versus-independent partition order and worker counts at 5, 1, and 0 budgets; the 22-test sensor suite and 1,145-pass workspace run cover queue execution and receipts. Re-verify after edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:23f22c55"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 extracted-worker/cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The fallible sensor_pool_routes_shared_cargo_targets_to_one_ordered_queue test pins exact Cargo-versus-independent partition order and worker counts at 5, 1, and 0 budgets; the 22-test sensor suite and 1,145-pass workspace run cover queue execution and receipts. Re-verify after edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:08f2188b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 extracted-worker/cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The fallible sensor_pool_routes_shared_cargo_targets_to_one_ordered_queue test pins exact Cargo-versus-independent partition order and worker counts at 5, 1, and 0 budgets; the 22-test sensor suite and 1,145-pass workspace run cover queue execution and receipts. Re-verify after edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:4cfa9a22"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 extracted-worker/cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The fallible sensor_pool_routes_shared_cargo_targets_to_one_ordered_queue test pins exact Cargo-versus-independent partition order and worker counts at 5, 1, and 0 budgets; the 22-test sensor suite and 1,145-pass workspace run cover queue execution and receipts. Re-verify after edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:fa1cd79b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 extracted-worker/cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The fallible sensor_pool_routes_shared_cargo_targets_to_one_ordered_queue test pins exact Cargo-versus-independent partition order and worker counts at 5, 1, and 0 budgets; the 22-test sensor suite and 1,145-pass workspace run cover queue execution and receipts. Re-verify after edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:ccb23d90"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 extracted-worker/cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The fallible sensor_pool_routes_shared_cargo_targets_to_one_ordered_queue test pins exact Cargo-versus-independent partition order and worker counts at 5, 1, and 0 budgets; the 22-test sensor suite and 1,145-pass workspace run cover queue execution and receipts. Re-verify after edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:24bf3380"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 extracted-worker/cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The fallible sensor_pool_routes_shared_cargo_targets_to_one_ordered_queue test pins exact Cargo-versus-independent partition order and worker counts at 5, 1, and 0 budgets; the 22-test sensor suite and 1,145-pass workspace run cover queue execution and receipts. Re-verify after edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:predicate:bba8a085"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 extracted-worker/cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The fallible sensor_pool_routes_shared_cargo_targets_to_one_ordered_queue test pins exact Cargo-versus-independent partition order and worker counts at 5, 1, and 0 budgets; the 22-test sensor suite and 1,145-pass workspace run cover queue execution and receipts. Re-verify after edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:15f74de2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 extracted-worker/cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The fallible sensor_pool_routes_shared_cargo_targets_to_one_ordered_queue test pins exact Cargo-versus-independent partition order and worker counts at 5, 1, and 0 budgets; the 22-test sensor suite and 1,145-pass workspace run cover queue execution and receipts. Re-verify after edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:a7ae067e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 extracted-worker/cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The fallible sensor_pool_routes_shared_cargo_targets_to_one_ordered_queue test pins exact Cargo-versus-independent partition order and worker counts at 5, 1, and 0 budgets; the 22-test sensor suite and 1,145-pass workspace run cover queue execution and receipts. Re-verify after edits to src/sensors/mod.rs."
