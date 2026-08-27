@@ -29,25 +29,30 @@ const SECRET_MARKERS: &[&str] = &[
     "sk-",
 ];
 const SENSITIVE_CREDENTIAL_KEYS: &[&str] = &[
-    "access_token",
-    "api_key",
+    "accesstoken",
+    "apikey",
     "authorization",
-    "client_secret",
+    "clientsecret",
     "credential",
     "credentials",
-    "github_token",
+    "factoryapikey",
+    "githubtoken",
+    "minimaxapikey",
+    "opencodeapikey",
     "password",
-    "private_key",
-    "refresh_token",
+    "privatekey",
+    "refreshtoken",
     "secret",
     "token",
+    "ubreviewgithubtoken",
+    "xapikey",
 ];
 const PRIVATE_PAYLOAD_KEYS: &[&str] = &[
     "content",
     "messages",
     "prompt",
-    "provider_request",
-    "shared_context",
+    "providerrequest",
+    "sharedcontext",
 ];
 
 #[derive(Debug, Deserialize)]
@@ -394,14 +399,18 @@ fn reject_sensitive_payload(text: &str, document: &Value, path: &str) -> Result<
             "secret marker {marker:?} found in {path}"
         );
     }
-    reject_sensitive_json_keys(document, path)
+    reject_sensitive_json(document, path)
 }
 
-fn reject_sensitive_json_keys(value: &Value, path: &str) -> Result<()> {
+fn reject_sensitive_json(value: &Value, path: &str) -> Result<()> {
     match value {
         Value::Object(object) => {
             for (key, child) in object {
-                let normalized = key.to_ascii_lowercase().replace('-', "_");
+                let normalized = key
+                    .bytes()
+                    .filter(|byte| byte.is_ascii_alphanumeric())
+                    .map(|byte| byte.to_ascii_lowercase() as char)
+                    .collect::<String>();
                 ensure!(
                     !SENSITIVE_CREDENTIAL_KEYS.contains(&normalized.as_str()),
                     "sensitive credential key {key:?} found in {path}"
@@ -410,12 +419,21 @@ fn reject_sensitive_json_keys(value: &Value, path: &str) -> Result<()> {
                     !PRIVATE_PAYLOAD_KEYS.contains(&normalized.as_str()),
                     "private payload key {key:?} found in {path}"
                 );
-                reject_sensitive_json_keys(child, path)?;
+                reject_sensitive_json(child, path)?;
             }
         }
         Value::Array(values) => {
             for child in values {
-                reject_sensitive_json_keys(child, path)?;
+                reject_sensitive_json(child, path)?;
+            }
+        }
+        Value::String(text) => {
+            let lowered = text.to_ascii_lowercase();
+            for marker in SECRET_MARKERS {
+                ensure!(
+                    !lowered.contains(marker),
+                    "secret marker {marker:?} found in decoded JSON string in {path}"
+                );
             }
         }
         _ => {}
@@ -630,6 +648,7 @@ fn corpus_rejects_mutation_missing_files_secrets_and_bad_evidence() -> Result<()
         ("missing", "missing retained file"),
         ("secret", "secret marker"),
         ("credential", "sensitive credential key"),
+        ("escaped", "sensitive credential key"),
         ("private", "private payload key"),
         ("pointer", "missing evidence pointer"),
         ("budget", "exceeds its byte budget"),
@@ -654,10 +673,11 @@ fn corpus_rejects_mutation_missing_files_secrets_and_bad_evidence() -> Result<()
                 fs::write(path, bytes)?;
             }
             "missing" => fs::remove_file(temp.path().join("916/review/proof_receipts.json"))?,
-            "secret" | "credential" | "private" => {
+            "secret" | "credential" | "escaped" | "private" => {
                 let payload: &[u8] = match mutation {
                     "secret" => b"{\"GITHUB_TOKEN\":\"ghp_1234567890abcdef\"}\n",
                     "credential" => b"{\"authorization\" : \"opaque credential\"}\n",
+                    "escaped" => b"{\"x-api-\\u006bey\" : \"opaque credential\"}\n",
                     "private" => b"{\"prompt\" : \"private provider input\"}\n",
                     other => bail!("unknown sensitive mutation {other}"),
                 };
