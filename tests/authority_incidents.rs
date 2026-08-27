@@ -28,12 +28,26 @@ const SECRET_MARKERS: &[&str] = &[
     "github_pat_",
     "sk-",
 ];
+const SENSITIVE_CREDENTIAL_KEYS: &[&str] = &[
+    "access_token",
+    "api_key",
+    "authorization",
+    "client_secret",
+    "credential",
+    "credentials",
+    "github_token",
+    "password",
+    "private_key",
+    "refresh_token",
+    "secret",
+    "token",
+];
 const PRIVATE_PAYLOAD_KEYS: &[&str] = &[
-    "\"content\":",
-    "\"prompt\":",
-    "\"messages\":",
-    "\"shared_context\":",
-    "\"provider_request\":",
+    "content",
+    "messages",
+    "prompt",
+    "provider_request",
+    "shared_context",
 ];
 
 #[derive(Debug, Deserialize)]
@@ -221,15 +235,15 @@ fn load_corpus(root: &Path) -> Result<LoadedCorpus> {
             );
             let text = std::str::from_utf8(&bytes)
                 .with_context(|| format!("retained file {} is not UTF-8", receipt.path))?;
-            reject_sensitive_payload(text, &receipt.path)?;
+            let document: Value = serde_json::from_slice(&bytes)
+                .with_context(|| format!("retained file {} is not JSON", receipt.path))?;
+            reject_sensitive_payload(text, &document, &receipt.path)?;
             let actual_digest = format!("{:x}", Sha256::digest(&bytes));
             ensure!(
                 actual_digest == receipt.sha256,
                 "digest mismatch for {}",
                 receipt.path
             );
-            let document: Value = serde_json::from_slice(&bytes)
-                .with_context(|| format!("retained file {} is not JSON", receipt.path))?;
             total_bytes = total_bytes
                 .checked_add(actual_bytes)
                 .context("corpus byte count overflow")?;
@@ -372,7 +386,7 @@ fn validate_relative_path(value: &str) -> Result<PathBuf> {
     Ok(path.to_path_buf())
 }
 
-fn reject_sensitive_payload(text: &str, path: &str) -> Result<()> {
+fn reject_sensitive_payload(text: &str, document: &Value, path: &str) -> Result<()> {
     let lowered = text.to_ascii_lowercase();
     for marker in SECRET_MARKERS {
         ensure!(
@@ -380,11 +394,31 @@ fn reject_sensitive_payload(text: &str, path: &str) -> Result<()> {
             "secret marker {marker:?} found in {path}"
         );
     }
-    for key in PRIVATE_PAYLOAD_KEYS {
-        ensure!(
-            !lowered.contains(key),
-            "private payload key {key:?} found in {path}"
-        );
+    reject_sensitive_json_keys(document, path)
+}
+
+fn reject_sensitive_json_keys(value: &Value, path: &str) -> Result<()> {
+    match value {
+        Value::Object(object) => {
+            for (key, child) in object {
+                let normalized = key.to_ascii_lowercase().replace('-', "_");
+                ensure!(
+                    !SENSITIVE_CREDENTIAL_KEYS.contains(&normalized.as_str()),
+                    "sensitive credential key {key:?} found in {path}"
+                );
+                ensure!(
+                    !PRIVATE_PAYLOAD_KEYS.contains(&normalized.as_str()),
+                    "private payload key {key:?} found in {path}"
+                );
+                reject_sensitive_json_keys(child, path)?;
+            }
+        }
+        Value::Array(values) => {
+            for child in values {
+                reject_sensitive_json_keys(child, path)?;
+            }
+        }
+        _ => {}
     }
     Ok(())
 }
@@ -595,6 +629,7 @@ fn corpus_rejects_mutation_missing_files_secrets_and_bad_evidence() -> Result<()
         ("digest", "digest mismatch"),
         ("missing", "missing retained file"),
         ("secret", "secret marker"),
+        ("credential", "sensitive credential key"),
         ("private", "private payload key"),
         ("pointer", "missing evidence pointer"),
         ("budget", "exceeds its byte budget"),
@@ -608,16 +643,23 @@ fn corpus_rejects_mutation_missing_files_secrets_and_bad_evidence() -> Result<()
             "digest" => {
                 let path = temp.path().join("915/review/gate_outcome.json");
                 let mut bytes = fs::read(&path)?;
-                let final_byte = bytes.last_mut().context("empty retained fixture")?;
-                *final_byte = b' ';
+                let value_start = bytes
+                    .windows(4)
+                    .position(|window| window == b"pass")
+                    .context("missing mutable digest witness")?;
+                let changed_byte = bytes
+                    .get_mut(value_start + 1)
+                    .context("digest witness index out of bounds")?;
+                *changed_byte = b'A';
                 fs::write(path, bytes)?;
             }
             "missing" => fs::remove_file(temp.path().join("916/review/proof_receipts.json"))?,
-            "secret" | "private" => {
-                let payload: &[u8] = if mutation == "secret" {
-                    b"{\"GITHUB_TOKEN\":\"ghp_1234567890abcdef\"}\n"
-                } else {
-                    b"{\"prompt\":\"private provider input\"}\n"
+            "secret" | "credential" | "private" => {
+                let payload: &[u8] = match mutation {
+                    "secret" => b"{\"GITHUB_TOKEN\":\"ghp_1234567890abcdef\"}\n",
+                    "credential" => b"{\"authorization\" : \"opaque credential\"}\n",
+                    "private" => b"{\"prompt\" : \"private provider input\"}\n",
+                    other => bail!("unknown sensitive mutation {other}"),
                 };
                 fs::write(temp.path().join("921/review/gate_outcome.json"), payload)?;
                 let manifest_path = temp.path().join(MANIFEST_NAME);
