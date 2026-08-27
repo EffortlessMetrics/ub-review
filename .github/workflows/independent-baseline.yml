@@ -50,10 +50,17 @@ jobs:
           fi
 
       - name: Install fixed Rust toolchain
+        if: ${{ matrix.check != 'verifier' }}
         uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
         with:
           toolchain: 1.95.0
           components: rustfmt,clippy
+
+      - name: Install fixed Python toolchain
+        if: ${{ matrix.check == 'verifier' }}
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
 
       - name: Run one fixed deterministic check
         shell: bash
@@ -102,6 +109,7 @@ jobs:
       CANDIDATE_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
       CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
       EVIDENCE_RESULT: ${{ needs.evidence.result }}
+      TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
     steps:
       - name: Write trusted exact-head baseline receipt
         shell: bash
@@ -113,7 +121,7 @@ jobs:
             --arg schema "ub-review.independent_baseline.v1" \
             --arg candidate_repository "$CANDIDATE_REPOSITORY" \
             --arg candidate_sha "$CANDIDATE_SHA" \
-            --arg workflow_sha "${{ github.sha }}" \
+            --arg workflow_sha "$TRUSTED_WORKFLOW_SHA" \
             --arg evidence_result "$EVIDENCE_RESULT" \
             '{
               schema: $schema,

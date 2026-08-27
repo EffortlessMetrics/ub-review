@@ -130,7 +130,9 @@ fn independent_baseline_isolates_candidate_evidence_from_trusted_finalization() 
         "ref: ${{ github.event.pull_request.head.sha }}",
         "persist-credentials: false",
         "actual_sha=\"$(git rev-parse HEAD)\"",
-        "uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772",
+        "- name: Install fixed Rust toolchain\n        if: ${{ matrix.check != 'verifier' }}\n        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772",
+        "- name: Install fixed Python toolchain\n        if: ${{ matrix.check == 'verifier' }}\n        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
+        "python-version: \"3.12\"",
         "export CARGO_TARGET_DIR=\"$RUNNER_TEMP/ub-review-independent-${CHECK}-target\"",
         "Run one fixed deterministic check",
     ] {
@@ -168,7 +170,9 @@ fn independent_baseline_isolates_candidate_evidence_from_trusted_finalization() 
         "needs: evidence",
         "if: ${{ always() }}",
         "EVIDENCE_RESULT: ${{ needs.evidence.result }}",
+        "TRUSTED_WORKFLOW_SHA: ${{ github.sha }}",
         "Write trusted exact-head baseline receipt",
+        "--arg workflow_sha \"$TRUSTED_WORKFLOW_SHA\"",
         "evidence_topology: \"isolated-matrix-jobs\"",
         "uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
         "path: ${{ runner.temp }}/ub-review-independent-baseline",
@@ -217,6 +221,7 @@ fn independent_baseline_isolates_candidate_evidence_from_trusted_finalization() 
     for forbidden in [
         "actions/checkout@v5",
         "dtolnay/rust-toolchain@master",
+        "actions/setup-python@v6",
         "actions/upload-artifact@v7",
         "cargo xtask policy-check",
     ] {
