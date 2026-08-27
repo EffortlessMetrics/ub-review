@@ -680,10 +680,10 @@ runs:
         UB_REVIEW_GITHUB_EVENT_ACTION: ${{ github.event.action }}
         UB_REVIEW_PR_HEAD_SHA: ${{ inputs['pr-head-sha'] }}
         UB_REVIEW_ACTION_GITHUB_TOKEN: ${{ inputs['github-token'] }}
-        UB_REVIEW_TRUSTED_BASE_TREE: ${{ inputs['trusted-base-tree'] }}
-        UB_REVIEW_TRUSTED_HEAD_SHA: ${{ inputs['trusted-head-sha'] }}
-        UB_REVIEW_TRUSTED_CHANGED_FILES: ${{ inputs['trusted-changed-files'] }}
-        UB_REVIEW_TRUSTED_DIFF_PATCH: ${{ inputs['trusted-diff-patch'] }}
+        UB_REVIEW_ACTION_TRUSTED_BASE_TREE: ${{ inputs['trusted-base-tree'] }}
+        UB_REVIEW_ACTION_TRUSTED_HEAD_SHA: ${{ inputs['trusted-head-sha'] }}
+        UB_REVIEW_ACTION_TRUSTED_CHANGED_FILES: ${{ inputs['trusted-changed-files'] }}
+        UB_REVIEW_ACTION_TRUSTED_DIFF_PATCH: ${{ inputs['trusted-diff-patch'] }}
       run: |
         set -euo pipefail
         extra=()
@@ -704,20 +704,20 @@ runs:
         if [[ -n "${{ inputs['review-mode'] }}" ]]; then
           extra+=(--review-mode "${{ inputs['review-mode'] }}")
         fi
-        if [[ -n "$UB_REVIEW_TRUSTED_BASE_TREE" ]]; then
-          extra+=(--trusted-base-tree "$UB_REVIEW_TRUSTED_BASE_TREE")
+        if [[ -n "$UB_REVIEW_ACTION_TRUSTED_BASE_TREE" ]]; then
+          extra+=(--trusted-base-tree "$UB_REVIEW_ACTION_TRUSTED_BASE_TREE")
           # Explicit admission constructs a packet from the validated diff.
           # It must not run sensors against the base-owned checkout.
           extra+=(--dry-run)
         fi
-        if [[ -n "$UB_REVIEW_TRUSTED_HEAD_SHA" ]]; then
-          extra+=(--trusted-head-sha "$UB_REVIEW_TRUSTED_HEAD_SHA")
+        if [[ -n "$UB_REVIEW_ACTION_TRUSTED_HEAD_SHA" ]]; then
+          extra+=(--trusted-head-sha "$UB_REVIEW_ACTION_TRUSTED_HEAD_SHA")
         fi
-        if [[ -n "$UB_REVIEW_TRUSTED_CHANGED_FILES" ]]; then
-          extra+=(--trusted-changed-files "$UB_REVIEW_TRUSTED_CHANGED_FILES")
+        if [[ -n "$UB_REVIEW_ACTION_TRUSTED_CHANGED_FILES" ]]; then
+          extra+=(--trusted-changed-files "$UB_REVIEW_ACTION_TRUSTED_CHANGED_FILES")
         fi
-        if [[ -n "$UB_REVIEW_TRUSTED_DIFF_PATCH" ]]; then
-          extra+=(--trusted-diff-patch "$UB_REVIEW_TRUSTED_DIFF_PATCH")
+        if [[ -n "$UB_REVIEW_ACTION_TRUSTED_DIFF_PATCH" ]]; then
+          extra+=(--trusted-diff-patch "$UB_REVIEW_ACTION_TRUSTED_DIFF_PATCH")
         fi
 
         config_path="${{ inputs.config }}"

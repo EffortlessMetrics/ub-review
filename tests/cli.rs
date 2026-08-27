@@ -80,7 +80,14 @@ fn action_forwards_complete_trusted_diff_admission_inputs() -> Result<()> {
         "trusted-diff-patch",
     ] {
         assert!(action.contains(&format!("  {input}:")), "missing {input}");
-        let env_name = input.replace('-', "_").to_ascii_uppercase();
+        let env_name = format!(
+            "ACTION_TRUSTED_{}",
+            input
+                .strip_prefix("trusted-")
+                .ok_or_else(|| anyhow::anyhow!("unexpected trusted input name: {input}"))?
+                .replace('-', "_")
+                .to_ascii_uppercase()
+        );
         assert!(
             action.contains(&format!(
                 "UB_REVIEW_{env_name}: ${{{{ inputs['{input}'] }}}}"
@@ -97,7 +104,7 @@ fn action_forwards_complete_trusted_diff_admission_inputs() -> Result<()> {
         );
     }
     let trusted_block = action
-        .split_once("if [[ -n \"$UB_REVIEW_TRUSTED_BASE_TREE\" ]]")
+        .split_once("if [[ -n \"$UB_REVIEW_ACTION_TRUSTED_BASE_TREE\" ]]")
         .map(|(_, suffix)| suffix)
         .ok_or_else(|| anyhow::anyhow!("trusted-base action block is missing"))?;
     assert!(
