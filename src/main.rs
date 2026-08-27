@@ -60,6 +60,7 @@ pub(crate) use revision_identity::RevisionRef;
 mod revision_admission;
 pub(crate) use revision_admission::*;
 mod compiler_reconciliation;
+mod task_ledger;
 pub(crate) use compiler_reconciliation::*;
 mod review_topics;
 pub(crate) use review_topics::*;
@@ -2190,6 +2191,10 @@ struct ResolvedCandidateRecord {
     resolved_status: String,
     resolved_disposition: String,
     resolution_source: String,
+    /// Immutable revision reference (A1.3/A1.4): which revision this
+    /// resolution belongs to. Cross-run reuse requires an exact digest join.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    revision: Option<RevisionRef>,
     source_artifacts: Vec<String>,
     reason: String,
     follow_up_task_ids: Vec<String>,
@@ -4944,6 +4949,7 @@ fn write_review_artifacts(
         &follow_up_results,
         &follow_up_outputs,
         &prior_resolved_candidates,
+        revision,
     );
     write_resolved_candidate_artifacts(out, &resolved_candidates)?;
     // The late receipt turn exists to change candidate dispositions, so the
@@ -21472,7 +21478,7 @@ index 1111111..2222222 100644
             })
             .collect::<Vec<_>>();
 
-        let records = resolved_candidate_records(&candidates, &results, &outputs, &[]);
+        let records = resolved_candidate_records(&candidates, &results, &outputs, &[], None);
         assert_eq!(records.len(), candidates.len());
         assert_eq!(records[0].resolved_status, "unchanged");
         assert_eq!(records[0].resolution_source, "candidate");
@@ -21999,7 +22005,7 @@ index 1111111..2222222 100644
             })
             .collect::<Vec<_>>();
 
-        let records = resolved_candidate_records(&candidates, &results, &outputs, &[]);
+        let records = resolved_candidate_records(&candidates, &results, &outputs, &[], None);
         let resolved_away = follow_up_resolved_away_candidate_ids(&records);
         assert_eq!(
             resolved_away,
@@ -22024,6 +22030,7 @@ index 1111111..2222222 100644
         for status in statuses {
             let record = ResolvedCandidateRecord {
                 schema: "ub-review.resolved_candidate.v1".to_owned(),
+                revision: None,
                 candidate_id: format!("cand-{status}"),
                 lane: "ub-memory-lifetime".to_owned(),
                 source: "proof-planner".to_owned(),
@@ -22090,6 +22097,7 @@ index 1111111..2222222 100644
         // encoding assumptions that would silently drop fields. See #611.
         let record = ResolvedCandidateRecord {
             schema: "ub-review.resolved_candidate.v1".to_owned(),
+            revision: None,
             candidate_id: "cand-unicode-λ-Ω-日本語".to_owned(),
             lane: String::new(),
             source: String::new(),
@@ -22119,6 +22127,108 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn stale_prior_resolutions_cannot_satisfy_the_current_revision() {
+        let current = test_candidate_record("candidate-0007-deadbeef1234");
+        let build_prior = |digest: Option<String>| super::ResolvedCandidateRecord {
+            revision: digest.map(|d| crate::RevisionRef {
+                digest: d,
+                semantics: "candidate_head".to_owned(),
+                reviewed_commit: "e".repeat(40),
+            }),
+            candidate_id: "candidate-0001-deadbeef1234".to_owned(),
+            resolved_status: "resolved".to_owned(),
+            resolved_disposition: "dropped".to_owned(),
+            lane: current.lane.clone(),
+            source: current.source.clone(),
+            original_status: current.status.clone(),
+            ..test_resolved_prior()
+        };
+        let now_ref = crate::RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+
+        // Exact join: the prior resolves and the row carries the ref.
+        let joined = resolved_candidate_records(
+            std::slice::from_ref(&current),
+            &[],
+            &[],
+            &[build_prior(Some("a".repeat(64)))],
+            Some(&now_ref),
+        );
+        assert_eq!(joined[0].resolution_source, "prior-resolved-candidates");
+        assert_eq!(
+            joined[0].revision.as_ref().map(|r| r.digest.clone()),
+            Some("a".repeat(64))
+        );
+
+        // Different revision: fingerprint matches, resolution is refused with
+        // the stale-revision reason token and both digests in evidence.
+        let stale = resolved_candidate_records(
+            std::slice::from_ref(&current),
+            &[],
+            &[],
+            &[build_prior(Some("f".repeat(64)))],
+            Some(&now_ref),
+        );
+        assert_eq!(stale[0].resolution_source, "candidate");
+        assert_eq!(stale[0].resolved_status, "unchanged");
+        assert!(
+            stale[0].reason.contains("[stale_revision]"),
+            "{}",
+            stale[0].reason
+        );
+        assert!(
+            stale[0]
+                .evidence
+                .iter()
+                .any(|line| line.contains(&"f".repeat(64))),
+            "{:?}",
+            stale[0].evidence
+        );
+
+        // Legacy unstamped priors cannot satisfy current-run reuse either.
+        let legacy = resolved_candidate_records(
+            std::slice::from_ref(&current),
+            &[],
+            &[],
+            &[build_prior(None)],
+            Some(&now_ref),
+        );
+        assert_eq!(legacy[0].resolved_status, "unchanged");
+        assert!(
+            legacy[0]
+                .evidence
+                .iter()
+                .any(|line| line.contains("<legacy-unstamped>")),
+            "{:?}",
+            legacy[0].evidence
+        );
+    }
+
+    fn test_resolved_prior() -> ResolvedCandidateRecord {
+        ResolvedCandidateRecord {
+            schema: "ub-review.resolved_candidate.v1".to_owned(),
+            revision: None,
+            candidate_id: String::new(),
+            lane: String::new(),
+            source: String::new(),
+            original_status: String::new(),
+            original_disposition: String::new(),
+            resolved_status: "resolved".to_owned(),
+            resolved_disposition: "dropped".to_owned(),
+            resolution_source: "prior-resolved-candidates".to_owned(),
+            source_artifacts: Vec::new(),
+            reason: String::new(),
+            follow_up_task_ids: Vec::new(),
+            follow_up_stages: Vec::new(),
+            follow_up_statuses: Vec::new(),
+            evidence: Vec::new(),
+        }
+    }
+
+    #[test]
     fn prior_resolved_candidates_drop_matching_candidate_by_hash_suffix() {
         let mut current = test_candidate_record("candidate-0007-deadbeef1234");
         current.claim = "The new test may also pass on base.".to_owned();
@@ -22126,6 +22236,7 @@ index 1111111..2222222 100644
         let control = test_candidate_record("candidate-0008-cafebabe1234");
         let prior = super::ResolvedCandidateRecord {
             schema: "ub-review.resolved_candidate.v1".to_owned(),
+            revision: None,
             candidate_id: "candidate-0001-deadbeef1234".to_owned(),
             lane: current.lane.clone(),
             source: current.source.clone(),
@@ -22146,8 +22257,13 @@ index 1111111..2222222 100644
             evidence: vec!["Prior pass dropped the same candidate surface.".to_owned()],
         };
 
-        let records =
-            resolved_candidate_records(&[current.clone(), control.clone()], &[], &[], &[prior]);
+        let records = resolved_candidate_records(
+            &[current.clone(), control.clone()],
+            &[],
+            &[],
+            &[prior],
+            None,
+        );
 
         assert_eq!(records[0].candidate_id, current.id);
         assert_eq!(records[0].resolved_status, "resolved");
