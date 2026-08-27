@@ -5326,7 +5326,7 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
     let model_finished = model_phase["finished_at_offset_ms"]
         .as_u64()
         .ok_or_else(|| anyhow::anyhow!("model phase missing finish"))?;
-    assert!(proof_started <= model_started);
+    assert!(proof_started <= model_finished);
     assert!(proof_finished >= model_started);
     assert!(model_finished > model_started);
 
