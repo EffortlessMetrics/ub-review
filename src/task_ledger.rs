@@ -30,6 +30,7 @@ impl TaskId {
 
 /// Why the task entered the ledger.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) enum TaskSource {
     Required,
     Configured,
@@ -57,6 +58,7 @@ pub(crate) enum TaskValueClass {
 
 /// One interested party and its explicit requirement/value metadata.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct TaskConsumer {
     id: String,
     requirement: TaskRequirement,
@@ -114,6 +116,7 @@ pub(crate) enum TaskResourceClass {
 
 /// One positive resource reservation recorded by the admitting scheduler.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct ResourceReservation {
     class: TaskResourceClass,
     units: u64,
@@ -142,6 +145,7 @@ impl ResourceReservation {
 
 /// A safety ceiling is admission metadata, never observed process duration.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct TaskExecutionLimits {
     timeout_ceiling_ms: u64,
 }
@@ -192,6 +196,7 @@ pub(crate) enum TaskReceiptOutcome {
 
 /// Distinct injected timing points and derived durations.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct TaskTiming {
     pub(crate) queued_at: Option<MonotonicInstant>,
     pub(crate) resource_wait_started_at: Option<MonotonicInstant>,
@@ -228,6 +233,7 @@ pub(crate) enum TaskState {
 
 /// Append-only inputs to the pure reducer.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) enum TaskEvent {
     Proposed {
         revision: RevisionRef,
@@ -333,6 +339,7 @@ impl TaskEvent {
 
 /// Deterministic snapshot produced by replaying one task's events.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct TaskSnapshot {
     pub(crate) id: TaskId,
     pub(crate) state: TaskState,
@@ -696,6 +703,10 @@ fn non_empty(value: &str, field: &str) -> Result<String> {
     ensure!(
         !trimmed.is_empty(),
         "[missing_strong_binding] {field} must be non-empty"
+    );
+    ensure!(
+        !trimmed.chars().any(char::is_control),
+        "[missing_strong_binding] {field} must not contain control characters"
     );
     Ok(trimmed.to_owned())
 }
@@ -1313,6 +1324,15 @@ mod tests {
         let forged_id: TaskId = serde_json::from_str(r#"" ""#)?;
         let forged_padded_id: TaskId = serde_json::from_str(r#"" task-1 ""#)?;
         let valid_id = TaskId::parse("task-1")?;
+        ensure!(TaskId::parse("task-1\u{1c}").is_err());
+        ensure!(
+            TaskConsumer::parse(
+                "review\u{1c}",
+                TaskRequirement::Required,
+                TaskValueClass::GateCritical,
+            )
+            .is_err()
+        );
         let zero_limits: TaskExecutionLimits = serde_json::from_str(r#"{"timeout_ceiling_ms":0}"#)?;
         let proposal = TaskEvent::Proposed {
             revision: revision.clone(),
@@ -1329,9 +1349,24 @@ mod tests {
         ensure!(reducer.apply(&valid_id, &proposal, &revision).is_err());
 
         reducer.apply(&valid_id, &proposed(&revision, 10_000)?, &revision)?;
+        let before = reducer.snapshot().cloned();
+        ensure!(
+            reducer
+                .apply(
+                    &valid_id,
+                    &TaskEvent::TerminallyDeclined {
+                        at: MonotonicInstant::from_millis(1),
+                        disposition: TaskNonExecutionDisposition::Refused,
+                        reason: "policy\u{1c}".to_owned(),
+                        existing_receipt: None,
+                    },
+                    &revision,
+                )
+                .is_err()
+        );
+        ensure!(reducer.snapshot().cloned() == before);
         let forged_consumer: TaskConsumer =
             serde_json::from_str(r#"{"id":" ","requirement":"Required","value":"GateCritical"}"#)?;
-        let before = reducer.snapshot().cloned();
         ensure!(
             reducer
                 .apply(

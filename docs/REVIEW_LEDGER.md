@@ -39,6 +39,9 @@ src/issue_broker.rs follow_up_resolved_away_candidate_ids + surface matchers
 src/work_queue.rs work_queue_task_from_sensor (#325 late-phase pending rule)
   <-> verifier require_sensor_work_queue_task_schema (pinned by
       self_test_late_phase_sensor_work_queue_task_stays_pending)
+src/task_ledger_artifact.rs strict v1 replay, digest, and snapshot contract
+  <-> verifier require_task_ledger_artifacts (cross-language golden pinned by
+      self_test_task_ledger_contract)
 schema strings ub-review.<name>.vN in Rust
   <-> exact strings the verifier pins
 ```
