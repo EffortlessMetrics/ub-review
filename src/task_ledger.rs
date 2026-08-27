@@ -5,10 +5,7 @@
 //! binds every task to the admitted revision and rejects events atomically.
 #![cfg_attr(
     not(test),
-    expect(
-        dead_code,
-        reason = "policy:task-ledger-shadow: A2.3 artifacts and A2.4/A2.5 shadow adapters will consume these pure contracts"
-    )
+    expect(dead_code, reason = "tracked in policy/allow.toml#task-ledger-shadow")
 )]
 
 use crate::RevisionRef;
@@ -131,6 +128,16 @@ impl ResourceReservation {
         );
         Ok(Self { class, units })
     }
+
+    /// Return the reserved resource class.
+    pub(crate) const fn class(&self) -> TaskResourceClass {
+        self.class
+    }
+
+    /// Return the reserved unit count.
+    pub(crate) const fn units(&self) -> u64 {
+        self.units
+    }
 }
 
 /// A safety ceiling is admission metadata, never observed process duration.
@@ -147,6 +154,11 @@ impl TaskExecutionLimits {
             "[invalid_timing] timeout ceiling must be positive"
         );
         Ok(Self { timeout_ceiling_ms })
+    }
+
+    /// Return the admission-metadata timeout ceiling.
+    pub(crate) const fn timeout_ceiling_ms(&self) -> u64 {
+        self.timeout_ceiling_ms
     }
 }
 
@@ -363,7 +375,7 @@ impl TaskReducer {
         event: &TaskEvent,
         current_revision: &RevisionRef,
     ) -> Result<&TaskSnapshot> {
-        non_empty(id.as_str(), "task id")?;
+        normalized_non_empty(id.as_str(), "task id")?;
         if let TaskEvent::Proposed {
             revision,
             source,
@@ -466,9 +478,11 @@ fn transition(state: TaskState, event: &TaskEvent) -> Result<TaskState> {
         }
         (TaskState::Admitted, TaskEvent::SetupStarted { .. }) => Some(TaskState::Setup),
         (TaskState::Setup, TaskEvent::RunStarted { .. }) => Some(TaskState::Running),
-        (TaskState::Running, TaskEvent::ProcessFinished { disposition, .. })
-            if *disposition != TaskTerminalDisposition::SetupFailed =>
-        {
+        (TaskState::Running, TaskEvent::ProcessFinished { disposition, .. }) => {
+            ensure!(
+                *disposition != TaskTerminalDisposition::SetupFailed,
+                "[invalid_transition] setup failure cannot be a process result"
+            );
             Some(TaskState::Cleanup(*disposition))
         }
         (TaskState::Admitted | TaskState::Setup, TaskEvent::SetupFailed { .. }) => Some(
@@ -514,7 +528,7 @@ fn transition(state: TaskState, event: &TaskEvent) -> Result<TaskState> {
 fn apply_payload(snapshot: &mut TaskSnapshot, event: &TaskEvent) -> Result<()> {
     match event {
         TaskEvent::ConsumerAttached { consumer } => {
-            non_empty(consumer.id(), "task consumer")?;
+            normalized_non_empty(consumer.id(), "task consumer")?;
             if let Some(existing) = snapshot
                 .consumers
                 .iter()
@@ -541,7 +555,7 @@ fn apply_payload(snapshot: &mut TaskSnapshot, event: &TaskEvent) -> Result<()> {
             }
             snapshot.timing.resource_wait_ms = match snapshot.timing.resource_wait_started_at {
                 Some(started) => duration(Some(started), *at, "resource wait")?,
-                None => Some(0),
+                None => None,
             };
             snapshot.timing.admitted_at = Some(*at);
             snapshot.reservations.clone_from(reservations);
@@ -552,10 +566,6 @@ fn apply_payload(snapshot: &mut TaskSnapshot, event: &TaskEvent) -> Result<()> {
             snapshot.timing.process_started_at = Some(*at);
         }
         TaskEvent::ProcessFinished { at, disposition } => {
-            ensure!(
-                *disposition != TaskTerminalDisposition::SetupFailed,
-                "[invalid_transition] setup failure cannot be a process result"
-            );
             snapshot.timing.process_ms =
                 duration(snapshot.timing.process_started_at, *at, "process")?;
             snapshot.timing.process_finished_at = Some(*at);
@@ -688,6 +698,15 @@ fn non_empty(value: &str, field: &str) -> Result<String> {
         "[missing_strong_binding] {field} must be non-empty"
     );
     Ok(trimmed.to_owned())
+}
+
+/// Revalidate serde-created identifiers without silently changing identity.
+fn normalized_non_empty(value: &str, field: &str) -> Result<()> {
+    ensure!(
+        value == non_empty(value, field)?,
+        "[missing_strong_binding] {field} must not contain surrounding whitespace"
+    );
+    Ok(())
 }
 
 /// Stable state name used in diagnostics.
@@ -1026,8 +1045,16 @@ mod tests {
                     .ok_or_else(|| anyhow::anyhow!("snapshot"))?;
                 ensure!(snapshot.execution_disposition == Some(disposition));
                 ensure!(snapshot.timing.setup_ms == setup_started.then_some(5));
+                ensure!(snapshot.timing.resource_wait_ms.is_none());
                 ensure!(snapshot.timing.process_started_at.is_none());
                 ensure!(snapshot.timing.process_ms.is_none());
+                ensure!(snapshot.limits.timeout_ceiling_ms() == 600_000);
+                let reservation = snapshot
+                    .reservations
+                    .first()
+                    .ok_or_else(|| anyhow::anyhow!("reservation"))?;
+                ensure!(reservation.class() == TaskResourceClass::Memory);
+                ensure!(reservation.units() == 512);
                 ensure!(snapshot.resources_released);
             }
         }
@@ -1240,6 +1267,22 @@ mod tests {
                 )
                 .is_err()
         );
+        let setup_result_error = reducer
+            .apply(
+                &id,
+                &TaskEvent::ProcessFinished {
+                    at: MonotonicInstant::from_millis(5),
+                    disposition: TaskTerminalDisposition::SetupFailed,
+                },
+                &revision,
+            )
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("setup failure was accepted as a process result"))?;
+        ensure!(
+            setup_result_error
+                .to_string()
+                .contains("setup failure cannot be a process result")
+        );
         reducer.apply(
             &id,
             &TaskEvent::ProcessFinished {
@@ -1268,6 +1311,7 @@ mod tests {
     fn malformed_deserialized_values_fail_at_reducer_boundary() -> Result<()> {
         let revision = revision('a');
         let forged_id: TaskId = serde_json::from_str(r#"" ""#)?;
+        let forged_padded_id: TaskId = serde_json::from_str(r#"" task-1 ""#)?;
         let valid_id = TaskId::parse("task-1")?;
         let zero_limits: TaskExecutionLimits = serde_json::from_str(r#"{"timeout_ceiling_ms":0}"#)?;
         let proposal = TaskEvent::Proposed {
@@ -1277,6 +1321,11 @@ mod tests {
         };
         let mut reducer = TaskReducer::new();
         ensure!(reducer.apply(&forged_id, &proposal, &revision).is_err());
+        ensure!(
+            reducer
+                .apply(&forged_padded_id, &proposed(&revision, 10_000)?, &revision)
+                .is_err()
+        );
         ensure!(reducer.apply(&valid_id, &proposal, &revision).is_err());
 
         reducer.apply(&valid_id, &proposed(&revision, 10_000)?, &revision)?;
@@ -1289,6 +1338,21 @@ mod tests {
                     &valid_id,
                     &TaskEvent::ConsumerAttached {
                         consumer: forged_consumer,
+                    },
+                    &revision,
+                )
+                .is_err()
+        );
+        ensure!(reducer.snapshot().cloned() == before);
+        let forged_padded_consumer: TaskConsumer = serde_json::from_str(
+            r#"{"id":" review ","requirement":"Required","value":"GateCritical"}"#,
+        )?;
+        ensure!(
+            reducer
+                .apply(
+                    &valid_id,
+                    &TaskEvent::ConsumerAttached {
+                        consumer: forged_padded_consumer,
                     },
                     &revision,
                 )

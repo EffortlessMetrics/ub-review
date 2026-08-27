@@ -29210,6 +29210,36 @@ finding_id = "probe:src_task_ledger.rs:match_arm:e7f720e6"
 owner = "ub-review/core"
 reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:call_deletion:508fc6db"
+owner = "ub-review/core"
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:647b6c96"
+owner = "ub-review/core"
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:ff48e5c5.3"
+owner = "ub-review/core"
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:call_deletion:66521ccb"
+owner = "ub-review/core"
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:return_value:6a460599"
+owner = "ub-review/core"
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
+
 # PR #1255 / issue #882 - trusted-base explicit diff admission.
 # Exact findings are retained because RIPR 0.10.0 cannot join the co-located
 # and subprocess oracles listed in each receipt; no gate threshold is raised.
