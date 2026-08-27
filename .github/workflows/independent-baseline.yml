@@ -1,0 +1,162 @@
+name: ub-review/independent-baseline
+
+# Temporary self-hosting containment (#947). `pull_request_target` loads this
+# workflow from the protected base branch, then checks out the exact candidate
+# SHA only in isolated deterministic evidence jobs. A fresh no-checkout job
+# aggregates GitHub-owned job results, writes the receipt, and enforces the
+# outcome. This is not the full hostile-head-safe coordinator boundary.
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ub-review-independent-baseline-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  evidence:
+    name: independent evidence / ${{ matrix.check }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [fmt, check, clippy, test, doc, policy, verifier]
+    env:
+      CANDIDATE_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout exact candidate revision without credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact candidate identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          if [[ "$actual_sha" != "$CANDIDATE_SHA" ]]; then
+            echo "expected candidate $CANDIDATE_SHA, checked out $actual_sha" >&2
+            exit 1
+          fi
+
+      - name: Install fixed Rust toolchain
+        if: ${{ matrix.check != 'verifier' }}
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: 1.95.0
+          components: rustfmt,clippy
+
+      - name: Install fixed Python toolchain
+        if: ${{ matrix.check == 'verifier' }}
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+
+      - name: Run one fixed deterministic check
+        shell: bash
+        env:
+          CHECK: ${{ matrix.check }}
+        run: |
+          set -euo pipefail
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/ub-review-independent-${CHECK}-target"
+          case "$CHECK" in
+            fmt)
+              cargo fmt --all -- --check
+              ;;
+            check)
+              cargo check --workspace --all-targets --locked
+              ;;
+            clippy)
+              cargo clippy --workspace --all-targets --locked -- -D warnings
+              ;;
+            test)
+              cargo test --workspace --all-targets --locked
+              ;;
+            doc)
+              cargo doc --workspace --no-deps --locked
+              ;;
+            policy)
+              cargo run --locked --package xtask -- policy-check
+              ;;
+            verifier)
+              python scripts/verify-bun-review-artifacts.py --self-test
+              ;;
+            *)
+              echo "unknown independent baseline check: $CHECK" >&2
+              exit 2
+              ;;
+          esac
+
+  finalize:
+    name: ub-review/independent-baseline
+    needs: evidence
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      CANDIDATE_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+      EVIDENCE_RESULT: ${{ needs.evidence.result }}
+      TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
+    steps:
+      - name: Write trusted exact-head baseline receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          receipt_dir="$RUNNER_TEMP/ub-review-independent-baseline"
+          mkdir -p "$receipt_dir"
+          jq -n \
+            --arg schema "ub-review.independent_baseline.v1" \
+            --arg candidate_repository "$CANDIDATE_REPOSITORY" \
+            --arg candidate_sha "$CANDIDATE_SHA" \
+            --arg workflow_sha "$TRUSTED_WORKFLOW_SHA" \
+            --arg evidence_result "$EVIDENCE_RESULT" \
+            '{
+              schema: $schema,
+              candidate_repository: $candidate_repository,
+              candidate_sha: $candidate_sha,
+              trusted_workflow_sha: $workflow_sha,
+              workflow_source: "protected-base",
+              evidence_topology: "isolated-matrix-jobs",
+              evidence_result: $evidence_result,
+              commands: [
+                "cargo fmt --all -- --check",
+                "cargo check --workspace --all-targets --locked",
+                "cargo clippy --workspace --all-targets --locked -- -D warnings",
+                "cargo test --workspace --all-targets --locked",
+                "cargo doc --workspace --no-deps --locked",
+                "cargo run --locked --package xtask -- policy-check",
+                "python scripts/verify-bun-review-artifacts.py --self-test"
+              ]
+            }' > "$receipt_dir/receipt.json"
+
+      - name: Upload independent baseline receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: independent-baseline-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/ub-review-independent-baseline
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Enforce independent baseline
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$EVIDENCE_RESULT" != "success" ]]; then
+            echo "independent baseline evidence ended $EVIDENCE_RESULT for exact candidate $CANDIDATE_SHA" >&2
+            exit 1
+          fi
