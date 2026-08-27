@@ -10319,11 +10319,13 @@ def require_no_secret_markers(root: pathlib.Path) -> None:
         root / "running-summary.md",
         root / "work_queue.json",
         root / "work_events.ndjson",
+        root / "task_ledger_events.ndjson",
         root / "tool-gate-outcomes.json",
         root / "tool_gate_outcomes.ndjson",
         root / "review/shared_context.md",
         root / "review/pr_thread_context.json",
         root / "review/terminal_state.json",
+        root / "review/task_ledger_snapshot.json",
         root / "review/review.json",
         root / "review/review.md",
         root / "review/ub-review-cost.json",
@@ -16148,6 +16150,22 @@ def self_test_task_ledger_contract() -> None:
         "[invalid_timing]",
         lambda: _task_ledger_u64(1 << 64, "event time"),
     )
+    with tempfile.TemporaryDirectory() as directory:
+        root = pathlib.Path(directory)
+        secret = "GITHUB_TOKEN=abcdefghijklmnopqrstuvwxyz123456"
+        for relative_path in (
+            "task_ledger_events.ndjson",
+            "review/task_ledger_snapshot.json",
+        ):
+            path = root / relative_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(secret, encoding="utf-8")
+            expect_self_test_failure(
+                f"task-ledger secret marker in {relative_path}",
+                "secret marker",
+                lambda: require_no_secret_markers(root),
+            )
+            path.unlink()
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
