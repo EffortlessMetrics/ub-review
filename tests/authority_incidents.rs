@@ -26,8 +26,8 @@ const SECRET_MARKERS: &[&str] = &[
     "ghs_",
     "ghr_",
     "github_pat_",
-    "sk-",
 ];
+const OPAQUE_TOKEN_PREFIXES: &[(&str, usize)] = &[("sk-", 20)];
 const SENSITIVE_CREDENTIAL_KEYS: &[&str] = &[
     "accesstoken",
     "apikey",
@@ -393,13 +393,30 @@ fn validate_relative_path(value: &str) -> Result<PathBuf> {
 
 fn reject_sensitive_payload(text: &str, document: &Value, path: &str) -> Result<()> {
     let lowered = text.to_ascii_lowercase();
+    reject_secret_markers(&lowered, path)?;
+    reject_sensitive_json(document, path)
+}
+
+fn reject_secret_markers(lowered: &str, path: &str) -> Result<()> {
     for marker in SECRET_MARKERS {
         ensure!(
             !lowered.contains(marker),
             "secret marker {marker:?} found in {path}"
         );
     }
-    reject_sensitive_json(document, path)
+    for (prefix, min_length) in OPAQUE_TOKEN_PREFIXES {
+        let has_token = lowered.match_indices(prefix).any(|(index, _)| {
+            lowered.get(index + prefix.len()..).is_some_and(|tail| {
+                tail.chars()
+                    .take_while(|character| character.is_ascii_alphanumeric() || *character == '_')
+                    .take(*min_length)
+                    .count()
+                    == *min_length
+            })
+        });
+        ensure!(!has_token, "secret marker {prefix:?} found in {path}");
+    }
+    Ok(())
 }
 
 fn reject_sensitive_json(value: &Value, path: &str) -> Result<()> {
@@ -429,12 +446,7 @@ fn reject_sensitive_json(value: &Value, path: &str) -> Result<()> {
         }
         Value::String(text) => {
             let lowered = text.to_ascii_lowercase();
-            for marker in SECRET_MARKERS {
-                ensure!(
-                    !lowered.contains(marker),
-                    "secret marker {marker:?} found in decoded JSON string in {path}"
-                );
-            }
+            reject_secret_markers(&lowered, path)?;
         }
         _ => {}
     }
@@ -512,6 +524,29 @@ fn copy_corpus(source: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
+fn set_file_receipt_bytes(manifest: &mut Value, path: &str, bytes: u64) -> Result<()> {
+    let cases = manifest
+        .get_mut("cases")
+        .and_then(Value::as_array_mut)
+        .context("manifest cases must be an array")?;
+    for case in cases {
+        let files = case
+            .get_mut("files")
+            .and_then(Value::as_array_mut)
+            .context("manifest case files must be an array")?;
+        for receipt in files {
+            if receipt.get("path").and_then(Value::as_str) == Some(path) {
+                let byte_receipt = receipt
+                    .get_mut("bytes")
+                    .context("retained file receipt has no bytes field")?;
+                *byte_receipt = Value::from(bytes);
+                return Ok(());
+            }
+        }
+    }
+    bail!("missing retained file byte receipt for {path}")
+}
+
 #[test]
 fn corpus_is_complete_sanitized_and_digest_bound() -> Result<()> {
     let corpus = load_corpus(&corpus_root())?;
@@ -530,19 +565,37 @@ fn corpus_is_complete_sanitized_and_digest_bound() -> Result<()> {
 fn pr_915_preserves_legacy_pass_with_required_proof_unproven() -> Result<()> {
     let corpus = load_corpus(&corpus_root())?;
     let incident = corpus.incident("915")?;
+    let violation_codes = incident
+        .expected_violations
+        .iter()
+        .map(|item| item.code.as_str())
+        .collect::<BTreeSet<_>>();
     ensure!(
-        incident
-            .expected_violations
-            .iter()
-            .any(|item| item.code == "legacy_pass_with_required_proof_unproven")
+        violation_codes
+            == BTreeSet::from([
+                "legacy_pass_with_required_proof_unproven",
+                "required_proof_starved_at_zero_remaining_budget",
+            ])
     );
     let gate = corpus.document("915/review/gate_outcome.json")?;
+    let portfolio = corpus.document("915/review/proof_portfolio.json")?;
     ensure!(text_at(gate, "/conclusion")? == "pass");
     ensure!(text_at(gate, "/gate_result")? == "pass");
     ensure!(u64_at(gate, "/required_proof/matched")? == 3);
     ensure!(u64_at(gate, "/required_proof/passed")? == 0);
     ensure!(u64_at(gate, "/required_proof/skipped")? == 3);
     ensure!(text_at(gate, "/not_proven_reasons/0")?.contains("produced no passing receipt"));
+    ensure!(u64_at(portfolio, "/budget_seconds")? == 0);
+    ensure!(array_at(portfolio, "/selected_task_ids")?.is_empty());
+    let required_decisions = array_at(portfolio, "/decisions")?
+        .iter()
+        .filter(|decision| decision.get("required").and_then(Value::as_bool) == Some(true))
+        .collect::<Vec<_>>();
+    ensure!(required_decisions.len() == 3);
+    for decision in required_decisions {
+        ensure!(text_at(decision, "/status")? == "deferred_by_safe_wind_down");
+        ensure!(array_at(decision, "/receipt_ids")?.is_empty());
+    }
     Ok(())
 }
 
@@ -569,11 +622,26 @@ fn pr_916_preserves_legacy_pass_with_truthful_not_proven() -> Result<()> {
 fn pr_921_preserves_cross_projection_contradictions() -> Result<()> {
     let corpus = load_corpus(&corpus_root())?;
     let incident = corpus.incident("921")?;
-    ensure!(incident.expected_violations.len() == 5);
+    let violation_codes = incident
+        .expected_violations
+        .iter()
+        .map(|item| item.code.as_str())
+        .collect::<BTreeSet<_>>();
+    ensure!(
+        violation_codes
+            == BTreeSet::from([
+                "executed_impact_receipt_missing_from_queue_and_portfolio",
+                "required_proof_unproven",
+                "successful_sensor_left_planned",
+                "symbolic_head_persisted_as_authority",
+                "timeout_ceilings_exhausted_budget_before_actual_deadline",
+            ])
+    );
     let gate = corpus.document("921/review/gate_outcome.json")?;
     let queue = corpus.document("921/work_queue.json")?;
     let portfolio = corpus.document("921/review/proof_portfolio.json")?;
     let receipts = corpus.document("921/review/proof_receipts.json")?;
+    let scheduler = corpus.document("921/review/scheduler.json")?;
     let sensor = corpus.document("921/sensors/cargo-allow/ub-review-sensor-status.json")?;
 
     ensure!(text_at(gate, "/conclusion")? == "pass");
@@ -619,7 +687,10 @@ fn pr_921_preserves_cross_projection_contradictions() -> Result<()> {
         }
     }
 
-    ensure!(u64_at(portfolio, "/budget_seconds")? == 0);
+    let budget_ms = u64_at(portfolio, "/budget_seconds")?
+        .checked_mul(1_000)
+        .context("budget conversion overflow")?;
+    ensure!(budget_ms == 0);
     ensure!(u64_at(portfolio, "/runtime/deadline_remaining_seconds")? > 0);
     let mut actual_ms = 0_u64;
     let mut timeout_ms = 0_u64;
@@ -637,7 +708,27 @@ fn pr_921_preserves_cross_projection_contradictions() -> Result<()> {
                 .context("timeout duration overflow")?;
         }
     }
-    ensure!(actual_ms < timeout_ms);
+    let elapsed_wall_ms = u64_at(scheduler, "/elapsed_wall_ms")?;
+    ensure!(actual_ms <= elapsed_wall_ms);
+    ensure!(elapsed_wall_ms < timeout_ms);
+    ensure!(timeout_ms > budget_ms);
+    Ok(())
+}
+
+#[test]
+fn opaque_secret_prefix_requires_token_context() -> Result<()> {
+    let ordinary = serde_json::json!({ "task_id": "task-1" });
+    reject_sensitive_payload("{\"task_id\":\"task-1\"}", &ordinary, "ordinary.json")?;
+
+    let secret = serde_json::json!({ "value": "sk-abcdefghijklmnopqrst" });
+    let error = reject_sensitive_payload(
+        "{\"value\":\"sk-abcdefghijklmnopqrst\"}",
+        &secret,
+        "secret.json",
+    )
+    .err()
+    .context("opaque secret token unexpectedly passed")?;
+    ensure!(format!("{error:#}").contains("secret marker \"sk-\""));
     Ok(())
 }
 
@@ -674,6 +765,7 @@ fn corpus_rejects_mutation_missing_files_secrets_and_bad_evidence() -> Result<()
             }
             "missing" => fs::remove_file(temp.path().join("916/review/proof_receipts.json"))?,
             "secret" | "credential" | "escaped" | "private" => {
+                const MUTATED_FILE: &str = "921/review/gate_outcome.json";
                 let payload: &[u8] = match mutation {
                     "secret" => b"{\"GITHUB_TOKEN\":\"ghp_1234567890abcdef\"}\n",
                     "credential" => b"{\"authorization\" : \"opaque credential\"}\n",
@@ -681,13 +773,10 @@ fn corpus_rejects_mutation_missing_files_secrets_and_bad_evidence() -> Result<()
                     "private" => b"{\"prompt\" : \"private provider input\"}\n",
                     other => bail!("unknown sensitive mutation {other}"),
                 };
-                fs::write(temp.path().join("921/review/gate_outcome.json"), payload)?;
+                fs::write(temp.path().join(MUTATED_FILE), payload)?;
                 let manifest_path = temp.path().join(MANIFEST_NAME);
                 let mut manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)?;
-                let bytes = manifest
-                    .pointer_mut("/cases/2/files/0/bytes")
-                    .context("missing retained file byte receipt")?;
-                *bytes = Value::from(u64::try_from(payload.len())?);
+                set_file_receipt_bytes(&mut manifest, MUTATED_FILE, u64::try_from(payload.len())?)?;
                 fs::write(manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
             }
             "pointer" | "budget" | "path" | "unknown" => {
