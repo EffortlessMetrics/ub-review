@@ -26980,3 +26980,859 @@ finding_id = "probe:src_task_ledger.rs:return_value:fcc39d0c"
 owner = "ub-review/core"
 reason = "A2.1 task lifecycle slice (#952): the reducer carries behavioral oracles - a complete transition truth table exercised by deterministic-replay, invalid-order (double selection/start/terminal, terminal-to-running, post-terminal attachment), foreign-revision precedence, terminally-declined absorption, and idempotent multi-consumer tests, each pinning its reason token. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/task_ledger.rs; retire as A2.3 ledger artifact and A2.4/A2.5 adapters consume the types."
 
+# PR #1255 / issue #882 - trusted-base explicit diff admission.
+# Exact findings are retained because RIPR 0.10.0 cannot join the co-located
+# and subprocess oracles listed in each receipt; no gate threshold is raised.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_cli.rs:call_deletion:94e05f1e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_cli.rs:field_construction:8cf4ee37"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_cli.rs:call_deletion:ecaf5880"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_cli.rs:field_construction:394d2de0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_cli.rs:call_deletion:4a06af00"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_cli.rs:field_construction:39018d17"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_cli.rs:call_deletion:f554ee39"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_cli.rs:field_construction:3dd49c60"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:fe9280c0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:fe9280c0.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:fe9280c0.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:fe9280c0.4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:349f529f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:537b1673"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:772aeaf1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:e7298eb4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:a4c3b322"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:1df3007e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:1eb64013"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:191d7656"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:call_deletion:0dd4db95"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:error_path:180a10b1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:call_deletion:d442160e.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:error_path:6704ca0f.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:match_arm:5063b506"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:call_deletion:369abeec"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:match_arm:ca6f7809"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:return_value:aa2f238d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:match_arm:67c325f6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:call_deletion:b0b63c08"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:return_value:2f25e87b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:call_deletion:54f362bd"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:match_arm:2be2cca6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:9e0d37db"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/no-static-path false-negative (ripr-swarm#1054). trusted_diff_run_uses_base_root_and_explicit_objects supplies hostile file and credentialed API context then asserts an exact absent receipt with no sources, proving trusted mode does not collect it. Re-verify after edits to context construction or trusted cmd_run routing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:30160f02"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/no-static-path false-negative (ripr-swarm#1054). trusted_diff_run_uses_base_root_and_explicit_objects supplies hostile file and credentialed API context then asserts an exact absent receipt with no sources, proving trusted mode does not collect it. Re-verify after edits to context construction or trusted cmd_run routing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:dff1848d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/no-static-path false-negative (ripr-swarm#1054). trusted_diff_run_uses_base_root_and_explicit_objects supplies hostile file and credentialed API context then asserts an exact absent receipt with no sources, proving trusted mode does not collect it. Re-verify after edits to context construction or trusted cmd_run routing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:1648b080"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/no-static-path false-negative (ripr-swarm#1054). trusted_diff_run_uses_base_root_and_explicit_objects supplies hostile file and credentialed API context then asserts an exact absent receipt with no sources, proving trusted mode does not collect it. Re-verify after edits to context construction or trusted cmd_run routing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:5242bcf2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/no-static-path false-negative (ripr-swarm#1054). trusted_diff_run_uses_base_root_and_explicit_objects supplies hostile file and credentialed API context then asserts an exact absent receipt with no sources, proving trusted mode does not collect it. Re-verify after edits to context construction or trusted cmd_run routing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:77fbc94e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/no-static-path false-negative (ripr-swarm#1054). trusted_diff_run_uses_base_root_and_explicit_objects supplies hostile file and credentialed API context then asserts an exact absent receipt with no sources, proving trusted mode does not collect it. Re-verify after edits to context construction or trusted cmd_run routing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:79df8296"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:de73aa5d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:6e6b44ff"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:7b64991d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:f95781ee"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:e8bed741"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:ec140b9b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:499f79ae"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:02f693b8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:f497f525"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:15e020ae"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:e050a900"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:6a040e7a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:f103d19b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:ea7397da"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:ea7397da.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:02bf0459"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:6096ea52"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:ea7397da.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:aa3efb3c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:6d477c6f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:932786dd"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:4f00828e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:6096ea52.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:2ad4efd9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:806d4c7a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:87be8e67"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:69ddd6f4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:5a6aa313"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:predicate:f929d4f5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:6656cbcf"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:match_arm:b859a26c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:match_arm:568a8d70"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:match_arm:d8e73c8b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:238bd45f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:dc43f06f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:20002a88"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:06378464"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:e73951dd"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:1801bd0b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:7b39dca1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:match_arm:9d252643"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:match_arm:d3eb3f7b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:988bda46"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:ee582d42"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:945aa214"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:match_arm:8d2e66f1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:match_arm:6258504d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:ce6ced1a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:7209e2d1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:59b9ab7a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:7402e5e2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:21fe2a82"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:841a5e7d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:a50d7a3b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:da08dadd"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:15f84f24"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:b36392eb"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:e9a5ef54"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:be084e60"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:27bf5e85"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:e0cf3fc8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:f4a3f4c1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:2c96dabe"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:61c511c3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:1f966631"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:aebae2e3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:3c87b9ff"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:8f1db065"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:aa97ff85"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:40b85f7c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:841a5e7d.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:da08dadd.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:59c7eae3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:50f4417b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:2057f81a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:93c6e91d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:e4610568"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:3c87b9ff.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:aa97ff85.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:69752a61"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:40092a30"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:7427a9e2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:26dfbd18"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:64748f40"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:d052fded"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:6c3dce60"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:9eb37304"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:8c54c03c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:49f4a7ed"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:49f4a7ed.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:60c95b10"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:49f4a7ed.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:49f4a7ed.4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:49f4a7ed.5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:49f4a7ed.6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:error_path:49f4a7ed.7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:55769fdf"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:3f6909b0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:return_value:e96a3466"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:e492537e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:field_construction:a6d788e5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:bf1a0e4c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+

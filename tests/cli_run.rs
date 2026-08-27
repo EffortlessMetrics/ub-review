@@ -10,6 +10,161 @@ mod common;
 use common::*;
 
 #[test]
+fn trusted_diff_run_uses_base_root_and_explicit_objects() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    fs::create_dir_all(repo.join("src"))?;
+    fs::create_dir_all(repo.join("scripts"))?;
+    write_file(
+        &repo.join("src/lib.rs"),
+        "pub fn answer() -> usize { 41 }\n",
+    )?;
+    write_file(&repo.join(".ub-review.toml"), "review_profile = \"safe\"\n")?;
+    write_file(&repo.join("scripts/reviewer.sh"), "echo safe\n")?;
+    run(&repo, "git", &["init"])?;
+    run(
+        &repo,
+        "git",
+        &["config", "user.email", "ub-review@example.invalid"],
+    )?;
+    run(&repo, "git", &["config", "user.name", "UB Review Test"])?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "trusted base"])?;
+
+    let git_output = |args: &[&str]| -> Result<String> {
+        let output = isolated_command("git", &repo).args(args).output()?;
+        anyhow::ensure!(
+            output.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    };
+    let base_tree = git_output(&["show", "-s", "--format=%T", "HEAD"])?;
+    write_file(
+        &repo.join(".ub-review.toml"),
+        "candidate config must never be parsed\n",
+    )?;
+    write_file(
+        &repo.join("scripts/reviewer.sh"),
+        "echo candidate-script-must-not-run\n",
+    )?;
+    write_file(
+        &repo.join("src/lib.rs"),
+        "pub fn answer() -> usize { 42 }\n",
+    )?;
+    run(&repo, "git", &["add", "."])?;
+    let changed = git_output(&["diff", "--cached", "--name-only", "--no-renames", "HEAD"])?;
+    let patch = git_output(&["diff", "--cached", "--binary", "--no-renames", "HEAD"])?;
+    let changed_path = temp.path().join("changed-files.txt");
+    let patch_path = temp.path().join("diff.patch");
+    write_file(&changed_path, &changed)?;
+    write_file(&patch_path, &patch)?;
+    run(&repo, "git", &["reset", "--hard", "HEAD"])?;
+
+    let out = temp.path().join("packet");
+    let hostile_thread = temp.path().join("hostile-thread.md");
+    write_file(&hostile_thread, "candidate thread context must not load\n")?;
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let head_sha = "f".repeat(40);
+    let args = [
+        "run",
+        "--dry-run",
+        "--config",
+        path_str(&config)?,
+        "--root",
+        path_str(&repo)?,
+        "--out",
+        path_str(&out)?,
+        "--trusted-base-tree",
+        base_tree.trim(),
+        "--trusted-head-sha",
+        &head_sha,
+        "--trusted-changed-files",
+        path_str(&changed_path)?,
+        "--trusted-diff-patch",
+        path_str(&patch_path)?,
+        "--model-mode",
+        "off",
+        "--no-github-summary",
+        "--pr-thread-context",
+        path_str(&hostile_thread)?,
+        "--github-token",
+        "trusted-mode-must-not-use-this-token",
+        "--github-repo",
+        "example/repo",
+        "--github-pull-number",
+        "1",
+    ];
+    run(temp.path(), bin, &args)?;
+    let mut sensor_args = args.to_vec();
+    sensor_args.remove(1);
+    let sensor_error = run_expect_failure(temp.path(), bin, &sensor_args)?;
+    assert!(
+        sensor_error.contains("requires --dry-run"),
+        "{sensor_error}"
+    );
+    let mut provider_args = args;
+    provider_args[17] = "auto";
+    let provider_error = run_expect_failure(temp.path(), bin, &provider_args)?;
+    assert!(
+        provider_error.contains("requires --model-mode off"),
+        "{provider_error}"
+    );
+    let mut posting_args = args.to_vec();
+    posting_args.extend(["--posting", "review"]);
+    let posting_error = run_expect_failure(temp.path(), bin, &posting_args)?;
+    assert!(
+        posting_error.contains("requires --posting artifact-only"),
+        "{posting_error}"
+    );
+    let mut heavy_args = args.to_vec();
+    heavy_args.push("--allow-heavy");
+    let heavy_error = run_expect_failure(temp.path(), bin, &heavy_args)?;
+    assert!(
+        heavy_error.contains("does not allow --allow-heavy"),
+        "{heavy_error}"
+    );
+
+    let diff: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("input/diff-context.json"))?)?;
+    let admission: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("input/revision-admission.json"))?)?;
+    assert_eq!(diff["base"], base_tree.trim());
+    assert_eq!(diff["head"], head_sha);
+    assert_eq!(
+        diff["changed_files"],
+        serde_json::json!([".ub-review.toml", "scripts/reviewer.sh", "src/lib.rs"])
+    );
+    assert_eq!(admission["reviewed_commit_oid"], "f".repeat(40));
+    let thread_context: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/pr_thread_context.json"))?)?;
+    assert_eq!(thread_context["status"], "absent");
+    assert_eq!(thread_context["sources"], serde_json::json!([]));
+    assert_eq!(thread_context["thread_context"], serde_json::Value::Null);
+    assert_eq!(
+        fs::read_to_string(repo.join(".ub-review.toml"))?,
+        "review_profile = \"safe\"\n"
+    );
+    let dirty_config = repo.join(".ub-review.toml");
+    write_file(
+        &dirty_config,
+        "candidate config must not parse before root admission\n",
+    )?;
+    let mut dirty_config_args = args;
+    dirty_config_args[3] = path_str(&dirty_config)?;
+    let dirty_error = run_expect_failure(temp.path(), bin, &dirty_config_args)?;
+    assert!(
+        dirty_error.contains("requires a clean base-owned root"),
+        "{dirty_error}"
+    );
+    assert!(!dirty_error.contains("parse config"), "{dirty_error}");
+    Ok(())
+}
+
+#[test]
 fn run_with_ledger_path_writes_bounded_shared_context() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;

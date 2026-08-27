@@ -71,6 +71,57 @@ fn action_forwards_prior_resolved_candidates_input() -> Result<()> {
 }
 
 #[test]
+fn action_forwards_complete_trusted_diff_admission_inputs() -> Result<()> {
+    let action = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("action.yml"))?;
+    for input in [
+        "trusted-base-tree",
+        "trusted-head-sha",
+        "trusted-changed-files",
+        "trusted-diff-patch",
+    ] {
+        assert!(action.contains(&format!("  {input}:")), "missing {input}");
+        let env_name = format!(
+            "ACTION_TRUSTED_{}",
+            input
+                .strip_prefix("trusted-")
+                .ok_or_else(|| anyhow::anyhow!("unexpected trusted input name: {input}"))?
+                .replace('-', "_")
+                .to_ascii_uppercase()
+        );
+        assert!(
+            action.contains(&format!(
+                "UB_REVIEW_{env_name}: ${{{{ inputs['{input}'] }}}}"
+            )),
+            "action does not bind {input} through the step environment"
+        );
+        assert!(
+            action.contains(&format!("--{input} \"$UB_REVIEW_{env_name}\"")),
+            "action does not forward {input} from its environment binding"
+        );
+        assert!(
+            !action.contains(&format!("--{input} \"${{{{ inputs['{input}'] }}}}\"")),
+            "action must not interpolate {input} directly into shell source"
+        );
+    }
+    let trusted_block = action
+        .split_once("if [[ -n \"$UB_REVIEW_ACTION_TRUSTED_BASE_TREE\" ]]")
+        .map(|(_, suffix)| suffix)
+        .ok_or_else(|| anyhow::anyhow!("trusted-base action block is missing"))?;
+    assert!(
+        trusted_block
+            .lines()
+            .take(6)
+            .any(|line| line.contains("extra+=(--dry-run)")),
+        "trusted-base action block must force dry-run packet construction"
+    );
+    assert!(
+        action
+            .contains("id: prior_resolved_candidates\n      if: inputs['trusted-base-tree'] == ''")
+    );
+    Ok(())
+}
+
+#[test]
 fn release_resolver_validates_binary_version_before_acceptance() -> Result<()> {
     let action = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("action.yml"))?;
     let candidate = action

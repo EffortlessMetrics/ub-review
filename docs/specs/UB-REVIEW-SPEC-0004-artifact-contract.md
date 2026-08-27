@@ -93,6 +93,9 @@ running-summary.md             single-writer; five required headings (below)
 input/changed-files.txt        one changed path per line
 input/diff.patch               the diff the review is anchored to
 input/diff-context.json        structured diff context
+input/revision-admission.json immutable base/head/tree/path/diff identity;
+                               ordinary Git or trusted-base explicit-diff
+                               admission
 lanes/<sanitized-lane>.md      one packet per effective model lane, exact
                                set match, [<lane>] prefix required
 sensors/<id>/ub-review-sensor-status.json
@@ -101,6 +104,12 @@ sensors/<id>/ub-review-sensor-status.json
                                status ok|missing|skipped|failed|timed_out,
                                reason field mandatory
 ```
+
+Trusted-base explicit-diff admission is specified operationally in
+[`docs/ci/trusted-diff-admission.md`](../ci/trusted-diff-admission.md). It
+constructs these same stable input artifacts from four fail-closed explicit
+objects while the root remains on the verified base tree; it does not resolve
+or check out the candidate head.
 
 Root-level NDJSON streams (each is line-for-line parity with a `review/`
 JSON array; see parity rules):

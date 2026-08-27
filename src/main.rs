@@ -167,7 +167,8 @@ mod github_delivery;
 pub(crate) use github_delivery::*;
 mod plan_artifacts;
 use plan_artifacts::{
-    PlanArtifactSelectors, RepairQueueEntry, RepairQueueFile, prepare_plan, write_plan_artifacts,
+    PlanArtifactSelectors, RepairQueueEntry, RepairQueueFile, prepare_plan, trusted_diff_inputs,
+    write_plan_artifacts,
 };
 mod ci_audit;
 pub(crate) use ci_audit::*;
@@ -3670,9 +3671,39 @@ struct RunCompletion {
 fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
     let run_started = Instant::now();
     let mut args = normalize_run_args(args)?;
+    let trusted_diff = trusted_diff_inputs(&args.review)?;
+    if trusted_diff.is_some() {
+        if !args.dry_run {
+            bail!(
+                "trusted-base diff admission requires --dry-run; candidate sensor execution is outside this admission seam"
+            );
+        }
+        if !matches!(args.model_mode, ModelMode::Off) {
+            bail!(
+                "trusted-base diff admission requires --model-mode off; secret-backed model providers are outside this admission seam"
+            );
+        }
+        if !matches!(args.posting, PostingMode::ArtifactOnly) {
+            bail!(
+                "trusted-base diff admission requires --posting artifact-only; credentialed GitHub delivery is outside this admission seam"
+            );
+        }
+        if args.allow_heavy {
+            bail!(
+                "trusted-base diff admission does not allow --allow-heavy; candidate proof execution is outside this admission seam"
+            );
+        }
+        // Prior receipts are review context, not part of the four admitted
+        // objects. Ignore even an explicitly supplied path in this mode.
+        args.prior_resolved_candidates.clear();
+    }
     let run_pass = resolved_run_pass(args.run_pass);
     let (mut config, diff, box_state, plan, revision) =
         prepare_plan(&args.review, args.allow_heavy, &args.selectors)?;
+    if trusted_diff.is_some() {
+        args.review.base = diff.base.clone();
+        args.review.head = diff.head.clone();
+    }
     // #719: apply the user-facing review-mode preset (advisory/gate/strict)
     // when set. This overrides --mode, --fail-on-gate, and
     // [gate].review_forward before any downstream resolution reads them, so
@@ -3766,7 +3797,13 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
             }
         }
     }
-    let pr_thread_context = collect_pr_thread_context(&args.review.root, &args, &diff.head)?;
+    // Trusted admission is intentionally context-free: do not read the
+    // GitHub event, caller-provided thread files, or credentialed API state.
+    let pr_thread_context = if trusted_diff.is_some() {
+        absent_pr_thread_context(args.pr_thread_context_max_bytes)
+    } else {
+        collect_pr_thread_context(&args.review.root, &args, &diff.head)?
+    };
 
     write_lane_packets(
         &args.review.out,
@@ -23760,6 +23797,10 @@ index 1111111..2222222 100644
                 base: "HEAD~1".to_owned(),
                 head: "HEAD".to_owned(),
                 pr_head_sha: None,
+                trusted_base_tree: None,
+                trusted_head_sha: None,
+                trusted_changed_files: None,
+                trusted_diff_patch: None,
                 config: Path::new(".ub-review.toml").to_path_buf(),
                 out,
                 profile: None,
