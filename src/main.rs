@@ -4334,6 +4334,28 @@ fn lane_turn_artifact_ref(lane: &str, turn: u32) -> String {
     )
 }
 
+/// Acquire the checkout's shared Cargo target for proof execution by waiting
+/// for its late-sensor owner, then open the proof scheduler interval. Keeping
+/// this ordering in one helper makes model-on and model-off runs share the
+/// same no-overlap contract (#1257).
+fn start_initial_proof_after_late_sensors(
+    late_phase: Option<LateSensorPhase>,
+    event_log: &EventLog,
+    run_started: &Instant,
+) -> Result<(ActiveRunLoop, Option<RunLoopPhase>)> {
+    let late_sensor_phase = late_phase
+        .map(|phase| phase.join_phase(event_log, run_started))
+        .transpose()?;
+    let proof_loop = start_run_loop(
+        event_log,
+        run_started,
+        "proof",
+        "proof",
+        "initial-diff-broker",
+    )?;
+    Ok((proof_loop, late_sensor_phase))
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
@@ -4441,19 +4463,28 @@ fn write_review_artifacts(
     let mut issue_candidates: Vec<IssueCandidate> = Vec::new();
     let mut model_calls_used = 0usize;
     let seeded_proof_requests = proof_requests.clone();
+    let late_sensor_ids: Vec<String> = late_phase
+        .as_ref()
+        .map(|phase| phase.sensor_ids.clone())
+        .unwrap_or_default();
+    let mut late_phase = late_phase;
 
     let mut proof_result = ProofBrokerResult::default();
     if matches!(args.model_mode, ModelMode::Auto) {
-        let initial_proof_loop = start_run_loop(
-            event_log,
-            run_started,
-            "proof",
-            "proof",
-            "initial-diff-broker",
-        )?;
+        // The late sensor owner and proof brokers both run Cargo against the
+        // checkout's shared target directory. Let late sensors keep
+        // overlapping the model wave, but make the proof thread wait for that
+        // owner before it starts any proof command (#1257).
+        let proof_late_phase = late_phase.take();
         thread::scope(|scope| -> Result<()> {
             let proof_handle = scope.spawn(move || {
-                run_seeded_proof_stream_v0(
+                let (initial_proof_loop, late_sensor_phase) =
+                    start_initial_proof_after_late_sensors(
+                        proof_late_phase,
+                        event_log,
+                        run_started,
+                    )?;
+                let (result, proof_phases) = run_seeded_proof_stream_v0(
                     root,
                     out,
                     diff,
@@ -4465,7 +4496,8 @@ fn write_review_artifacts(
                     run_started,
                     box_state,
                     impact_plan_ref,
-                )
+                )?;
+                Ok::<_, anyhow::Error>((result, proof_phases, late_sensor_phase))
             });
 
             let model_loop =
@@ -4635,9 +4667,12 @@ fn write_review_artifacts(
                 "completed",
             )?;
 
-            let (seeded_result, proof_phases) = proof_handle
+            let (seeded_result, proof_phases, late_sensor_phase) = proof_handle
                 .join()
                 .map_err(|_| anyhow::anyhow!("seeded proof stream thread panicked"))??;
+            if let Some(phase) = late_sensor_phase {
+                run_loop_tracker.record(phase);
+            }
             for phase in proof_phases {
                 run_loop_tracker.record(phase);
             }
@@ -4654,13 +4689,11 @@ fn write_review_artifacts(
             model_loop,
             "skipped_model_mode_off",
         )?;
-        let initial_proof_loop = start_run_loop(
-            event_log,
-            run_started,
-            "proof",
-            "proof",
-            "initial-diff-broker",
-        )?;
+        let (initial_proof_loop, late_sensor_phase) =
+            start_initial_proof_after_late_sensors(late_phase.take(), event_log, run_started)?;
+        if let Some(phase) = late_sensor_phase {
+            run_loop_tracker.record(phase);
+        }
         proof_result = run_initial_diff_proof_broker_v0(
             root,
             out,
@@ -4686,10 +4719,6 @@ fn write_review_artifacts(
     // collection, both review compiles, and the gate. A late sensor that
     // failed or never wrote a receipt surfaces as missing evidence through
     // the same collectors as before — never as clean evidence.
-    let late_sensor_ids: Vec<String> = late_phase
-        .as_ref()
-        .map(|phase| phase.sensor_ids.clone())
-        .unwrap_or_default();
     if let Some(phase) = late_phase {
         phase.join(event_log, run_started, run_loop_tracker)?;
     }
@@ -15252,7 +15281,7 @@ required_proof_unprooven = true
     }
 
     #[test]
-    fn pipelined_late_sensor_phase_joins_before_gate_and_stays_missing_evidence() -> Result<()> {
+    fn pipelined_late_sensor_phase_joins_before_proof_and_stays_missing_evidence() -> Result<()> {
         // #325 end-to-end: a late-phase required sensor runs behind the model
         // wave; its receipt must land before the gate evaluates, and a late
         // sensor that could not run stays missing evidence — never clean.
@@ -15333,6 +15362,16 @@ required_proof_unprooven = true
         assert!(events.contains("late_sensor_phase_started"));
         assert!(events.contains("late_sensor_phase_joined"));
         assert!(events.contains("late-sensors"));
+        let late_joined = events
+            .find("\"kind\":\"late_sensor_phase_joined\"")
+            .ok_or_else(|| anyhow::anyhow!("late sensor join event missing"))?;
+        let proof_started = events
+            .find("\"kind\":\"proof_loop_started\"")
+            .ok_or_else(|| anyhow::anyhow!("initial proof start event missing"))?;
+        assert!(
+            late_joined < proof_started,
+            "proof commands must wait for the shared Cargo-target sensor owner: {events}"
+        );
         assert!(out.join("tool-status.json").is_file());
         Ok(())
     }

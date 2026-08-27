@@ -32,29 +32,32 @@ pub(crate) fn run_sensor_pool(
     sensors: VecDeque<SensorPlan>,
     event_log: &EventLog,
 ) -> Result<()> {
-    let queue = Arc::new(Mutex::new(sensors));
     let failures = Arc::new(Mutex::new(Vec::<String>::new()));
 
     thread::scope(|scope| {
-        for _ in 0..jobs {
+        if jobs == 1 {
+            let queue = Mutex::new(sensors);
+            let failures = Arc::clone(&failures);
+            scope.spawn(move || drain_sensor_queue(root, out, plan, &queue, event_log, &failures));
+            return;
+        }
+
+        let (cargo_queue, parallel_queue) = partition_sensor_queues(sensors);
+        let cargo_worker_count = usize::from(jobs > 0 && !cargo_queue.is_empty());
+        if cargo_worker_count == 1 {
+            let queue = Mutex::new(cargo_queue);
+            let failures = Arc::clone(&failures);
+            scope.spawn(move || drain_sensor_queue(root, out, plan, &queue, event_log, &failures));
+        }
+
+        let parallel_worker_count = jobs
+            .saturating_sub(cargo_worker_count)
+            .min(parallel_queue.len());
+        let queue = Arc::new(Mutex::new(parallel_queue));
+        for _ in 0..parallel_worker_count {
             let queue = Arc::clone(&queue);
             let failures = Arc::clone(&failures);
-            scope.spawn(move || {
-                loop {
-                    let sensor = match queue.lock() {
-                        Ok(mut queue) => queue.pop_front(),
-                        Err(_) => None,
-                    };
-                    let Some(sensor) = sensor else {
-                        break;
-                    };
-                    if let Err(err) = run_sensor(root, out, &sensor, event_log, plan)
-                        && let Ok(mut failures) = failures.lock()
-                    {
-                        failures.push(format!("{}: {err:#}", sensor.id));
-                    }
-                }
-            });
+            scope.spawn(move || drain_sensor_queue(root, out, plan, &queue, event_log, &failures));
         }
     });
 
@@ -68,6 +71,66 @@ pub(crate) fn run_sensor_pool(
         )?;
     }
     Ok(())
+}
+
+/// Drain one sensor queue. A queue has one owner for shared Cargo-target work
+/// and up to the remaining profile worker budget for independent commands.
+fn drain_sensor_queue(
+    root: &Path,
+    out: &Path,
+    plan: &Plan,
+    queue: &Mutex<VecDeque<SensorPlan>>,
+    event_log: &EventLog,
+    failures: &Mutex<Vec<String>>,
+) {
+    loop {
+        let sensor = match queue.lock() {
+            Ok(mut queue) => queue.pop_front(),
+            Err(_) => None,
+        };
+        let Some(sensor) = sensor else {
+            break;
+        };
+        if let Err(err) = run_sensor(root, out, &sensor, event_log, plan)
+            && let Ok(mut failures) = failures.lock()
+        {
+            failures.push(format!("{}: {err:#}", sensor.id));
+        }
+    }
+}
+
+/// Keep every Cargo invocation that shares the checkout target directory on
+/// one ordered worker. Cargo's artifact lock protects compilation, but it can
+/// be released while a test binary is still executing; a concurrent Clippy or
+/// doc build may then relink that binary and trigger Linux `ETXTBSY` (#1257).
+fn partition_sensor_queues(
+    sensors: VecDeque<SensorPlan>,
+) -> (VecDeque<SensorPlan>, VecDeque<SensorPlan>) {
+    sensors
+        .into_iter()
+        .partition(sensor_uses_shared_cargo_target)
+}
+
+fn sensor_uses_shared_cargo_target(sensor: &SensorPlan) -> bool {
+    if matches!(
+        sensor.id.as_str(),
+        "cargo-fmt"
+            | "cargo-check"
+            | "cargo-test"
+            | "cargo-clippy"
+            | "cargo-doc"
+            | "coverage"
+            | "cargo-audit"
+            | "cargo-deny"
+    ) {
+        return true;
+    }
+    let executable = sensor
+        .command
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(sensor.command.as_str());
+    executable.eq_ignore_ascii_case("cargo") || executable.eq_ignore_ascii_case("cargo.exe")
 }
 
 /// Handle for the late evidence phase (#325): heavy sensors (test, build,
@@ -91,7 +154,8 @@ pub(crate) fn spawn_late_sensor_phase(
     run_started: &Instant,
     sensors: Vec<SensorPlan>,
 ) -> Result<LateSensorPhase> {
-    let jobs = sensor_job_count(profile, sensors.len())?;
+    let job_budget = sensor_job_count(profile, sensors.len())?;
+    let jobs = sensor_pool_worker_count(job_budget, &sensors);
     let sensor_ids: Vec<String> = sensors.iter().map(|sensor| sensor.id.clone()).collect();
     let run_loop = start_run_loop(
         event_log,
@@ -139,6 +203,18 @@ impl LateSensorPhase {
         run_started: &Instant,
         tracker: &mut RunLoopTracker,
     ) -> Result<()> {
+        let phase = self.join_phase(event_log, run_started)?;
+        tracker.record(phase);
+        Ok(())
+    }
+
+    /// Join the late sensor owner and return its scheduler phase for a caller
+    /// that must wait on another thread before recording shared run state.
+    pub(crate) fn join_phase(
+        self,
+        event_log: &EventLog,
+        run_started: &Instant,
+    ) -> Result<RunLoopPhase> {
         let joined = self.handle.join();
         let status = match &joined {
             Ok(Ok(())) => "completed",
@@ -149,9 +225,12 @@ impl LateSensorPhase {
             "late_sensor_phase_joined",
             serde_json::json!({"sensors": self.sensor_ids, "status": status}),
         )?;
-        finish_run_loop(event_log, run_started, tracker, self.run_loop, status)?;
+        let phase = finish_run_loop_phase(event_log, run_started, self.run_loop, status)?;
         match joined {
-            Ok(result) => result,
+            Ok(result) => {
+                result?;
+                Ok(phase)
+            }
             Err(_) => Err(anyhow::anyhow!("late sensor phase thread panicked")),
         }
     }
@@ -165,6 +244,19 @@ pub(crate) fn sensor_job_count(profile: &Profile, runnable_len: usize) -> Result
         );
     }
     Ok(profile.limits.sensor_jobs.min(runnable_len))
+}
+
+fn sensor_pool_worker_count(job_budget: usize, sensors: &[SensorPlan]) -> usize {
+    let cargo_worker_count =
+        usize::from(job_budget > 0 && sensors.iter().any(sensor_uses_shared_cargo_target));
+    let parallel_sensor_count = sensors
+        .iter()
+        .filter(|sensor| !sensor_uses_shared_cargo_target(sensor))
+        .count();
+    cargo_worker_count
+        + job_budget
+            .saturating_sub(cargo_worker_count)
+            .min(parallel_sensor_count)
 }
 
 fn classify_sensor_command_result(
@@ -709,10 +801,61 @@ pub(crate) fn display_command(argv: &[String]) -> String {
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use anyhow::{Context as _, Result};
+    use anyhow::{Context as _, Result, ensure};
 
+    use super::{partition_sensor_queues, sensor_pool_worker_count};
     use crate::tests::{run_test_command, sensor_plan, sleeper_argv, test_diff, test_plan};
     use crate::*;
+
+    #[test]
+    fn sensor_pool_routes_shared_cargo_targets_to_one_ordered_queue() -> Result<()> {
+        let sensors = VecDeque::from([
+            sensor_plan("cargo-check", "cargo", true),
+            sensor_plan("ripr", "ripr", true),
+            sensor_plan("cargo-test", "custom-wrapper", true),
+            sensor_plan("cargo-allow", "cargo-allow", true),
+            sensor_plan("cargo-clippy", "C:\\Rust\\bin\\cargo.exe", true),
+            sensor_plan("custom-cargo", "/opt/rust/bin/cargo", true),
+        ]);
+
+        let (cargo, parallel) = partition_sensor_queues(sensors);
+        let cargo_ids = cargo
+            .iter()
+            .map(|sensor| sensor.id.as_str())
+            .collect::<Vec<_>>();
+        let parallel_ids = parallel
+            .iter()
+            .map(|sensor| sensor.id.as_str())
+            .collect::<Vec<_>>();
+
+        ensure!(
+            cargo_ids == ["cargo-check", "cargo-test", "cargo-clippy", "custom-cargo"],
+            "shared Cargo-target sensor order changed: {cargo_ids:?}"
+        );
+        ensure!(
+            parallel_ids == ["ripr", "cargo-allow"],
+            "independent sensor queue changed: {parallel_ids:?}"
+        );
+        let cargo_only = cargo.iter().cloned().collect::<Vec<_>>();
+        ensure!(
+            sensor_pool_worker_count(5, &cargo_only) == 1,
+            "shared Cargo-target work must have exactly one owner"
+        );
+        let all = cargo.into_iter().chain(parallel).collect::<Vec<_>>();
+        ensure!(
+            sensor_pool_worker_count(5, &all) == 3,
+            "one Cargo owner plus two independent workers should use three workers"
+        );
+        ensure!(
+            sensor_pool_worker_count(1, &all) == 1,
+            "the selected profile worker ceiling must remain authoritative"
+        );
+        ensure!(
+            sensor_pool_worker_count(0, &all) == 0,
+            "a zero worker budget must not admit a Cargo owner"
+        );
+        Ok(())
+    }
 
     /// Subprocess budget for fixtures whose fake sensor command is a real
     /// spawned process. These tests assert receipt content, never latency, so
