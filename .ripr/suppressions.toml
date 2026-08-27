@@ -31384,3 +31384,9 @@ kind = "exposure_gap"
 finding_id = "probe:src_task_ledger_artifact.rs:return_value:88a67cbf"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 cfg(test) and fallible-helper attribution false-negative (ripr-swarm#1054/#1055). Four co-located fallible Rust tests plus the Python verifier self-test pin cross-language golden bytes and success/failure branches for replay, digest/order/revision binding, strict schemas, terminal release, receipt paths, consumers, and forged snapshots. Re-verify after semantic edits to task-ledger artifacts."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:call_deletion:0831b524"
+owner = "ub-review/core"
+reason = "A2.3 control-character hardening (#954): malformed_deserialized_values_fail_at_reducer_boundary rejects C0/C1 controls in task ids, consumer ids, and terminal reasons and proves reducer atomicity; the mirrored Python self-test pins the same wire boundary. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger string-validation edits."

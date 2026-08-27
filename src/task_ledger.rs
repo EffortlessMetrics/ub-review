@@ -704,6 +704,10 @@ fn non_empty(value: &str, field: &str) -> Result<String> {
         !trimmed.is_empty(),
         "[missing_strong_binding] {field} must be non-empty"
     );
+    ensure!(
+        !trimmed.chars().any(char::is_control),
+        "[missing_strong_binding] {field} must not contain control characters"
+    );
     Ok(trimmed.to_owned())
 }
 
@@ -1320,6 +1324,15 @@ mod tests {
         let forged_id: TaskId = serde_json::from_str(r#"" ""#)?;
         let forged_padded_id: TaskId = serde_json::from_str(r#"" task-1 ""#)?;
         let valid_id = TaskId::parse("task-1")?;
+        ensure!(TaskId::parse("task-1\u{1c}").is_err());
+        ensure!(
+            TaskConsumer::parse(
+                "review\u{1c}",
+                TaskRequirement::Required,
+                TaskValueClass::GateCritical,
+            )
+            .is_err()
+        );
         let zero_limits: TaskExecutionLimits = serde_json::from_str(r#"{"timeout_ceiling_ms":0}"#)?;
         let proposal = TaskEvent::Proposed {
             revision: revision.clone(),
@@ -1336,9 +1349,24 @@ mod tests {
         ensure!(reducer.apply(&valid_id, &proposal, &revision).is_err());
 
         reducer.apply(&valid_id, &proposed(&revision, 10_000)?, &revision)?;
+        let before = reducer.snapshot().cloned();
+        ensure!(
+            reducer
+                .apply(
+                    &valid_id,
+                    &TaskEvent::TerminallyDeclined {
+                        at: MonotonicInstant::from_millis(1),
+                        disposition: TaskNonExecutionDisposition::Refused,
+                        reason: "policy\u{1c}".to_owned(),
+                        existing_receipt: None,
+                    },
+                    &revision,
+                )
+                .is_err()
+        );
+        ensure!(reducer.snapshot().cloned() == before);
         let forged_consumer: TaskConsumer =
             serde_json::from_str(r#"{"id":" ","requirement":"Required","value":"GateCritical"}"#)?;
-        let before = reducer.snapshot().cloned();
         ensure!(
             reducer
                 .apply(

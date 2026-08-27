@@ -2079,7 +2079,12 @@ def _task_ledger_revision(value, label: str) -> dict:
 
 
 def _task_ledger_nonempty(value, label: str) -> str:
-    if not isinstance(value, str) or not value or value.strip() != value:
+    if (
+        not isinstance(value, str)
+        or not value
+        or value.strip() != value
+        or any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in value)
+    ):
         fail(f"[missing_strong_binding] {label} must be canonical and non-empty")
     return value
 
@@ -2096,7 +2101,9 @@ def _task_ledger_u64(value, label: str) -> int:
 
 
 def _task_ledger_receipt_reference(value) -> str:
-    reference = _task_ledger_nonempty(value, "receipt reference")
+    if not isinstance(value, str) or not value or value.strip() != value:
+        fail("[missing_strong_binding] receipt reference must be canonical and non-empty")
+    reference = value
     if (
         "\\" in reference
         or ":" in reference
@@ -16116,6 +16123,18 @@ def self_test_task_ledger_contract() -> None:
             {"ReceiptCreationFailed": {"at": 45, "reason": " disk full "}}
         ),
     )
+    for label, value in (
+        ("task id", "proof\u001ctask"),
+        ("task consumer", "gate\u001c"),
+        ("terminal reason", "policy\u001f"),
+    ):
+        expect_self_test_failure(
+            f"task-ledger control character in {label}",
+            "[missing_strong_binding]",
+            lambda current=value, current_label=label: _task_ledger_nonempty(
+                current, current_label
+            ),
+        )
     expect_self_test_failure(
         "task-ledger nested source addition",
         "[unsupported_schema]",
