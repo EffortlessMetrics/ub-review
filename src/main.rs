@@ -3693,6 +3693,9 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
                 "trusted-base diff admission does not allow --allow-heavy; candidate proof execution is outside this admission seam"
             );
         }
+        // Prior receipts are review context, not part of the four admitted
+        // objects. Ignore even an explicitly supplied path in this mode.
+        args.prior_resolved_candidates.clear();
     }
     let run_pass = resolved_run_pass(args.run_pass);
     let (mut config, diff, box_state, plan, revision) =
@@ -3794,7 +3797,13 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
             }
         }
     }
-    let pr_thread_context = collect_pr_thread_context(&args.review.root, &args, &diff.head)?;
+    // Trusted admission is intentionally context-free: do not read the
+    // GitHub event, caller-provided thread files, or credentialed API state.
+    let pr_thread_context = if trusted_diff.is_some() {
+        absent_pr_thread_context(args.pr_thread_context_max_bytes)
+    } else {
+        collect_pr_thread_context(&args.review.root, &args, &diff.head)?
+    };
 
     write_lane_packets(
         &args.review.out,

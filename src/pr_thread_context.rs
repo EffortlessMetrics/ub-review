@@ -3,15 +3,13 @@
 
 use crate::*;
 
-pub(crate) fn collect_pr_thread_context(
-    root: &Path,
-    args: &RunArgs,
-    current_head: &str,
-) -> Result<PrThreadContext> {
-    let mut context = PrThreadContext {
+/// Constructs an explicit no-context receipt without reading event files,
+/// configured context files, or GitHub API state.
+pub(crate) fn absent_pr_thread_context(max_bytes: usize) -> PrThreadContext {
+    PrThreadContext {
         schema: PR_THREAD_CONTEXT_SCHEMA.to_owned(),
         status: "absent".to_owned(),
-        max_bytes: args.pr_thread_context_max_bytes,
+        max_bytes,
         sources: Vec::new(),
         warnings: Vec::new(),
         pull_number: None,
@@ -22,7 +20,15 @@ pub(crate) fn collect_pr_thread_context(
         thread_context: None,
         thread_context_truncated: false,
         threads: Vec::new(),
-    };
+    }
+}
+
+pub(crate) fn collect_pr_thread_context(
+    root: &Path,
+    args: &RunArgs,
+    current_head: &str,
+) -> Result<PrThreadContext> {
+    let mut context = absent_pr_thread_context(args.pr_thread_context_max_bytes);
 
     if let Some(event_path) = std::env::var_os("GITHUB_EVENT_PATH") {
         let event_path = PathBuf::from(event_path);

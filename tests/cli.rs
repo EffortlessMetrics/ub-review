@@ -80,13 +80,24 @@ fn action_forwards_complete_trusted_diff_admission_inputs() -> Result<()> {
         "trusted-diff-patch",
     ] {
         assert!(action.contains(&format!("  {input}:")), "missing {input}");
+        let env_name = input.replace('-', "_").to_ascii_uppercase();
         assert!(
-            action.contains(&format!("--{input} \"${{{{ inputs['{input}'] }}}}\"")),
-            "action does not forward {input}"
+            action.contains(&format!(
+                "UB_REVIEW_{env_name}: ${{{{ inputs['{input}'] }}}}"
+            )),
+            "action does not bind {input} through the step environment"
+        );
+        assert!(
+            action.contains(&format!("--{input} \"$UB_REVIEW_{env_name}\"")),
+            "action does not forward {input} from its environment binding"
+        );
+        assert!(
+            !action.contains(&format!("--{input} \"${{{{ inputs['{input}'] }}}}\"")),
+            "action must not interpolate {input} directly into shell source"
         );
     }
     let trusted_block = action
-        .split_once("if [[ -n \"${{ inputs['trusted-base-tree'] }}\" ]]")
+        .split_once("if [[ -n \"$UB_REVIEW_TRUSTED_BASE_TREE\" ]]")
         .map(|(_, suffix)| suffix)
         .ok_or_else(|| anyhow::anyhow!("trusted-base action block is missing"))?;
     assert!(
@@ -95,6 +106,10 @@ fn action_forwards_complete_trusted_diff_admission_inputs() -> Result<()> {
             .take(6)
             .any(|line| line.contains("extra+=(--dry-run)")),
         "trusted-base action block must force dry-run packet construction"
+    );
+    assert!(
+        action
+            .contains("id: prior_resolved_candidates\n      if: inputs['trusted-base-tree'] == ''")
     );
     Ok(())
 }

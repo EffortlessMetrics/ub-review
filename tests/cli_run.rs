@@ -64,6 +64,8 @@ fn trusted_diff_run_uses_base_root_and_explicit_objects() -> Result<()> {
     run(&repo, "git", &["reset", "--hard", "HEAD"])?;
 
     let out = temp.path().join("packet");
+    let hostile_thread = temp.path().join("hostile-thread.md");
+    write_file(&hostile_thread, "candidate thread context must not load\n")?;
     let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
     let bin = env!("CARGO_BIN_EXE_ub-review");
     let head_sha = "f".repeat(40);
@@ -87,6 +89,14 @@ fn trusted_diff_run_uses_base_root_and_explicit_objects() -> Result<()> {
         "--model-mode",
         "off",
         "--no-github-summary",
+        "--pr-thread-context",
+        path_str(&hostile_thread)?,
+        "--github-token",
+        "trusted-mode-must-not-use-this-token",
+        "--github-repo",
+        "example/repo",
+        "--github-pull-number",
+        "1",
     ];
     run(temp.path(), bin, &args)?;
     let mut sensor_args = args.to_vec();
@@ -129,6 +139,11 @@ fn trusted_diff_run_uses_base_root_and_explicit_objects() -> Result<()> {
         serde_json::json!([".ub-review.toml", "scripts/reviewer.sh", "src/lib.rs"])
     );
     assert_eq!(admission["reviewed_commit_oid"], "f".repeat(40));
+    let thread_context: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/pr_thread_context.json"))?)?;
+    assert_eq!(thread_context["status"], "absent");
+    assert_eq!(thread_context["sources"], serde_json::json!([]));
+    assert_eq!(thread_context["thread_context"], serde_json::Value::Null);
     assert_eq!(
         fs::read_to_string(repo.join(".ub-review.toml"))?,
         "review_profile = \"safe\"\n"

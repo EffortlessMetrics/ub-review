@@ -790,6 +790,52 @@ mod tests {
     }
 
     #[test]
+    fn trusted_diff_rejects_invalid_identity_and_input_objects() -> Result<()> {
+        let repo = init_repo()?;
+        let fixture = trusted_fixture(&repo)?;
+
+        let mut invalid_head = fixture.inputs();
+        invalid_head.head_sha = "not-a-sha".to_owned();
+        invalid_head.pr_head_sha = None;
+        let Err(error) = admit_trusted_diff(repo.root(), &invalid_head) else {
+            bail!("invalid trusted head SHA must fail admission");
+        };
+        assert!(
+            error.to_string().contains("malformed git object id"),
+            "{error}"
+        );
+
+        let mut mismatched_pr_head = fixture.inputs();
+        mismatched_pr_head.pr_head_sha = Some("e".repeat(40));
+        let Err(error) = admit_trusted_diff(repo.root(), &mismatched_pr_head) else {
+            bail!("mismatched pull-request head must fail admission");
+        };
+        assert!(error.to_string().contains("does not match"), "{error}");
+
+        let mut missing_changed_files = fixture.inputs();
+        missing_changed_files.changed_files = repo.root().join("missing-changed-files.txt");
+        let Err(error) = admit_trusted_diff(repo.root(), &missing_changed_files) else {
+            bail!("missing changed-path object must fail admission");
+        };
+        assert!(format!("{error:#}").contains("open trusted changed-path object"));
+
+        let original_changed_files = fs::read(fixture.changed_files.path())?;
+        fs::write(fixture.changed_files.path(), "src/a.rs\nsrc/a.rs\n")?;
+        let Err(error) = admit_trusted_diff(repo.root(), &fixture.inputs()) else {
+            bail!("duplicate changed paths must fail admission");
+        };
+        assert!(error.to_string().contains("duplicate-free"), "{error}");
+
+        fs::write(fixture.changed_files.path(), original_changed_files)?;
+        fs::write(fixture.diff_patch.path(), [])?;
+        let Err(error) = admit_trusted_diff(repo.root(), &fixture.inputs()) else {
+            bail!("empty diff patch must fail admission");
+        };
+        assert!(error.to_string().contains("must not be empty"), "{error}");
+        Ok(())
+    }
+
+    #[test]
     fn trusted_input_reader_rejects_oversize_and_non_utf8_objects() -> Result<()> {
         let mut input = tempfile::NamedTempFile::new()?;
         std::io::Write::write_all(&mut input, b"12345")?;

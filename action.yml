@@ -574,6 +574,7 @@ runs:
 
     - name: Resolve prior resolved candidates
       id: prior_resolved_candidates
+      if: inputs['trusted-base-tree'] == ''
       shell: bash
       env:
         GH_TOKEN: ${{ inputs['github-token'] }}
@@ -678,10 +679,15 @@ runs:
         UB_REVIEW_OPENCODE_API_URL: ${{ inputs['opencode-api-url'] }}
         UB_REVIEW_GITHUB_EVENT_ACTION: ${{ github.event.action }}
         UB_REVIEW_PR_HEAD_SHA: ${{ inputs['pr-head-sha'] }}
+        UB_REVIEW_ACTION_GITHUB_TOKEN: ${{ inputs['github-token'] }}
+        UB_REVIEW_TRUSTED_BASE_TREE: ${{ inputs['trusted-base-tree'] }}
+        UB_REVIEW_TRUSTED_HEAD_SHA: ${{ inputs['trusted-head-sha'] }}
+        UB_REVIEW_TRUSTED_CHANGED_FILES: ${{ inputs['trusted-changed-files'] }}
+        UB_REVIEW_TRUSTED_DIFF_PATCH: ${{ inputs['trusted-diff-patch'] }}
       run: |
         set -euo pipefail
         extra=()
-        pr_thread_auth="${{ inputs['github-token'] }}"
+        pr_thread_auth="$UB_REVIEW_ACTION_GITHUB_TOKEN"
         if [[ -n "$pr_thread_auth" ]]; then
           extra+=(--github-token "$pr_thread_auth")
         fi
@@ -698,20 +704,20 @@ runs:
         if [[ -n "${{ inputs['review-mode'] }}" ]]; then
           extra+=(--review-mode "${{ inputs['review-mode'] }}")
         fi
-        if [[ -n "${{ inputs['trusted-base-tree'] }}" ]]; then
-          extra+=(--trusted-base-tree "${{ inputs['trusted-base-tree'] }}")
+        if [[ -n "$UB_REVIEW_TRUSTED_BASE_TREE" ]]; then
+          extra+=(--trusted-base-tree "$UB_REVIEW_TRUSTED_BASE_TREE")
           # Explicit admission constructs a packet from the validated diff.
           # It must not run sensors against the base-owned checkout.
           extra+=(--dry-run)
         fi
-        if [[ -n "${{ inputs['trusted-head-sha'] }}" ]]; then
-          extra+=(--trusted-head-sha "${{ inputs['trusted-head-sha'] }}")
+        if [[ -n "$UB_REVIEW_TRUSTED_HEAD_SHA" ]]; then
+          extra+=(--trusted-head-sha "$UB_REVIEW_TRUSTED_HEAD_SHA")
         fi
-        if [[ -n "${{ inputs['trusted-changed-files'] }}" ]]; then
-          extra+=(--trusted-changed-files "${{ inputs['trusted-changed-files'] }}")
+        if [[ -n "$UB_REVIEW_TRUSTED_CHANGED_FILES" ]]; then
+          extra+=(--trusted-changed-files "$UB_REVIEW_TRUSTED_CHANGED_FILES")
         fi
-        if [[ -n "${{ inputs['trusted-diff-patch'] }}" ]]; then
-          extra+=(--trusted-diff-patch "${{ inputs['trusted-diff-patch'] }}")
+        if [[ -n "$UB_REVIEW_TRUSTED_DIFF_PATCH" ]]; then
+          extra+=(--trusted-diff-patch "$UB_REVIEW_TRUSTED_DIFF_PATCH")
         fi
 
         config_path="${{ inputs.config }}"
