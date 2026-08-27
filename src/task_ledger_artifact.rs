@@ -179,7 +179,11 @@ fn replay_event_stream(
             !line.is_empty(),
             "[truncated_event_stream] event stream contains an empty record"
         );
-        let record: TaskLedgerEventRecord = serde_json::from_str(line).with_context(|| {
+        let raw: serde_json::Value = serde_json::from_str(line).with_context(|| {
+            format!("[unsupported_schema] event record {index} is not strict v1 JSON")
+        })?;
+        validate_strict_revision_objects(&raw, index)?;
+        let record: TaskLedgerEventRecord = serde_json::from_value(raw).with_context(|| {
             format!("[unsupported_schema] event record {index} is not strict v1 JSON")
         })?;
         let expected_sequence =
@@ -216,6 +220,11 @@ fn replay_event_stream(
         ensure!(
             record.digest == expected_digest,
             "[source_digest_mismatch] event {} digest is invalid",
+            record.sequence
+        );
+        ensure!(
+            line.as_bytes() == serde_json::to_vec(&record)?,
+            "[source_digest_mismatch] event {} bytes are not canonical",
             record.sequence
         );
         validate_receipt_references(&record.event)?;
@@ -266,6 +275,41 @@ fn replay_event_stream(
         source_digest: domain_digest(STREAM_DIGEST_DOMAIN, bytes),
         tasks,
     })
+}
+
+/// Keep v1 revision strictness local to this wire format. Other artifact
+/// readers deliberately retain their additive-field compatibility.
+fn validate_strict_revision_objects(value: &serde_json::Value, index: usize) -> Result<()> {
+    let record = value.as_object().ok_or_else(|| {
+        anyhow::anyhow!("[unsupported_schema] event record {index} must be an object")
+    })?;
+    validate_strict_revision_object(record.get("revision"), "event envelope")?;
+    if let Some(proposal_revision) = record
+        .get("event")
+        .and_then(serde_json::Value::as_object)
+        .and_then(|event| event.get("Proposed"))
+        .and_then(serde_json::Value::as_object)
+        .and_then(|proposal| proposal.get("revision"))
+    {
+        validate_strict_revision_object(Some(proposal_revision), "proposal")?;
+    }
+    Ok(())
+}
+
+fn validate_strict_revision_object(value: Option<&serde_json::Value>, label: &str) -> Result<()> {
+    let object = value
+        .and_then(serde_json::Value::as_object)
+        .ok_or_else(|| {
+            anyhow::anyhow!("[unsupported_schema] {label} revision must be an object")
+        })?;
+    ensure!(
+        object.len() == 3
+            && object.contains_key("digest")
+            && object.contains_key("semantics")
+            && object.contains_key("reviewed_commit"),
+        "[unsupported_schema] {label} revision fields are not strict v1"
+    );
+    Ok(())
 }
 
 fn validate_receipt_references(event: &TaskEvent) -> Result<()> {
@@ -500,6 +544,21 @@ mod tests {
             "[source_digest_mismatch]",
         )?;
 
+        let first_line_end = valid
+            .events_ndjson
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .ok_or_else(|| anyhow::anyhow!("fixture contains no NDJSON line"))?;
+        let noncanonical_line = String::from_utf8(valid.events_ndjson[..first_line_end].to_vec())?
+            .replacen("\"schema\":", "\"schema\" :", 1);
+        let mut noncanonical = noncanonical_line.into_bytes();
+        noncanonical.push(b'\n');
+        noncanonical.extend_from_slice(&valid.events_ndjson[first_line_end + 1..]);
+        error_contains(
+            verify_task_ledger_artifacts(&noncanonical, &valid.snapshot_json, &revision),
+            "[source_digest_mismatch]",
+        )?;
+
         let lines: Vec<&[u8]> = valid
             .events_ndjson
             .split_inclusive(|byte| *byte == b'\n')
@@ -596,6 +655,13 @@ mod tests {
             verify_task_ledger_artifacts(&nested_unknown, &valid.snapshot_json, &admitted),
             "[unsupported_schema]",
         )?;
+
+        let additive_revision: RevisionRef = serde_json::from_str(&format!(
+            r#"{{"digest":"{}","semantics":"candidate_head","reviewed_commit":"{}","future":true}}"#,
+            "a".repeat(64),
+            "a".repeat(40)
+        ))?;
+        ensure!(additive_revision == admitted);
         Ok(())
     }
 
