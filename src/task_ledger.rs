@@ -548,7 +548,7 @@ fn apply_payload(snapshot: &mut TaskSnapshot, event: &TaskEvent) -> Result<()> {
         TaskEvent::SetupFailed { at } => {
             snapshot.timing.setup_ms = match snapshot.timing.setup_started_at {
                 Some(started) => duration(Some(started), *at, "setup")?,
-                None => Some(0),
+                None => None,
             };
             snapshot.execution_disposition = Some(TaskTerminalDisposition::SetupFailed);
         }
@@ -574,12 +574,25 @@ fn apply_payload(snapshot: &mut TaskSnapshot, event: &TaskEvent) -> Result<()> {
             snapshot.timing.resources_released_at = Some(*at);
         }
         TaskEvent::TerminallyDeclined {
+            at,
             disposition,
             reason,
             existing_receipt,
-            ..
         } => {
             let reason = non_empty(reason, "terminal reason")?;
+            match snapshot.state {
+                TaskState::Queued => {
+                    snapshot.timing.queue_ms = duration(snapshot.timing.queued_at, *at, "queue")?;
+                }
+                TaskState::ResourceWait => {
+                    snapshot.timing.resource_wait_ms = duration(
+                        snapshot.timing.resource_wait_started_at,
+                        *at,
+                        "resource wait",
+                    )?;
+                }
+                _ => {}
+            }
             match disposition {
                 TaskNonExecutionDisposition::SatisfiedByExistingReceipt => ensure!(
                     existing_receipt
@@ -890,13 +903,6 @@ mod tests {
         )?;
         reducer.apply(
             &id,
-            &TaskEvent::SetupStarted {
-                at: MonotonicInstant::from_millis(25),
-            },
-            &revision,
-        )?;
-        reducer.apply(
-            &id,
             &TaskEvent::SetupFailed {
                 at: MonotonicInstant::from_millis(30),
             },
@@ -920,6 +926,8 @@ mod tests {
         let snapshot = reducer
             .snapshot()
             .ok_or_else(|| anyhow::anyhow!("snapshot"))?;
+        ensure!(snapshot.timing.setup_started_at.is_none());
+        ensure!(snapshot.timing.setup_ms.is_none());
         ensure!(snapshot.timing.process_ms.is_none());
         ensure!(matches!(
             snapshot.receipt,
@@ -942,6 +950,16 @@ mod tests {
             TaskNonExecutionDisposition::SatisfiedByExistingReceipt,
         ] {
             let (mut reducer, id, revision) = reducer_at_queue()?;
+            let waited = disposition == TaskNonExecutionDisposition::LatestSafeStartDeferred;
+            if waited {
+                reducer.apply(
+                    &id,
+                    &TaskEvent::EnteredResourceWait {
+                        at: MonotonicInstant::from_millis(15),
+                    },
+                    &revision,
+                )?;
+            }
             let existing_receipt = (disposition
                 == TaskNonExecutionDisposition::SatisfiedByExistingReceipt)
                 .then(|| "receipts/prior.json".to_owned());
@@ -963,6 +981,8 @@ mod tests {
                 snapshot.timing.process_started_at.is_none()
                     && snapshot.timing.process_ms.is_none()
             );
+            ensure!(snapshot.timing.queue_ms == Some(if waited { 5 } else { 10 }));
+            ensure!(snapshot.timing.resource_wait_ms == waited.then_some(5));
             ensure!(snapshot.receipt.is_none() && snapshot.reservations.is_empty());
             ensure!(!snapshot.resources_released);
         }

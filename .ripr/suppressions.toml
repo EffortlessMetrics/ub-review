@@ -26668,250 +26668,93 @@ owner = "ub-review/core"
 reason = "A1.4 enforcement slice (#951): the prior-resolution machinery carries behavioral oracles - stale_prior_resolutions_cannot_satisfy_the_current_revision pins exact-join reuse, stale rejection with the stale_revision token and dual-digest evidence, and legacy-unstamped rejection, while the Python verifier self-tests pin forged/stale/unbound/semantics tokens on the same contract. RIPR's Linux-side discriminator marks these sites observation_unverified while Windows classifies identical committed content as strongly exposed (platform divergence tracked as ripr-swarm#3469 / ub-review#1247). Re-verify on edits to src/issue_broker.rs; these are enforcement-path probes for the A1.4 boundary."
 
 
-# PR #1255 / issue #882 - trusted-base explicit diff admission.
+# PR #1256 / issue #953 - pure task-ledger accounting and release contract.
 # Exact findings are retained because RIPR 0.10.0 cannot join the co-located
-# and subprocess oracles listed in each receipt; no gate threshold is raised.
+# fallible cfg(test) truth-table oracles listed in each receipt.
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_cli.rs:call_deletion:94e05f1e"
+finding_id = "probe:src_task_ledger.rs:match_arm:7287f4ae"
 owner = "ub-review/core"
-reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_cli.rs:field_construction:8cf4ee37"
+finding_id = "probe:src_task_ledger.rs:match_arm:ca667ccb"
 owner = "ub-review/core"
-reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_cli.rs:call_deletion:ecaf5880"
+finding_id = "probe:src_task_ledger.rs:match_arm:ef4a4e7e"
 owner = "ub-review/core"
-reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_cli.rs:field_construction:394d2de0"
+finding_id = "probe:src_task_ledger.rs:match_arm:12660294"
 owner = "ub-review/core"
-reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_cli.rs:call_deletion:4a06af00"
+finding_id = "probe:src_task_ledger.rs:match_arm:f000f81e"
 owner = "ub-review/core"
-reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_cli.rs:field_construction:39018d17"
+finding_id = "probe:src_task_ledger.rs:match_arm:31b03a71"
 owner = "ub-review/core"
-reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_cli.rs:call_deletion:f554ee39"
+finding_id = "probe:src_task_ledger.rs:match_arm:ecb885a8"
 owner = "ub-review/core"
-reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_cli.rs:field_construction:3dd49c60"
+finding_id = "probe:src_task_ledger.rs:error_path:93380399"
 owner = "ub-review/core"
-reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_main.rs:error_path:fe9280c0"
+finding_id = "probe:src_task_ledger.rs:match_arm:d95311ab"
 owner = "ub-review/core"
-reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_main.rs:error_path:fe9280c0.2"
+finding_id = "probe:src_task_ledger.rs:error_path:93380399.2"
 owner = "ub-review/core"
-reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_main.rs:error_path:fe9280c0.3"
+finding_id = "probe:src_task_ledger.rs:return_value:46463adb"
 owner = "ub-review/core"
-reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_main.rs:error_path:fe9280c0.4"
+finding_id = "probe:src_task_ledger.rs:match_arm:67d871a9"
 owner = "ub-review/core"
-reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_main.rs:field_construction:349f529f"
+finding_id = "probe:src_task_ledger.rs:match_arm:3f5f2d3b"
 owner = "ub-review/core"
-reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_main.rs:return_value:537b1673"
+finding_id = "probe:src_task_ledger.rs:error_path:93380399.3"
 owner = "ub-review/core"
-reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_main.rs:field_construction:772aeaf1"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_main.rs:return_value:e7298eb4"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_main.rs:field_construction:a4c3b322"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_main.rs:return_value:1df3007e"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_main.rs:field_construction:1eb64013"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_main.rs:return_value:191d7656"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_plan_artifacts.rs:call_deletion:0dd4db95"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_plan_artifacts.rs:error_path:180a10b1"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_plan_artifacts.rs:call_deletion:d442160e.2"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_plan_artifacts.rs:error_path:6704ca0f.2"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_plan_artifacts.rs:match_arm:5063b506"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_plan_artifacts.rs:call_deletion:369abeec"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_plan_artifacts.rs:match_arm:ca6f7809"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_plan_artifacts.rs:return_value:aa2f238d"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_plan_artifacts.rs:match_arm:67c325f6"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_plan_artifacts.rs:call_deletion:b0b63c08"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_plan_artifacts.rs:return_value:2f25e87b"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_plan_artifacts.rs:call_deletion:54f362bd"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_plan_artifacts.rs:match_arm:2be2cca6"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_pr_thread_context.rs:field_construction:9e0d37db"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module/no-static-path false-negative (ripr-swarm#1054). trusted_diff_run_uses_base_root_and_explicit_objects supplies hostile file and credentialed API context then asserts an exact absent receipt with no sources, proving trusted mode does not collect it. Re-verify after edits to context construction or trusted cmd_run routing."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_pr_thread_context.rs:field_construction:30160f02"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module/no-static-path false-negative (ripr-swarm#1054). trusted_diff_run_uses_base_root_and_explicit_objects supplies hostile file and credentialed API context then asserts an exact absent receipt with no sources, proving trusted mode does not collect it. Re-verify after edits to context construction or trusted cmd_run routing."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_pr_thread_context.rs:field_construction:dff1848d"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module/no-static-path false-negative (ripr-swarm#1054). trusted_diff_run_uses_base_root_and_explicit_objects supplies hostile file and credentialed API context then asserts an exact absent receipt with no sources, proving trusted mode does not collect it. Re-verify after edits to context construction or trusted cmd_run routing."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_pr_thread_context.rs:return_value:1648b080"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module/no-static-path false-negative (ripr-swarm#1054). trusted_diff_run_uses_base_root_and_explicit_objects supplies hostile file and credentialed API context then asserts an exact absent receipt with no sources, proving trusted mode does not collect it. Re-verify after edits to context construction or trusted cmd_run routing."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_pr_thread_context.rs:field_construction:5242bcf2"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module/no-static-path false-negative (ripr-swarm#1054). trusted_diff_run_uses_base_root_and_explicit_objects supplies hostile file and credentialed API context then asserts an exact absent receipt with no sources, proving trusted mode does not collect it. Re-verify after edits to context construction or trusted cmd_run routing."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_pr_thread_context.rs:return_value:77fbc94e"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module/no-static-path false-negative (ripr-swarm#1054). trusted_diff_run_uses_base_root_and_explicit_objects supplies hostile file and credentialed API context then asserts an exact absent receipt with no sources, proving trusted mode does not collect it. Re-verify after edits to context construction or trusted cmd_run routing."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_revision_admission.rs:call_deletion:79df8296"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
-
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
 [[suppressions]]
 kind = "exposure_gap"
@@ -27443,43 +27286,7 @@ reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table te
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_task_ledger.rs:match_arm:7287f4ae"
-owner = "ub-review/core"
-reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
-
-[[suppressions]]
-kind = "exposure_gap"
 finding_id = "probe:src_task_ledger.rs:match_arm:0bc00af9"
-owner = "ub-review/core"
-reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_task_ledger.rs:match_arm:ca667ccb"
-owner = "ub-review/core"
-reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_task_ledger.rs:match_arm:ef4a4e7e"
-owner = "ub-review/core"
-reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_task_ledger.rs:match_arm:12660294"
-owner = "ub-review/core"
-reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_task_ledger.rs:match_arm:f000f81e"
-owner = "ub-review/core"
-reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_task_ledger.rs:match_arm:31b03a71"
 owner = "ub-review/core"
 reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
@@ -27719,31 +27526,7 @@ reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table te
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_task_ledger.rs:error_path:93380399"
-owner = "ub-review/core"
-reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_task_ledger.rs:error_path:93380399.2"
-owner = "ub-review/core"
-reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_task_ledger.rs:match_arm:ecb885a8"
-owner = "ub-review/core"
-reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
-
-[[suppressions]]
-kind = "exposure_gap"
 finding_id = "probe:src_task_ledger.rs:match_arm:45763d79"
-owner = "ub-review/core"
-reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_task_ledger.rs:match_arm:d95311ab"
 owner = "ub-review/core"
 reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
@@ -27851,31 +27634,7 @@ reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table te
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_task_ledger.rs:return_value:46463adb"
-owner = "ub-review/core"
-reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_task_ledger.rs:match_arm:67d871a9"
-owner = "ub-review/core"
-reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_task_ledger.rs:match_arm:3f5f2d3b"
-owner = "ub-review/core"
-reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
-
-[[suppressions]]
-kind = "exposure_gap"
 finding_id = "probe:src_task_ledger.rs:return_value:4f265782"
-owner = "ub-review/core"
-reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_task_ledger.rs:error_path:93380399.3"
 owner = "ub-review/core"
 reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
@@ -28253,19 +28012,7 @@ reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table te
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_task_ledger.rs:call_deletion:57a624c7.2"
-owner = "ub-review/core"
-reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_task_ledger.rs:match_arm:b82462b5.2"
-owner = "ub-review/core"
-reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_task_ledger.rs:return_value:113b6d31.2"
+finding_id = "probe:src_task_ledger.rs:match_arm:ff48e5c5"
 owner = "ub-review/core"
 reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
@@ -28350,6 +28097,42 @@ reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table te
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_task_ledger.rs:match_arm:b7cc1dc0"
+owner = "ub-review/core"
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:1717831e"
+owner = "ub-review/core"
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:4b393dc4"
+owner = "ub-review/core"
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:253ad010"
+owner = "ub-review/core"
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:call_deletion:cf3307bd"
+owner = "ub-review/core"
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:error_path:3bbbd8fb"
+owner = "ub-review/core"
+reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger.rs:match_arm:946efdd4"
 owner = "ub-review/core"
 reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
 
@@ -29378,6 +29161,251 @@ kind = "exposure_gap"
 finding_id = "probe:src_task_ledger.rs:error_path:308de0c3"
 owner = "ub-review/core"
 reason = "A2.2 task-ledger accounting (#953): co-located fallible truth-table tests cover timing, release, terminal, receipt, consumer, revision, replay, and malformed-event branches. RIPR 0.10.0 cannot link anyhow::ensure! or cfg(test) oracles (ripr-swarm#1054/#1055). Re-verify on task-ledger edits."
+
+# PR #1255 / issue #882 - trusted-base explicit diff admission.
+# Exact findings are retained because RIPR 0.10.0 cannot join the co-located
+# and subprocess oracles listed in each receipt; no gate threshold is raised.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_cli.rs:call_deletion:94e05f1e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_cli.rs:field_construction:8cf4ee37"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_cli.rs:call_deletion:ecaf5880"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_cli.rs:field_construction:394d2de0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_cli.rs:call_deletion:4a06af00"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_cli.rs:field_construction:39018d17"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_cli.rs:call_deletion:f554ee39"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_cli.rs:field_construction:3dd49c60"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 no-static-path false-negative (ripr-swarm#1054) for the four clap trusted-admission fields. action_forwards_complete_trusted_diff_admission_inputs pins safe action forwarding and trusted_diff_run_uses_base_root_and_explicit_objects pins CLI parsing through the admitted artifact values. Re-verify after edits to src/cli.rs or the trusted-admission tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:fe9280c0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:fe9280c0.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:fe9280c0.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:fe9280c0.4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:349f529f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:537b1673"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:772aeaf1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:e7298eb4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:a4c3b322"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:1df3007e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:1eb64013"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:191d7656"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative (ripr-swarm#1054/#1055) in the trusted-run boundary. trusted_diff_run_uses_base_root_and_explicit_objects asserts each exact fail-closed execution restriction and the cfg(test) RunArgs fixture is exercised throughout the binary suite. Re-verify after edits to cmd_run, test_run_args, or trusted admission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:call_deletion:0dd4db95"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:error_path:180a10b1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:call_deletion:d442160e.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:error_path:6704ca0f.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:match_arm:5063b506"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:call_deletion:369abeec"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:match_arm:ca6f7809"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:return_value:aa2f238d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:match_arm:67c325f6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:call_deletion:b0b63c08"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:return_value:2f25e87b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:call_deletion:54f362bd"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_artifacts.rs:match_arm:2be2cca6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/fixture discriminator false-negative (ripr-swarm#1054). trusted_diff_inputs_are_absent_or_complete pins absent, partial, and complete input sets, while trusted_diff_run_uses_base_root_and_explicit_objects proves validation occurs before candidate config parsing. Re-verify after edits to plan preparation or trusted input assembly."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:9e0d37db"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/no-static-path false-negative (ripr-swarm#1054). trusted_diff_run_uses_base_root_and_explicit_objects supplies hostile file and credentialed API context then asserts an exact absent receipt with no sources, proving trusted mode does not collect it. Re-verify after edits to context construction or trusted cmd_run routing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:30160f02"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/no-static-path false-negative (ripr-swarm#1054). trusted_diff_run_uses_base_root_and_explicit_objects supplies hostile file and credentialed API context then asserts an exact absent receipt with no sources, proving trusted mode does not collect it. Re-verify after edits to context construction or trusted cmd_run routing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:dff1848d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/no-static-path false-negative (ripr-swarm#1054). trusted_diff_run_uses_base_root_and_explicit_objects supplies hostile file and credentialed API context then asserts an exact absent receipt with no sources, proving trusted mode does not collect it. Re-verify after edits to context construction or trusted cmd_run routing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:1648b080"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/no-static-path false-negative (ripr-swarm#1054). trusted_diff_run_uses_base_root_and_explicit_objects supplies hostile file and credentialed API context then asserts an exact absent receipt with no sources, proving trusted mode does not collect it. Re-verify after edits to context construction or trusted cmd_run routing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:5242bcf2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/no-static-path false-negative (ripr-swarm#1054). trusted_diff_run_uses_base_root_and_explicit_objects supplies hostile file and credentialed API context then asserts an exact absent receipt with no sources, proving trusted mode does not collect it. Re-verify after edits to context construction or trusted cmd_run routing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:77fbc94e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module/no-static-path false-negative (ripr-swarm#1054). trusted_diff_run_uses_base_root_and_explicit_objects supplies hostile file and credentialed API context then asserts an exact absent receipt with no sources, proving trusted mode does not collect it. Re-verify after edits to context construction or trusted cmd_run routing."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_revision_admission.rs:call_deletion:79df8296"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cross-module and cfg(test) discriminator false-negative (ripr-swarm#1054/#1055). The co-located trusted_diff_* suite pins successful isolated tree derivation plus head mismatch, missing/duplicate objects, dirty/wrong roots, malformed/empty/oversized/non-UTF8 inputs, unsafe paths, and repository-object cleanup; the CLI test pins exact artifacts and hostile config/script non-loading. Re-verify after edits to src/revision_admission.rs."
+
 
 
 [[suppressions]]
