@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 import contextlib
 import hashlib
 import io
@@ -13,7 +14,7 @@ import pathlib
 import re
 import sys
 import tempfile
-from typing import Any, Callable, NoReturn
+from typing import Any, NoReturn
 
 
 SENSORS = ["tokmd", "cargo-allow", "ripr", "unsafe-review", "ast-grep", "actionlint"]
