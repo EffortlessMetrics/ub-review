@@ -1,0 +1,203 @@
+{
+  "schema": "ub-review.authority_incident_corpus.v1",
+  "max_total_bytes": 65536,
+  "cases": [
+    {
+      "id": "915",
+      "source": {
+        "repository": "EffortlessMetrics/ub-review",
+        "pull_request": 915,
+        "workflow_run": 32593806467,
+        "artifact_id": 9481061943,
+        "artifact_name": "ub-review-gate",
+        "artifact_digest": "sha256:dbd084ca66eb789b6a6d6aaf476388d5beb2fe8615ea03c49c89968ecdef282f",
+        "base_revision": "4e7e9f0a7205b561d84f295e5a5628b44aba61a2",
+        "head_revision": "c2ec05d3f5a5cd1c82b79f1f9824f5a2cc23642d",
+        "extracted_on": "2026-08-27",
+        "extraction_tool": "gh 2.86.0"
+      },
+      "files": [
+        {
+          "path": "915/review/gate_outcome.json",
+          "bytes": 899,
+          "sha256": "c0c9bb7ef6b6e5f171883a88597f484903ca570db391e3e777c3804e521f571d"
+        },
+        {
+          "path": "915/review/proof_portfolio.json",
+          "bytes": 5188,
+          "sha256": "fa98422ae1afc6950f165918bff896f75f1e4cfef9f4898d177c585553290305"
+        },
+        {
+          "path": "915/review/proof_receipts.json",
+          "bytes": 2439,
+          "sha256": "725c978cccbcf9e77679cad7b1aacae8bb679e61e660f864c80c651e161291dd"
+        }
+      ],
+      "redactions": [],
+      "omissions": [
+        "Model transcripts, prompts, source patches, bulk sensor outputs, and delivery payloads are unnecessary for the retained pass-versus-required-proof contradiction."
+      ],
+      "expected_violations": [
+        {
+          "code": "legacy_pass_with_required_proof_unproven",
+          "evidence": [
+            { "file": "915/review/gate_outcome.json", "pointer": "/conclusion" },
+            { "file": "915/review/gate_outcome.json", "pointer": "/required_proof/passed" },
+            { "file": "915/review/gate_outcome.json", "pointer": "/required_proof/skipped" },
+            { "file": "915/review/gate_outcome.json", "pointer": "/not_proven_reasons/0" }
+          ]
+        },
+        {
+          "code": "required_proof_starved_at_zero_remaining_budget",
+          "evidence": [
+            { "file": "915/review/proof_portfolio.json", "pointer": "/budget_seconds" },
+            { "file": "915/review/proof_portfolio.json", "pointer": "/selected_task_ids" },
+            { "file": "915/review/proof_portfolio.json", "pointer": "/decisions" },
+            { "file": "915/review/proof_receipts.json", "pointer": "/0/requested_by" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "916",
+      "source": {
+        "repository": "EffortlessMetrics/ub-review",
+        "pull_request": 916,
+        "workflow_run": 32542016728,
+        "artifact_id": 9467384189,
+        "artifact_name": "ub-review-gate",
+        "artifact_digest": "sha256:816569eaa9182bdb8166389b3a6d2692f9de78022548464caadf654cd4bf1b55",
+        "base_revision": "5edcc8c107b3bbef508c35e7164c831cbfcb7fa4",
+        "head_revision": "e201b672d61b26563a8c7e55da0996093a83b0cb",
+        "extracted_on": "2026-08-27",
+        "extraction_tool": "gh 2.86.0"
+      },
+      "files": [
+        {
+          "path": "916/review/gate_outcome.json",
+          "bytes": 1053,
+          "sha256": "2ebec058a0948d82c5ce86968a79791680f9c23659f8a9932a89ce2efebf597c"
+        },
+        {
+          "path": "916/review/proof_portfolio.json",
+          "bytes": 2813,
+          "sha256": "5b9e175e64d979adc595743004ef8307da19922af8b30069874d7baee17d2726"
+        },
+        {
+          "path": "916/review/proof_receipts.json",
+          "bytes": 2441,
+          "sha256": "2636059591475eeae8504286d61210a3ce5c9e42a97d99d1d593532bc6f78126"
+        }
+      ],
+      "redactions": [],
+      "omissions": [
+        "Model transcripts, prompts, source patches, bulk sensor outputs, and delivery payloads are unnecessary for the retained pass-versus-not-proven contradiction."
+      ],
+      "expected_violations": [
+        {
+          "code": "legacy_pass_with_truthful_not_proven",
+          "evidence": [
+            { "file": "916/review/gate_outcome.json", "pointer": "/conclusion" },
+            { "file": "916/review/gate_outcome.json", "pointer": "/gate_result" },
+            { "file": "916/review/gate_outcome.json", "pointer": "/required_proof/skipped" },
+            { "file": "916/review/gate_outcome.json", "pointer": "/not_proven_reasons/0" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "921",
+      "source": {
+        "repository": "EffortlessMetrics/ub-review",
+        "pull_request": 921,
+        "workflow_run": 32628010111,
+        "artifact_id": 9490287288,
+        "artifact_name": "ub-review-gate",
+        "artifact_digest": "sha256:df1f4d1d6d71821bd7af1cdc9068c05232d29e3acb6a65d13c829ad41c6f9eb5",
+        "base_revision": "e48ac88aaa30fb3a4b6ed1198a597538d67e800c",
+        "head_revision": "31e741db641ccfc6057511ebc0d8b2f2521ee54f",
+        "extracted_on": "2026-08-27",
+        "extraction_tool": "gh 2.86.0"
+      },
+      "files": [
+        {
+          "path": "921/review/gate_outcome.json",
+          "bytes": 909,
+          "sha256": "2302238def9cf91ff81671ee46970bfeb6ef1d9845ffde3d506b63900a132e06"
+        },
+        {
+          "path": "921/review/proof_portfolio.json",
+          "bytes": 2953,
+          "sha256": "d44a642e719b73b883cf054e941e92d39bec3a3434e0aecbb7856a282e104db8"
+        },
+        {
+          "path": "921/review/proof_receipts.json",
+          "bytes": 2445,
+          "sha256": "b3808c408c6f0eb742a0cabc09faa0b1b41154f576844e5c0d6e3d5159b5e571"
+        },
+        {
+          "path": "921/review/scheduler.json",
+          "bytes": 4243,
+          "sha256": "f4c67221606098db2af690791c0a59d1532c0e3a560841e43e4bfd8a42fe01ca"
+        },
+        {
+          "path": "921/sensors/cargo-allow/ub-review-sensor-status.json",
+          "bytes": 573,
+          "sha256": "a8b4e7631da3f0eeab5134601c66ecca0596d3307cb0590e16b1d0c94246fd09"
+        },
+        {
+          "path": "921/work_queue.json",
+          "bytes": 21774,
+          "sha256": "204a0aaef3c95d3578f43f7b63b0685d232b44d48e9c703817c3e6374b4349ad"
+        }
+      ],
+      "redactions": [],
+      "omissions": [
+        "Model transcripts, prompts, source patches, delivery payloads, bulk logs, and unrelated sensor output are omitted; the retained queue, receipt, sensor, gate, portfolio, and scheduler files are byte-identical to the hosted artifact."
+      ],
+      "expected_violations": [
+        {
+          "code": "executed_impact_receipt_missing_from_queue_and_portfolio",
+          "evidence": [
+            { "file": "921/review/proof_receipts.json", "pointer": "/0/id" },
+            { "file": "921/review/proof_receipts.json", "pointer": "/0/requested_by" },
+            { "file": "921/work_queue.json", "pointer": "/tasks" },
+            { "file": "921/review/proof_portfolio.json", "pointer": "/candidate_tasks" }
+          ]
+        },
+        {
+          "code": "successful_sensor_left_planned",
+          "evidence": [
+            { "file": "921/sensors/cargo-allow/ub-review-sensor-status.json", "pointer": "/status" },
+            { "file": "921/work_queue.json", "pointer": "/tasks" }
+          ]
+        },
+        {
+          "code": "required_proof_unproven",
+          "evidence": [
+            { "file": "921/review/gate_outcome.json", "pointer": "/required_proof" },
+            { "file": "921/review/proof_portfolio.json", "pointer": "/selected_task_ids" },
+            { "file": "921/review/proof_portfolio.json", "pointer": "/decisions" }
+          ]
+        },
+        {
+          "code": "timeout_ceilings_exhausted_budget_before_actual_deadline",
+          "evidence": [
+            { "file": "921/review/proof_portfolio.json", "pointer": "/budget_seconds" },
+            { "file": "921/review/proof_portfolio.json", "pointer": "/runtime/deadline_remaining_seconds" },
+            { "file": "921/review/proof_receipts.json", "pointer": "/0/commands/0/timeout_sec" },
+            { "file": "921/review/proof_receipts.json", "pointer": "/0/commands/0/duration_ms" },
+            { "file": "921/review/scheduler.json", "pointer": "/elapsed_wall_ms" }
+          ]
+        },
+        {
+          "code": "symbolic_head_persisted_as_authority",
+          "evidence": [
+            { "file": "921/review/proof_portfolio.json", "pointer": "/head" },
+            { "file": "921/review/proof_receipts.json", "pointer": "/0/head" }
+          ]
+        }
+      ]
+    }
+  ]
+}

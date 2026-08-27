@@ -1,0 +1,754 @@
+{
+  "schema": "ub-review.work_queue.v1",
+  "initial_packet_deadline_sec": 60,
+  "follow_up_deadline_sec": 300,
+  "tasks": [
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-tokmd",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "medium",
+      "packet_policy": "include-if-ready",
+      "deadline_sec": 300,
+      "consumers": [
+        "all-lanes",
+        "compiler"
+      ],
+      "gate_policy": "review-context",
+      "dedupe_key": "tool-registry:sensor:tokmd",
+      "lease": {
+        "cpu": 1,
+        "memory_mb": 0,
+        "disk_mb": 192,
+        "network": false,
+        "timeout_sec": 300
+      },
+      "receipt_path": "sensors/tokmd/ub-review-sensor-status.json",
+      "status": "planned",
+      "initial_packet_status": "ready_for_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-cargo-allow",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "high",
+      "packet_policy": "must-run",
+      "deadline_sec": 120,
+      "consumers": [
+        "security",
+        "compiler"
+      ],
+      "gate_policy": "gate-required",
+      "dedupe_key": "tool-registry:sensor:cargo-allow",
+      "lease": {
+        "cpu": 1,
+        "memory_mb": 0,
+        "disk_mb": 64,
+        "network": false,
+        "timeout_sec": 120
+      },
+      "receipt_path": "sensors/cargo-allow/ub-review-sensor-status.json",
+      "status": "planned",
+      "initial_packet_status": "ready_for_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-ripr",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "high",
+      "packet_policy": "must-run",
+      "deadline_sec": 240,
+      "consumers": [
+        "tests-oracle",
+        "proof-planner",
+        "compiler"
+      ],
+      "gate_policy": "gate-required",
+      "dedupe_key": "tool-registry:sensor:ripr",
+      "lease": {
+        "cpu": 1,
+        "memory_mb": 0,
+        "disk_mb": 128,
+        "network": false,
+        "timeout_sec": 240
+      },
+      "receipt_path": "sensors/ripr/ub-review-sensor-status.json",
+      "status": "planned",
+      "initial_packet_status": "ready_for_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-unsafe-review",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "low",
+      "packet_policy": "artifact-only",
+      "deadline_sec": 0,
+      "consumers": [
+        "ub-memory-lifetime",
+        "security",
+        "compiler"
+      ],
+      "gate_policy": "artifact-only",
+      "dedupe_key": "tool-registry:sensor:unsafe-review",
+      "lease": {
+        "cpu": 0,
+        "memory_mb": 0,
+        "disk_mb": 128,
+        "network": false,
+        "timeout_sec": 0
+      },
+      "receipt_path": "sensors/unsafe-review/ub-review-sensor-status.json",
+      "status": "skipped",
+      "initial_packet_status": "not_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-ast-grep",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "high",
+      "packet_policy": "must-run",
+      "deadline_sec": 60,
+      "consumers": [
+        "source-route",
+        "compiler"
+      ],
+      "gate_policy": "gate-required",
+      "dedupe_key": "tool-registry:sensor:ast-grep",
+      "lease": {
+        "cpu": 1,
+        "memory_mb": 0,
+        "disk_mb": 64,
+        "network": false,
+        "timeout_sec": 60
+      },
+      "receipt_path": "sensors/ast-grep/ub-review-sensor-status.json",
+      "status": "planned",
+      "initial_packet_status": "ready_for_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-semgrep",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "low",
+      "packet_policy": "artifact-only",
+      "deadline_sec": 0,
+      "consumers": [
+        "compiler"
+      ],
+      "gate_policy": "artifact-only",
+      "dedupe_key": "tool-registry:sensor:semgrep",
+      "lease": {
+        "cpu": 0,
+        "memory_mb": 0,
+        "disk_mb": 128,
+        "network": false,
+        "timeout_sec": 0
+      },
+      "receipt_path": "sensors/semgrep/ub-review-sensor-status.json",
+      "status": "skipped",
+      "initial_packet_status": "not_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-actionlint",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "low",
+      "packet_policy": "artifact-only",
+      "deadline_sec": 0,
+      "consumers": [
+        "workflow-permissions",
+        "workflow-pinning",
+        "workflow-proof",
+        "workflow-opposition",
+        "compiler"
+      ],
+      "gate_policy": "artifact-only",
+      "dedupe_key": "tool-registry:sensor:actionlint",
+      "lease": {
+        "cpu": 0,
+        "memory_mb": 0,
+        "disk_mb": 32,
+        "network": false,
+        "timeout_sec": 0
+      },
+      "receipt_path": "sensors/actionlint/ub-review-sensor-status.json",
+      "status": "skipped",
+      "initial_packet_status": "not_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-zizmor",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "low",
+      "packet_policy": "artifact-only",
+      "deadline_sec": 0,
+      "consumers": [
+        "compiler"
+      ],
+      "gate_policy": "artifact-only",
+      "dedupe_key": "tool-registry:sensor:zizmor",
+      "lease": {
+        "cpu": 0,
+        "memory_mb": 0,
+        "disk_mb": 64,
+        "network": false,
+        "timeout_sec": 0
+      },
+      "receipt_path": "sensors/zizmor/ub-review-sensor-status.json",
+      "status": "skipped",
+      "initial_packet_status": "not_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-gitleaks",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "low",
+      "packet_policy": "artifact-only",
+      "deadline_sec": 0,
+      "consumers": [
+        "compiler"
+      ],
+      "gate_policy": "artifact-only",
+      "dedupe_key": "tool-registry:sensor:gitleaks",
+      "lease": {
+        "cpu": 0,
+        "memory_mb": 0,
+        "disk_mb": 128,
+        "network": false,
+        "timeout_sec": 0
+      },
+      "receipt_path": "sensors/gitleaks/ub-review-sensor-status.json",
+      "status": "skipped",
+      "initial_packet_status": "not_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-osv-scanner",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "low",
+      "packet_policy": "artifact-only",
+      "deadline_sec": 0,
+      "consumers": [
+        "compiler"
+      ],
+      "gate_policy": "artifact-only",
+      "dedupe_key": "tool-registry:sensor:osv-scanner",
+      "lease": {
+        "cpu": 0,
+        "memory_mb": 0,
+        "disk_mb": 128,
+        "network": false,
+        "timeout_sec": 0
+      },
+      "receipt_path": "sensors/osv-scanner/ub-review-sensor-status.json",
+      "status": "skipped",
+      "initial_packet_status": "not_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-cargo-audit",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "low",
+      "packet_policy": "artifact-only",
+      "deadline_sec": 0,
+      "consumers": [
+        "compiler"
+      ],
+      "gate_policy": "artifact-only",
+      "dedupe_key": "tool-registry:sensor:cargo-audit",
+      "lease": {
+        "cpu": 0,
+        "memory_mb": 0,
+        "disk_mb": 64,
+        "network": false,
+        "timeout_sec": 0
+      },
+      "receipt_path": "sensors/cargo-audit/ub-review-sensor-status.json",
+      "status": "skipped",
+      "initial_packet_status": "not_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-cargo-deny",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "low",
+      "packet_policy": "artifact-only",
+      "deadline_sec": 0,
+      "consumers": [
+        "compiler"
+      ],
+      "gate_policy": "artifact-only",
+      "dedupe_key": "tool-registry:sensor:cargo-deny",
+      "lease": {
+        "cpu": 0,
+        "memory_mb": 0,
+        "disk_mb": 128,
+        "network": false,
+        "timeout_sec": 0
+      },
+      "receipt_path": "sensors/cargo-deny/ub-review-sensor-status.json",
+      "status": "skipped",
+      "initial_packet_status": "not_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-coverage",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "medium",
+      "packet_policy": "include-if-ready",
+      "deadline_sec": 1800,
+      "consumers": [
+        "tests-oracle",
+        "source-route",
+        "compiler"
+      ],
+      "gate_policy": "review-context",
+      "dedupe_key": "tool-registry:sensor:coverage",
+      "lease": {
+        "cpu": 1,
+        "memory_mb": 0,
+        "disk_mb": 256,
+        "network": false,
+        "timeout_sec": 1800
+      },
+      "receipt_path": "sensors/coverage/ub-review-sensor-status.json",
+      "status": "planned",
+      "initial_packet_status": "pending_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-artifact-verifier",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "high",
+      "packet_policy": "must-run",
+      "deadline_sec": 120,
+      "consumers": [
+        "compiler"
+      ],
+      "gate_policy": "gate-required",
+      "dedupe_key": "tool-registry:sensor:artifact-verifier",
+      "lease": {
+        "cpu": 1,
+        "memory_mb": 0,
+        "disk_mb": 32,
+        "network": false,
+        "timeout_sec": 120
+      },
+      "receipt_path": "sensors/artifact-verifier/ub-review-sensor-status.json",
+      "status": "planned",
+      "initial_packet_status": "ready_for_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-build",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "low",
+      "packet_policy": "artifact-only",
+      "deadline_sec": 0,
+      "consumers": [
+        "compiler"
+      ],
+      "gate_policy": "artifact-only",
+      "dedupe_key": "tool-registry:sensor:build",
+      "lease": {
+        "cpu": 0,
+        "memory_mb": 0,
+        "disk_mb": 256,
+        "network": false,
+        "timeout_sec": 0
+      },
+      "receipt_path": "sensors/build/ub-review-sensor-status.json",
+      "status": "skipped",
+      "initial_packet_status": "not_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-cargo-check",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "high",
+      "packet_policy": "must-run",
+      "deadline_sec": 600,
+      "consumers": [
+        "compiler"
+      ],
+      "gate_policy": "gate-required",
+      "dedupe_key": "tool-registry:sensor:cargo-check",
+      "lease": {
+        "cpu": 1,
+        "memory_mb": 0,
+        "disk_mb": 128,
+        "network": false,
+        "timeout_sec": 600
+      },
+      "receipt_path": "sensors/cargo-check/ub-review-sensor-status.json",
+      "status": "planned",
+      "initial_packet_status": "pending_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-cargo-clippy",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "high",
+      "packet_policy": "must-run",
+      "deadline_sec": 600,
+      "consumers": [
+        "compiler"
+      ],
+      "gate_policy": "gate-required",
+      "dedupe_key": "tool-registry:sensor:cargo-clippy",
+      "lease": {
+        "cpu": 1,
+        "memory_mb": 0,
+        "disk_mb": 128,
+        "network": false,
+        "timeout_sec": 600
+      },
+      "receipt_path": "sensors/cargo-clippy/ub-review-sensor-status.json",
+      "status": "planned",
+      "initial_packet_status": "pending_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-cargo-doc",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "high",
+      "packet_policy": "must-run",
+      "deadline_sec": 600,
+      "consumers": [
+        "compiler"
+      ],
+      "gate_policy": "gate-required",
+      "dedupe_key": "tool-registry:sensor:cargo-doc",
+      "lease": {
+        "cpu": 1,
+        "memory_mb": 0,
+        "disk_mb": 128,
+        "network": false,
+        "timeout_sec": 600
+      },
+      "receipt_path": "sensors/cargo-doc/ub-review-sensor-status.json",
+      "status": "planned",
+      "initial_packet_status": "pending_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-cargo-fmt",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "high",
+      "packet_policy": "must-run",
+      "deadline_sec": 120,
+      "consumers": [
+        "compiler"
+      ],
+      "gate_policy": "gate-required",
+      "dedupe_key": "tool-registry:sensor:cargo-fmt",
+      "lease": {
+        "cpu": 1,
+        "memory_mb": 0,
+        "disk_mb": 32,
+        "network": false,
+        "timeout_sec": 120
+      },
+      "receipt_path": "sensors/cargo-fmt/ub-review-sensor-status.json",
+      "status": "planned",
+      "initial_packet_status": "ready_for_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-cargo-mutants",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "low",
+      "packet_policy": "artifact-only",
+      "deadline_sec": 0,
+      "consumers": [
+        "compiler"
+      ],
+      "gate_policy": "artifact-only",
+      "dedupe_key": "tool-registry:sensor:cargo-mutants",
+      "lease": {
+        "cpu": 0,
+        "memory_mb": 0,
+        "disk_mb": 256,
+        "network": false,
+        "timeout_sec": 0
+      },
+      "receipt_path": "sensors/cargo-mutants/ub-review-sensor-status.json",
+      "status": "skipped",
+      "initial_packet_status": "not_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-cargo-test",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "high",
+      "packet_policy": "must-run",
+      "deadline_sec": 900,
+      "consumers": [
+        "compiler"
+      ],
+      "gate_policy": "gate-required",
+      "dedupe_key": "tool-registry:sensor:cargo-test",
+      "lease": {
+        "cpu": 1,
+        "memory_mb": 0,
+        "disk_mb": 256,
+        "network": false,
+        "timeout_sec": 900
+      },
+      "receipt_path": "sensors/cargo-test/ub-review-sensor-status.json",
+      "status": "planned",
+      "initial_packet_status": "pending_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-cppcheck",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "low",
+      "packet_policy": "artifact-only",
+      "deadline_sec": 0,
+      "consumers": [
+        "compiler"
+      ],
+      "gate_policy": "artifact-only",
+      "dedupe_key": "tool-registry:sensor:cppcheck",
+      "lease": {
+        "cpu": 0,
+        "memory_mb": 0,
+        "disk_mb": 128,
+        "network": false,
+        "timeout_sec": 0
+      },
+      "receipt_path": "sensors/cppcheck/ub-review-sensor-status.json",
+      "status": "skipped",
+      "initial_packet_status": "not_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-miri",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "low",
+      "packet_policy": "artifact-only",
+      "deadline_sec": 0,
+      "consumers": [
+        "compiler"
+      ],
+      "gate_policy": "artifact-only",
+      "dedupe_key": "tool-registry:sensor:miri",
+      "lease": {
+        "cpu": 0,
+        "memory_mb": 0,
+        "disk_mb": 256,
+        "network": false,
+        "timeout_sec": 0
+      },
+      "receipt_path": "sensors/miri/ub-review-sensor-status.json",
+      "status": "skipped",
+      "initial_packet_status": "not_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-shellcheck",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "low",
+      "packet_policy": "artifact-only",
+      "deadline_sec": 0,
+      "consumers": [
+        "compiler"
+      ],
+      "gate_policy": "artifact-only",
+      "dedupe_key": "tool-registry:sensor:shellcheck",
+      "lease": {
+        "cpu": 0,
+        "memory_mb": 0,
+        "disk_mb": 32,
+        "network": false,
+        "timeout_sec": 0
+      },
+      "receipt_path": "sensors/shellcheck/ub-review-sensor-status.json",
+      "status": "skipped",
+      "initial_packet_status": "not_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "sensor-test",
+      "kind": "sensor",
+      "source": "tool-registry",
+      "priority": "low",
+      "packet_policy": "artifact-only",
+      "deadline_sec": 0,
+      "consumers": [
+        "compiler"
+      ],
+      "gate_policy": "artifact-only",
+      "dedupe_key": "tool-registry:sensor:test",
+      "lease": {
+        "cpu": 0,
+        "memory_mb": 0,
+        "disk_mb": 256,
+        "network": false,
+        "timeout_sec": 0
+      },
+      "receipt_path": "sensors/test/ub-review-sensor-status.json",
+      "status": "skipped",
+      "initial_packet_status": "not_initial_packet",
+      "task_path": "resolved-tools.json"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "proof-red-green-5d3e08218fbd",
+      "kind": "focused-test",
+      "source": "proof-planner",
+      "priority": "high",
+      "packet_policy": "late-follow-up",
+      "deadline_sec": 600,
+      "consumers": [
+        "tests-oracle",
+        "opposition",
+        "compiler"
+      ],
+      "gate_policy": "trust-affecting",
+      "dedupe_key": "proof-planner:focused-test:proof-0004-4b5cdb12dcb0+proof-0007-8caaf06dac66",
+      "lease": {
+        "cpu": 4,
+        "memory_mb": 4096,
+        "disk_mb": 2048,
+        "network": false,
+        "timeout_sec": 600
+      },
+      "receipt_path": "review/proof_receipts.json",
+      "status": "planned",
+      "initial_packet_status": "pending_initial_packet",
+      "task_path": "proof_tasks.ndjson"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "proof-build-81dee1e1dd1f",
+      "kind": "focused-build",
+      "source": "proof-planner",
+      "priority": "medium",
+      "packet_policy": "late-follow-up",
+      "deadline_sec": 600,
+      "consumers": [
+        "intelligent-ci-policy",
+        "proof-policy:cargo-check",
+        "compiler"
+      ],
+      "gate_policy": "trust-affecting",
+      "dedupe_key": "proof-planner:focused-build:proof-0000-291419f6f509",
+      "lease": {
+        "cpu": 4,
+        "memory_mb": 4096,
+        "disk_mb": 2048,
+        "network": false,
+        "timeout_sec": 600
+      },
+      "receipt_path": "review/proof_receipts.json",
+      "status": "planned",
+      "initial_packet_status": "pending_initial_packet",
+      "task_path": "proof_tasks.ndjson"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "proof-build-f5e93291b352",
+      "kind": "focused-build",
+      "source": "proof-planner",
+      "priority": "medium",
+      "packet_policy": "late-follow-up",
+      "deadline_sec": 600,
+      "consumers": [
+        "intelligent-ci-policy",
+        "proof-policy:cargo-doc",
+        "compiler"
+      ],
+      "gate_policy": "trust-affecting",
+      "dedupe_key": "proof-planner:focused-build:proof-0001-d97c389baa65",
+      "lease": {
+        "cpu": 4,
+        "memory_mb": 4096,
+        "disk_mb": 2048,
+        "network": false,
+        "timeout_sec": 600
+      },
+      "receipt_path": "review/proof_receipts.json",
+      "status": "planned",
+      "initial_packet_status": "pending_initial_packet",
+      "task_path": "proof_tasks.ndjson"
+    },
+    {
+      "schema": "ub-review.work_queue_task.v1",
+      "id": "proof-build-58fe49dac211",
+      "kind": "focused-build",
+      "source": "proof-planner",
+      "priority": "medium",
+      "packet_policy": "late-follow-up",
+      "deadline_sec": 300,
+      "consumers": [
+        "intelligent-ci-policy",
+        "proof-policy:policy-check",
+        "proof-planner",
+        "compiler"
+      ],
+      "gate_policy": "trust-affecting",
+      "dedupe_key": "proof-planner:focused-build:proof-0002-d2ae3e742e84+proof-0006-4f5e7df015d4",
+      "lease": {
+        "cpu": 4,
+        "memory_mb": 4096,
+        "disk_mb": 2048,
+        "network": false,
+        "timeout_sec": 300
+      },
+      "receipt_path": "review/proof_receipts.json",
+      "status": "planned",
+      "initial_packet_status": "pending_initial_packet",
+      "task_path": "proof_tasks.ndjson"
+    }
+  ]
+}

@@ -1,0 +1,198 @@
+{
+  "schema": "ub-review.proof_portfolio.v1",
+  "phase": "broker-final",
+  "head": "HEAD",
+  "budget_seconds": 0,
+  "remaining_seconds": 0,
+  "candidate_count": 8,
+  "candidate_tasks": [
+    {
+      "id": "proof-red-green-b3dc6b4ca2a5",
+      "kind": "focused-red-green",
+      "required": false,
+      "estimated_cost_sec": 600,
+      "request_ids": [
+        "proof-0003-019e7f2c4829",
+        "proof-0004-8f09aff263fa"
+      ]
+    },
+    {
+      "id": "proof-red-green-1ef0293a8744",
+      "kind": "focused-red-green",
+      "required": false,
+      "estimated_cost_sec": 600,
+      "request_ids": [
+        "proof-0007-c0f0a9affa87"
+      ]
+    },
+    {
+      "id": "proof-red-green-3584cb75dfd3",
+      "kind": "focused-red-green",
+      "required": false,
+      "estimated_cost_sec": 600,
+      "request_ids": [
+        "proof-0006-eb454de3c333"
+      ]
+    },
+    {
+      "id": "proof-red-green-2d435efc8a25",
+      "kind": "focused-red-green",
+      "required": false,
+      "estimated_cost_sec": 1200,
+      "request_ids": [
+        "proof-0005-2ff63c155de7"
+      ]
+    },
+    {
+      "id": "proof-build-f60ccde7c791",
+      "kind": "focused-build",
+      "required": false,
+      "estimated_cost_sec": 600,
+      "request_ids": [
+        "proof-0008-d7e3a0e89dfd"
+      ]
+    },
+    {
+      "id": "proof-build-81dee1e1dd1f",
+      "kind": "focused-build",
+      "required": true,
+      "estimated_cost_sec": 600,
+      "request_ids": [
+        "proof-0000-291419f6f509"
+      ]
+    },
+    {
+      "id": "proof-build-f5e93291b352",
+      "kind": "focused-build",
+      "required": true,
+      "estimated_cost_sec": 600,
+      "request_ids": [
+        "proof-0001-d97c389baa65"
+      ]
+    },
+    {
+      "id": "proof-build-58fe49dac211",
+      "kind": "focused-build",
+      "required": true,
+      "estimated_cost_sec": 300,
+      "request_ids": [
+        "proof-0002-d2ae3e742e84"
+      ]
+    }
+  ],
+  "selected_task_ids": [],
+  "runtime": {
+    "cpus": 4,
+    "free_mem_mb": 14836,
+    "free_disk_mb": 85610,
+    "load_1m": 3.3,
+    "github_actions": true,
+    "deadline_remaining_seconds": 3478,
+    "lease": {
+      "cpu": 4,
+      "memory_mb": 4096,
+      "disk_mb": 2048,
+      "network": false,
+      "scratch": true
+    }
+  },
+  "decisions": [
+    {
+      "task_id": "proof-build-58fe49dac211",
+      "kind": "focused-build",
+      "status": "deferred_by_safe_wind_down",
+      "reason": "hard deadline has expired; proof was safely wound down",
+      "required": true,
+      "estimated_cost_sec": 300,
+      "request_ids": [
+        "proof-0002-d2ae3e742e84"
+      ],
+      "receipt_ids": []
+    },
+    {
+      "task_id": "proof-build-81dee1e1dd1f",
+      "kind": "focused-build",
+      "status": "deferred_by_safe_wind_down",
+      "reason": "hard deadline has expired; proof was safely wound down",
+      "required": true,
+      "estimated_cost_sec": 600,
+      "request_ids": [
+        "proof-0000-291419f6f509"
+      ],
+      "receipt_ids": []
+    },
+    {
+      "task_id": "proof-build-f5e93291b352",
+      "kind": "focused-build",
+      "status": "deferred_by_safe_wind_down",
+      "reason": "hard deadline has expired; proof was safely wound down",
+      "required": true,
+      "estimated_cost_sec": 600,
+      "request_ids": [
+        "proof-0001-d97c389baa65"
+      ],
+      "receipt_ids": []
+    },
+    {
+      "task_id": "proof-red-green-b3dc6b4ca2a5",
+      "kind": "focused-red-green",
+      "status": "deferred_by_safe_wind_down",
+      "reason": "hard deadline has expired; proof was safely wound down",
+      "required": false,
+      "estimated_cost_sec": 600,
+      "request_ids": [
+        "proof-0003-019e7f2c4829",
+        "proof-0004-8f09aff263fa"
+      ],
+      "receipt_ids": []
+    },
+    {
+      "task_id": "proof-red-green-1ef0293a8744",
+      "kind": "focused-red-green",
+      "status": "deferred_by_safe_wind_down",
+      "reason": "hard deadline has expired; proof was safely wound down",
+      "required": false,
+      "estimated_cost_sec": 600,
+      "request_ids": [
+        "proof-0007-c0f0a9affa87"
+      ],
+      "receipt_ids": []
+    },
+    {
+      "task_id": "proof-red-green-3584cb75dfd3",
+      "kind": "focused-red-green",
+      "status": "deferred_by_safe_wind_down",
+      "reason": "hard deadline has expired; proof was safely wound down",
+      "required": false,
+      "estimated_cost_sec": 600,
+      "request_ids": [
+        "proof-0006-eb454de3c333"
+      ],
+      "receipt_ids": []
+    },
+    {
+      "task_id": "proof-red-green-2d435efc8a25",
+      "kind": "focused-red-green",
+      "status": "deferred_by_safe_wind_down",
+      "reason": "hard deadline has expired; proof was safely wound down",
+      "required": false,
+      "estimated_cost_sec": 1200,
+      "request_ids": [
+        "proof-0005-2ff63c155de7"
+      ],
+      "receipt_ids": []
+    },
+    {
+      "task_id": "proof-build-f60ccde7c791",
+      "kind": "focused-build",
+      "status": "deferred_by_safe_wind_down",
+      "reason": "hard deadline has expired; proof was safely wound down",
+      "required": false,
+      "estimated_cost_sec": 600,
+      "request_ids": [
+        "proof-0008-d7e3a0e89dfd"
+      ],
+      "receipt_ids": []
+    }
+  ]
+}

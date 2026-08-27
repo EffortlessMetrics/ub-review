@@ -1,0 +1,169 @@
+{
+  "schema": "ub-review.scheduler.v1",
+  "concurrency_model": "profiled-stream-scheduler-v0",
+  "scheduler_profile": "default-three-stream-v0",
+  "local_proof_wall_excludes_model_wait": true,
+  "elapsed_wall_ms": 161026,
+  "scheduler_roles": {
+    "evidence": {
+      "started_at_offset_ms": 19,
+      "finished_at_offset_ms": 134301,
+      "wall_ms": 134282
+    },
+    "model": {
+      "started_at_offset_ms": 4694,
+      "finished_at_offset_ms": 161017,
+      "wall_ms": 53519
+    },
+    "proof": {
+      "started_at_offset_ms": 4694,
+      "finished_at_offset_ms": 161019,
+      "wall_ms": 129607
+    }
+  },
+  "streams": {
+    "coordination": {
+      "started_at_offset_ms": 19,
+      "finished_at_offset_ms": 161045,
+      "wall_ms": 134315
+    },
+    "investigation": {
+      "started_at_offset_ms": 4694,
+      "finished_at_offset_ms": 161017,
+      "wall_ms": 53519
+    },
+    "proof": {
+      "started_at_offset_ms": 4694,
+      "finished_at_offset_ms": 161019,
+      "wall_ms": 129607
+    }
+  },
+  "loops": {
+    "evidence": {
+      "started_at_offset_ms": 19,
+      "finished_at_offset_ms": 134301,
+      "wall_ms": 134282
+    },
+    "model": {
+      "started_at_offset_ms": 4694,
+      "finished_at_offset_ms": 161017,
+      "wall_ms": 53519
+    },
+    "proof": {
+      "started_at_offset_ms": 4694,
+      "finished_at_offset_ms": 161019,
+      "wall_ms": 129607
+    },
+    "compiler": {
+      "started_at_offset_ms": 161009,
+      "finished_at_offset_ms": 161045,
+      "wall_ms": 33
+    }
+  },
+  "overlaps": {
+    "investigation_proof_overlap_ms": 26816,
+    "model_proof_overlap_ms": 26816,
+    "proof_overlap_ms": 26816
+  },
+  "phases": [
+    {
+      "loop_id": "evidence",
+      "stream_id": "coordination",
+      "stage": "sensors-and-packet",
+      "status": "completed",
+      "started_at_offset_ms": 19,
+      "finished_at_offset_ms": 4638,
+      "duration_ms": 4618
+    },
+    {
+      "loop_id": "model",
+      "stream_id": "investigation",
+      "stage": "primary",
+      "status": "completed",
+      "started_at_offset_ms": 4694,
+      "finished_at_offset_ms": 31510,
+      "duration_ms": 26815
+    },
+    {
+      "loop_id": "proof",
+      "stream_id": "proof",
+      "stage": "initial-diff-broker",
+      "status": "completed",
+      "started_at_offset_ms": 4694,
+      "finished_at_offset_ms": 134299,
+      "duration_ms": 129605
+    },
+    {
+      "loop_id": "proof",
+      "stream_id": "proof",
+      "stage": "seeded-request-broker",
+      "status": "completed",
+      "started_at_offset_ms": 134300,
+      "finished_at_offset_ms": 134300,
+      "duration_ms": 0
+    },
+    {
+      "loop_id": "evidence",
+      "stream_id": "coordination",
+      "stage": "late-sensors",
+      "status": "completed",
+      "started_at_offset_ms": 3221,
+      "finished_at_offset_ms": 134301,
+      "duration_ms": 131079
+    },
+    {
+      "loop_id": "proof",
+      "stream_id": "proof",
+      "stage": "model-request-broker",
+      "status": "completed",
+      "started_at_offset_ms": 134305,
+      "finished_at_offset_ms": 134306,
+      "duration_ms": 0
+    },
+    {
+      "loop_id": "model",
+      "stream_id": "investigation",
+      "stage": "reporter",
+      "status": "completed",
+      "started_at_offset_ms": 134306,
+      "finished_at_offset_ms": 161009,
+      "duration_ms": 26702
+    },
+    {
+      "loop_id": "compiler",
+      "stream_id": "coordination",
+      "stage": "preliminary",
+      "status": "completed",
+      "started_at_offset_ms": 161009,
+      "finished_at_offset_ms": 161017,
+      "duration_ms": 7
+    },
+    {
+      "loop_id": "model",
+      "stream_id": "investigation",
+      "stage": "follow-up",
+      "status": "completed",
+      "started_at_offset_ms": 161017,
+      "finished_at_offset_ms": 161017,
+      "duration_ms": 0
+    },
+    {
+      "loop_id": "proof",
+      "stream_id": "proof",
+      "stage": "follow-up-broker",
+      "status": "completed",
+      "started_at_offset_ms": 161018,
+      "finished_at_offset_ms": 161019,
+      "duration_ms": 0
+    },
+    {
+      "loop_id": "compiler",
+      "stream_id": "coordination",
+      "stage": "final",
+      "status": "completed",
+      "started_at_offset_ms": 161020,
+      "finished_at_offset_ms": 161045,
+      "duration_ms": 25
+    }
+  ]
+}
