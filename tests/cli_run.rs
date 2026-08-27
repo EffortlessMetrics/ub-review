@@ -89,6 +89,13 @@ fn trusted_diff_run_uses_base_root_and_explicit_objects() -> Result<()> {
         "--no-github-summary",
     ];
     run(temp.path(), bin, &args)?;
+    let mut sensor_args = args.to_vec();
+    sensor_args.remove(1);
+    let sensor_error = run_expect_failure(temp.path(), bin, &sensor_args)?;
+    assert!(
+        sensor_error.contains("requires --dry-run"),
+        "{sensor_error}"
+    );
     let mut provider_args = args;
     provider_args[17] = "auto";
     let provider_error = run_expect_failure(temp.path(), bin, &provider_args)?;

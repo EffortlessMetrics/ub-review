@@ -3673,6 +3673,11 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
     let mut args = normalize_run_args(args)?;
     let trusted_diff = trusted_diff_inputs(&args.review)?;
     if trusted_diff.is_some() {
+        if !args.dry_run {
+            bail!(
+                "trusted-base diff admission requires --dry-run; candidate sensor execution is outside this admission seam"
+            );
+        }
         if !matches!(args.model_mode, ModelMode::Off) {
             bail!(
                 "trusted-base diff admission requires --model-mode off; secret-backed model providers are outside this admission seam"

@@ -85,6 +85,17 @@ fn action_forwards_complete_trusted_diff_admission_inputs() -> Result<()> {
             "action does not forward {input}"
         );
     }
+    let trusted_block = action
+        .split_once("if [[ -n \"${{ inputs['trusted-base-tree'] }}\" ]]")
+        .map(|(_, suffix)| suffix)
+        .ok_or_else(|| anyhow::anyhow!("trusted-base action block is missing"))?;
+    assert!(
+        trusted_block
+            .lines()
+            .take(6)
+            .any(|line| line.contains("extra+=(--dry-run)")),
+        "trusted-base action block must force dry-run packet construction"
+    );
     Ok(())
 }
 

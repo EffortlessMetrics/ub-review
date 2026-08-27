@@ -14,10 +14,12 @@ Supply all four inputs together:
   duplicate-free;
 - `--trusted-diff-patch`: a patch applicable to the supplied base tree.
 
-The composite action exposes the same names as inputs. Trusted mode also
-requires `--model-mode off`, `--posting artifact-only`, and no
-`--allow-heavy`; secret-backed model execution, credentialed GitHub delivery,
-and candidate proof execution are intentionally outside this child seam.
+The composite action exposes the same names as inputs and automatically selects
+dry-run packet construction when `trusted-base-tree` is present. Direct CLI
+use requires `--dry-run`, `--model-mode off`, `--posting artifact-only`, and no
+`--allow-heavy`; sensor execution against the base checkout, secret-backed
+model execution, credentialed GitHub delivery, and candidate proof execution
+are intentionally outside this child seam.
 
 The changed-path object is capped at 1 MiB and the patch at 64 MiB. Both must
 be valid UTF-8. Admission copies the exact validated patch bytes into its

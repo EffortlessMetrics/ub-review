@@ -700,6 +700,9 @@ runs:
         fi
         if [[ -n "${{ inputs['trusted-base-tree'] }}" ]]; then
           extra+=(--trusted-base-tree "${{ inputs['trusted-base-tree'] }}")
+          # Explicit admission constructs a packet from the validated diff.
+          # It must not run sensors against the base-owned checkout.
+          extra+=(--dry-run)
         fi
         if [[ -n "${{ inputs['trusted-head-sha'] }}" ]]; then
           extra+=(--trusted-head-sha "${{ inputs['trusted-head-sha'] }}")
