@@ -2036,6 +2036,469 @@ def require_joined_revision(value, label: str, binding: dict) -> None:
         fail(f"[stale_revision] {label} reviewed_commit does not join the admitted revision")
 
 
+TASK_LEDGER_EVENT_SCHEMA = "ub-review.task_ledger_event.v1"
+TASK_LEDGER_SNAPSHOT_SCHEMA = "ub-review.task_ledger_snapshot.v1"
+_TASK_LEDGER_EVENT_DIGEST_DOMAIN = b"ub-review.task-ledger-event.digest.v1"
+_TASK_LEDGER_STREAM_DIGEST_DOMAIN = b"ub-review.task-ledger-stream.digest.v1"
+_TASK_LEDGER_EVENT_FIELDS = {
+    "schema", "sequence", "task_id", "revision", "previous_digest", "event", "digest"
+}
+_TASK_LEDGER_SNAPSHOT_FIELDS = {
+    "schema", "revision", "event_count", "source_digest", "tasks"
+}
+
+
+def _task_ledger_strict_fields(value, expected: set[str], label: str) -> None:
+    if not isinstance(value, dict) or set(value) != expected:
+        fail(f"[unsupported_schema] {label} fields must be exactly {sorted(expected)!r}")
+
+
+def _task_ledger_json(value) -> bytes:
+    return json.dumps(
+        value, ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")
+
+
+def _task_ledger_digest(domain: bytes, payload: bytes) -> str:
+    return hashlib.sha256(domain + b"\x00" + payload).hexdigest()
+
+
+def _task_ledger_revision(value, label: str) -> dict:
+    _task_ledger_strict_fields(
+        value, {"digest", "semantics", "reviewed_commit"}, f"{label} revision"
+    )
+    _require_revision_ref(value, label)
+    commit = value["reviewed_commit"]
+    if any(char not in "0123456789abcdef" for char in commit) or set(commit) == {"0"}:
+        fail(f"[missing_strong_binding] {label} reviewed_commit must be a non-null git object id")
+    return {
+        "digest": value["digest"],
+        "semantics": value["semantics"],
+        "reviewed_commit": value["reviewed_commit"],
+    }
+
+
+def _task_ledger_nonempty(value, label: str) -> str:
+    if not isinstance(value, str) or not value or value.strip() != value:
+        fail(f"[missing_strong_binding] {label} must be canonical and non-empty")
+    return value
+
+
+def _task_ledger_u64(value, label: str) -> int:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or value < 0
+        or value > (1 << 64) - 1
+    ):
+        fail(f"[invalid_timing] {label} must be a u64 integer")
+    return value
+
+
+def _task_ledger_receipt_reference(value) -> str:
+    reference = _task_ledger_nonempty(value, "receipt reference")
+    if (
+        "\\" in reference
+        or ":" in reference
+        or reference.startswith("/")
+        or any(ord(char) < 32 or ord(char) == 127 for char in reference)
+    ):
+        fail(
+            "[invalid_receipt_reference] receipt reference must be an "
+            "artifact-relative POSIX path"
+        )
+    pieces = reference.split("#")
+    if len(pieces) > 2 or (len(pieces) == 2 and not pieces[1]):
+        fail("[invalid_receipt_reference] receipt reference has an invalid fragment")
+    if any(
+        part in {"", ".", ".."} or part.lower() == ".git"
+        for part in pieces[0].split("/")
+    ):
+        fail(
+            "[invalid_receipt_reference] receipt reference must not traverse "
+            "or contain empty components"
+        )
+    return reference
+
+
+def _task_ledger_source(value) -> object:
+    if isinstance(value, str) and value in {
+        "Required", "Configured", "Impact", "Sensor", "Worker"
+    }:
+        return value
+    if isinstance(value, dict) and set(value) == {"ReviewerTurn"}:
+        payload = value["ReviewerTurn"]
+        _task_ledger_strict_fields(payload, {"model_on"}, "reviewer-turn source")
+        if not isinstance(payload["model_on"], bool):
+            fail("[unsupported_schema] reviewer-turn model_on must be boolean")
+        return {"ReviewerTurn": {"model_on": payload["model_on"]}}
+    fail(f"[unsupported_schema] task source is invalid: {value!r}")
+
+
+def _task_ledger_consumer(value) -> dict:
+    _task_ledger_strict_fields(
+        value, {"id", "requirement", "value"}, "task consumer"
+    )
+    consumer_id = _task_ledger_nonempty(value["id"], "task consumer")
+    if value["requirement"] not in {"Required", "Optional"}:
+        fail("[unsupported_schema] task consumer requirement is invalid")
+    if value["value"] not in {
+        "GateCritical", "ClaimDirected", "Advisory", "Telemetry"
+    }:
+        fail("[unsupported_schema] task consumer value is invalid")
+    return {
+        "id": consumer_id,
+        "requirement": value["requirement"],
+        "value": value["value"],
+    }
+
+
+def _task_ledger_reservations(value) -> list[dict]:
+    if not isinstance(value, list):
+        fail("[invalid_resource_accounting] reservations must be an array")
+    result = []
+    seen = set()
+    for reservation in value:
+        _task_ledger_strict_fields(
+            reservation, {"class", "units"}, "resource reservation"
+        )
+        resource_class = reservation["class"]
+        if resource_class not in {
+            "Cpu", "Memory", "Disk", "Worktree", "Network", "Test", "Build", "Cargo"
+        }:
+            fail("[invalid_resource_accounting] resource class is invalid")
+        units = _task_ledger_u64(reservation["units"], "reservation units")
+        if units == 0 or resource_class in seen:
+            fail("[invalid_resource_accounting] reservations must be positive and unique")
+        seen.add(resource_class)
+        result.append({"class": resource_class, "units": units})
+    return result
+
+
+def _task_ledger_event(value) -> tuple[str, dict | None, object]:
+    if isinstance(value, str):
+        if value != "Selected":
+            fail(f"[unsupported_schema] unknown unit task event {value!r}")
+        return "Selected", None, "Selected"
+    if not isinstance(value, dict) or len(value) != 1:
+        fail("[unsupported_schema] task event must have exactly one variant")
+    kind, payload = next(iter(value.items()))
+    fields = {
+        "Proposed": {"revision", "source", "limits"},
+        "ConsumerAttached": {"consumer"},
+        "Queued": {"at"},
+        "EnteredResourceWait": {"at"},
+        "Admitted": {"at", "reservations"},
+        "SetupStarted": {"at"},
+        "RunStarted": {"at"},
+        "ProcessFinished": {"at", "disposition"},
+        "SetupFailed": {"at"},
+        "PreRunTerminated": {"at", "disposition"},
+        "CleanupFinished": {"at"},
+        "ReceiptCreated": {"at", "reference"},
+        "ReceiptCreationFailed": {"at", "reason"},
+        "ResourcesReleased": {"at"},
+        "TerminallyDeclined": {"at", "disposition", "reason", "existing_receipt"},
+    }
+    expected = fields.get(kind)
+    if expected is None:
+        fail(f"[unsupported_schema] unknown task event {kind!r}")
+    _task_ledger_strict_fields(payload, expected, f"{kind} event")
+    canonical = {}
+    for field in expected:
+        # Reordered below into Rust declaration order.
+        canonical[field] = payload[field]
+    if kind == "Proposed":
+        limits = payload["limits"]
+        _task_ledger_strict_fields(limits, {"timeout_ceiling_ms"}, "task limits")
+        timeout = _task_ledger_u64(limits["timeout_ceiling_ms"], "timeout ceiling")
+        if timeout == 0:
+            fail("[invalid_timing] timeout ceiling must be positive")
+        canonical = {
+            "revision": _task_ledger_revision(payload["revision"], "proposal"),
+            "source": _task_ledger_source(payload["source"]),
+            "limits": {"timeout_ceiling_ms": timeout},
+        }
+    elif kind == "ConsumerAttached":
+        canonical = {"consumer": _task_ledger_consumer(payload["consumer"])}
+    elif kind == "Admitted":
+        canonical = {
+            "at": _task_ledger_u64(payload["at"], "admitted at"),
+            "reservations": _task_ledger_reservations(payload["reservations"]),
+        }
+    elif kind in {"ProcessFinished", "PreRunTerminated"}:
+        dispositions = {
+            "Succeeded", "DeterministicFailure", "TimedOut", "Cancelled", "SetupFailed"
+        }
+        if payload["disposition"] not in dispositions:
+            fail("[unsupported_schema] execution disposition is invalid")
+        canonical = {
+            "at": _task_ledger_u64(payload["at"], f"{kind} at"),
+            "disposition": payload["disposition"],
+        }
+    elif kind == "ReceiptCreated":
+        canonical = {
+            "at": _task_ledger_u64(payload["at"], "receipt at"),
+            "reference": _task_ledger_receipt_reference(payload["reference"]),
+        }
+    elif kind == "ReceiptCreationFailed":
+        canonical = {
+            "at": _task_ledger_u64(payload["at"], "receipt failure at"),
+            "reason": _task_ledger_nonempty(payload["reason"], "receipt failure reason"),
+        }
+    elif kind == "TerminallyDeclined":
+        dispositions = {
+            "Unsupported", "Refused", "BudgetDeferred", "LatestSafeStartDeferred",
+            "Superseded", "SatisfiedByExistingReceipt"
+        }
+        if payload["disposition"] not in dispositions:
+            fail("[unsupported_schema] non-execution disposition is invalid")
+        receipt = payload["existing_receipt"]
+        if receipt is not None:
+            receipt = _task_ledger_receipt_reference(receipt)
+        canonical = {
+            "at": _task_ledger_u64(payload["at"], "declined at"),
+            "disposition": payload["disposition"],
+            "reason": _task_ledger_nonempty(payload["reason"], "terminal reason"),
+            "existing_receipt": receipt,
+        }
+    else:
+        canonical = {"at": _task_ledger_u64(payload["at"], f"{kind} at")}
+    return kind, canonical, {kind: canonical}
+
+
+def _task_ledger_timing() -> dict:
+    return {
+        "queued_at": None,
+        "resource_wait_started_at": None,
+        "admitted_at": None,
+        "setup_started_at": None,
+        "process_started_at": None,
+        "process_finished_at": None,
+        "cleanup_finished_at": None,
+        "receipt_recorded_at": None,
+        "resources_released_at": None,
+        "queue_ms": None,
+        "resource_wait_ms": None,
+        "setup_ms": None,
+        "process_ms": None,
+        "cleanup_ms": None,
+    }
+
+
+def _task_ledger_state(name: str, disposition: str | None = None) -> object:
+    return name if disposition is None else {name: disposition}
+
+
+def _task_ledger_state_parts(value) -> tuple[str, str | None]:
+    if isinstance(value, str):
+        return value, None
+    return next(iter(value.items()))
+
+
+def _task_ledger_duration(start, end: int, phase: str) -> int:
+    if start is None or end < start:
+        fail(f"[invalid_timing] {phase} finish has no valid matching start")
+    return end - start
+
+
+def _task_ledger_apply(snapshot: dict | None, task_id: str, kind: str, payload: dict | None,
+                       revision: dict) -> dict:
+    if kind == "Proposed":
+        if snapshot is not None:
+            fail(f"[duplicate_event] task {task_id} already has an initial proposal")
+        if payload["revision"] != revision:
+            fail("[stale_revision] proposed event does not join admitted revision")
+        return {
+            "id": task_id,
+            "state": "Proposed",
+            "revision_digest": revision["digest"],
+            "source": payload["source"],
+            "limits": payload["limits"],
+            "consumers": [],
+            "reservations": [],
+            "resources_released": False,
+            "timing": _task_ledger_timing(),
+            "execution_disposition": None,
+            "non_execution_disposition": None,
+            "terminal_reason": None,
+            "receipt": None,
+            "existing_receipt": None,
+            "last_event_at": None,
+        }
+    if snapshot is None:
+        fail(f"[missing_strong_binding] task {task_id} received {kind} before proposal")
+    state, state_disposition = _task_ledger_state_parts(snapshot["state"])
+    at = payload.get("at") if payload is not None else None
+    if at is not None and snapshot["last_event_at"] is not None and at < snapshot["last_event_at"]:
+        fail(f"[invalid_timing] {kind} precedes prior event")
+    if kind == "ConsumerAttached":
+        consumer = payload["consumer"]
+        existing = next((row for row in snapshot["consumers"] if row["id"] == consumer["id"]), None)
+        if existing is not None and existing != consumer:
+            fail(f"[conflicting_consumer] consumer {consumer['id']} changed metadata")
+        if existing is None:
+            snapshot["consumers"].append(consumer)
+        return snapshot
+
+    next_state = None
+    if state == "Proposed" and kind == "Selected":
+        next_state = "Selected"
+    elif state == "Selected" and kind == "Queued":
+        next_state = "Queued"
+        snapshot["timing"]["queued_at"] = at
+    elif state == "Queued" and kind == "EnteredResourceWait":
+        next_state = "ResourceWait"
+        snapshot["timing"]["queue_ms"] = _task_ledger_duration(snapshot["timing"]["queued_at"], at, "queue")
+        snapshot["timing"]["resource_wait_started_at"] = at
+    elif state in {"Queued", "ResourceWait"} and kind == "Admitted":
+        next_state = "Admitted"
+        if state == "Queued":
+            snapshot["timing"]["queue_ms"] = _task_ledger_duration(snapshot["timing"]["queued_at"], at, "queue")
+        if snapshot["timing"]["resource_wait_started_at"] is not None:
+            snapshot["timing"]["resource_wait_ms"] = _task_ledger_duration(snapshot["timing"]["resource_wait_started_at"], at, "resource wait")
+        snapshot["timing"]["admitted_at"] = at
+        snapshot["reservations"] = payload["reservations"]
+    elif state == "Admitted" and kind == "SetupStarted":
+        next_state = "Setup"
+        snapshot["timing"]["setup_started_at"] = at
+    elif state == "Setup" and kind == "RunStarted":
+        next_state = "Running"
+        snapshot["timing"]["setup_ms"] = _task_ledger_duration(snapshot["timing"]["setup_started_at"], at, "setup")
+        snapshot["timing"]["process_started_at"] = at
+    elif state == "Running" and kind == "ProcessFinished" and payload["disposition"] != "SetupFailed":
+        next_state = _task_ledger_state("Cleanup", payload["disposition"])
+        snapshot["timing"]["process_ms"] = _task_ledger_duration(snapshot["timing"]["process_started_at"], at, "process")
+        snapshot["timing"]["process_finished_at"] = at
+        snapshot["execution_disposition"] = payload["disposition"]
+    elif state in {"Admitted", "Setup"} and kind == "SetupFailed":
+        next_state = _task_ledger_state("ReceiptPending", "SetupFailed")
+        if snapshot["timing"]["setup_started_at"] is not None:
+            snapshot["timing"]["setup_ms"] = _task_ledger_duration(snapshot["timing"]["setup_started_at"], at, "setup")
+        snapshot["execution_disposition"] = "SetupFailed"
+    elif state in {"Admitted", "Setup"} and kind == "PreRunTerminated" and payload["disposition"] in {"TimedOut", "Cancelled"}:
+        next_state = _task_ledger_state("ReceiptPending", payload["disposition"])
+        if snapshot["timing"]["setup_started_at"] is not None:
+            snapshot["timing"]["setup_ms"] = _task_ledger_duration(snapshot["timing"]["setup_started_at"], at, "setup")
+        snapshot["execution_disposition"] = payload["disposition"]
+    elif state == "Cleanup" and kind == "CleanupFinished":
+        next_state = _task_ledger_state("ReceiptPending", state_disposition)
+        snapshot["timing"]["cleanup_ms"] = _task_ledger_duration(snapshot["timing"]["process_finished_at"], at, "cleanup")
+        snapshot["timing"]["cleanup_finished_at"] = at
+    elif state == "ReceiptPending" and kind in {"ReceiptCreated", "ReceiptCreationFailed"}:
+        next_state = _task_ledger_state("ReleasePending", state_disposition)
+        snapshot["receipt"] = (
+            {"Created": {"reference": payload["reference"]}}
+            if kind == "ReceiptCreated"
+            else {"CreationFailed": {"reason": payload["reason"]}}
+        )
+        snapshot["timing"]["receipt_recorded_at"] = at
+    elif state == "ReleasePending" and kind == "ResourcesReleased":
+        next_state = _task_ledger_state("ResourcesReleased", state_disposition)
+        snapshot["resources_released"] = True
+        snapshot["timing"]["resources_released_at"] = at
+    elif state in {"Proposed", "Selected", "Queued", "ResourceWait"} and kind == "TerminallyDeclined":
+        disposition = payload["disposition"]
+        receipt = payload["existing_receipt"]
+        if (disposition == "SatisfiedByExistingReceipt") != (receipt is not None):
+            fail("[missing_strong_binding] satisfied disposition and existing receipt disagree")
+        next_state = _task_ledger_state("TerminallyDeclined", disposition)
+        if state == "Queued":
+            snapshot["timing"]["queue_ms"] = _task_ledger_duration(snapshot["timing"]["queued_at"], at, "queue")
+        if state == "ResourceWait":
+            snapshot["timing"]["resource_wait_ms"] = _task_ledger_duration(snapshot["timing"]["resource_wait_started_at"], at, "resource wait")
+        snapshot["non_execution_disposition"] = disposition
+        snapshot["terminal_reason"] = payload["reason"]
+        snapshot["existing_receipt"] = receipt
+    if next_state is None:
+        fail(f"[invalid_transition] {state} cannot accept {kind}")
+    snapshot["state"] = next_state
+    if at is not None:
+        snapshot["last_event_at"] = at
+    return snapshot
+
+
+def _verify_task_ledger_bytes(events_bytes: bytes, snapshot_bytes: bytes, binding: dict) -> None:
+    if not events_bytes or not events_bytes.endswith(b"\n") or b"\r" in events_bytes:
+        fail("[truncated_event_stream] NDJSON must end each record with one LF")
+    try:
+        text = events_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        fail("[truncated_event_stream] event stream is not UTF-8")
+    tasks = {}
+    previous_digest = None
+    for index, line in enumerate(text[:-1].split("\n")):
+        if not line:
+            fail("[truncated_event_stream] event stream contains an empty record")
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            fail(f"[truncated_event_stream] event record {index} is malformed")
+        _task_ledger_strict_fields(record, _TASK_LEDGER_EVENT_FIELDS, f"event record {index}")
+        if record["schema"] != TASK_LEDGER_EVENT_SCHEMA:
+            fail(f"[unsupported_schema] task-ledger event schema is {record['schema']!r}")
+        if isinstance(record["sequence"], bool) or record["sequence"] != index:
+            fail(f"[event_order] expected sequence {index}, got {record['sequence']!r}")
+        task_id = _task_ledger_nonempty(record["task_id"], "task id")
+        revision = _task_ledger_revision(record["revision"], f"event {index}")
+        require_joined_revision(revision, f"task-ledger event {index}", binding)
+        if record["previous_digest"] != previous_digest:
+            fail(f"[source_digest_mismatch] event {index} breaks the digest chain")
+        kind, payload, event = _task_ledger_event(record["event"])
+        source = {
+            "schema": TASK_LEDGER_EVENT_SCHEMA,
+            "sequence": index,
+            "task_id": task_id,
+            "revision": revision,
+            "previous_digest": previous_digest,
+            "event": event,
+        }
+        digest = _task_ledger_digest(_TASK_LEDGER_EVENT_DIGEST_DOMAIN, _task_ledger_json(source))
+        if record["digest"] != digest:
+            fail(f"[source_digest_mismatch] event {index} digest is invalid")
+        canonical_record = {**source, "digest": digest}
+        if line.encode("utf-8") != _task_ledger_json(canonical_record):
+            fail(f"[source_digest_mismatch] event {index} bytes are not canonical")
+        tasks[task_id] = _task_ledger_apply(tasks.get(task_id), task_id, kind, payload, binding)
+        previous_digest = digest
+    for task_id, snapshot in tasks.items():
+        state, _ = _task_ledger_state_parts(snapshot["state"])
+        if state == "ReleasePending":
+            fail(f"[unreleased_resources] task {task_id} reached a terminal outcome without release")
+        if state not in {"ResourcesReleased", "TerminallyDeclined"}:
+            fail(f"[truncated_event_stream] task {task_id} is not terminal")
+    recomputed = {
+        "schema": TASK_LEDGER_SNAPSHOT_SCHEMA,
+        "revision": dict(binding),
+        "event_count": len(text[:-1].split("\n")),
+        "source_digest": _task_ledger_digest(_TASK_LEDGER_STREAM_DIGEST_DOMAIN, events_bytes),
+        "tasks": [tasks[key] for key in sorted(tasks)],
+    }
+    try:
+        committed = json.loads(snapshot_bytes)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        fail("[unsupported_schema] snapshot is not strict v1 JSON")
+    _task_ledger_strict_fields(committed, _TASK_LEDGER_SNAPSHOT_FIELDS, "task-ledger snapshot")
+    if committed["schema"] != TASK_LEDGER_SNAPSHOT_SCHEMA:
+        fail(f"[unsupported_schema] task-ledger snapshot schema is {committed['schema']!r}")
+    require_joined_revision(committed["revision"], "task-ledger snapshot", binding)
+    if committed != recomputed or snapshot_bytes != _task_ledger_json(recomputed) + b"\n":
+        fail("[forged_snapshot] snapshot does not match deterministic event replay")
+
+
+def require_task_ledger_artifacts(root: pathlib.Path) -> None:
+    events_path = root / "task_ledger_events.ndjson"
+    snapshot_path = root / "review/task_ledger_snapshot.json"
+    if not events_path.exists() and not snapshot_path.exists():
+        return
+    if not events_path.is_file() or not snapshot_path.is_file():
+        fail("[truncated_event_stream] task-ledger event and snapshot artifacts must coexist")
+    binding = load_revision_binding(root)
+    if binding is None:
+        fail("[missing_strong_binding] task-ledger artifacts require revision admission")
+    _verify_task_ledger_bytes(events_path.read_bytes(), snapshot_path.read_bytes(), binding)
+
+
 def require_revision_coherence(root: pathlib.Path) -> None:
     """A1.4: when the packet admits a revision, every remaining stamped
     surface (model stages, review.json embedded rows) must join it too."""
@@ -14610,6 +15073,7 @@ def run_self_tests() -> None:
     require_run_mode("intelligent-ci", "self-test intelligent-ci mode")
     self_test_claim_graph_contract()
     self_test_revision_binding_enforcement()
+    self_test_task_ledger_contract()
     self_test_artifact_only_post_receipt_contract()
     self_test_reviewer_value_heading_parity_with_rust()
     self_test_delivery_transaction_contract()
@@ -15506,6 +15970,149 @@ def self_test_observation(
     }
 
 
+def _task_ledger_self_test_records(events: list[tuple[str, object]], binding: dict) -> bytes:
+    records = []
+    previous = None
+    for sequence, (task_id, event) in enumerate(events):
+        source = {
+            "schema": TASK_LEDGER_EVENT_SCHEMA,
+            "sequence": sequence,
+            "task_id": task_id,
+            "revision": dict(binding),
+            "previous_digest": previous,
+            "event": event,
+        }
+        digest = _task_ledger_digest(
+            _TASK_LEDGER_EVENT_DIGEST_DOMAIN, _task_ledger_json(source)
+        )
+        records.append(_task_ledger_json({**source, "digest": digest}) + b"\n")
+        previous = digest
+    return b"".join(records)
+
+
+def _task_ledger_self_test_artifacts(
+    events: list[tuple[str, object]], binding: dict
+) -> tuple[bytes, bytes]:
+    event_bytes = _task_ledger_self_test_records(events, binding)
+    tasks = {}
+    for task_id, event in events:
+        kind, payload, canonical = _task_ledger_event(event)
+        if canonical != event:
+            fail("task-ledger self-test fixture is not canonical")
+        tasks[task_id] = _task_ledger_apply(
+            tasks.get(task_id), task_id, kind, payload, binding
+        )
+    snapshot = {
+        "schema": TASK_LEDGER_SNAPSHOT_SCHEMA,
+        "revision": dict(binding),
+        "event_count": len(events),
+        "source_digest": _task_ledger_digest(
+            _TASK_LEDGER_STREAM_DIGEST_DOMAIN, event_bytes
+        ),
+        "tasks": [tasks[key] for key in sorted(tasks)],
+    }
+    return event_bytes, _task_ledger_json(snapshot) + b"\n"
+
+
+def self_test_task_ledger_contract() -> None:
+    binding = {
+        "digest": "a" * 64,
+        "semantics": "candidate_head",
+        "reviewed_commit": "a" * 40,
+    }
+    task_id = "proof/cargo-test"
+    events = [
+        (task_id, {"Proposed": {"revision": dict(binding), "source": "Required", "limits": {"timeout_ceiling_ms": 60000}}}),
+        (task_id, {"ConsumerAttached": {"consumer": {"id": "gate", "requirement": "Required", "value": "GateCritical"}}}),
+        (task_id, "Selected"),
+        (task_id, {"Queued": {"at": 10}}),
+        (task_id, {"Admitted": {"at": 20, "reservations": [{"class": "Cargo", "units": 1}]}}),
+        (task_id, {"SetupStarted": {"at": 21}}),
+        (task_id, {"RunStarted": {"at": 25}}),
+        (task_id, {"ProcessFinished": {"at": 40, "disposition": "Succeeded"}}),
+        (task_id, {"CleanupFinished": {"at": 42}}),
+        (task_id, {"ReceiptCreated": {"at": 43, "reference": "review/proof_receipts.json#cargo-test"}}),
+        (task_id, {"ResourcesReleased": {"at": 44}}),
+    ]
+    event_bytes, snapshot_bytes = _task_ledger_self_test_artifacts(events, binding)
+    if hashlib.sha256(event_bytes).hexdigest() != "b4fbc4688e3bcaa5740ba7bcbccb960aa3d1d6db4a03978bdcfb6ef1253e5427":
+        fail("task-ledger Python/Rust event golden drifted")
+    if hashlib.sha256(snapshot_bytes).hexdigest() != "d13b28c2dbccf7276e1f82d71eb0e77637839d70bc11a7161f7b9c92aeb231cb":
+        fail("task-ledger Python/Rust snapshot golden drifted")
+    _verify_task_ledger_bytes(event_bytes, snapshot_bytes, binding)
+
+    lines = event_bytes.splitlines(keepends=True)
+    mutated = json.loads(lines[0])
+    mutated["digest"] = ("b" if mutated["digest"][0] == "a" else "a") + mutated["digest"][1:]
+    expect_self_test_failure(
+        "task-ledger mutated source digest",
+        "[source_digest_mismatch]",
+        lambda: _verify_task_ledger_bytes(
+            _task_ledger_json(mutated) + b"\n" + b"".join(lines[1:]),
+            snapshot_bytes,
+            binding,
+        ),
+    )
+    expect_self_test_failure(
+        "task-ledger reordered events",
+        "[event_order]",
+        lambda: _verify_task_ledger_bytes(b"".join([lines[1], lines[0], *lines[2:]]), snapshot_bytes, binding),
+    )
+    expect_self_test_failure(
+        "task-ledger truncated before release",
+        "[unreleased_resources]",
+        lambda: _verify_task_ledger_bytes(b"".join(lines[:-1]), snapshot_bytes, binding),
+    )
+    duplicate = _task_ledger_self_test_records(
+        [*events, (task_id, {"ResourcesReleased": {"at": 45}})], binding
+    )
+    expect_self_test_failure(
+        "task-ledger duplicate terminal",
+        "[invalid_transition]",
+        lambda: _verify_task_ledger_bytes(duplicate, snapshot_bytes, binding),
+    )
+    foreign = {**binding, "digest": "b" * 64, "reviewed_commit": "b" * 40}
+    stale = _task_ledger_self_test_records(
+        [(task_id, {"Proposed": {"revision": dict(foreign), "source": "Required", "limits": {"timeout_ceiling_ms": 60000}}})],
+        foreign,
+    )
+    expect_self_test_failure(
+        "task-ledger stale revision",
+        "[stale_revision]",
+        lambda: _verify_task_ledger_bytes(stale, snapshot_bytes, binding),
+    )
+    forged = json.loads(snapshot_bytes)
+    forged["tasks"][0]["resources_released"] = False
+    expect_self_test_failure(
+        "task-ledger forged snapshot",
+        "[forged_snapshot]",
+        lambda: _verify_task_ledger_bytes(event_bytes, _task_ledger_json(forged) + b"\n", binding),
+    )
+    unknown = json.loads(lines[0])
+    unknown["future"] = True
+    expect_self_test_failure(
+        "task-ledger unknown v1 field",
+        "[unsupported_schema]",
+        lambda: _verify_task_ledger_bytes(_task_ledger_json(unknown) + b"\n" + b"".join(lines[1:]), snapshot_bytes, binding),
+    )
+    expect_self_test_failure(
+        "task-ledger invalid external receipt reference",
+        "[invalid_receipt_reference]",
+        lambda: _task_ledger_receipt_reference("../outside.json"),
+    )
+    for hostile_reference in ("C:/outside.json", ".git/config", "bad\nname.json"):
+        expect_self_test_failure(
+            "task-ledger hostile external receipt reference",
+            "[invalid_receipt_reference]",
+            lambda value=hostile_reference: _task_ledger_receipt_reference(value),
+        )
+    expect_self_test_failure(
+        "task-ledger Python integer exceeds Rust u64",
+        "[invalid_timing]",
+        lambda: _task_ledger_u64(1 << 64, "event time"),
+    )
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("root", nargs="?", default="target/ub-review")
@@ -15553,6 +16160,7 @@ def main(argv: list[str]) -> int:
     metrics = require_metrics(root, review)
     require_cost_receipt(root, metrics)
     require_revision_coherence(root)
+    require_task_ledger_artifacts(root)
     require_floor_trend(root)
     require_fill_ledger(root)
     require_quality_receipt(root, metrics, review)

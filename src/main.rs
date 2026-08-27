@@ -61,6 +61,7 @@ mod revision_admission;
 pub(crate) use revision_admission::*;
 mod compiler_reconciliation;
 mod task_ledger;
+mod task_ledger_artifact;
 pub(crate) use compiler_reconciliation::*;
 mod review_topics;
 pub(crate) use review_topics::*;

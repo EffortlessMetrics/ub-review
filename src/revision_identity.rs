@@ -136,6 +136,7 @@ const CANONICAL_VERSION: &str = "ub-review.revision-identity.v1";
 /// merge-result distinction end to end. Legacy symbolic `head` labels stay
 /// display-only next to this.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct RevisionRef {
     pub(crate) digest: String,
     pub(crate) semantics: String,

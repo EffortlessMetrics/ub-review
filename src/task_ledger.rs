@@ -57,6 +57,7 @@ pub(crate) enum TaskValueClass {
 
 /// One interested party and its explicit requirement/value metadata.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct TaskConsumer {
     id: String,
     requirement: TaskRequirement,
@@ -114,6 +115,7 @@ pub(crate) enum TaskResourceClass {
 
 /// One positive resource reservation recorded by the admitting scheduler.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct ResourceReservation {
     class: TaskResourceClass,
     units: u64,
@@ -142,6 +144,7 @@ impl ResourceReservation {
 
 /// A safety ceiling is admission metadata, never observed process duration.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct TaskExecutionLimits {
     timeout_ceiling_ms: u64,
 }
@@ -192,6 +195,7 @@ pub(crate) enum TaskReceiptOutcome {
 
 /// Distinct injected timing points and derived durations.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct TaskTiming {
     pub(crate) queued_at: Option<MonotonicInstant>,
     pub(crate) resource_wait_started_at: Option<MonotonicInstant>,
@@ -228,6 +232,7 @@ pub(crate) enum TaskState {
 
 /// Append-only inputs to the pure reducer.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) enum TaskEvent {
     Proposed {
         revision: RevisionRef,
@@ -333,6 +338,7 @@ impl TaskEvent {
 
 /// Deterministic snapshot produced by replaying one task's events.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct TaskSnapshot {
     pub(crate) id: TaskId,
     pub(crate) state: TaskState,

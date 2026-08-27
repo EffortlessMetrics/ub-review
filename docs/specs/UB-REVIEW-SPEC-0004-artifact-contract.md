@@ -124,6 +124,23 @@ receipt_routes.ndjson          tool_gate_outcomes.ndjson
 resource_leases.ndjson
 ```
 
+Task-ledger A2.3 adds a dormant, optional pair before production task
+instrumentation lands in #925:
+
+```text
+task_ledger_events.ndjson          ub-review.task_ledger_event.v1 lines
+review/task_ledger_snapshot.json   ub-review.task_ledger_snapshot.v1
+```
+
+Neither file is emitted by `run` yet, preserving the current production
+tree. If either is present, the verifier requires both and requires strong
+packet revision binding. Event records use contiguous caller order, a
+SHA-256 source-digest chain, strict transition replay, canonical LF-delimited
+JSON bytes, and artifact-relative receipt references. The snapshot is only a
+derived cache: the verifier recomputes it from the event stream and requires
+byte equality. A structurally valid external receipt reference is a pointer,
+not proof; #925 owns joining it to a produced receipt.
+
 `review/` (the compiled review surface):
 
 ```text
@@ -359,6 +376,12 @@ refuted or dropped
 (scripts/verify-bun-review-artifacts.py `require_final_compiler_input`;
 src/main.rs). Consumers must match schema strings exactly and treat an
 unknown version as unreadable, the same way the verifier does.
+
+Task-ledger v1 is intentionally stricter than an additive-field reader:
+unknown fields at the event envelope, revision, event payload, or snapshot
+envelope are rejected. Adding a field therefore requires an explicit schema
+version decision and synchronized Rust/Python verifier change. This prevents
+an older verifier from silently hashing or replaying a different meaning.
 
 Deliberate exceptions:
 
