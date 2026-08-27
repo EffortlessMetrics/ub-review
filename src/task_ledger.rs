@@ -249,6 +249,10 @@ pub(crate) enum TaskEvent {
     SetupFailed {
         at: MonotonicInstant,
     },
+    PreRunTerminated {
+        at: MonotonicInstant,
+        disposition: TaskTerminalDisposition,
+    },
     CleanupFinished {
         at: MonotonicInstant,
     },
@@ -285,6 +289,7 @@ impl TaskEvent {
             Self::RunStarted { .. } => "running",
             Self::ProcessFinished { .. } => "process_finished",
             Self::SetupFailed { .. } => "setup_failed",
+            Self::PreRunTerminated { .. } => "pre_run_terminated",
             Self::CleanupFinished { .. } => "cleanup_finished",
             Self::ReceiptCreated { .. } => "receipt_created",
             Self::ReceiptCreationFailed { .. } => "receipt_creation_failed",
@@ -303,6 +308,7 @@ impl TaskEvent {
             | Self::RunStarted { at }
             | Self::ProcessFinished { at, .. }
             | Self::SetupFailed { at }
+            | Self::PreRunTerminated { at, .. }
             | Self::CleanupFinished { at }
             | Self::ReceiptCreated { at, .. }
             | Self::ReceiptCreationFailed { at, .. }
@@ -468,6 +474,16 @@ fn transition(state: TaskState, event: &TaskEvent) -> Result<TaskState> {
         (TaskState::Admitted | TaskState::Setup, TaskEvent::SetupFailed { .. }) => Some(
             TaskState::ReceiptPending(TaskTerminalDisposition::SetupFailed),
         ),
+        (
+            TaskState::Admitted | TaskState::Setup,
+            TaskEvent::PreRunTerminated { disposition, .. },
+        ) if matches!(
+            disposition,
+            TaskTerminalDisposition::TimedOut | TaskTerminalDisposition::Cancelled
+        ) =>
+        {
+            Some(TaskState::ReceiptPending(*disposition))
+        }
         (TaskState::Cleanup(disposition), TaskEvent::CleanupFinished { .. }) => {
             Some(TaskState::ReceiptPending(disposition))
         }
@@ -551,6 +567,20 @@ fn apply_payload(snapshot: &mut TaskSnapshot, event: &TaskEvent) -> Result<()> {
                 None => None,
             };
             snapshot.execution_disposition = Some(TaskTerminalDisposition::SetupFailed);
+        }
+        TaskEvent::PreRunTerminated { at, disposition } => {
+            ensure!(
+                matches!(
+                    disposition,
+                    TaskTerminalDisposition::TimedOut | TaskTerminalDisposition::Cancelled
+                ),
+                "[invalid_transition] pre-run termination must be timed out or cancelled"
+            );
+            snapshot.timing.setup_ms = match snapshot.timing.setup_started_at {
+                Some(started) => duration(Some(started), *at, "setup")?,
+                None => None,
+            };
+            snapshot.execution_disposition = Some(*disposition);
         }
         TaskEvent::CleanupFinished { at } => {
             snapshot.timing.cleanup_ms =
@@ -935,6 +965,72 @@ mod tests {
         ));
         ensure!(snapshot.execution_disposition == Some(TaskTerminalDisposition::SetupFailed));
         ensure!(snapshot.resources_released);
+        Ok(())
+    }
+
+    #[test]
+    /// Cancellation and timeout before a run retain their truthful disposition and timing.
+    fn pre_run_termination_attempts_receipt_and_releases_resources() -> Result<()> {
+        for disposition in [
+            TaskTerminalDisposition::TimedOut,
+            TaskTerminalDisposition::Cancelled,
+        ] {
+            for setup_started in [false, true] {
+                let (mut reducer, id, revision) = reducer_at_queue()?;
+                reducer.apply(
+                    &id,
+                    &TaskEvent::Admitted {
+                        at: MonotonicInstant::from_millis(20),
+                        reservations: vec![ResourceReservation::new(
+                            TaskResourceClass::Memory,
+                            512,
+                        )?],
+                    },
+                    &revision,
+                )?;
+                if setup_started {
+                    reducer.apply(
+                        &id,
+                        &TaskEvent::SetupStarted {
+                            at: MonotonicInstant::from_millis(25),
+                        },
+                        &revision,
+                    )?;
+                }
+                reducer.apply(
+                    &id,
+                    &TaskEvent::PreRunTerminated {
+                        at: MonotonicInstant::from_millis(30),
+                        disposition,
+                    },
+                    &revision,
+                )?;
+                reducer.apply(
+                    &id,
+                    &TaskEvent::ReceiptCreated {
+                        at: MonotonicInstant::from_millis(31),
+                        reference: "receipts/pre-run.json".to_owned(),
+                    },
+                    &revision,
+                )?;
+                reducer.apply(
+                    &id,
+                    &TaskEvent::ResourcesReleased {
+                        at: MonotonicInstant::from_millis(32),
+                    },
+                    &revision,
+                )?;
+
+                let snapshot = reducer
+                    .snapshot()
+                    .ok_or_else(|| anyhow::anyhow!("snapshot"))?;
+                ensure!(snapshot.execution_disposition == Some(disposition));
+                ensure!(snapshot.timing.setup_ms == setup_started.then_some(5));
+                ensure!(snapshot.timing.process_started_at.is_none());
+                ensure!(snapshot.timing.process_ms.is_none());
+                ensure!(snapshot.resources_released);
+            }
+        }
         Ok(())
     }
 
