@@ -9,35 +9,69 @@ pub(crate) fn prepare_plan(
     selectors: &SelectorArgs,
 ) -> Result<(Config, DiffContext, BoxState, Plan, RevisionAdmission)> {
     validate_selector_syntax(selectors)?;
+    // Trusted admission must validate the clean base root and explicit diff
+    // objects before any repository config is read. A dirty or mismatched
+    // root must not get an opportunity to influence configuration parsing.
+    let trusted_admission = trusted_diff_inputs(args)?
+        .map(|inputs| admit_trusted_diff(&args.root, &inputs))
+        .transpose()?;
     let config = Config::load_or_default(
         &args.config,
         runtime_profile_override(args.profile.as_ref(), args.runtime_profile.as_ref()),
     )?;
     let profile = config.selected_profile()?;
     let box_state = BoxState::detect()?;
-    let diff = DiffContext::from_git(&args.root, &args.base, &args.head)?;
-    // A1.2 (#949): admit the exact reviewed revision next to the diff so the
-    // digests bind to the same changed-file set and patch. Ambiguity here is
-    // an explicit evidence failure, never a relabeled identity. Hosted
-    // non-PR events render the workflow expression as an empty string, which
-    // means "no metadata" exactly like an unset variable.
-    let pr_head_sha = args
-        .pr_head_sha
-        .as_deref()
-        .map(str::trim)
-        .filter(|sha| !sha.is_empty());
-    let revision = admit_revision(
-        &args.root,
-        &args.base,
-        &args.head,
-        pr_head_sha,
-        &diff.changed_files,
-        &diff.patch,
-    )?;
+    let (diff, revision) = if let Some(admission) = trusted_admission {
+        admission
+    } else {
+        let diff = DiffContext::from_git(&args.root, &args.base, &args.head)?;
+        // A1.2 (#949): admit the exact reviewed revision next to the diff so the
+        // digests bind to the same changed-file set and patch. Ambiguity here is
+        // an explicit evidence failure, never a relabeled identity. Hosted
+        // non-PR events render the workflow expression as an empty string, which
+        // means "no metadata" exactly like an unset variable.
+        let pr_head_sha = args
+            .pr_head_sha
+            .as_deref()
+            .map(str::trim)
+            .filter(|sha| !sha.is_empty());
+        let revision = admit_revision(
+            &args.root,
+            &args.base,
+            &args.head,
+            pr_head_sha,
+            &diff.changed_files,
+            &diff.patch,
+        )?;
+        (diff, revision)
+    };
     revision.validate()?;
     let mut plan = build_plan(&config, profile, &box_state, &diff, &args.root, allow_heavy);
     apply_plan_selectors(&mut plan, selectors)?;
     Ok((config, diff, box_state, plan, revision))
+}
+
+pub(crate) fn trusted_diff_inputs(args: &ReviewArgs) -> Result<Option<TrustedDiffInputs>> {
+    match (
+        &args.trusted_base_tree,
+        &args.trusted_head_sha,
+        &args.trusted_changed_files,
+        &args.trusted_diff_patch,
+    ) {
+        (None, None, None, None) => Ok(None),
+        (Some(base_tree), Some(head_sha), Some(changed_files), Some(diff_patch)) => {
+            Ok(Some(TrustedDiffInputs {
+                base_tree: base_tree.clone(),
+                head_sha: head_sha.clone(),
+                changed_files: changed_files.clone(),
+                diff_patch: diff_patch.clone(),
+                pr_head_sha: args.pr_head_sha.clone(),
+            }))
+        }
+        _ => bail!(
+            "trusted-base diff admission requires --trusted-base-tree, --trusted-head-sha, --trusted-changed-files, and --trusted-diff-patch together"
+        ),
+    }
 }
 
 pub(crate) fn write_plan_artifacts(
@@ -229,4 +263,31 @@ pub(crate) struct RepairQueueFile {
     /// `requires_witness_receipt`, `requires_human_review`, `do_not_auto_repair`.
     #[serde(default)]
     pub(crate) buckets: std::collections::BTreeMap<String, Vec<RepairQueueEntry>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn trusted_diff_inputs_are_absent_or_complete() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut review = crate::tests::test_run_args(temp.path().join("out")).review;
+        assert!(trusted_diff_inputs(&review)?.is_none());
+
+        review.trusted_base_tree = Some("a".repeat(40));
+        let Err(error) = trusted_diff_inputs(&review) else {
+            bail!("partial trusted-diff inputs must fail closed");
+        };
+        assert!(error.to_string().contains("requires --trusted-base-tree"));
+
+        review.trusted_head_sha = Some("b".repeat(40));
+        review.trusted_changed_files = Some(temp.path().join("changed-files.txt"));
+        review.trusted_diff_patch = Some(temp.path().join("diff.patch"));
+        let inputs = trusted_diff_inputs(&review)?
+            .ok_or_else(|| anyhow::anyhow!("complete trusted-diff inputs were not admitted"))?;
+        assert_eq!(inputs.base_tree, "a".repeat(40));
+        assert_eq!(inputs.head_sha, "b".repeat(40));
+        Ok(())
+    }
 }

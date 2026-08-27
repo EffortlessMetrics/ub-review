@@ -455,6 +455,20 @@ pub(crate) struct ReviewArgs {
     /// two-parent reviewed commit is an explicit admission failure.
     #[arg(long, env = "UB_REVIEW_PR_HEAD_SHA")]
     pub(crate) pr_head_sha: Option<String>,
+    /// Trusted-base admission: exact tree object for the clean base-owned
+    /// checkout. All four trusted-diff inputs must be supplied together.
+    #[arg(long, env = "UB_REVIEW_TRUSTED_BASE_TREE")]
+    pub(crate) trusted_base_tree: Option<String>,
+    /// Trusted-base admission: exact candidate head SHA label. The object is
+    /// deliberately not resolved or loaded from the repository.
+    #[arg(long, env = "UB_REVIEW_TRUSTED_HEAD_SHA")]
+    pub(crate) trusted_head_sha: Option<String>,
+    /// Trusted-base admission: newline-delimited, sorted changed paths.
+    #[arg(long, env = "UB_REVIEW_TRUSTED_CHANGED_FILES")]
+    pub(crate) trusted_changed_files: Option<PathBuf>,
+    /// Trusted-base admission: patch object generated outside this process.
+    #[arg(long, env = "UB_REVIEW_TRUSTED_DIFF_PATCH")]
+    pub(crate) trusted_diff_patch: Option<PathBuf>,
     /// Config path.
     #[arg(long, default_value = ".ub-review.toml", env = "UB_REVIEW_CONFIG")]
     pub(crate) config: PathBuf,

@@ -53,6 +53,11 @@ impl CommitTree {
         self.commit.as_str()
     }
 
+    /// Validated tree object id.
+    pub(crate) fn tree_oid(&self) -> &str {
+        self.tree.as_str()
+    }
+
     /// Validates and constructs one commit/tree side of an identity.
     pub(crate) fn new(label: &str, commit: &str, tree: &str) -> Result<Self> {
         let commit = Oid::parse(commit).map_err(|e| anyhow::anyhow!("{label} commit: {e}"))?;

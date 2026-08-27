@@ -71,6 +71,24 @@ fn action_forwards_prior_resolved_candidates_input() -> Result<()> {
 }
 
 #[test]
+fn action_forwards_complete_trusted_diff_admission_inputs() -> Result<()> {
+    let action = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("action.yml"))?;
+    for input in [
+        "trusted-base-tree",
+        "trusted-head-sha",
+        "trusted-changed-files",
+        "trusted-diff-patch",
+    ] {
+        assert!(action.contains(&format!("  {input}:")), "missing {input}");
+        assert!(
+            action.contains(&format!("--{input} \"${{{{ inputs['{input}'] }}}}\"")),
+            "action does not forward {input}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn release_resolver_validates_binary_version_before_acceptance() -> Result<()> {
     let action = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("action.yml"))?;
     let candidate = action
