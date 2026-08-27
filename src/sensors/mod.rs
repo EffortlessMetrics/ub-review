@@ -203,6 +203,18 @@ impl LateSensorPhase {
         run_started: &Instant,
         tracker: &mut RunLoopTracker,
     ) -> Result<()> {
+        let phase = self.join_phase(event_log, run_started)?;
+        tracker.record(phase);
+        Ok(())
+    }
+
+    /// Join the late sensor owner and return its scheduler phase for a caller
+    /// that must wait on another thread before recording shared run state.
+    pub(crate) fn join_phase(
+        self,
+        event_log: &EventLog,
+        run_started: &Instant,
+    ) -> Result<RunLoopPhase> {
         let joined = self.handle.join();
         let status = match &joined {
             Ok(Ok(())) => "completed",
@@ -213,9 +225,12 @@ impl LateSensorPhase {
             "late_sensor_phase_joined",
             serde_json::json!({"sensors": self.sensor_ids, "status": status}),
         )?;
-        finish_run_loop(event_log, run_started, tracker, self.run_loop, status)?;
+        let phase = finish_run_loop_phase(event_log, run_started, self.run_loop, status)?;
         match joined {
-            Ok(result) => result,
+            Ok(result) => {
+                result?;
+                Ok(phase)
+            }
             Err(_) => Err(anyhow::anyhow!("late sensor phase thread panicked")),
         }
     }
