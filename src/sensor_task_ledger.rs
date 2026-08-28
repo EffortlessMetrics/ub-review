@@ -6,7 +6,6 @@
 
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use std::{fs, io};
 
 use anyhow::{Context, Result, ensure};
 
@@ -15,7 +14,9 @@ use crate::task_ledger::{
     TaskNonExecutionDisposition, TaskRequirement, TaskResourceClass, TaskSource,
     TaskTerminalDisposition, TaskValueClass,
 };
-use crate::task_ledger_artifact::{TaskLedgerInput, write_task_ledger_artifacts};
+use crate::task_ledger_artifact::{
+    TaskLedgerInput, remove_task_ledger_artifacts, write_task_ledger_artifacts,
+};
 use crate::{Plan, RevisionRef, SensorPlan, work_queue_sensor_consumers};
 
 // tokmd runs one version preflight, four always-on report commands, and at
@@ -189,11 +190,7 @@ impl SensorTaskLedger {
             .map_err(|_| anyhow::anyhow!("sensor task-ledger mutex poisoned"))?
             .clone();
         if inputs.is_empty() {
-            let events_result = remove_optional_artifact(&out.join("task_ledger_events.ndjson"));
-            let snapshot_result =
-                remove_optional_artifact(&out.join("review/task_ledger_snapshot.json"));
-            events_result?;
-            return snapshot_result;
+            return remove_task_ledger_artifacts(out);
         }
         write_task_ledger_artifacts(out, &self.inner.revision, &inputs)
     }
@@ -211,14 +208,6 @@ impl SensorTaskLedger {
             .map_err(|_| anyhow::anyhow!("sensor task-ledger mutex poisoned"))?
             .extend(events);
         Ok(())
-    }
-}
-
-fn remove_optional_artifact(path: &std::path::Path) -> Result<()> {
-    match fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error).with_context(|| format!("remove stale {}", path.display())),
     }
 }
 

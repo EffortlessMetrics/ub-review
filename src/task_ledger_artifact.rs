@@ -97,6 +97,45 @@ pub(crate) fn write_task_ledger_artifacts(
     publish_task_ledger_artifacts(out, &artifacts, |_| Ok(()))
 }
 
+/// Remove the optional pair as one rollback-safe state transition.
+pub(crate) fn remove_task_ledger_artifacts(out: &Path) -> Result<()> {
+    remove_task_ledger_artifacts_with_hook(out, |_| Ok(()))
+}
+
+fn remove_task_ledger_artifacts_with_hook(
+    out: &Path,
+    before_snapshot_remove: impl FnOnce(&Path) -> Result<()>,
+) -> Result<()> {
+    let events_path = out.join("task_ledger_events.ndjson");
+    let snapshot_path = out.join("review/task_ledger_snapshot.json");
+    let previous_events = read_optional_file(&events_path)?;
+    let previous_snapshot = read_optional_file(&snapshot_path)?;
+    let mut events_removed = false;
+    let mut snapshot_removed = false;
+    let removal = (|| -> Result<()> {
+        events_removed = remove_file_if_present_with_status(&events_path)?;
+        before_snapshot_remove(&snapshot_path)?;
+        snapshot_removed = remove_file_if_present_with_status(&snapshot_path)?;
+        Ok(())
+    })();
+    if let Err(error) = removal {
+        let events_rollback = if events_removed {
+            restore_optional_file(&events_path, previous_events.as_deref())
+        } else {
+            Ok(())
+        };
+        let snapshot_rollback = if snapshot_removed {
+            restore_optional_file(&snapshot_path, previous_snapshot.as_deref())
+        } else {
+            Ok(())
+        };
+        events_rollback.context("restore task-ledger events after pair-removal failure")?;
+        snapshot_rollback.context("restore task-ledger snapshot after pair-removal failure")?;
+        return Err(error).context("remove task-ledger artifact pair");
+    }
+    Ok(())
+}
+
 fn publish_task_ledger_artifacts(
     out: &Path,
     artifacts: &TaskLedgerArtifactBytes,
@@ -153,9 +192,13 @@ fn read_optional_file(path: &Path) -> Result<Option<Vec<u8>>> {
 }
 
 fn remove_file_if_present(path: &Path) -> Result<()> {
+    remove_file_if_present_with_status(path).map(|_| ())
+}
+
+fn remove_file_if_present_with_status(path: &Path) -> Result<bool> {
     match fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
         Err(error) => Err(error).with_context(|| format!("remove {}", path.display())),
     }
 }
@@ -643,6 +686,27 @@ mod tests {
         ensure!(fs::read(&snapshot_path)? == b"previous snapshot\n");
         ensure!(!out.join("task_ledger_events.ndjson.tmp").exists());
         ensure!(!review.join("task_ledger_snapshot.json.tmp").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn pair_removal_failure_restores_the_previous_generation() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        let review = out.join("review");
+        fs::create_dir_all(&review)?;
+        let events_path = out.join("task_ledger_events.ndjson");
+        let snapshot_path = review.join("task_ledger_snapshot.json");
+        fs::write(&events_path, b"previous events\n")?;
+        fs::write(&snapshot_path, b"previous snapshot\n")?;
+
+        let result = remove_task_ledger_artifacts_with_hook(out, |_| {
+            bail!("injected snapshot-removal failure")
+        });
+
+        error_contains(result, "remove task-ledger artifact pair")?;
+        ensure!(fs::read(&events_path)? == b"previous events\n");
+        ensure!(fs::read(&snapshot_path)? == b"previous snapshot\n");
         Ok(())
     }
 
