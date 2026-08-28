@@ -46,6 +46,9 @@ jobs:
     container: ubuntu:24.04
     permissions:
       contents: read
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Prepare clean container
         run: |
