@@ -1,0 +1,28 @@
+name: Temporary source export
+
+on:
+  push:
+    branches:
+      - codex/955-sensor-task-ledger
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ub-review-source-${{ github.sha }}
+          path: |
+            .
+            !.git/**
+            !target/**
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
