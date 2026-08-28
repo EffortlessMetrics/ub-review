@@ -32452,3 +32452,531 @@ kind = "exposure_gap"
 finding_id = "probe:src_sensor_task_ledger.rs:match_arm:b3174fdf"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 cannot statically link the fallible stale-artifact cleanup branches to the empty-plan reuse regression oracle (ripr-swarm#1054/#1055). empty_sensor_plan_omits_the_optional_artifact_pair seeds both owned files, verifies both are removed, and the surrounding adapter tests pin normal emission. Re-verify after semantic edits to remove_optional_artifact or empty-plan persistence."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_build.rs:call_deletion:e99f9551"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the normalized sensor-timeout plan boundary to the focused runnable and skipped-plan assertions (ripr-swarm#1054/#1055). The 14-test plan/sensor suite pins repo overrides, profile defaults, disabled sensors, and the one-second zero-value floor. Re-verify after semantic edits to sensor timeout resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_build.rs:return_value:0b53fd72"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the normalized sensor-timeout plan boundary to the focused runnable and skipped-plan assertions (ripr-swarm#1054/#1055). The 14-test plan/sensor suite pins repo overrides, profile defaults, disabled sensors, and the one-second zero-value floor. Re-verify after semantic edits to sensor timeout resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_build.rs:match_arm:485d8e7f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the normalized sensor-timeout plan boundary to the focused runnable and skipped-plan assertions (ripr-swarm#1054/#1055). The 14-test plan/sensor suite pins repo overrides, profile defaults, disabled sensors, and the one-second zero-value floor. Re-verify after semantic edits to sensor timeout resolution."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:call_deletion:a6b3fd38"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor shadow adapter lifecycle branches to the focused ledger truth-table oracles (ripr-swarm#1054/#1055). The 4-test adapter suite pins runnable, skipped, setup-failure, timeout, receipt, release, tokmd aggregate ceiling, and empty-plan behavior. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:call_deletion:350f1929"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor shadow adapter lifecycle branches to the focused ledger truth-table oracles (ripr-swarm#1054/#1055). The 4-test adapter suite pins runnable, skipped, setup-failure, timeout, receipt, release, tokmd aggregate ceiling, and empty-plan behavior. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:field_construction:068577b7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor shadow adapter lifecycle branches to the focused ledger truth-table oracles (ripr-swarm#1054/#1055). The 4-test adapter suite pins runnable, skipped, setup-failure, timeout, receipt, release, tokmd aggregate ceiling, and empty-plan behavior. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:call_deletion:5aff217b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor shadow adapter lifecycle branches to the focused ledger truth-table oracles (ripr-swarm#1054/#1055). The 4-test adapter suite pins runnable, skipped, setup-failure, timeout, receipt, release, tokmd aggregate ceiling, and empty-plan behavior. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:call_deletion:1725332e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor shadow adapter lifecycle branches to the focused ledger truth-table oracles (ripr-swarm#1054/#1055). The 4-test adapter suite pins runnable, skipped, setup-failure, timeout, receipt, release, tokmd aggregate ceiling, and empty-plan behavior. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:return_value:18e3d394"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor shadow adapter lifecycle branches to the focused ledger truth-table oracles (ripr-swarm#1054/#1055). The 4-test adapter suite pins runnable, skipped, setup-failure, timeout, receipt, release, tokmd aggregate ceiling, and empty-plan behavior. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:1e2a9048"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:be56f5e2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:d43a178a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:b25c2440"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:53eb691b.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:3cd3dcec"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:b13f61f6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:a0cb81ab"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:03a33f33"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:9893fb75"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:2b87ed6a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:99e7f6c5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:e21356f0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:49fb969a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:90d347d7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:18890af3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:9532c27f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:16a9aa1f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:689e112e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:e6a06e73"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:a5fbfa24"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:ef5b649d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:return_value:44083abf"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:field_construction:5c487b77"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:field_construction:3c17c745"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:dc03bf51"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:0b0631bc"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:98ffa09c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:return_value:a236d720"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:36f9b43f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:return_value:623861d6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:69c62db5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:return_value:4b3e4ed2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:f947fd8f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:return_value:81072cb5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:e6be0e6c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:return_value:349b3346"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:140329ca"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:f947fd8f.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:return_value:81072cb5.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:36f4f348"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:f947fd8f.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:return_value:81072cb5.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:f947fd8f.4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:return_value:81072cb5.4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:field_construction:9c2bc139"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:field_construction:c2bc16af"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:9a8aa3f6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:c3ad42eb"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:c275b03f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:77e8f7a6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:b8507d8b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:39069b20"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:270050b7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:b7b19bc5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:c96b134a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:2bd69bac"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:1ae58579"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:5324aa93"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:b8507d8b.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:39069b20.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:fc4dbbcc"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:affd267c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:return_value:b51600d1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:0cc5da88"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:match_arm:6f00a50b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:return_value:4a9707f2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:match_arm:b11fdb10"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:match_arm:b9659ac8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:match_arm:06e95dcb"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:bd213af2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:match_arm:913d4556"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:return_value:82ab8080"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:match_arm:9cf94f61"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:match_arm:35902b6a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:d986c510"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:match_arm:438de1b7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:match_arm:53869058"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:match_arm:4e38252c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
