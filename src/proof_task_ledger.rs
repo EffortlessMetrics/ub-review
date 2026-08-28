@@ -596,9 +596,7 @@ mod tests {
     use anyhow::{Context as _, Result, ensure};
 
     use super::*;
-    use crate::task_ledger::{
-        TaskReceiptOutcome, TaskReducer, TaskSnapshot, TaskState,
-    };
+    use crate::task_ledger::{TaskReceiptOutcome, TaskReducer, TaskSnapshot, TaskState};
     use crate::{ProofCommandReceipt, RevisionRef, write_proof_receipt_artifacts};
 
     fn revision(digest: char) -> RevisionRef {

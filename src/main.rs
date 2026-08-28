@@ -6069,7 +6069,7 @@ fn load_previous_quality_backfill(
 
 #[cfg(test)]
 mod tests {
-    use crate::InternalAuditClassification;
+    use crate::{CommandProcessObservation, InternalAuditClassification};
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
     use std::io::{BufRead, BufReader, Write as _};
