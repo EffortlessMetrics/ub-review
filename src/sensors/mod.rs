@@ -404,6 +404,13 @@ fn run_sensor_with_task_ledger_and_command_availability(
         command_available,
         &mut observe_process,
     );
+    if process_started && !process_finished {
+        process_finished = true;
+        if setup_observation.is_ok() && run_observation.is_ok() {
+            finish_observation =
+                task_ledger.process_finished(sensor, TaskTerminalDisposition::DeterministicFailure);
+        }
+    }
     let cleanup_observation = if setup_observation.is_ok()
         && run_observation.is_ok()
         && finish_observation.is_ok()
@@ -1851,7 +1858,7 @@ mod tests {
         let out = temp.path().join("out");
         let fake_bin = temp.path().join("fake-bin");
         fs::create_dir_all(&root)?;
-        let fake_tokmd = write_fake_tokmd_command(&fake_bin, "1.11.1")?;
+        let fake_tokmd = write_fake_tokmd_command(&fake_bin, "1.11.1", None)?;
         let event_log = EventLog::open(&out.join("events.ndjson"))?;
         let mut sensor = sensor_plan("tokmd", &fake_tokmd.display().to_string(), true);
         sensor.timeout_sec = FIXTURE_SENSOR_TIMEOUT_SEC;
@@ -1908,11 +1915,73 @@ mod tests {
         Ok(())
     }
 
-    fn write_fake_tokmd_command(dir: &Path, version: &str) -> Result<PathBuf> {
+    #[test]
+    fn tokmd_post_spawn_error_still_terminalizes_the_task() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("repo");
+        let out = temp.path().join("out");
+        let fake_bin = temp.path().join("fake-bin");
+        let aggregate_stdout = out.join("sensors/tokmd/stdout.txt");
+        fs::create_dir_all(&root)?;
+        let fake_tokmd = write_fake_tokmd_command(
+            &fake_bin,
+            STANDARD_IMAGE_TOKMD_VERSION,
+            Some(&aggregate_stdout),
+        )?;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let mut sensor = sensor_plan("tokmd", &fake_tokmd.display().to_string(), true);
+        sensor.timeout_sec = FIXTURE_SENSOR_TIMEOUT_SEC;
+        let plan = test_plan(vec![sensor.clone()]);
+        let revision = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+        let task_ledger = SensorTaskLedger::initialize(&revision, &plan, false, &Instant::now())?;
+
+        let result = super::run_sensor_with_task_ledger(
+            &root,
+            &out,
+            &sensor,
+            &event_log,
+            &plan,
+            &task_ledger,
+        );
+        ensure!(result.is_err());
+        task_ledger.write_artifacts(&out)?;
+
+        let snapshot: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/task_ledger_snapshot.json"))?)?;
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/state/ResourcesReleased")
+                .and_then(serde_json::Value::as_str)
+                == Some("DeterministicFailure")
+        );
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/receipt/CreationFailed/reason")
+                .and_then(serde_json::Value::as_str)
+                == Some("sensor status receipt missing or invalid")
+        );
+        Ok(())
+    }
+
+    fn write_fake_tokmd_command(
+        dir: &Path,
+        version: &str,
+        aggregate_stdout_failure: Option<&Path>,
+    ) -> Result<PathBuf> {
         fs::create_dir_all(dir)?;
         #[cfg(windows)]
         {
             let source = dir.join("fake_tokmd.rs");
+            let sabotage = aggregate_stdout_failure.map_or_else(String::new, |path| {
+                format!(
+                    "let path = {path:?}; let _ = std::fs::remove_file(path); let _ = std::fs::create_dir(path);",
+                    path = path.display().to_string()
+                )
+            });
             fs::write(
                 &source,
                 format!(
@@ -1924,6 +1993,7 @@ fn main() {{
     let args = env::args().skip(1).collect::<Vec<_>>();
     if args == ["--version"] {{
         println!("tokmd {{VERSION}}");
+        {sabotage}
         return;
     }}
     eprintln!("unexpected tokmd subcommand: {{}}", args.join(" "));
@@ -1941,10 +2011,16 @@ fn main() {{
         #[cfg(not(windows))]
         {
             let script = dir.join("fake_tokmd");
+            let sabotage = aggregate_stdout_failure.map_or_else(String::new, |path| {
+                format!(
+                    "rm -f -- {path:?}\nmkdir -- {path:?}\n",
+                    path = path.display().to_string()
+                )
+            });
             fs::write(
                 &script,
                 format!(
-                    "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo \"tokmd {version}\"; exit 0; fi\necho \"unexpected tokmd subcommand: $*\" >&2\nexit 42\n"
+                    "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo \"tokmd {version}\"\n{sabotage}exit 0; fi\necho \"unexpected tokmd subcommand: $*\" >&2\nexit 42\n"
                 ),
             )?;
             #[cfg(unix)]
