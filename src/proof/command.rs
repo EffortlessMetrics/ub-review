@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
+use crate::task_ledger::{TaskNonExecutionDisposition, TaskTerminalDisposition};
 use crate::test_parse::command_display_with_env;
 use crate::*;
 
@@ -159,9 +160,7 @@ where
         }
     }
     let stream_result = bound_proof_command_streams(&paths);
-    if process_spawned
-        && let Some((ledger, task)) = ledger_task
-    {
+    if process_spawned && let Some((ledger, task)) = ledger_task {
         ledger.cleanup_finished(task)?;
     }
     stream_result?;
@@ -468,6 +467,7 @@ mod tests {
     use anyhow::ensure;
 
     use super::*;
+    use crate::task_ledger::{TaskEvent, TaskTerminalDisposition};
 
     fn revision() -> RevisionRef {
         RevisionRef {
@@ -725,7 +725,11 @@ mod tests {
         let focused = focused_task("proof-command-observed");
         let command_task = ProofCommandTask::focused_test(&focused, "head", 7);
         let spec = ProofCommandSpec {
-            argv: vec!["cargo".to_owned(), "test".to_owned(), "focused_case".to_owned()],
+            argv: vec![
+                "cargo".to_owned(),
+                "test".to_owned(),
+                "focused_case".to_owned(),
+            ],
             env: BTreeMap::new(),
         };
         let lease = granted_lease("lease-proof-command-observed");
@@ -764,7 +768,11 @@ mod tests {
             .filter(|input| input.task_id == task_id)
             .map(|input| input.event)
             .collect::<Vec<_>>();
-        ensure!(events.iter().any(|event| matches!(event, TaskEvent::RunStarted { .. })));
+        ensure!(
+            events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::RunStarted { .. }))
+        );
         ensure!(events.iter().any(|event| matches!(
             event,
             TaskEvent::ProcessFinished {
@@ -772,9 +780,21 @@ mod tests {
                 ..
             }
         )));
-        ensure!(events.iter().any(|event| matches!(event, TaskEvent::CleanupFinished { .. })));
-        ensure!(!events.iter().any(|event| matches!(event, TaskEvent::ReceiptCreated { .. })));
-        ensure!(!events.iter().any(|event| matches!(event, TaskEvent::ResourcesReleased { .. })));
+        ensure!(
+            events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::CleanupFinished { .. }))
+        );
+        ensure!(
+            !events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::ReceiptCreated { .. }))
+        );
+        ensure!(
+            !events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::ResourcesReleased { .. }))
+        );
         Ok(())
     }
 
@@ -787,7 +807,11 @@ mod tests {
         let focused = focused_task("proof-command-unconfirmed");
         let command_task = ProofCommandTask::focused_test(&focused, "head", 7);
         let spec = ProofCommandSpec {
-            argv: vec!["cargo".to_owned(), "test".to_owned(), "focused_case".to_owned()],
+            argv: vec![
+                "cargo".to_owned(),
+                "test".to_owned(),
+                "focused_case".to_owned(),
+            ],
             env: BTreeMap::new(),
         };
         let lease = granted_lease("lease-proof-command-unconfirmed");
@@ -821,7 +845,11 @@ mod tests {
             .filter(|input| input.task_id == task_id)
             .map(|input| input.event)
             .collect::<Vec<_>>();
-        ensure!(events.iter().any(|event| matches!(event, TaskEvent::RunStarted { .. })));
+        ensure!(
+            events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::RunStarted { .. }))
+        );
         for event in &events {
             ensure!(!matches!(
                 event,
@@ -874,10 +902,21 @@ mod tests {
             .filter(|input| input.task_id == task_id)
             .map(|input| input.event)
             .collect::<Vec<_>>();
-        ensure!(events.iter().any(|event| matches!(event, TaskEvent::SetupFailed { .. })));
-        ensure!(!events.iter().any(|event| matches!(event, TaskEvent::RunStarted { .. })));
-        ensure!(!events.iter().any(|event| matches!(event, TaskEvent::ProcessFinished { .. })));
+        ensure!(
+            events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::SetupFailed { .. }))
+        );
+        ensure!(
+            !events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::RunStarted { .. }))
+        );
+        ensure!(
+            !events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::ProcessFinished { .. }))
+        );
         Ok(())
     }
-
 }

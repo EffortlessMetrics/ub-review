@@ -551,23 +551,24 @@ mod worker_proof_tests {
         // runner's argv is not allowlisted; instead exercise the path with a
         // no-op runner that writes the stream files, proving the canonical
         // receipt + artifact-path contract).
-        let mut runner = |_root: &Path,
-                          _argv: &[String],
-                          _env: &BTreeMap<String, String>,
-                          _timeout: u64,
-                          stdout: &Path,
-                          stderr: &Path,
-                          _observe_process: &mut dyn FnMut(CommandProcessObservation)| {
-            fs::write(stdout, b"ok\n")?;
-            fs::write(stderr, b"")?;
-            Ok(CommandStatus {
-                exit_code: Some(0),
-                timed_out: false,
-                success: true,
-                reason: "completed".to_owned(),
-                duration_ms: 5,
-            })
-        };
+        let mut runner =
+            |_root: &Path,
+             _argv: &[String],
+             _env: &BTreeMap<String, String>,
+             _timeout: u64,
+             stdout: &Path,
+             stderr: &Path,
+             _observe_process: &mut dyn FnMut(CommandProcessObservation)| {
+                fs::write(stdout, b"ok\n")?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    exit_code: Some(0),
+                    timed_out: false,
+                    success: true,
+                    reason: "completed".to_owned(),
+                    duration_ms: 5,
+                })
+            };
         let command_receipt = run_proof_command_receipt(
             ProofCommandInvocation {
                 command_root: temp.path(),
@@ -10391,7 +10392,8 @@ index 3333333..4444444 100644
                           _env: &BTreeMap<String, String>,
                           _timeout: u64,
                           stdout: &Path,
-                          stderr: &Path|
+                          stderr: &Path,
+                          _observe_process: &mut dyn FnMut(CommandProcessObservation)|
          -> Result<CommandStatus> {
             runner_calls += 1;
             fs::write(stdout, b"ok\n")?;
@@ -10417,6 +10419,7 @@ index 3333333..4444444 100644
             &task,
             300,
             &lease,
+            None,
             &mut runner,
             &mut prepare,
         )?;
@@ -10448,7 +10451,8 @@ index 3333333..4444444 100644
                           _env: &BTreeMap<String, String>,
                           _timeout: u64,
                           stdout: &Path,
-                          stderr: &Path|
+                          stderr: &Path,
+                          _observe_process: &mut dyn FnMut(CommandProcessObservation)|
          -> Result<CommandStatus> {
             fs::write(stdout, b"failed\n")?;
             fs::write(stderr, b"")?;
@@ -10472,6 +10476,7 @@ index 3333333..4444444 100644
             &task,
             300,
             &lease,
+            None,
             &mut runner,
             &mut prepare,
         )?;
@@ -10499,7 +10504,8 @@ index 3333333..4444444 100644
                           _env: &BTreeMap<String, String>,
                           _timeout: u64,
                           stdout: &Path,
-                          stderr: &Path|
+                          stderr: &Path,
+                          _observe_process: &mut dyn FnMut(CommandProcessObservation)|
          -> Result<CommandStatus> {
             fs::write(stdout, b"head ok\n")?;
             fs::write(stderr, b"")?;
@@ -10522,6 +10528,7 @@ index 3333333..4444444 100644
             &task,
             300,
             &lease,
+            None,
             &mut runner,
             &mut prepare,
         )?;
@@ -10599,7 +10606,8 @@ index 3333333..4444444 100644
                           _env: &BTreeMap<String, String>,
                           _timeout: u64,
                           stdout: &Path,
-                          stderr: &Path|
+                          stderr: &Path,
+                          _observe_process: &mut dyn FnMut(CommandProcessObservation)|
          -> Result<CommandStatus> {
             runner_calls += 1;
             fs::write(stdout, b"head ok\n")?;
@@ -10625,6 +10633,7 @@ index 3333333..4444444 100644
             &task,
             300,
             &lease,
+            None,
             &mut runner,
             &mut prepare,
         );

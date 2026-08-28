@@ -157,9 +157,7 @@ impl ProofTaskLedger {
             TaskEvent::Proposed {
                 revision: self.recorder.revision().clone(),
                 source: task.source(),
-                limits: TaskExecutionLimits::new(
-                    task.timeout_sec.max(1).saturating_mul(1_000),
-                )?,
+                limits: TaskExecutionLimits::new(task.timeout_sec.max(1).saturating_mul(1_000))?,
             },
         )];
         for consumer in task.consumers()? {
@@ -196,9 +194,7 @@ impl ProofTaskLedger {
             TaskEvent::Proposed {
                 revision: self.recorder.revision().clone(),
                 source: task.source(),
-                limits: TaskExecutionLimits::new(
-                    task.timeout_sec.max(1).saturating_mul(1_000),
-                )?,
+                limits: TaskExecutionLimits::new(task.timeout_sec.max(1).saturating_mul(1_000))?,
             },
         )];
         for consumer in task.consumers()? {
@@ -317,9 +313,7 @@ impl ProofTaskLedger {
                 );
                 let previous = references.insert(
                     task_id.as_str().to_owned(),
-                    format!(
-                        "review/proof_receipts.json#/{receipt_index}/commands/{command_index}"
-                    ),
+                    format!("review/proof_receipts.json#/{receipt_index}/commands/{command_index}"),
                 );
                 ensure!(
                     previous.is_none(),
@@ -427,7 +421,11 @@ impl ProofTaskLedger {
             .map_err(|_| anyhow::anyhow!("proof task-ledger mutex poisoned"))?
             .proposed
             .insert(task_id.as_str().to_owned());
-        ensure!(inserted, "proof task {} was proposed twice", task_id.as_str());
+        ensure!(
+            inserted,
+            "proof task {} was proposed twice",
+            task_id.as_str()
+        );
         Ok(())
     }
 
@@ -570,9 +568,9 @@ fn source_request_disposition(
 }
 
 fn is_configured_proof(requested_by: &[String]) -> bool {
-    requested_by.iter().any(|id| {
-        id == crate::REQUIRED_PROOF_POLICY_LANE || id.starts_with("proof-policy:")
-    })
+    requested_by
+        .iter()
+        .any(|id| id == crate::REQUIRED_PROOF_POLICY_LANE || id.starts_with("proof-policy:"))
 }
 
 fn canonical_reason(value: &str) -> String {
@@ -598,10 +596,10 @@ mod tests {
     use anyhow::{Context as _, Result, ensure};
 
     use super::*;
-    use crate::{
-        ProofCommandReceipt, RevisionRef, TaskReceiptOutcome, TaskReducer, TaskState,
-        write_proof_receipt_artifacts,
+    use crate::task_ledger::{
+        TaskReceiptOutcome, TaskReducer, TaskSnapshot, TaskState,
     };
+    use crate::{ProofCommandReceipt, RevisionRef, write_proof_receipt_artifacts};
 
     fn revision(digest: char) -> RevisionRef {
         RevisionRef {
@@ -705,10 +703,7 @@ mod tests {
         ledger.cleanup_finished(task)
     }
 
-    fn state_for(
-        recorder: &TaskLedgerRecorder,
-        task_id: &TaskId,
-    ) -> Result<crate::TaskSnapshot> {
+    fn state_for(recorder: &TaskLedgerRecorder, task_id: &TaskId) -> Result<TaskSnapshot> {
         let mut reducer = TaskReducer::new();
         for input in recorder
             .inputs()?
@@ -727,13 +722,7 @@ mod tests {
     fn command_sources_preserve_impact_required_and_model_provenance() -> Result<()> {
         ensure!(task("impact", "head", &["impact-planner"], &[]).source() == TaskSource::Impact);
         ensure!(
-            task(
-                "required",
-                "head",
-                &["proof-policy:smoke"],
-                &["request-a"]
-            )
-            .source()
+            task("required", "head", &["proof-policy:smoke"], &["request-a"]).source()
                 == TaskSource::Required
         );
         ensure!(
@@ -752,10 +741,7 @@ mod tests {
         execute_side(&ledger, &command_task, &granted_lease("receipt-a"))?;
 
         let before = state_for(&recorder, &command_task.task_id()?)?;
-        ensure!(
-            before.state
-                == TaskState::ReceiptPending(TaskTerminalDisposition::Succeeded)
-        );
+        ensure!(before.state == TaskState::ReceiptPending(TaskTerminalDisposition::Succeeded));
         ensure!(before.receipt.is_none());
         ensure!(before.timing.resources_released_at.is_none());
 
@@ -764,10 +750,7 @@ mod tests {
         ledger.reconcile_published_receipts(temp.path())?;
 
         let after = state_for(&recorder, &command_task.task_id()?)?;
-        ensure!(
-            after.state
-                == TaskState::ResourcesReleased(TaskTerminalDisposition::Succeeded)
-        );
+        ensure!(after.state == TaskState::ResourcesReleased(TaskTerminalDisposition::Succeeded));
         ensure!(matches!(
             after.receipt,
             Some(TaskReceiptOutcome::Created { reference })
@@ -795,13 +778,9 @@ mod tests {
             .reconcile_published_receipts(temp.path())
             .err()
             .context("stale revision must be rejected")?;
-        ensure!(
-            format!("{error:#}").contains("does not bind the admitted revision")
-        );
+        ensure!(format!("{error:#}").contains("does not bind the admitted revision"));
         let task = state_for(&recorder, &command_task.task_id()?)?;
-        ensure!(
-            task.state == TaskState::ReceiptPending(TaskTerminalDisposition::Succeeded)
-        );
+        ensure!(task.state == TaskState::ReceiptPending(TaskTerminalDisposition::Succeeded));
         ensure!(task.receipt.is_none());
         ensure!(task.timing.resources_released_at.is_none());
         Ok(())
@@ -826,10 +805,7 @@ mod tests {
         fs::create_dir_all(&review)?;
         fs::write(
             review.join("proof_receipts.json"),
-            serde_json::to_vec_pretty(&vec![receipt(
-                revision('a'),
-                &["base-plus-tests", "head"],
-            )])?,
+            serde_json::to_vec_pretty(&vec![receipt(revision('a'), &["base-plus-tests", "head"])])?,
         )?;
 
         let error = ledger
@@ -840,8 +816,7 @@ mod tests {
         for command_task in [&head, &base] {
             let snapshot = state_for(&recorder, &command_task.task_id()?)?;
             ensure!(
-                snapshot.state
-                    == TaskState::ReceiptPending(TaskTerminalDisposition::Succeeded)
+                snapshot.state == TaskState::ReceiptPending(TaskTerminalDisposition::Succeeded)
             );
             ensure!(snapshot.receipt.is_none());
             ensure!(snapshot.timing.resources_released_at.is_none());

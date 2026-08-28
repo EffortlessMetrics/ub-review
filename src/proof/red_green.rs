@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
+use crate::task_ledger::TaskNonExecutionDisposition;
 use crate::*;
 
 #[expect(
@@ -348,8 +349,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anyhow::{Context as _, ensure};
+    use crate::task_ledger::TaskEvent;
     use crate::tests::{run_test_command, test_diff, test_run_args};
+    use anyhow::ensure;
     use std::fs;
     use std::time::Instant;
 
@@ -611,5 +613,4 @@ mod tests {
         }));
         Ok(())
     }
-
 }

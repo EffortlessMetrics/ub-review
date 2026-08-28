@@ -5,6 +5,7 @@ use std::path::Path;
 
 use anyhow::Result;
 
+use crate::task_ledger::TaskNonExecutionDisposition;
 use crate::*;
 
 #[expect(
