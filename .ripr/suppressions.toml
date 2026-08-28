@@ -32647,6 +32647,564 @@ reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, roll
 
 [[suppressions]]
 kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:0550b3e3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:3aac200d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:452bd516"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:6a447882"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:7ab51403"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:8f42cea1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:9582708e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:b2c1fa09"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:bba94900"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:c4f039ab"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:d9be7e80"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:f3b302c6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:error_path:460df596"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:error_path:ba444ce9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:0f2a5d54"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:40b1a270"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:490c2390"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:7af27c25"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:9412a56b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:b0b7656e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:fa1fe8d1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:fe8671d3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:216140bc"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:50a38ca1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:62d6febc"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:6e782ab1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:75073838"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:9048707f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:95f66633"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:e13dd73f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:ec312ea0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:f5ef93ac"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:return_value:1a6b404b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:return_value:52bc5c6a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:return_value:92df6bbf"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the shared sensor wait, termination, and reap branches to their exact lifecycle oracles (ripr-swarm#1054/#1055). The focused tests inject the real wait-error arm against a live child, prove reap-before-return and no delayed escape, retry Interrupted reaps, and retain CompletionUnconfirmed on a genuine failure. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:000d40e9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:0e4d2708"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:451d0bef"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:5670cfaa"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:5b52ecd2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:77a76968"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:800ab474"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:b6d3ae2c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:c068d9e7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:d7eae43a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:0ce4f3bd"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:0e61a26e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:0e61a26e.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:17a0d87a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:17a0d87a.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:271c6b6a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:4a77e1d3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:55fd5b4f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:58b2b984"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:5b9c32ce"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:7dbfdef9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:7fbbde17"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:9692ede2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:9b09303e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:a4e65de9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:c6d668b7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:ca7df250"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:d480dfa0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:e347fe7c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:e5b14e7d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:e69aa4fd"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:f601ba27"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:08cf5c2f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:08cf5c2f.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:1b4ec74f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:1b4ec74f.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:1dcc1ce1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:2ed97806"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:35b4fa16"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:390e78eb"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:60d6e082"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:851735e5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:86e8225d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:86e8225d.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:a40b2bf4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:a8f05fb9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:b135246a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:b3fa591a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:0518f9a2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:29c7ded9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:6e0dd8bd"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:8dfc68aa"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:b2d682b4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:bc4224b5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:c089edc3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:c1b3c9d2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:ef5eda51"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:ef5eda51.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the sensor attempt-preparation and tokmd aggregate branches to their exact injected oracles (ripr-swarm#1054/#1055). The focused tests preserve readable stale success bytes while proving SetupFailed and ReceiptCreationFailed, and prove unconfirmed tokmd completion prevents later command spawn and aggregate/status publication. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
 finding_id = "probe:src_task_ledger_artifact.rs:field_construction:5c487b77"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
