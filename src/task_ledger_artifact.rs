@@ -1,18 +1,10 @@
 //! Deterministic task-ledger persistence and replay verification (A2.3, #954).
 //!
-//! This module is deliberately disconnected from production writers until
-//! #925 instruments real task sources. Version 1 rejects unknown fields:
-//! additive wire changes require a new schema version instead of being
-//! silently discarded by an older verifier.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "tracked in policy/allow.toml#task-ledger-artifact-shadow"
-    )
-)]
-
+//! Sensor execution is the first production writer (#955). Version 1 rejects
+//! unknown fields: additive wire changes require a new schema version instead
+//! of being silently discarded by an older verifier.
 use std::collections::BTreeMap;
+use std::fs;
 use std::path::{Component, Path};
 
 use crate::artifacts::{TASK_LEDGER_EVENT_SCHEMA, TASK_LEDGER_SNAPSHOT_SCHEMA};
@@ -90,6 +82,30 @@ pub(crate) fn build_task_ledger_artifacts(
         events_ndjson,
         snapshot_json,
     })
+}
+
+/// Replay and verify caller events before publishing the canonical stream and
+/// derived snapshot together.
+pub(crate) fn write_task_ledger_artifacts(
+    out: &Path,
+    revision: &RevisionRef,
+    inputs: &[TaskLedgerInput],
+) -> Result<()> {
+    let artifacts = build_task_ledger_artifacts(revision, inputs)?;
+    verify_task_ledger_artifacts(&artifacts.events_ndjson, &artifacts.snapshot_json, revision)?;
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    fs::write(
+        out.join("task_ledger_events.ndjson"),
+        artifacts.events_ndjson,
+    )
+    .context("write task_ledger_events.ndjson")?;
+    fs::write(
+        review_dir.join("task_ledger_snapshot.json"),
+        artifacts.snapshot_json,
+    )
+    .context("write review/task_ledger_snapshot.json")?;
+    Ok(())
 }
 
 /// Independently replay and compare the derived cache byte-for-byte.

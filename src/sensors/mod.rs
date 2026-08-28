@@ -16,9 +16,10 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 
 use crate::system_detect::command_on_path;
+use crate::task_ledger::TaskTerminalDisposition;
 use crate::*;
 
 /// Run a set of sensors on a bounded worker pool. Individual sensor failures
@@ -31,6 +32,7 @@ pub(crate) fn run_sensor_pool(
     jobs: usize,
     sensors: VecDeque<SensorPlan>,
     event_log: &EventLog,
+    task_ledger: Option<&SensorTaskLedger>,
 ) -> Result<()> {
     let failures = Arc::new(Mutex::new(Vec::<String>::new()));
 
@@ -38,7 +40,9 @@ pub(crate) fn run_sensor_pool(
         if jobs == 1 {
             let queue = Mutex::new(sensors);
             let failures = Arc::clone(&failures);
-            scope.spawn(move || drain_sensor_queue(root, out, plan, &queue, event_log, &failures));
+            scope.spawn(move || {
+                drain_sensor_queue(root, out, plan, &queue, event_log, task_ledger, &failures)
+            });
             return;
         }
 
@@ -47,7 +51,9 @@ pub(crate) fn run_sensor_pool(
         if cargo_worker_count == 1 {
             let queue = Mutex::new(cargo_queue);
             let failures = Arc::clone(&failures);
-            scope.spawn(move || drain_sensor_queue(root, out, plan, &queue, event_log, &failures));
+            scope.spawn(move || {
+                drain_sensor_queue(root, out, plan, &queue, event_log, task_ledger, &failures)
+            });
         }
 
         let parallel_worker_count = jobs
@@ -57,7 +63,9 @@ pub(crate) fn run_sensor_pool(
         for _ in 0..parallel_worker_count {
             let queue = Arc::clone(&queue);
             let failures = Arc::clone(&failures);
-            scope.spawn(move || drain_sensor_queue(root, out, plan, &queue, event_log, &failures));
+            scope.spawn(move || {
+                drain_sensor_queue(root, out, plan, &queue, event_log, task_ledger, &failures)
+            });
         }
     });
 
@@ -81,6 +89,7 @@ fn drain_sensor_queue(
     plan: &Plan,
     queue: &Mutex<VecDeque<SensorPlan>>,
     event_log: &EventLog,
+    task_ledger: Option<&SensorTaskLedger>,
     failures: &Mutex<Vec<String>>,
 ) {
     loop {
@@ -91,7 +100,13 @@ fn drain_sensor_queue(
         let Some(sensor) = sensor else {
             break;
         };
-        if let Err(err) = run_sensor(root, out, &sensor, event_log, plan)
+        let result = match task_ledger {
+            Some(ledger) => {
+                run_sensor_with_task_ledger(root, out, &sensor, event_log, plan, ledger)
+            }
+            None => run_sensor(root, out, &sensor, event_log, plan),
+        };
+        if let Err(err) = result
             && let Ok(mut failures) = failures.lock()
         {
             failures.push(format!("{}: {err:#}", sensor.id));
@@ -145,6 +160,22 @@ pub(crate) struct LateSensorPhase {
     run_loop: ActiveRunLoop,
 }
 
+/// Owned work transferred to the late sensor thread. Keeping the shadow
+/// observer beside its exact sensor set prevents separate argument drift.
+pub(crate) struct LateSensorWork {
+    sensors: Vec<SensorPlan>,
+    task_ledger: Option<SensorTaskLedger>,
+}
+
+impl LateSensorWork {
+    pub(crate) fn new(sensors: Vec<SensorPlan>, task_ledger: Option<SensorTaskLedger>) -> Self {
+        Self {
+            sensors,
+            task_ledger,
+        }
+    }
+}
+
 pub(crate) fn spawn_late_sensor_phase(
     root: &Path,
     out: &Path,
@@ -152,8 +183,12 @@ pub(crate) fn spawn_late_sensor_phase(
     profile: &Profile,
     event_log: &Arc<EventLog>,
     run_started: &Instant,
-    sensors: Vec<SensorPlan>,
+    work: LateSensorWork,
 ) -> Result<LateSensorPhase> {
+    let LateSensorWork {
+        sensors,
+        task_ledger,
+    } = work;
     let job_budget = sensor_job_count(profile, sensors.len())?;
     let jobs = sensor_pool_worker_count(job_budget, &sensors);
     let sensor_ids: Vec<String> = sensors.iter().map(|sensor| sensor.id.clone()).collect();
@@ -183,6 +218,7 @@ pub(crate) fn spawn_late_sensor_phase(
                 jobs,
                 queue,
                 &thread_log,
+                task_ledger.as_ref(),
             )
         })?;
     Ok(LateSensorPhase {
@@ -285,10 +321,93 @@ pub(crate) fn run_sensor(
     event_log: &EventLog,
     plan: &Plan,
 ) -> Result<()> {
+    let command_available = command_on_path(&sensor.command);
+    run_sensor_with_command_availability(root, out, sensor, event_log, plan, command_available)
+}
+
+fn run_sensor_with_task_ledger(
+    root: &Path,
+    out: &Path,
+    sensor: &SensorPlan,
+    event_log: &EventLog,
+    plan: &Plan,
+    task_ledger: &SensorTaskLedger,
+) -> Result<()> {
+    // Observation must never suppress the existing process attempt. Defer any
+    // adapter error until after the runner and receipt path have completed.
+    let setup_observation = task_ledger.setup_started(sensor);
+    let command_available = command_on_path(&sensor.command);
+    let run_observation = if command_available && setup_observation.is_ok() {
+        task_ledger.run_started(sensor)
+    } else {
+        Ok(())
+    };
+    let run_result =
+        run_sensor_with_command_availability(root, out, sensor, event_log, plan, command_available);
+    let receipt_result = sensor_task_receipt_disposition(out, sensor, command_available);
+    let receipt_created = receipt_result.is_ok();
+    let terminal_observation = if setup_observation.is_err() || run_observation.is_err() {
+        Ok(())
+    } else if command_available {
+        let disposition = receipt_result
+            .as_ref()
+            .copied()
+            .unwrap_or(TaskTerminalDisposition::DeterministicFailure);
+        task_ledger.execution_finished(sensor, disposition, receipt_created)
+    } else {
+        task_ledger.setup_failed(sensor, receipt_created)
+    };
+    run_result?;
+    receipt_result?;
+    setup_observation?;
+    run_observation?;
+    terminal_observation
+}
+
+fn sensor_task_receipt_disposition(
+    out: &Path,
+    sensor: &SensorPlan,
+    command_available: bool,
+) -> Result<TaskTerminalDisposition> {
+    let path = out
+        .join("sensors")
+        .join(&sensor.id)
+        .join("ub-review-sensor-status.json");
+    let value: serde_json::Value = serde_json::from_slice(
+        &fs::read(&path).with_context(|| format!("read sensor status {}", path.display()))?,
+    )
+    .with_context(|| format!("parse sensor status {}", path.display()))?;
+    ensure!(
+        value.get("sensor").and_then(serde_json::Value::as_str) == Some(sensor.id.as_str()),
+        "sensor status identity does not match {}",
+        sensor.id
+    );
+    let status = value
+        .get("status")
+        .and_then(serde_json::Value::as_str)
+        .context("sensor status receipt has no string status")?;
+    match status {
+        "ok" => Ok(TaskTerminalDisposition::Succeeded),
+        "failed" => Ok(TaskTerminalDisposition::DeterministicFailure),
+        "timed_out" => Ok(TaskTerminalDisposition::TimedOut),
+        "missing" if !command_available => Ok(TaskTerminalDisposition::SetupFailed),
+        "missing" => bail!("running sensor {} reported missing command", sensor.id),
+        other => bail!("sensor {} reported unsupported status {other}", sensor.id),
+    }
+}
+
+fn run_sensor_with_command_availability(
+    root: &Path,
+    out: &Path,
+    sensor: &SensorPlan,
+    event_log: &EventLog,
+    plan: &Plan,
+    command_available: bool,
+) -> Result<()> {
     let dir = out.join("sensors").join(&sensor.id);
     fs::create_dir_all(&dir)?;
     let argv = build_sensor_argv(root, &dir, sensor, plan);
-    if !command_on_path(&sensor.command) {
+    if !command_available {
         write_sensor_status(
             out,
             sensor,
@@ -804,6 +923,7 @@ mod tests {
     use anyhow::{Context as _, Result, ensure};
 
     use super::{partition_sensor_queues, sensor_pool_worker_count};
+    use crate::task_ledger::TaskTerminalDisposition;
     use crate::tests::{run_test_command, sensor_plan, sleeper_argv, test_diff, test_plan};
     use crate::*;
 
@@ -1045,6 +1165,12 @@ mod tests {
         sensor.phase = SensorPhase::Late;
         sensor.timeout_sec = FIXTURE_SENSOR_TIMEOUT_SEC;
         let plan = test_plan(vec![sensor.clone()]);
+        let revision = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+        let task_ledger = SensorTaskLedger::initialize(&revision, &plan, false, &run_started)?;
 
         let phase = super::spawn_late_sensor_phase(
             &root,
@@ -1053,7 +1179,7 @@ mod tests {
             &Profile::default(),
             &event_log,
             &run_started,
-            vec![sensor],
+            LateSensorWork::new(vec![sensor], Some(task_ledger.clone())),
         )?;
         assert_eq!(phase.sensor_ids, vec!["late-probe".to_owned()]);
         phase.join(&event_log, &run_started, &mut tracker)?;
@@ -1071,6 +1197,20 @@ mod tests {
         assert!(
             events.contains("\"stage\":\"late-sensors\""),
             "late phase must open an evidence scheduler phase: {events}"
+        );
+        task_ledger.write_artifacts(&out)?;
+        let snapshot: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/task_ledger_snapshot.json"))?)?;
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/state/ResourcesReleased")
+                .and_then(serde_json::Value::as_str)
+                == Some("SetupFailed")
+        );
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/timing/process_started_at")
+                .is_some_and(serde_json::Value::is_null)
         );
         Ok(())
     }
@@ -1173,8 +1313,15 @@ mod tests {
         let mut sensor = sensor_plan("ripr", &fake_ripr.display().to_string(), true);
         sensor.timeout_sec = FIXTURE_SENSOR_TIMEOUT_SEC;
         let plan = test_plan(vec![sensor.clone()]);
+        let revision = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+        let task_ledger = SensorTaskLedger::initialize(&revision, &plan, false, &Instant::now())?;
 
-        run_sensor(&root, &out, &sensor, &event_log, &plan)?;
+        super::run_sensor_with_task_ledger(&root, &out, &sensor, &event_log, &plan, &task_ledger)?;
+        task_ledger.write_artifacts(&out)?;
 
         let sensor_dir = out.join("sensors/ripr");
         let status: serde_json::Value =
@@ -1246,6 +1393,14 @@ mod tests {
         assert!(sensor_dir.join("exposure-gaps.ripr.stderr").is_file());
         assert!(!sensor_dir.join("exposure-gaps.stdout.tmp").exists());
         assert!(!sensor_dir.join("exposure-gaps.stderr.tmp").exists());
+        let snapshot: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/task_ledger_snapshot.json"))?)?;
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/state/ResourcesReleased")
+                .and_then(serde_json::Value::as_str)
+                == Some("Succeeded")
+        );
         Ok(())
     }
 
@@ -1766,8 +1921,15 @@ esac
         let event_log = EventLog::open(&out.join("events.ndjson"))?;
         let sensor = sensor_plan("ripr", "ub-review-test-tool-that-does-not-exist", true);
         let plan = test_plan(vec![sensor.clone()]);
+        let revision = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+        let task_ledger = SensorTaskLedger::initialize(&revision, &plan, false, &Instant::now())?;
 
-        run_sensor(root, &out, &sensor, &event_log, &plan)?;
+        super::run_sensor_with_task_ledger(root, &out, &sensor, &event_log, &plan, &task_ledger)?;
+        task_ledger.write_artifacts(&out)?;
 
         let status_path = out.join("sensors/ripr/ub-review-sensor-status.json");
         let value: serde_json::Value = serde_json::from_slice(&fs::read(status_path)?)?;
@@ -1776,6 +1938,60 @@ esac
         assert_eq!(value["reason"], "command not found");
         assert!(out.join("sensors/ripr/stdout.txt").exists());
         assert!(out.join("sensors/ripr/stderr.txt").exists());
+        let snapshot: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/task_ledger_snapshot.json"))?)?;
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/state/ResourcesReleased")
+                .and_then(serde_json::Value::as_str)
+                == Some("SetupFailed")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn sensor_task_receipt_mapping_rejects_missing_mismatched_and_unknown_status() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let sensor = sensor_plan("probe", "probe", true);
+        let status_path = out.join("sensors/probe/ub-review-sensor-status.json");
+        let status_dir = status_path
+            .parent()
+            .context("sensor status fixture has no parent")?;
+        fs::create_dir_all(status_dir)?;
+
+        ensure!(super::sensor_task_receipt_disposition(&out, &sensor, true).is_err());
+        fs::write(
+            &status_path,
+            serde_json::to_vec(&serde_json::json!({
+                "sensor": "another-probe",
+                "status": "ok"
+            }))?,
+        )?;
+        ensure!(super::sensor_task_receipt_disposition(&out, &sensor, true).is_err());
+
+        for (status, expected) in [
+            ("ok", TaskTerminalDisposition::Succeeded),
+            ("failed", TaskTerminalDisposition::DeterministicFailure),
+            ("timed_out", TaskTerminalDisposition::TimedOut),
+        ] {
+            fs::write(
+                &status_path,
+                serde_json::to_vec(&serde_json::json!({
+                    "sensor": "probe",
+                    "status": status
+                }))?,
+            )?;
+            ensure!(super::sensor_task_receipt_disposition(&out, &sensor, true)? == expected);
+        }
+        fs::write(
+            &status_path,
+            serde_json::to_vec(&serde_json::json!({
+                "sensor": "probe",
+                "status": "future-status"
+            }))?,
+        )?;
+        ensure!(super::sensor_task_receipt_disposition(&out, &sensor, true).is_err());
         Ok(())
     }
 

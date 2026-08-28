@@ -27,17 +27,6 @@ review_after = "2026-09-27"
 expires = "2026-11-27"
 
 [[exception]]
-id = "task-ledger-artifact-shadow"
-kind = "rust-lint-suppression"
-path = "src/task_ledger_artifact.rs"
-lint = "dead_code"
-owner = "ub-review/core"
-reason = "A2.3 intentionally lands deterministic task-ledger persistence and verification before A2.4 instruments production task sources; remove this module-level expectation when #925 connects the writer."
-created = "2026-08-27"
-review_after = "2026-09-27"
-expires = "2026-11-27"
-
-[[exception]]
 id = "non-rust-github-actions"
 kind = "non-rust-file"
 glob = ".github/workflows/*.yml"
