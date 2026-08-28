@@ -14,6 +14,7 @@ pub(crate) use unsafe_review::*;
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::io;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -448,6 +449,7 @@ fn run_sensor_with_command_availability(
 ) -> Result<()> {
     let dir = out.join("sensors").join(&sensor.id);
     fs::create_dir_all(&dir)?;
+    remove_prior_sensor_status(&dir)?;
     let argv = build_sensor_argv(root, &dir, sensor, plan);
     if !command_available {
         write_sensor_status(
@@ -546,6 +548,15 @@ fn run_sensor_with_command_availability(
         }
     }
     Ok(())
+}
+
+fn remove_prior_sensor_status(dir: &Path) -> Result<()> {
+    let path = dir.join("ub-review-sensor-status.json");
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| format!("remove stale {}", path.display())),
+    }
 }
 
 pub(crate) fn run_tokmd_sensor(
@@ -1991,6 +2002,68 @@ esac
                 .pointer("/tasks/0/state/ResourcesReleased")
                 .and_then(serde_json::Value::as_str)
                 == Some("SetupFailed")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn failed_attempt_cannot_reuse_a_prior_sensor_status_receipt() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("repo");
+        let out = temp.path().join("out");
+        let fake_bin = temp.path().join("fake-bin");
+        fs::create_dir_all(&root)?;
+        fs::create_dir_all(out.join("input"))?;
+        fs::write(
+            out.join("input/diff.patch"),
+            "diff --git a/src/lib.rs b/src/lib.rs\n",
+        )?;
+        let fake_ripr = write_fake_ripr_command(&fake_bin)?;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let mut sensor = sensor_plan("ripr", &fake_ripr.display().to_string(), true);
+        sensor.timeout_sec = FIXTURE_SENSOR_TIMEOUT_SEC;
+        let plan = test_plan(vec![sensor.clone()]);
+        let revision = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+        let task_ledger = SensorTaskLedger::initialize(&revision, &plan, false, &Instant::now())?;
+        let sensor_dir = out.join("sensors/ripr");
+        fs::create_dir_all(&sensor_dir)?;
+        fs::write(
+            sensor_dir.join("ub-review-sensor-status.json"),
+            serde_json::to_vec(&serde_json::json!({"sensor": "ripr", "status": "ok"}))?,
+        )?;
+        // A directory at the receipt target forces the post-process copy to
+        // fail after the fake subprocess has started but before status publish.
+        fs::create_dir_all(sensor_dir.join("gate-decision.json"))?;
+
+        let result = super::run_sensor_with_task_ledger(
+            &root,
+            &out,
+            &sensor,
+            &event_log,
+            &plan,
+            &task_ledger,
+        );
+        ensure!(result.is_err());
+        ensure!(!sensor_dir.join("ub-review-sensor-status.json").exists());
+        task_ledger.write_artifacts(&out)?;
+
+        let snapshot: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/task_ledger_snapshot.json"))?)?;
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/state/ResourcesReleased")
+                .and_then(serde_json::Value::as_str)
+                == Some("DeterministicFailure")
+        );
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/receipt/CreationFailed/reason")
+                .and_then(serde_json::Value::as_str)
+                == Some("sensor status receipt missing or invalid")
         );
         Ok(())
     }

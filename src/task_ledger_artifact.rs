@@ -5,6 +5,7 @@
 //! of being silently discarded by an older verifier.
 use std::collections::BTreeMap;
 use std::fs;
+use std::io;
 use std::path::{Component, Path};
 
 use crate::artifacts::{TASK_LEDGER_EVENT_SCHEMA, TASK_LEDGER_SNAPSHOT_SCHEMA};
@@ -93,19 +94,85 @@ pub(crate) fn write_task_ledger_artifacts(
 ) -> Result<()> {
     let artifacts = build_task_ledger_artifacts(revision, inputs)?;
     verify_task_ledger_artifacts(&artifacts.events_ndjson, &artifacts.snapshot_json, revision)?;
+    publish_task_ledger_artifacts(out, &artifacts, |_| Ok(()))
+}
+
+fn publish_task_ledger_artifacts(
+    out: &Path,
+    artifacts: &TaskLedgerArtifactBytes,
+    before_snapshot_publish: impl FnOnce(&Path) -> Result<()>,
+) -> Result<()> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
-    fs::write(
-        out.join("task_ledger_events.ndjson"),
-        artifacts.events_ndjson,
-    )
-    .context("write task_ledger_events.ndjson")?;
-    fs::write(
-        review_dir.join("task_ledger_snapshot.json"),
-        artifacts.snapshot_json,
-    )
-    .context("write review/task_ledger_snapshot.json")?;
+    let events_path = out.join("task_ledger_events.ndjson");
+    let snapshot_path = review_dir.join("task_ledger_snapshot.json");
+    let events_stage = out.join("task_ledger_events.ndjson.tmp");
+    let snapshot_stage = review_dir.join("task_ledger_snapshot.json.tmp");
+    let previous_events = read_optional_file(&events_path)?;
+    let previous_snapshot = read_optional_file(&snapshot_path)?;
+    remove_file_if_present(&events_stage)?;
+    remove_file_if_present(&snapshot_stage)?;
+    fs::write(&events_stage, &artifacts.events_ndjson)
+        .context("stage task_ledger_events.ndjson")?;
+    if let Err(error) = fs::write(&snapshot_stage, &artifacts.snapshot_json)
+        .context("stage review/task_ledger_snapshot.json")
+    {
+        let events_cleanup = remove_file_if_present(&events_stage);
+        let snapshot_cleanup = remove_file_if_present(&snapshot_stage);
+        events_cleanup.context("clean staged task-ledger events after staging failure")?;
+        snapshot_cleanup.context("clean staged task-ledger snapshot after staging failure")?;
+        return Err(error);
+    }
+
+    let publication = (|| -> Result<()> {
+        replace_with_staged_file(&events_stage, &events_path)?;
+        before_snapshot_publish(&snapshot_stage)?;
+        replace_with_staged_file(&snapshot_stage, &snapshot_path)
+    })();
+    if let Err(error) = publication {
+        let events_rollback = restore_optional_file(&events_path, previous_events.as_deref());
+        let snapshot_rollback = restore_optional_file(&snapshot_path, previous_snapshot.as_deref());
+        let events_cleanup = remove_file_if_present(&events_stage);
+        let snapshot_cleanup = remove_file_if_present(&snapshot_stage);
+        events_rollback.context("restore prior task-ledger events after publication failure")?;
+        snapshot_rollback
+            .context("restore prior task-ledger snapshot after publication failure")?;
+        events_cleanup.context("clean staged task-ledger events after publication failure")?;
+        snapshot_cleanup.context("clean staged task-ledger snapshot after publication failure")?;
+        return Err(error).context("publish task-ledger artifact pair");
+    }
     Ok(())
+}
+
+fn read_optional_file(path: &Path) -> Result<Option<Vec<u8>>> {
+    match fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error).with_context(|| format!("read prior {}", path.display())),
+    }
+}
+
+fn remove_file_if_present(path: &Path) -> Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| format!("remove {}", path.display())),
+    }
+}
+
+fn replace_with_staged_file(staged: &Path, destination: &Path) -> Result<()> {
+    remove_file_if_present(destination)?;
+    fs::rename(staged, destination)
+        .with_context(|| format!("publish staged {}", destination.display()))
+}
+
+fn restore_optional_file(path: &Path, previous: Option<&[u8]>) -> Result<()> {
+    match previous {
+        Some(bytes) => {
+            fs::write(path, bytes).with_context(|| format!("restore {}", path.display()))
+        }
+        None => remove_file_if_present(path),
+    }
 }
 
 /// Independently replay and compare the derived cache byte-for-byte.
@@ -548,6 +615,34 @@ mod tests {
             "snapshot golden changed: {}",
             sha256_hex(&first.snapshot_json)
         );
+        Ok(())
+    }
+
+    #[test]
+    fn pair_publication_failure_restores_the_previous_generation() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        let review = out.join("review");
+        fs::create_dir_all(&review)?;
+        let events_path = out.join("task_ledger_events.ndjson");
+        let snapshot_path = review.join("task_ledger_snapshot.json");
+        fs::write(&events_path, b"previous events\n")?;
+        fs::write(&snapshot_path, b"previous snapshot\n")?;
+        let admitted = revision('a');
+        let artifacts = build_task_ledger_artifacts(
+            &admitted,
+            &completed_inputs(&admitted, "review/proof_receipts.json#cargo-test")?,
+        )?;
+
+        let result = publish_task_ledger_artifacts(out, &artifacts, |snapshot_stage| {
+            fs::remove_file(snapshot_stage).context("remove staged snapshot fixture")
+        });
+
+        error_contains(result, "publish task-ledger artifact pair")?;
+        ensure!(fs::read(&events_path)? == b"previous events\n");
+        ensure!(fs::read(&snapshot_path)? == b"previous snapshot\n");
+        ensure!(!out.join("task_ledger_events.ndjson.tmp").exists());
+        ensure!(!review.join("task_ledger_snapshot.json.tmp").exists());
         Ok(())
     }
 

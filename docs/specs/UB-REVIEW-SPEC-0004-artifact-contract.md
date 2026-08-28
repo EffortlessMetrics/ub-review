@@ -135,9 +135,16 @@ review/task_ledger_snapshot.json   ub-review.task_ledger_snapshot.v1
 `run` emits both after the late sensor phase joins when the resolved plan has
 at least one sensor; a legitimately empty sensor plan omits the optional pair.
 Empty-plan runs remove a stale pair from a reused output directory.
+Publication stages both files and restores the prior on-disk pair state when
+either final publish fails, so a failed run does not leave a mixed pair.
 Every resolved sensor has one proposal. Runnable fast and late sensors record queued, admitted, setup,
 process, receipt-attempt, and release events around the unchanged runner;
 skipped and dry-run sensors terminate without fabricated process timing.
+Each attempt removes its prior sensor-status receipt before execution, so its
+terminal state can only derive from the current attempt. A tokmd proposal uses
+the aggregate ceiling for its version preflight, four required report commands,
+and optional changed-path context command because each subprocess receives the
+configured timeout independently.
 Sensor phase remains scheduling metadata in the linked sensor status receipt,
 not a second lifecycle model. Event records use contiguous caller order, a
 SHA-256 source-digest chain, strict transition replay, canonical LF-delimited

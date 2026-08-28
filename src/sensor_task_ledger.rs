@@ -18,6 +18,11 @@ use crate::task_ledger::{
 use crate::task_ledger_artifact::{TaskLedgerInput, write_task_ledger_artifacts};
 use crate::{Plan, RevisionRef, SensorPlan, work_queue_sensor_consumers};
 
+// tokmd runs one version preflight, four always-on report commands, and at
+// most one changed-path context command. Each subprocess receives the sensor
+// timeout independently, so admission must reserve the aggregate ceiling.
+const TOKMD_MAX_SUBPROCESS_COUNT: u64 = 6;
+
 #[derive(Clone)]
 pub(crate) struct SensorTaskLedger {
     inner: Arc<SensorTaskLedgerInner>,
@@ -209,8 +214,15 @@ fn sensor_task_id(sensor: &SensorPlan) -> Result<TaskId> {
 }
 
 fn sensor_timeout_ms(sensor: &SensorPlan) -> Result<u64> {
+    let subprocess_count = if sensor.id == "tokmd" {
+        TOKMD_MAX_SUBPROCESS_COUNT
+    } else {
+        1
+    };
     sensor
         .timeout_sec
+        .checked_mul(subprocess_count)
+        .context("sensor aggregate timeout seconds overflow")?
         .checked_mul(1_000)
         .context("sensor timeout milliseconds overflow")
 }
@@ -407,6 +419,23 @@ mod tests {
                 .join("review/task_ledger_snapshot.json")
                 .exists()
         );
+        Ok(())
+    }
+
+    #[test]
+    fn tokmd_reserves_the_aggregate_subprocess_timeout_ceiling() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut tokmd = sensor_plan("tokmd", "tokmd", false);
+        tokmd.timeout_sec = 7;
+        tokmd.reason = "fixture does not execute tokmd".to_owned();
+        let plan = test_plan(vec![tokmd]);
+        let ledger = SensorTaskLedger::initialize(&revision(), &plan, false, &Instant::now())?;
+
+        ledger.write_artifacts(temp.path())?;
+
+        let snapshot = read_snapshot(temp.path())?;
+        let task = snapshot_task(&snapshot, "sensor-tokmd")?;
+        ensure!(task.pointer("/limits/timeout_ceiling_ms") == Some(&serde_json::json!(42_000)));
         Ok(())
     }
 }
