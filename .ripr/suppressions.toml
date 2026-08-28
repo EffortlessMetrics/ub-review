@@ -32410,3 +32410,45 @@ kind = "exposure_gap"
 finding_id = "probe:tests_authority_incidents.rs:return_value:e7c71b9b"
 owner = "ub-review/tests"
 reason = "RIPR 0.10.0 integration-test and fallible anyhow::ensure! attribution false-negative (ripr-swarm#1054/#1055). Six executable Rust tests pin the exact corpus success path, three hosted contradiction shapes, and eleven negative mutation classes for digest, inventory, path, schema, size, sensitive payload, and evidence-pointer drift. These probes are inside the test-only loader and fixture copier, not production behavior. Re-verify after semantic edits to tests/authority_incidents.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:error_path:2bf804fc"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible stale-artifact cleanup branches to the empty-plan reuse regression oracle (ripr-swarm#1054/#1055). empty_sensor_plan_omits_the_optional_artifact_pair seeds both owned files, verifies both are removed, and the surrounding adapter tests pin normal emission. Re-verify after semantic edits to remove_optional_artifact or empty-plan persistence."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:match_arm:c45f6b9e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible stale-artifact cleanup branches to the empty-plan reuse regression oracle (ripr-swarm#1054/#1055). empty_sensor_plan_omits_the_optional_artifact_pair seeds both owned files, verifies both are removed, and the surrounding adapter tests pin normal emission. Re-verify after semantic edits to remove_optional_artifact or empty-plan persistence."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:call_deletion:70f7e1c5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible stale-artifact cleanup branches to the empty-plan reuse regression oracle (ripr-swarm#1054/#1055). empty_sensor_plan_omits_the_optional_artifact_pair seeds both owned files, verifies both are removed, and the surrounding adapter tests pin normal emission. Re-verify after semantic edits to remove_optional_artifact or empty-plan persistence."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:match_arm:d1696504"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible stale-artifact cleanup branches to the empty-plan reuse regression oracle (ripr-swarm#1054/#1055). empty_sensor_plan_omits_the_optional_artifact_pair seeds both owned files, verifies both are removed, and the surrounding adapter tests pin normal emission. Re-verify after semantic edits to remove_optional_artifact or empty-plan persistence."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:return_value:f148574a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible stale-artifact cleanup branches to the empty-plan reuse regression oracle (ripr-swarm#1054/#1055). empty_sensor_plan_omits_the_optional_artifact_pair seeds both owned files, verifies both are removed, and the surrounding adapter tests pin normal emission. Re-verify after semantic edits to remove_optional_artifact or empty-plan persistence."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:match_arm:86bbafc7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible stale-artifact cleanup branches to the empty-plan reuse regression oracle (ripr-swarm#1054/#1055). empty_sensor_plan_omits_the_optional_artifact_pair seeds both owned files, verifies both are removed, and the surrounding adapter tests pin normal emission. Re-verify after semantic edits to remove_optional_artifact or empty-plan persistence."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:match_arm:b3174fdf"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the fallible stale-artifact cleanup branches to the empty-plan reuse regression oracle (ripr-swarm#1054/#1055). empty_sensor_plan_omits_the_optional_artifact_pair seeds both owned files, verifies both are removed, and the surrounding adapter tests pin normal emission. Re-verify after semantic edits to remove_optional_artifact or empty-plan persistence."
