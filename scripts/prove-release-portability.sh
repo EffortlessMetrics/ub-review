@@ -30,7 +30,7 @@ run_row() {
   rm -rf "$row_dir"
   mkdir -p "$row_dir"
 
-  docker run --rm \
+  docker run --rm --interactive \
     --network bridge \
     --mount "type=bind,src=$row_dir,dst=/receipt" \
     --env "RELEASE_TAG=$RELEASE_TAG" \
