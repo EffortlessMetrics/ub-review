@@ -22,13 +22,28 @@ jobs:
         run: |
           shopt -s nullglob
           chunks=(.github/ub-review-proof-adapter.patch.*)
-          if [[ ${#chunks[@]} -eq 0 ]]; then
+          if [[ -f .github/proof_task_ledger.rs.gz.b64 ]]; then
+            echo 'state=source' >> "$GITHUB_OUTPUT"
+          elif [[ ${#chunks[@]} -eq 0 ]]; then
             echo 'state=none' >> "$GITHUB_OUTPUT"
           elif [[ -f .github/ub-review-proof-adapter.patch.08 && ${#chunks[@]} -eq 9 ]]; then
             echo 'state=ready' >> "$GITHUB_OUTPUT"
           else
             echo 'state=partial' >> "$GITHUB_OUTPUT"
           fi
+      - if: steps.detect.outputs.state == 'source'
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s  %s\n' 'c6240757b0701eb3011ac62da88330fe5afe3e620de6d58605840277806b0a8e' .github/proof_task_ledger.rs.gz.b64 | sha256sum --check --strict
+          base64 --decode .github/proof_task_ledger.rs.gz.b64 | gzip --decompress > src/proof_task_ledger.rs
+          printf '%s  %s\n' '06e85e6ed4679c23657f7e818ca7f4041c82716951d9214687441f436543bc68' src/proof_task_ledger.rs | sha256sum --check --strict
+          git add src/proof_task_ledger.rs
+          git rm .github/proof_task_ledger.rs.gz.b64
+          git config user.name 'EffortlessSteven'
+          git config user.email 'git@effortlesssteven.com'
+          git commit -m 'runtime(task-ledger): add the proof execution adapter'
+          git push origin HEAD:codex/956-proof-worker-task-ledger
       - if: steps.detect.outputs.state == 'ready'
         shell: bash
         run: |
