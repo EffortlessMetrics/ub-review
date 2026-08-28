@@ -1,4 +1,4 @@
-name: Temporary proof adapter apply
+name: Temporary #956 apply and validation
 
 on:
   push:
@@ -11,6 +11,8 @@ permissions:
 jobs:
   apply:
     runs-on: ubuntu-latest
+    outputs:
+      patch_state: ${{ steps.detect.outputs.state }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -20,21 +22,91 @@ jobs:
         run: |
           shopt -s nullglob
           chunks=(.github/ub-review-proof-adapter.patch.*)
-          if [[ -f .github/ub-review-proof-adapter.patch.08 && ${#chunks[@]} -eq 9 ]]; then
-            echo 'apply=true' >> "$GITHUB_OUTPUT"
+          if [[ ${#chunks[@]} -eq 0 ]]; then
+            echo 'state=none' >> "$GITHUB_OUTPUT"
+          elif [[ -f .github/ub-review-proof-adapter.patch.08 && ${#chunks[@]} -eq 9 ]]; then
+            echo 'state=ready' >> "$GITHUB_OUTPUT"
+          else
+            echo 'state=partial' >> "$GITHUB_OUTPUT"
           fi
-      - if: steps.detect.outputs.apply == 'true'
+      - if: steps.detect.outputs.state == 'ready'
         shell: bash
         run: |
           set -euo pipefail
           cat .github/ub-review-proof-adapter.patch.* > /tmp/ub-review-proof-adapter.patch
-          printf '%s  %s\n' '56c353c0f0947cd9c9e119db02da5faa4fa7e2def14a5a08daee571077252bf8' /tmp/ub-review-proof-adapter.patch | sha256sum --check --strict
+          printf '%s  %s\n' 'e86168205f7d367cfc1206ad3f9e1e041fdd7248e9cdc3b02b9ae071574f4232' /tmp/ub-review-proof-adapter.patch | sha256sum --check --strict
           git apply --index /tmp/ub-review-proof-adapter.patch
           git rm .github/ub-review-proof-adapter.patch.*
-          git rm .github/workflows/_temporary-source-export.yml
-          printf '%s\n' 'proof adapter applied from 56c353c0f0947cd9c9e119db02da5faa4fa7e2def14a5a08daee571077252bf8' > .github/proof-adapter-applied
-          git add .github/proof-adapter-applied
           git config user.name 'EffortlessSteven'
           git config user.email 'git@effortlesssteven.com'
           git commit -m 'runtime(task-ledger): observe proof execution in shadow'
           git push origin HEAD:codex/956-proof-worker-task-ledger
+
+  validate:
+    needs: apply
+    if: needs.apply.outputs.patch_state == 'none'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          components: rustfmt,clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Format and validate the proof TaskLedger slice
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p validation
+          {
+            cargo fmt --all
+            git diff --check
+            git diff --binary > validation/formatted.patch
+            cargo fmt --all -- --check
+            cargo check --locked --all-targets --all-features
+            cargo test --locked --all-targets proof_task_ledger
+            cargo test --locked --all-targets proof::command
+            cargo test --locked --all-targets proof::red_green
+            cargo test --locked --all-targets proof::build
+            cargo test --locked --all-targets proof::broker
+            cargo test --locked --all-targets sensor_task_ledger
+            cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+            cargo xtask policy-check
+          } 2>&1 | tee validation/validation.log
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: proof-task-ledger-validation-${{ github.sha }}
+          path: validation
+          if-no-files-found: error
+          retention-days: 1
+
+  export:
+    needs: apply
+    if: needs.apply.outputs.patch_state == 'none'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ub-review-source-${{ github.sha }}
+          path: |
+            .
+            !.git/**
+            !target/**
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
