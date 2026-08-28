@@ -1,5 +1,5 @@
 name: Temporary #956 apply and validation
-# Validation trigger for proof adapter head 7b9ba6e0533de71ef74d262ec572b92680ba3746.
+# Validation trigger for proof adapter head 19fa42d429d75bfd39f9a77bafba3c995cd55b15.
 
 on:
   push:
