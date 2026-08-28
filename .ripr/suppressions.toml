@@ -31399,18 +31399,6 @@ reason = "RIPR 0.10.0 integration-test and fallible anyhow::ensure! attribution 
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_lane_packets.rs:call_deletion:a18fee52"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_lane_packets.rs:field_construction:19fcb51d"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
 finding_id = "probe:src_lane_packets.rs:call_deletion:86663fc0"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
@@ -31418,12 +31406,6 @@ reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-sp
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_lane_packets.rs:return_value:c58458ad"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_lane_packets.rs:call_deletion:d6427303"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
 
@@ -31448,48 +31430,6 @@ reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-sp
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_lane_packets.rs:field_construction:064df52d"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_lane_packets.rs:call_deletion:c005a14c"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_lane_packets.rs:field_construction:2ddd8b42"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_lane_packets.rs:call_deletion:8ff08142"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_lane_packets.rs:field_construction:026dc186"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_lane_packets.rs:call_deletion:47931787"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_lane_packets.rs:field_construction:b6fa4820"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_lane_packets.rs:call_deletion:dc8699ae"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
 
@@ -31610,18 +31550,6 @@ reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction an
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_sensor_task_ledger.rs:call_deletion:b28ea9a8"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensor_task_ledger.rs:field_construction:a055d2cf"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensor_task_ledger.rs:call_deletion:b726f2c6"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
 
@@ -31777,42 +31705,6 @@ reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mappin
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_sensors_mod.rs:return_value:617dba58"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensors_mod.rs:return_value:53eb691b"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensors_mod.rs:error_path:8e35e9a9"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensors_mod.rs:error_path:f212d54d"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensors_mod.rs:error_path:65ff0575"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensors_mod.rs:error_path:7bbf597b"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
 finding_id = "probe:src_sensors_mod.rs:field_construction:7051ddbb"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
@@ -31891,55 +31783,13 @@ reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mappin
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_sensors_mod.rs:field_construction:510d76ca"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
 finding_id = "probe:src_sensors_mod.rs:field_construction:e8edd6ad"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_sensors_mod.rs:field_construction:8e21d9d6"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensors_mod.rs:match_arm:6a789aa4"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
 finding_id = "probe:src_task_ledger_artifact.rs:field_construction:b8c22541"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically attribute verified pair persistence to the replay and cross-language verifier oracles (ripr-swarm#1054/#1055). Task-ledger artifact tests pin canonical bytes, corruption/order/revision/receipt failures; the Python self-test mirrors replay; the CLI test requires both production files. Re-verify after semantic edits to src/task_ledger_artifact.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:da551605"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically attribute verified pair persistence to the replay and cross-language verifier oracles (ripr-swarm#1054/#1055). Task-ledger artifact tests pin canonical bytes, corruption/order/revision/receipt failures; the Python self-test mirrors replay; the CLI test requires both production files. Re-verify after semantic edits to src/task_ledger_artifact.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:da551605.2"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically attribute verified pair persistence to the replay and cross-language verifier oracles (ripr-swarm#1054/#1055). Task-ledger artifact tests pin canonical bytes, corruption/order/revision/receipt failures; the Python self-test mirrors replay; the CLI test requires both production files. Re-verify after semantic edits to src/task_ledger_artifact.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:c5c93f42"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically attribute verified pair persistence to the replay and cross-language verifier oracles (ripr-swarm#1054/#1055). Task-ledger artifact tests pin canonical bytes, corruption/order/revision/receipt failures; the Python self-test mirrors replay; the CLI test requires both production files. Re-verify after semantic edits to src/task_ledger_artifact.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_task_ledger_artifact.rs:return_value:9a931326"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 cannot statically attribute verified pair persistence to the replay and cross-language verifier oracles (ripr-swarm#1054/#1055). Task-ledger artifact tests pin canonical bytes, corruption/order/revision/receipt failures; the Python self-test mirrors replay; the CLI test requires both production files. Re-verify after semantic edits to src/task_ledger_artifact.rs."
 
@@ -32413,48 +32263,6 @@ reason = "RIPR 0.10.0 integration-test and fallible anyhow::ensure! attribution 
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_sensor_task_ledger.rs:error_path:2bf804fc"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the fallible stale-artifact cleanup branches to the empty-plan reuse regression oracle (ripr-swarm#1054/#1055). empty_sensor_plan_omits_the_optional_artifact_pair seeds both owned files, verifies both are removed, and the surrounding adapter tests pin normal emission. Re-verify after semantic edits to remove_optional_artifact or empty-plan persistence."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensor_task_ledger.rs:match_arm:c45f6b9e"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the fallible stale-artifact cleanup branches to the empty-plan reuse regression oracle (ripr-swarm#1054/#1055). empty_sensor_plan_omits_the_optional_artifact_pair seeds both owned files, verifies both are removed, and the surrounding adapter tests pin normal emission. Re-verify after semantic edits to remove_optional_artifact or empty-plan persistence."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensor_task_ledger.rs:call_deletion:70f7e1c5"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the fallible stale-artifact cleanup branches to the empty-plan reuse regression oracle (ripr-swarm#1054/#1055). empty_sensor_plan_omits_the_optional_artifact_pair seeds both owned files, verifies both are removed, and the surrounding adapter tests pin normal emission. Re-verify after semantic edits to remove_optional_artifact or empty-plan persistence."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensor_task_ledger.rs:match_arm:d1696504"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the fallible stale-artifact cleanup branches to the empty-plan reuse regression oracle (ripr-swarm#1054/#1055). empty_sensor_plan_omits_the_optional_artifact_pair seeds both owned files, verifies both are removed, and the surrounding adapter tests pin normal emission. Re-verify after semantic edits to remove_optional_artifact or empty-plan persistence."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensor_task_ledger.rs:return_value:f148574a"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the fallible stale-artifact cleanup branches to the empty-plan reuse regression oracle (ripr-swarm#1054/#1055). empty_sensor_plan_omits_the_optional_artifact_pair seeds both owned files, verifies both are removed, and the surrounding adapter tests pin normal emission. Re-verify after semantic edits to remove_optional_artifact or empty-plan persistence."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensor_task_ledger.rs:match_arm:86bbafc7"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the fallible stale-artifact cleanup branches to the empty-plan reuse regression oracle (ripr-swarm#1054/#1055). empty_sensor_plan_omits_the_optional_artifact_pair seeds both owned files, verifies both are removed, and the surrounding adapter tests pin normal emission. Re-verify after semantic edits to remove_optional_artifact or empty-plan persistence."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensor_task_ledger.rs:match_arm:b3174fdf"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link the fallible stale-artifact cleanup branches to the empty-plan reuse regression oracle (ripr-swarm#1054/#1055). empty_sensor_plan_omits_the_optional_artifact_pair seeds both owned files, verifies both are removed, and the surrounding adapter tests pin normal emission. Re-verify after semantic edits to remove_optional_artifact or empty-plan persistence."
-
-[[suppressions]]
-kind = "exposure_gap"
 finding_id = "probe:src_plan_build.rs:call_deletion:e99f9551"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 cannot statically link the normalized sensor-timeout plan boundary to the focused runnable and skipped-plan assertions (ripr-swarm#1054/#1055). The 14-test plan/sensor suite pins repo overrides, profile defaults, disabled sensors, and the one-second zero-value floor. Re-verify after semantic edits to sensor timeout resolution."
@@ -32506,48 +32314,6 @@ kind = "exposure_gap"
 finding_id = "probe:src_sensor_task_ledger.rs:return_value:18e3d394"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 cannot statically link the sensor shadow adapter lifecycle branches to the focused ledger truth-table oracles (ripr-swarm#1054/#1055). The 4-test adapter suite pins runnable, skipped, setup-failure, timeout, receipt, release, tokmd aggregate ceiling, and empty-plan behavior. Re-verify after semantic edits to src/sensor_task_ledger.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensors_mod.rs:return_value:1e2a9048"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensors_mod.rs:match_arm:be56f5e2"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensors_mod.rs:match_arm:d43a178a"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensors_mod.rs:match_arm:b25c2440"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensors_mod.rs:return_value:53eb691b.2"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensors_mod.rs:error_path:3cd3dcec"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensors_mod.rs:error_path:b13f61f6"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
 
 [[suppressions]]
 kind = "exposure_gap"
@@ -32612,12 +32378,6 @@ reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd p
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_sensors_mod.rs:field_construction:16a9aa1f"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_sensors_mod.rs:match_arm:689e112e"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 cannot statically link sensor runner lifecycle and tokmd preflight branches to the focused subprocess and artifact assertions (ripr-swarm#1054/#1055). The 27-test sensor suite pins spawn/finish ordering, stale and missing receipts, tokmd drift, post-spawn failure terminalization, timeout, and unchanged gate behavior. Re-verify after semantic edits to src/sensors/mod.rs."
 
@@ -32980,3 +32740,765 @@ kind = "exposure_gap"
 finding_id = "probe:src_task_ledger_artifact.rs:match_arm:4e38252c"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 cannot statically link the fallible pair publication, rollback, removal, and replay branches to the focused artifact oracles (ripr-swarm#1054/#1055). The 6-test artifact suite pins byte-stable replay, corruption rejection, structural receipts, snapshot derivation, and byte-identical rollback after injected failures. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:b2c1fa09"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:490c2390"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:6a447882"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:bba94900"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:0f2a5d54"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:c4f039ab"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:fa1fe8d1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:f3b302c6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:fe8671d3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:40b1a270"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:7af27c25"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:0550b3e3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:e13dd73f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:95f66633"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:return_value:52bc5c6a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:62d6febc"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:f5ef93ac"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:216140bc"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:9048707f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:9daef4d4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:a7c14992"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:e064dbed"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:4383c80a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:d56d98db"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:7af04f46"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:7ab51403"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:b0b7656e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:89bed6b8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:75073838"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:b9e1be28"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:5fd967e7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:50a38ca1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:3aac200d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:d9be7e80"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:error_path:460df596"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:3aac200d.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:d9be7e80.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:error_path:460df596.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:return_value:7bffbd07"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:error_path:36e2ef30"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:9412a56b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:9582708e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:return_value:1a6b404b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:8f42cea1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:error_path:ba444ce9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link shared subprocess termination, bounded Interrupted retries, dual-error diagnostics, and live-child reap-before-return behavior to the 9 focused lane-packet tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:match_arm:deddeffa"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR aggregate timeout accounting to the 5 focused sensor TaskLedger tests, including the exact two-subprocess ceiling oracle (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:match_arm:07a3f0de"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR aggregate timeout accounting to the 5 focused sensor TaskLedger tests, including the exact two-subprocess ceiling oracle (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:match_arm:058dbe01"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR aggregate timeout accounting to the 5 focused sensor TaskLedger tests, including the exact two-subprocess ceiling oracle (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:match_arm:cb122ba2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR aggregate timeout accounting to the 5 focused sensor TaskLedger tests, including the exact two-subprocess ceiling oracle (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:17a0d87a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:0e61a26e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:55fd5b4f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:bc4224b5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:a4e65de9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:5b9c32ce"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:58b2b984"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:7dbfdef9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:7fbbde17"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:c089edc3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:c1b3c9d2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:35b4fa16"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:b3fa591a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:1dcc1ce1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:a8f05fb9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:2ed97806"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:ef5eda51"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:5670cfaa"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:0e4d2708"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:ef5eda51.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:77a76968"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:d7eae43a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:451d0bef"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:800ab474"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:000d40e9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:5b52ecd2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:29c7ded9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:9692ede2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:d480dfa0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:271c6b6a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:9b09303e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:e5b14e7d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:390e78eb"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:a40b2bf4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:851735e5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:b68342d8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:a40b2bf4.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:851735e5.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:50acc816"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:c068d9e7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:0518f9a2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:8dfc68aa"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:e69aa4fd"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:4a77e1d3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:0ce4f3bd"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:f601ba27"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:b2d682b4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:17a0d87a.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:0e61a26e.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:e347fe7c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:c6d668b7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:ca7df250"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:60d6e082"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:86e8225d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:08cf5c2f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:1b4ec74f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:b135246a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:86e8225d.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:08cf5c2f.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:1b4ec74f.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:b6d3ae2c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:6e0dd8bd"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link sensor attempt authority, RIPR detail ordering, tokmd fail-closed sequencing, and stale-receipt event projections to the 29 focused sensor tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:field_construction:322d6dcf"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR detail-runner observation and unconfirmed-completion propagation to the 4 focused RIPR detail tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:return_value:43796b3a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR detail-runner observation and unconfirmed-completion propagation to the 4 focused RIPR detail tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:return_value:4bd35bcf"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR detail-runner observation and unconfirmed-completion propagation to the 4 focused RIPR detail tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:field_construction:3c7520e4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR detail-runner observation and unconfirmed-completion propagation to the 4 focused RIPR detail tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:field_construction:ac14f2a1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR detail-runner observation and unconfirmed-completion propagation to the 4 focused RIPR detail tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:field_construction:8a1f8512"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR detail-runner observation and unconfirmed-completion propagation to the 4 focused RIPR detail tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:field_construction:e5e46834"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR detail-runner observation and unconfirmed-completion propagation to the 4 focused RIPR detail tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:error_path:7ffb727c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR detail-runner observation and unconfirmed-completion propagation to the 4 focused RIPR detail tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:error_path:d3a6aceb"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR detail-runner observation and unconfirmed-completion propagation to the 4 focused RIPR detail tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:error_path:72a09926"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR detail-runner observation and unconfirmed-completion propagation to the 4 focused RIPR detail tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:error_path:300387a6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR detail-runner observation and unconfirmed-completion propagation to the 4 focused RIPR detail tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:error_path:41fa1e28"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR detail-runner observation and unconfirmed-completion propagation to the 4 focused RIPR detail tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:error_path:b2aabe06"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR detail-runner observation and unconfirmed-completion propagation to the 4 focused RIPR detail tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:error_path:0025c36f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR detail-runner observation and unconfirmed-completion propagation to the 4 focused RIPR detail tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:return_value:e929990e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR detail-runner observation and unconfirmed-completion propagation to the 4 focused RIPR detail tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:return_value:e6fc8d57"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link RIPR detail-runner observation and unconfirmed-completion propagation to the 4 focused RIPR detail tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/ripr.rs."
