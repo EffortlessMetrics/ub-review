@@ -1,4 +1,5 @@
 name: Temporary #956 apply and validation
+# Validation trigger for proof adapter head cfc882c84f4320a0e1f57319fac1119689b4476a.
 
 on:
   push:
