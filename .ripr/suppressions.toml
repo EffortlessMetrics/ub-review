@@ -31399,6 +31399,552 @@ reason = "RIPR 0.10.0 integration-test and fallible anyhow::ensure! attribution 
 
 [[suppressions]]
 kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:a18fee52"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:19fcb51d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:86663fc0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:return_value:c58458ad"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:d6427303"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:7ca67683"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:71b84e27"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:9537f7fb"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:064df52d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:c005a14c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:2ddd8b42"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:8ff08142"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:026dc186"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:47931787"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:b6fa4820"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:dc8699ae"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the non-authoritative successful-spawn callback and deny-by-default command wiring to their executable oracles (ripr-swarm#1054/#1055). lane_packets environment-containment tests pin the preserved runner contract; sensor_timeout_status_is_returned and sensor_spawn_setup_failure_records_no_process_timing pin timeout and pre-spawn boundaries. Re-verify after semantic edits to src/lane_packets.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:63a069ac"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute the fast-pool shadow-ledger argument to the end-to-end CLI oracle (ripr-swarm#1054/#1055). plan_and_dry_run_write_expected_packet_tree requires the emitted pair and exact no-fake-process terminal shape, while fast and late focused tests pin both execution routes. Re-verify after semantic edits to this wiring."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:field_construction:956d0e63"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:field_construction:c174b28b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:field_construction:bb161ae0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:field_construction:c5fc9f8d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:field_construction:11eaea7b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:return_value:1086de83"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:return_value:d7580761"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:field_construction:13dc4d66"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:return_value:7d51602b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:field_construction:9c87f3d7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:return_value:e3c05e77"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:return_value:2451607b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:field_construction:9dd3327e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:call_deletion:df0403d1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:call_deletion:492c8949"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:side_effect:94dd4325"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:call_deletion:c089eec2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:side_effect:a6600f6b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:call_deletion:b28ea9a8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:field_construction:a055d2cf"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:call_deletion:b726f2c6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:return_value:197efec9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:call_deletion:3493e781"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:return_value:dab3c7cc"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:call_deletion:59d124fe"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:call_deletion:8fe382de"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:return_value:c771abbb"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:field_construction:d1e7000a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:field_construction:663457ad"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:field_construction:b60fc92e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:field_construction:b60fc92e.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:field_construction:4bde9191"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensor_task_ledger.rs:return_value:d9464c71"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link fallible TaskLedger construction and anyhow::ensure! assertions to the co-located lifecycle oracles (ripr-swarm#1054/#1055). Three adapter tests pin empty-plan omission, runnable/skipped states, resource reservations, timeout/setup/receipt terminals, releases, timing, and artifact bytes; the CLI test pins production emission. Re-verify after semantic edits to src/sensor_task_ledger.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:487012d3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:4684e935"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:16f485c3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:2633317b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:c2ccec97"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:24792138"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:a0374b5f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:ed6d8176"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:4d7d7e08"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:cba734c6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:d79b8b2a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:a6ed9fe2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:8229960c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:617dba58"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:53eb691b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:8e35e9a9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:f212d54d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:65ff0575"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:error_path:7bbf597b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:7051ddbb"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:0cf17bfa"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:e676fbe4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:edf9c71f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:return_value:67cf300d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:4b19cb06"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:474dafdf"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:527507a0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:192d530a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:29d35b62"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:cc34a481"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:6c894acd"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:8ef10e20"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:510d76ca"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:e8edd6ad"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:field_construction:8e21d9d6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:match_arm:6a789aa4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically link the shadow observer, receipt mapping, spawn callback, and fast/late routing to the focused sensor oracles (ripr-swarm#1054/#1055). The 24-test sensor suite pins pool concurrency, fast/late execution, finding/success/failure/timeout/setup outcomes, missing/mismatched receipts, pre-spawn timing, and unchanged status artifacts. Re-verify after semantic edits to src/sensors/mod.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:field_construction:b8c22541"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute verified pair persistence to the replay and cross-language verifier oracles (ripr-swarm#1054/#1055). Task-ledger artifact tests pin canonical bytes, corruption/order/revision/receipt failures; the Python self-test mirrors replay; the CLI test requires both production files. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:da551605"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute verified pair persistence to the replay and cross-language verifier oracles (ripr-swarm#1054/#1055). Task-ledger artifact tests pin canonical bytes, corruption/order/revision/receipt failures; the Python self-test mirrors replay; the CLI test requires both production files. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:da551605.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute verified pair persistence to the replay and cross-language verifier oracles (ripr-swarm#1054/#1055). Task-ledger artifact tests pin canonical bytes, corruption/order/revision/receipt failures; the Python self-test mirrors replay; the CLI test requires both production files. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:call_deletion:c5c93f42"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute verified pair persistence to the replay and cross-language verifier oracles (ripr-swarm#1054/#1055). Task-ledger artifact tests pin canonical bytes, corruption/order/revision/receipt failures; the Python self-test mirrors replay; the CLI test requires both production files. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_task_ledger_artifact.rs:return_value:9a931326"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot statically attribute verified pair persistence to the replay and cross-language verifier oracles (ripr-swarm#1054/#1055). Task-ledger artifact tests pin canonical bytes, corruption/order/revision/receipt failures; the Python self-test mirrors replay; the CLI test requires both production files. Re-verify after semantic edits to src/task_ledger_artifact.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
 finding_id = "probe:tests_authority_incidents.rs:call_deletion:05c70917"
 owner = "ub-review/tests"
 reason = "RIPR 0.10.0 integration-test and fallible anyhow::ensure! attribution false-negative (ripr-swarm#1054/#1055). Six executable Rust tests pin the exact corpus success path, three hosted contradiction shapes, and eleven negative mutation classes for digest, inventory, path, schema, size, sensitive payload, and evidence-pointer drift. These probes are inside the test-only loader and fixture copier, not production behavior. Re-verify after semantic edits to tests/authority_incidents.rs."
