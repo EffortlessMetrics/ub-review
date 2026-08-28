@@ -1,0 +1,162 @@
+diff --git a/src/lane_packets.rs b/src/lane_packets.rs
+index 326b4e8..22f386f 100644
+--- a/src/lane_packets.rs
++++ b/src/lane_packets.rs
+@@ -228,8 +228,30 @@ pub(crate) fn run_command_to_files(
+     stdout_path: &Path,
+     stderr_path: &Path,
+ ) -> Result<CommandStatus> {
+-    let ambient = BTreeMap::new();
+     let mut ignore_process = |_| {};
++    run_command_to_files_with_spawn_observer(
++        root,
++        argv,
++        env,
++        timeout_sec,
++        stdout_path,
++        stderr_path,
++        &mut ignore_process,
++    )
++}
++
++/// Run an approved proof/worker subprocess with its explicit environment while
++/// exposing the same spawn and completion authority used by sensors.
++pub(crate) fn run_command_to_files_with_spawn_observer(
++    root: &Path,
++    argv: &[String],
++    env: &BTreeMap<String, String>,
++    timeout_sec: u64,
++    stdout_path: &Path,
++    stderr_path: &Path,
++    observe_process: &mut dyn FnMut(CommandProcessObservation),
++) -> Result<CommandStatus> {
++    let ambient = BTreeMap::new();
+     run_command_to_files_inner(CommandRun {
+         root,
+         argv,
+@@ -239,7 +261,7 @@ pub(crate) fn run_command_to_files(
+         stdout_path,
+         stderr_path,
+         quarantine_environment: false,
+-        observe_process: &mut ignore_process,
++        observe_process,
+     })
+ }
+ 
+diff --git a/src/main.rs b/src/main.rs
+index 7cdbd61..bbfdb38 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -33,7 +33,9 @@ mod artifacts;
+ mod gate_truth;
+ use artifacts::*;
+ mod proof;
++mod proof_task_ledger;
+ pub(crate) use proof::*;
++pub(crate) use proof_task_ledger::*;
+ mod tools;
+ pub(crate) use tools::*;
+ mod lanes;
+@@ -353,7 +355,7 @@ fn cmd_worker(args: WorkerArgs) -> Result<()> {
+         worktree: None,
+         command: Some(format!("head: {}", cmd.argv.join(" "))),
+     };
+-    let mut runner = crate::run_command_to_files;
++    let mut runner = crate::run_command_to_files_with_spawn_observer;
+     let command_receipt = run_proof_command_receipt(
+         ProofCommandInvocation {
+             command_root: root,
+@@ -363,6 +365,8 @@ fn cmd_worker(args: WorkerArgs) -> Result<()> {
+             spec: &spec,
+             timeout_sec,
+             lease: &lease,
++            task_ledger: None,
++            task: None,
+         },
+         &mut runner,
+     )?;
+@@ -552,7 +556,8 @@ mod worker_proof_tests {
+                           _env: &BTreeMap<String, String>,
+                           _timeout: u64,
+                           stdout: &Path,
+-                          stderr: &Path| {
++                          stderr: &Path,
++                          _observe_process: &mut dyn FnMut(CommandProcessObservation)| {
+             fs::write(stdout, b"ok\n")?;
+             fs::write(stderr, b"")?;
+             Ok(CommandStatus {
+@@ -572,6 +577,8 @@ mod worker_proof_tests {
+                 spec: &spec,
+                 timeout_sec: 30,
+                 lease: &lease,
++                task_ledger: None,
++                task: None,
+             },
+             &mut runner,
+         )?;
+@@ -3744,6 +3751,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
+         .context("admitted revision reference")?;
+     let sensor_task_ledger =
+         SensorTaskLedger::initialize(&revision_ref, &plan, args.dry_run, &run_started)?;
++    let proof_task_ledger = ProofTaskLedger::new(sensor_task_ledger.recorder());
+ 
+     let event_log = Arc::new(EventLog::open(&args.review.out.join("events.ndjson"))?);
+     let mut run_loop_tracker = RunLoopTracker::new();
+@@ -3855,6 +3863,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
+         &mut run_loop_tracker,
+         run_started.elapsed(),
+         late_phase,
++        Some(&proof_task_ledger),
+     )?;
+     sensor_task_ledger.write_artifacts(&args.review.out)?;
+     let summary = render_summary(&args.review.out, &plan, &diff)?;
+@@ -4384,6 +4393,7 @@ fn write_review_artifacts(
+     run_loop_tracker: &mut RunLoopTracker,
+     elapsed: Duration,
+     late_phase: Option<LateSensorPhase>,
++    proof_task_ledger: Option<&ProofTaskLedger>,
+ ) -> Result<GateOutcome> {
+     let review_dir = out.join("review");
+     fs::create_dir_all(&review_dir)?;
+@@ -4504,6 +4514,7 @@ fn write_review_artifacts(
+                     run_started,
+                     box_state,
+                     impact_plan_ref,
++                    proof_task_ledger,
+                 )?;
+                 Ok::<_, anyhow::Error>((result, proof_phases, late_sensor_phase))
+             });
+@@ -4711,6 +4722,7 @@ fn write_review_artifacts(
+             box_state,
+             run_started,
+             impact_plan_ref,
++            proof_task_ledger,
+         )?;
+         finish_run_loop(
+             event_log,
+@@ -4805,6 +4817,7 @@ fn write_review_artifacts(
+             args,
+             box_state,
+             run_started,
++            proof_task_ledger,
+         )?;
+         proof_result
+             .proof_receipts
+@@ -5064,6 +5077,7 @@ fn write_review_artifacts(
+         args,
+         box_state,
+         run_started,
++        proof_task_ledger,
+     )?;
+     let follow_up_proof_receipts = follow_up_proof_result.proof_receipts;
+     review
+@@ -5284,6 +5298,9 @@ fn write_review_artifacts(
+     write_witness_artifacts(out, &witnesses)?;
+     write_proof_receipt_artifacts(out, &review.proof_receipts, revision)?;
+     write_resource_lease_artifacts(out, &review.resource_leases, revision)?;
++    if let Some(task_ledger) = proof_task_ledger {
++        task_ledger.reconcile_published_receipts(out)?;
++    }
+     review.proof_requests =
+         terminalize_proof_requests(&diff.head, &review.proof_requests, &review.proof_receipts);
+     let mut active_claim_graph = build_active_claim_graph(
