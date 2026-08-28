@@ -674,15 +674,11 @@ fn run_tokmd_sensor(
                 &preflight.stderr_path,
             );
             if preflight_failure_reason.is_some() && process_spawned {
-                observe_process(SensorProcessObservation::Finished(
-                    sensor_process_disposition(if result.timed_out {
-                        "timed_out"
-                    } else if result.success {
-                        "ok"
-                    } else {
-                        "failed"
-                    }),
-                ));
+                observe_process(SensorProcessObservation::Finished(if result.timed_out {
+                    TaskTerminalDisposition::TimedOut
+                } else {
+                    TaskTerminalDisposition::DeterministicFailure
+                }));
             }
             append_tokmd_subcommand_receipts(
                 &aggregate_stdout_path,
@@ -1860,8 +1856,15 @@ mod tests {
         let mut sensor = sensor_plan("tokmd", &fake_tokmd.display().to_string(), true);
         sensor.timeout_sec = FIXTURE_SENSOR_TIMEOUT_SEC;
         let plan = test_plan(vec![sensor.clone()]);
+        let revision = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+        let task_ledger = SensorTaskLedger::initialize(&revision, &plan, false, &Instant::now())?;
 
-        run_sensor(&root, &out, &sensor, &event_log, &plan)?;
+        super::run_sensor_with_task_ledger(&root, &out, &sensor, &event_log, &plan, &task_ledger)?;
+        task_ledger.write_artifacts(&out)?;
 
         let sensor_dir = out.join("sensors/tokmd");
         let status: serde_json::Value =
@@ -1894,6 +1897,14 @@ mod tests {
         let aggregate_stdout = fs::read_to_string(sensor_dir.join("stdout.txt"))?;
         assert!(aggregate_stdout.contains("--version"));
         assert!(aggregate_stdout.contains("tokmd 1.11.1"));
+        let snapshot: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/task_ledger_snapshot.json"))?)?;
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/state/ResourcesReleased")
+                .and_then(serde_json::Value::as_str)
+                == Some("DeterministicFailure")
+        );
         Ok(())
     }
 
