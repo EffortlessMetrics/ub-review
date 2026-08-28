@@ -67,7 +67,11 @@ uname -a > /receipt/uname.txt
 uname -m > /receipt/arch.txt
 getconf GNU_LIBC_VERSION > /receipt/glibc.txt
 printf '%s\n' "$PROOF_IMAGE" > /receipt/container-image.txt
-printf '%s\n' "cargo=absent" "rustc=absent" "ub_review_source_checkout=absent" > /receipt/prerequisites.txt
+printf '%s\n' \
+  "cargo=absent" \
+  "rustc=absent" \
+  "ub_review_source_checkout=absent" \
+  > /receipt/prerequisites.txt
 
 archive="/work/download/$RELEASE_ASSET"
 checksum="${archive}.sha256"
@@ -139,7 +143,9 @@ with tarfile.open(archive, "r:gz") as bundle:
         json.dump(payload, handle, indent=2, sort_keys=True)
         handle.write("\n")
     if not valid:
-        raise SystemExit("release archive is not exactly one root-level regular file named ub-review")
+        raise SystemExit(
+            "release archive is not exactly one root-level regular file named ub-review"
+        )
 PY
 
 tar -xzf "$archive" -C /work/install
@@ -254,10 +260,15 @@ tar -czf "$negative_dir/wrong-layout.tar.gz" -C "$negative_dir" nested
 if python3 - "$negative_dir/wrong-layout.tar.gz" <<'PY'
 import sys
 import tarfile
+
 archive = sys.argv[1]
 with tarfile.open(archive, "r:gz") as bundle:
     members = bundle.getmembers()
-valid = len(members) == 1 and members[0].name.lstrip("./") == "ub-review" and members[0].isfile()
+valid = (
+    len(members) == 1
+    and members[0].name.lstrip("./") == "ub-review"
+    and members[0].isfile()
+)
 raise SystemExit(0 if valid else 1)
 PY
 then
@@ -318,9 +329,31 @@ cd "$repo"
 git init -q -b main
 git config user.name "UB Review Portability Proof"
 git config user.email "proof@invalid.example"
-"$bin" init --path .ub-review.toml --no-guide --profile gh-runner --force \
+
+# Exercise the released initializer exactly and retain its generated policy.
+# Its known gate failure is evidence, not the runtime portability verdict.
+"$bin" init \
+  --path init-generated.ub-review.toml \
+  --no-guide \
+  --profile gh-runner \
+  --force \
   > /receipt/init.stdout 2> /receipt/init.stderr
-git add Cargo.toml src/lib.rs .ub-review.toml
+cp init-generated.ub-review.toml /receipt/init-generated.ub-review.toml
+
+# Use the smallest explicit valid policy to isolate runtime support from the
+# released initializer's empty provider and impact values.
+cat > .ub-review.toml <<'TOML'
+profile = "gh-runner"
+
+[providers]
+policy = "auto"
+
+[impact]
+mode = "shadow"
+TOML
+cp .ub-review.toml /receipt/minimal-valid.ub-review.toml
+
+git add Cargo.toml src/lib.rs .ub-review.toml init-generated.ub-review.toml
 git commit -q -m "fixture base"
 cat >> src/lib.rs <<'RS'
 
@@ -336,10 +369,67 @@ git rev-parse HEAD > /receipt/head-sha.txt
 
 "$bin" doctor \
   --root "$repo" \
+  --config "$repo/init-generated.ub-review.toml" \
+  --profile gh-runner \
+  --base HEAD~1 \
+  > /receipt/doctor-init-generated.stdout \
+  2> /receipt/doctor-init-generated.stderr
+
+"$bin" doctor \
+  --root "$repo" \
   --config "$repo/.ub-review.toml" \
   --profile gh-runner \
   --base HEAD~1 \
   > /receipt/doctor.stdout 2> /receipt/doctor.stderr
+
+init_out="$repo/packet-init-generated"
+"$bin" run \
+  --root "$repo" \
+  --base HEAD~1 \
+  --head HEAD \
+  --config "$repo/init-generated.ub-review.toml" \
+  --out "$init_out" \
+  --profile gh-runner \
+  --dry-run \
+  --posting artifact-only \
+  --run-pass manual \
+  --model-mode off \
+  --fail-on-gate false \
+  --no-github-summary \
+  > /receipt/run-init-generated.stdout \
+  2> /receipt/run-init-generated.stderr
+
+python3 - \
+  "$init_out/review/gate_outcome.json" \
+  /receipt/init-generated-gate-outcome.json <<'PY'
+import json
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1])
+receipt = pathlib.Path(sys.argv[2])
+gate = json.loads(source.read_text())
+if gate.get("schema") != "ub-review.gate_outcome.v1":
+    raise SystemExit(f"unexpected init-generated gate schema: {gate.get('schema')!r}")
+if gate.get("conclusion") != "fail":
+    raise SystemExit(
+        f"init-generated config no longer records the expected policy failure: {gate!r}"
+    )
+reasons = gate.get("reasons")
+if not isinstance(reasons, list):
+    raise SystemExit("init-generated gate reasons are not a list")
+observed = {(reason.get("kind"), reason.get("id")) for reason in reasons}
+expected = {
+    ("policy", "impact.mode"),
+    ("policy", "providers"),
+}
+if observed != expected:
+    raise SystemExit(
+        f"unexpected init-generated policy reasons: expected {sorted(expected)!r}, "
+        f"got {sorted(observed)!r}"
+    )
+receipt.write_text(json.dumps(gate, indent=2, sort_keys=True) + "\n")
+PY
 
 out="$repo/packet"
 "$bin" run \
@@ -468,11 +558,23 @@ payload = {
         "archive_layout": "pass",
         "binary_identity": "pass",
         "help": "pass",
-        "doctor": "pass",
+        "init_command": "pass",
+        "init_generated_config_gate": "known_policy_fail",
+        "doctor_init_generated_config": "pass",
+        "doctor_minimal_valid_config": "pass",
+        "minimal_valid_config_gate": "pass",
         "model_off_packet": "pass",
         "packet_json": "pass",
         "negative_controls": "pass",
     },
+    "known_defects": [
+        {
+            "id": "v0.1.0-init-empty-policy-defaults",
+            "scope": "init-generated config",
+            "gate_reason_ids": ["impact.mode", "providers"],
+            "portability_blocking": False,
+        }
+    ],
     "outcome": "supported_pass",
     "minimum_glibc": os.environ["MINIMUM_GLIBC"],
 }
@@ -526,6 +628,8 @@ matrix = {
         "v0_1_0_supported_baseline": "Linux x86_64 with glibc 2.39 or newer",
         "ubuntu_24_04": "supported",
         "ubuntu_22_04": "explicitly_unsupported",
+        "v0_1_0_init_generated_config": "policy_invalid_empty_defaults",
+        "explicit_minimal_valid_config": "model_off_packet_pass",
         "source_fallback_used": False,
     },
 }
@@ -536,6 +640,7 @@ matrix = {
     "- **Excluded baseline:** Ubuntu 22.04, glibc 2.35; the loader fails closed on the binary's `GLIBC_2.39` requirement after checksum and archive verification.\n"
     "- **Immutable asset:** `ub-review-x86_64-unknown-linux-gnu.tar.gz` from tag `v0.1.0`, SHA-256 `87a660273e8d6f76d78b41d5bf2da1ed2928cb7987fbe114f9e1035d32b03465`.\n"
     "- **Runtime proof:** exact version/help identity, `doctor`, model-off dry-run packet, JSON/NDJSON parsing, and negative asset controls.\n"
+    "- **Init defect:** the released `init` command executes, but its serialized `[providers].policy` and `[impact].mode` defaults are empty; the generated-config packet records those two policy failures. An explicit minimal valid policy produces a passing model-off packet.\n"
     "- **Boundary:** no release, tag, asset, resolver, or default was mutated by this proof.\n"
 )
 PY
