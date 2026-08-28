@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 
 use crate::test_parse::command_display_with_env;
 use crate::*;
@@ -32,6 +32,8 @@ pub(crate) struct ProofCommandInvocation<'a> {
     pub(crate) spec: &'a ProofCommandSpec,
     pub(crate) timeout_sec: u64,
     pub(crate) lease: &'a ResourceLease,
+    pub(crate) task_ledger: Option<&'a ProofTaskLedger>,
+    pub(crate) task: Option<&'a ProofCommandTask>,
 }
 
 #[derive(Default)]
@@ -52,6 +54,7 @@ where
         u64,
         &Path,
         &Path,
+        &mut dyn FnMut(CommandProcessObservation),
     ) -> Result<CommandStatus>,
 {
     let ProofCommandInvocation {
@@ -62,7 +65,14 @@ where
         spec,
         timeout_sec,
         lease,
+        task_ledger,
+        task,
     } = invocation;
+    let ledger_task = match (task_ledger, task) {
+        (Some(ledger), Some(task)) => Some((ledger, task)),
+        (None, None) => None,
+        _ => bail!("proof task-ledger invocation must provide both ledger and task metadata"),
+    };
     if lease.status != "granted" || lease.consumer != receipt_id {
         let reason = if lease.status != "granted" {
             format!(
@@ -75,13 +85,49 @@ where
                 lease.id, lease.consumer, receipt_id
             )
         };
+        if let Some((ledger, task)) = ledger_task {
+            let disposition = if lease.status == "exhausted" {
+                TaskNonExecutionDisposition::BudgetDeferred
+            } else {
+                TaskNonExecutionDisposition::Refused
+            };
+            ledger.decline_command(task, disposition, &reason)?;
+        }
         return skipped_proof_command_receipt_for_id(
             out, receipt_id, side, spec, "skipped", reason,
         );
     }
 
-    let paths = proof_command_paths(out, receipt_id, side)?;
+    if let Some((ledger, task)) = ledger_task {
+        ledger.begin_command(task, lease)?;
+    }
+    let paths = match proof_command_paths(out, receipt_id, side) {
+        Ok(paths) => paths,
+        Err(error) => {
+            if let Some((ledger, task)) = ledger_task {
+                ledger.setup_failed(task)?;
+            }
+            return Err(error);
+        }
+    };
     let command = command_display_with_env(&spec.env, &spec.argv);
+    let mut process_spawned = false;
+    let mut completion_unconfirmed = false;
+    let mut observation_error = None;
+    let mut observe_process = |observation| match observation {
+        CommandProcessObservation::Spawned => {
+            process_spawned = true;
+            if let Some((ledger, task)) = ledger_task
+                && observation_error.is_none()
+                && let Err(error) = ledger.run_started(task)
+            {
+                observation_error = Some(error);
+            }
+        }
+        CommandProcessObservation::CompletionUnconfirmed => {
+            completion_unconfirmed = true;
+        }
+    };
     let status = runner(
         command_root,
         &spec.argv,
@@ -89,8 +135,36 @@ where
         timeout_sec,
         &paths.stdout_path,
         &paths.stderr_path,
+        &mut observe_process,
     );
-    bound_proof_command_streams(&paths)?;
+    if let Some(error) = observation_error {
+        return Err(error).context("record proof process observation");
+    }
+    if completion_unconfirmed {
+        return match status {
+            Err(error) => Err(error).context("proof child completion remains unconfirmed"),
+            Ok(_) => bail!("proof child completion remains unconfirmed"),
+        };
+    }
+    let disposition = match &status {
+        Ok(status) if status.timed_out => TaskTerminalDisposition::TimedOut,
+        Ok(status) if status.success => TaskTerminalDisposition::Succeeded,
+        Ok(_) | Err(_) => TaskTerminalDisposition::DeterministicFailure,
+    };
+    if let Some((ledger, task)) = ledger_task {
+        if process_spawned {
+            ledger.process_finished(task, disposition)?;
+        } else {
+            ledger.setup_failed(task)?;
+        }
+    }
+    let stream_result = bound_proof_command_streams(&paths);
+    if process_spawned
+        && let Some((ledger, task)) = ledger_task
+    {
+        ledger.cleanup_finished(task)?;
+    }
+    stream_result?;
     let (command_status, reason, exit_code, timed_out, duration_ms) = match status {
         Ok(status) if status.timed_out => (
             "timed_out".to_owned(),
@@ -148,6 +222,7 @@ pub(crate) fn run_proof_command_receipt_for_task<F>(
     spec: &ProofCommandSpec,
     timeout_sec: u64,
     lease: &ResourceLease,
+    task_ledger: Option<&ProofTaskLedger>,
     runner: &mut F,
 ) -> Result<ProofCommandReceipt>
 where
@@ -158,8 +233,10 @@ where
         u64,
         &Path,
         &Path,
+        &mut dyn FnMut(CommandProcessObservation),
     ) -> Result<CommandStatus>,
 {
+    let command_task = ProofCommandTask::focused_test(task, side, timeout_sec);
     run_proof_command_receipt(
         ProofCommandInvocation {
             command_root,
@@ -169,6 +246,8 @@ where
             spec,
             timeout_sec,
             lease,
+            task_ledger,
+            task: task_ledger.map(|_| &command_task),
         },
         runner,
     )
@@ -384,7 +463,32 @@ fn proof_command_paths(out: &Path, receipt_id: &str, side: &str) -> Result<Proof
 
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
+
+    use anyhow::ensure;
+
     use super::*;
+
+    fn revision() -> RevisionRef {
+        RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        }
+    }
+
+    fn focused_task(id: &str) -> FocusedTestTask {
+        FocusedTestTask {
+            id: id.to_owned(),
+            file: "src/lib.rs".to_owned(),
+            test_name: Some("focused_case".to_owned()),
+            mode: FocusedProofMode::HeadOnly,
+            command_specs: None,
+            timeout_sec: Some(7),
+            requested_by: vec!["tests-oracle".to_owned()],
+            request_ids: vec!["request-a".to_owned()],
+        }
+    }
 
     fn granted_lease(id: &str) -> ResourceLease {
         ResourceLease {
@@ -428,8 +532,10 @@ mod tests {
                 spec: &spec,
                 timeout_sec: 7,
                 lease: &granted_lease("lease-proof-command-001"),
+                task_ledger: None,
+                task: None,
             },
-            &mut |_root, _argv, _env, timeout, stdout, stderr| {
+            &mut |_root, _argv, _env, timeout, stdout, stderr, _observe_process| {
                 fs::write(stdout, b"started\n")?;
                 fs::write(stderr, b"timed out\n")?;
                 Ok(CommandStatus {
@@ -481,8 +587,10 @@ mod tests {
                 spec: &spec,
                 timeout_sec: 60,
                 lease: &lease,
+                task_ledger: None,
+                task: None,
             },
-            &mut |_root, _argv, _env, _timeout, _stdout, _stderr| {
+            &mut |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
                 runner_called = true;
                 Ok(CommandStatus {
                     exit_code: Some(0),
@@ -529,8 +637,10 @@ mod tests {
                 spec: &spec,
                 timeout_sec: 60,
                 lease: &lease,
+                task_ledger: None,
+                task: None,
             },
-            &mut |_root, _argv, _env, _timeout, _stdout, _stderr| {
+            &mut |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
                 runner_called = true;
                 Ok(CommandStatus {
                     exit_code: Some(0),
@@ -576,8 +686,10 @@ mod tests {
                 spec: &spec,
                 timeout_sec: 60,
                 lease: &granted_lease("lease-proof-command-loud"),
+                task_ledger: None,
+                task: None,
             },
-            &mut |_root, _argv, _env, _timeout, stdout, stderr| {
+            &mut |_root, _argv, _env, _timeout, stdout, stderr, _observe_process| {
                 fs::write(stdout, &loud_stdout)?;
                 fs::write(stderr, &loud_stderr)?;
                 Ok(CommandStatus {
@@ -602,4 +714,170 @@ mod tests {
         assert!(bounded_stderr.ends_with(&[b'e'; 32]));
         Ok(())
     }
+
+    #[test]
+    fn proof_command_task_records_spawn_and_completion_but_waits_for_receipt_publication()
+    -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let recorder = TaskLedgerRecorder::new(&revision(), &Instant::now())?;
+        let ledger = ProofTaskLedger::new(recorder.clone());
+        let focused = focused_task("proof-command-observed");
+        let command_task = ProofCommandTask::focused_test(&focused, "head", 7);
+        let spec = ProofCommandSpec {
+            argv: vec!["cargo".to_owned(), "test".to_owned(), "focused_case".to_owned()],
+            env: BTreeMap::new(),
+        };
+        let lease = granted_lease("lease-proof-command-observed");
+
+        let receipt = run_proof_command_receipt(
+            ProofCommandInvocation {
+                command_root: temp.path(),
+                out: &out,
+                receipt_id: &focused.id,
+                side: "head",
+                spec: &spec,
+                timeout_sec: 7,
+                lease: &lease,
+                task_ledger: Some(&ledger),
+                task: Some(&command_task),
+            },
+            &mut |_root, _argv, _env, _timeout, stdout, stderr, observe_process| {
+                observe_process(CommandProcessObservation::Spawned);
+                fs::write(stdout, b"ok\n")?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    exit_code: Some(0),
+                    timed_out: false,
+                    success: true,
+                    reason: "completed".to_owned(),
+                    duration_ms: 2,
+                })
+            },
+        )?;
+
+        ensure!(receipt.status == "passed");
+        let task_id = proof_command_task_id(&focused.id, "head")?;
+        let events = recorder
+            .inputs()?
+            .into_iter()
+            .filter(|input| input.task_id == task_id)
+            .map(|input| input.event)
+            .collect::<Vec<_>>();
+        ensure!(events.iter().any(|event| matches!(event, TaskEvent::RunStarted { .. })));
+        ensure!(events.iter().any(|event| matches!(
+            event,
+            TaskEvent::ProcessFinished {
+                disposition: TaskTerminalDisposition::Succeeded,
+                ..
+            }
+        )));
+        ensure!(events.iter().any(|event| matches!(event, TaskEvent::CleanupFinished { .. })));
+        ensure!(!events.iter().any(|event| matches!(event, TaskEvent::ReceiptCreated { .. })));
+        ensure!(!events.iter().any(|event| matches!(event, TaskEvent::ResourcesReleased { .. })));
+        Ok(())
+    }
+
+    #[test]
+    fn completion_unconfirmed_stops_before_terminal_receipt_and_release() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let recorder = TaskLedgerRecorder::new(&revision(), &Instant::now())?;
+        let ledger = ProofTaskLedger::new(recorder.clone());
+        let focused = focused_task("proof-command-unconfirmed");
+        let command_task = ProofCommandTask::focused_test(&focused, "head", 7);
+        let spec = ProofCommandSpec {
+            argv: vec!["cargo".to_owned(), "test".to_owned(), "focused_case".to_owned()],
+            env: BTreeMap::new(),
+        };
+        let lease = granted_lease("lease-proof-command-unconfirmed");
+
+        let error = run_proof_command_receipt(
+            ProofCommandInvocation {
+                command_root: temp.path(),
+                out: &out,
+                receipt_id: &focused.id,
+                side: "head",
+                spec: &spec,
+                timeout_sec: 7,
+                lease: &lease,
+                task_ledger: Some(&ledger),
+                task: Some(&command_task),
+            },
+            &mut |_root, _argv, _env, _timeout, _stdout, _stderr, observe_process| {
+                observe_process(CommandProcessObservation::Spawned);
+                observe_process(CommandProcessObservation::CompletionUnconfirmed);
+                Err(anyhow::anyhow!("injected unconfirmed cleanup"))
+            },
+        )
+        .err()
+        .context("unconfirmed child must fail closed")?;
+        ensure!(format!("{error:#}").contains("completion remains unconfirmed"));
+
+        let task_id = proof_command_task_id(&focused.id, "head")?;
+        let events = recorder
+            .inputs()?
+            .into_iter()
+            .filter(|input| input.task_id == task_id)
+            .map(|input| input.event)
+            .collect::<Vec<_>>();
+        ensure!(events.iter().any(|event| matches!(event, TaskEvent::RunStarted { .. })));
+        for event in &events {
+            ensure!(!matches!(
+                event,
+                TaskEvent::ProcessFinished { .. }
+                    | TaskEvent::CleanupFinished { .. }
+                    | TaskEvent::ReceiptCreated { .. }
+                    | TaskEvent::ReceiptCreationFailed { .. }
+                    | TaskEvent::ResourcesReleased { .. }
+            ));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn runner_setup_error_has_no_process_timing() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let recorder = TaskLedgerRecorder::new(&revision(), &Instant::now())?;
+        let ledger = ProofTaskLedger::new(recorder.clone());
+        let focused = focused_task("proof-command-setup-failure");
+        let command_task = ProofCommandTask::focused_test(&focused, "head", 7);
+        let spec = ProofCommandSpec {
+            argv: vec!["missing-proof-command".to_owned()],
+            env: BTreeMap::new(),
+        };
+        let lease = granted_lease("lease-proof-command-setup-failure");
+
+        let receipt = run_proof_command_receipt(
+            ProofCommandInvocation {
+                command_root: temp.path(),
+                out: &out,
+                receipt_id: &focused.id,
+                side: "head",
+                spec: &spec,
+                timeout_sec: 7,
+                lease: &lease,
+                task_ledger: Some(&ledger),
+                task: Some(&command_task),
+            },
+            &mut |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
+                Err(anyhow::anyhow!("injected pre-spawn failure"))
+            },
+        )?;
+        ensure!(receipt.status == "skipped");
+
+        let task_id = proof_command_task_id(&focused.id, "head")?;
+        let events = recorder
+            .inputs()?
+            .into_iter()
+            .filter(|input| input.task_id == task_id)
+            .map(|input| input.event)
+            .collect::<Vec<_>>();
+        ensure!(events.iter().any(|event| matches!(event, TaskEvent::SetupFailed { .. })));
+        ensure!(!events.iter().any(|event| matches!(event, TaskEvent::RunStarted { .. })));
+        ensure!(!events.iter().any(|event| matches!(event, TaskEvent::ProcessFinished { .. })));
+        Ok(())
+    }
+
 }

@@ -19,6 +19,7 @@ pub(crate) fn run_focused_build_proof_tasks_with_runner<F>(
     args: &RunArgs,
     budget: ProofBudget,
     tasks: Vec<FocusedBuildTask>,
+    task_ledger: Option<&ProofTaskLedger>,
     mut runner: F,
 ) -> Result<ProofBrokerResult>
 where
@@ -29,6 +30,7 @@ where
         u64,
         &Path,
         &Path,
+        &mut dyn FnMut(CommandProcessObservation),
     ) -> Result<CommandStatus>,
 {
     let mut receipts = Vec::new();
@@ -46,6 +48,13 @@ where
                 "skipped_profile",
                 "dry-run; resource broker did not grant a build proof lease",
             ));
+            if let Some(ledger) = task_ledger {
+                ledger.decline_command(
+                    &ProofCommandTask::focused_build(&task, task_timeout_sec),
+                    TaskNonExecutionDisposition::Refused,
+                    "dry-run; proof broker did not execute focused build",
+                )?;
+            }
             receipts.push(skipped_focused_build_receipt(
                 out,
                 diff,
@@ -63,6 +72,13 @@ where
                 "absent",
                 "profile allows zero focused build leases",
             ));
+            if let Some(ledger) = task_ledger {
+                ledger.decline_command(
+                    &ProofCommandTask::focused_build(&task, task_timeout_sec),
+                    TaskNonExecutionDisposition::Refused,
+                    "profile allows zero focused build leases",
+                )?;
+            }
             receipts.push(skipped_focused_build_receipt(
                 out,
                 diff,
@@ -85,6 +101,13 @@ where
                 "exhausted",
                 "focused build proof lease budget exhausted by runtime profile",
             ));
+            if let Some(ledger) = task_ledger {
+                ledger.decline_command(
+                    &ProofCommandTask::focused_build(&task, task_timeout_sec),
+                    TaskNonExecutionDisposition::BudgetDeferred,
+                    "focused build proof lease budget exhausted by runtime profile",
+                )?;
+            }
             receipts.push(skipped_focused_build_receipt(
                 out,
                 diff,
@@ -108,6 +131,7 @@ where
             &task,
             task_timeout_sec,
             &lease,
+            task_ledger,
             &mut runner,
         )?);
         leases.push(lease);
@@ -137,6 +161,7 @@ fn run_focused_build_proof_task<F>(
     task: &FocusedBuildTask,
     timeout_sec: u64,
     lease: &ResourceLease,
+    task_ledger: Option<&ProofTaskLedger>,
     runner: &mut F,
 ) -> Result<ProofReceipt>
 where
@@ -147,9 +172,11 @@ where
         u64,
         &Path,
         &Path,
+        &mut dyn FnMut(CommandProcessObservation),
     ) -> Result<CommandStatus>,
 {
     let spec = focused_build_command_spec_for_task(task);
+    let command_task = ProofCommandTask::focused_build(task, timeout_sec);
     let head = run_proof_command_receipt(
         ProofCommandInvocation {
             command_root: root,
@@ -159,6 +186,8 @@ where
             spec: &spec,
             timeout_sec,
             lease,
+            task_ledger,
+            task: task_ledger.map(|_| &command_task),
         },
         runner,
     )?;
@@ -232,7 +261,8 @@ mod tests {
                 max_total_seconds: 120,
             },
             tasks,
-            |_root, argv, env, timeout, stdout, stderr| {
+            None,
+            |_root, argv, env, timeout, stdout, stderr, _observe_process| {
                 commands.push(command_display_with_env(env, argv));
                 assert!(env.is_empty());
                 assert_eq!(timeout, 90);
@@ -307,7 +337,8 @@ mod tests {
                 max_total_seconds: 120,
             },
             tasks,
-            |_root, _argv, _env, _timeout, _stdout, _stderr| {
+            None,
+            |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
                 Err(anyhow::anyhow!("build runner should not execute"))
             },
         )?;

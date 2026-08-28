@@ -33,7 +33,9 @@ mod artifacts;
 mod gate_truth;
 use artifacts::*;
 mod proof;
+mod proof_task_ledger;
 pub(crate) use proof::*;
+pub(crate) use proof_task_ledger::*;
 mod tools;
 pub(crate) use tools::*;
 mod lanes;
@@ -353,7 +355,7 @@ fn cmd_worker(args: WorkerArgs) -> Result<()> {
         worktree: None,
         command: Some(format!("head: {}", cmd.argv.join(" "))),
     };
-    let mut runner = crate::run_command_to_files;
+    let mut runner = crate::run_command_to_files_with_spawn_observer;
     let command_receipt = run_proof_command_receipt(
         ProofCommandInvocation {
             command_root: root,
@@ -363,6 +365,8 @@ fn cmd_worker(args: WorkerArgs) -> Result<()> {
             spec: &spec,
             timeout_sec,
             lease: &lease,
+            task_ledger: None,
+            task: None,
         },
         &mut runner,
     )?;
@@ -552,7 +556,8 @@ mod worker_proof_tests {
                           _env: &BTreeMap<String, String>,
                           _timeout: u64,
                           stdout: &Path,
-                          stderr: &Path| {
+                          stderr: &Path,
+                          _observe_process: &mut dyn FnMut(CommandProcessObservation)| {
             fs::write(stdout, b"ok\n")?;
             fs::write(stderr, b"")?;
             Ok(CommandStatus {
@@ -572,6 +577,8 @@ mod worker_proof_tests {
                 spec: &spec,
                 timeout_sec: 30,
                 lease: &lease,
+                task_ledger: None,
+                task: None,
             },
             &mut runner,
         )?;
@@ -3744,6 +3751,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         .context("admitted revision reference")?;
     let sensor_task_ledger =
         SensorTaskLedger::initialize(&revision_ref, &plan, args.dry_run, &run_started)?;
+    let proof_task_ledger = ProofTaskLedger::new(sensor_task_ledger.recorder());
 
     let event_log = Arc::new(EventLog::open(&args.review.out.join("events.ndjson"))?);
     let mut run_loop_tracker = RunLoopTracker::new();
@@ -3855,6 +3863,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         &mut run_loop_tracker,
         run_started.elapsed(),
         late_phase,
+        Some(&proof_task_ledger),
     )?;
     sensor_task_ledger.write_artifacts(&args.review.out)?;
     let summary = render_summary(&args.review.out, &plan, &diff)?;
@@ -4384,6 +4393,7 @@ fn write_review_artifacts(
     run_loop_tracker: &mut RunLoopTracker,
     elapsed: Duration,
     late_phase: Option<LateSensorPhase>,
+    proof_task_ledger: Option<&ProofTaskLedger>,
 ) -> Result<GateOutcome> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir)?;
@@ -4504,6 +4514,7 @@ fn write_review_artifacts(
                     run_started,
                     box_state,
                     impact_plan_ref,
+                    proof_task_ledger,
                 )?;
                 Ok::<_, anyhow::Error>((result, proof_phases, late_sensor_phase))
             });
@@ -4711,6 +4722,7 @@ fn write_review_artifacts(
             box_state,
             run_started,
             impact_plan_ref,
+            proof_task_ledger,
         )?;
         finish_run_loop(
             event_log,
@@ -4805,6 +4817,7 @@ fn write_review_artifacts(
             args,
             box_state,
             run_started,
+            proof_task_ledger,
         )?;
         proof_result
             .proof_receipts
@@ -5064,6 +5077,7 @@ fn write_review_artifacts(
         args,
         box_state,
         run_started,
+        proof_task_ledger,
     )?;
     let follow_up_proof_receipts = follow_up_proof_result.proof_receipts;
     review
@@ -5284,6 +5298,9 @@ fn write_review_artifacts(
     write_witness_artifacts(out, &witnesses)?;
     write_proof_receipt_artifacts(out, &review.proof_receipts, revision)?;
     write_resource_lease_artifacts(out, &review.resource_leases, revision)?;
+    if let Some(task_ledger) = proof_task_ledger {
+        task_ledger.reconcile_published_receipts(out)?;
+    }
     review.proof_requests =
         terminalize_proof_requests(&diff.head, &review.proof_requests, &review.proof_receipts);
     let mut active_claim_graph = build_active_claim_graph(
@@ -5311,6 +5328,9 @@ fn write_review_artifacts(
         &review.proof_receipts,
         &review.resource_leases,
     )?;
+    if let Some(task_ledger) = proof_task_ledger {
+        task_ledger.record_source_requests(&review.proof_requests, &review.proof_receipts)?;
+    }
     finish_run_loop(
         event_log,
         run_started,
@@ -9257,7 +9277,8 @@ index 1111111..2222222 100644
                 max_total_seconds: 600,
             },
             tasks,
-            |_root, argv, env, timeout, stdout, stderr| {
+            None,
+            |_root, argv, env, timeout, stdout, stderr, _observe_process| {
                 commands.push(super::test_parse::command_display_with_env(env, argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
                 assert_eq!(env.contains_key("USE_SYSTEM_BUN"), is_base);
@@ -9375,7 +9396,8 @@ index 1111111..2222222 100644
                 max_total_seconds: 600,
             },
             tasks,
-            |_root, argv, env, timeout, stdout, stderr| {
+            None,
+            |_root, argv, env, timeout, stdout, stderr, _observe_process| {
                 commands.push(super::test_parse::command_display_with_env(env, argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
                 assert!(env.is_empty());
@@ -9640,7 +9662,8 @@ index 1111111..2222222 100644
                 max_total_seconds: 1_200,
             },
             tasks,
-            |_root, argv, env, timeout, stdout, stderr| {
+            None,
+            |_root, argv, env, timeout, stdout, stderr, _observe_process| {
                 commands.push(command_display(argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
                 assert_eq!(env.contains_key("USE_SYSTEM_BUN"), is_base);
@@ -9789,7 +9812,8 @@ index 1111111..2222222 100644
                 max_total_seconds: 600,
             },
             tasks,
-            |_root, argv, env, _timeout, stdout, stderr| {
+            None,
+            |_root, argv, env, _timeout, stdout, stderr, _observe_process| {
                 commands.push(command_display(argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
                 assert_eq!(env.contains_key("USE_SYSTEM_BUN"), is_base);
@@ -9888,7 +9912,8 @@ index 1111111..2222222 100644
             &args,
             remaining,
             tasks,
-            |_root, argv, _env, _timeout, _stdout, _stderr| {
+            None,
+            |_root, argv, _env, _timeout, _stdout, _stderr, _observe_process| {
                 commands.push(command_display(argv));
                 Ok(CommandStatus {
                     exit_code: Some(0),
@@ -10148,7 +10173,8 @@ index 1111111..2222222 100644
                 max_total_seconds: 600,
             },
             tasks,
-            |_root, argv, env, _timeout, stdout, stderr| {
+            None,
+            |_root, argv, env, _timeout, stdout, stderr, _observe_process| {
                 commands.push(command_display(argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
                 assert_eq!(env.contains_key("USE_SYSTEM_BUN"), is_base);
@@ -10265,7 +10291,8 @@ index 3333333..4444444 100644
                 max_total_seconds: 600,
             },
             tasks,
-            |_root, argv, env, _timeout, stdout, stderr| {
+            None,
+            |_root, argv, env, _timeout, stdout, stderr, _observe_process| {
                 commands.push(command_display(argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
                 assert_eq!(env.contains_key("USE_SYSTEM_BUN"), is_base);
@@ -10646,7 +10673,8 @@ index 3333333..4444444 100644
                 max_total_seconds: 600,
             },
             tasks,
-            |_root, _argv, _env, _timeout, _stdout, _stderr| {
+            None,
+            |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
                 bail!("proof command should not run without a lease")
             },
             |_root, _out, _diff| {
@@ -10690,7 +10718,8 @@ index 3333333..4444444 100644
                 max_total_seconds: 600,
             },
             tasks,
-            |_root, _argv, _env, _timeout, _stdout, _stderr| {
+            None,
+            |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
                 bail!("proof command should not run when proof budget is zero")
             },
             |_root, _out, _diff| {
@@ -15116,6 +15145,7 @@ required_proof_unprooven = true
             &mut run_loop_tracker,
             std::time::Duration::from_secs(5),
             None,
+            None,
         )?;
 
         let written: serde_json::Value =
@@ -15339,6 +15369,7 @@ required_proof_unprooven = true
             &mut run_loop_tracker,
             std::time::Duration::from_secs(5),
             Some(late_phase),
+            None,
         )?;
 
         // The late receipt landed before the gate evaluated, and the missing
@@ -17911,6 +17942,7 @@ index 1111111..2222222 100644
             &mut run_loop_tracker,
             std::time::Duration::from_secs(73),
             None,
+            None,
         )?;
 
         let artifact_body = fs::read_to_string(out.join("review/review.md"))?;
@@ -17980,6 +18012,7 @@ index 1111111..2222222 100644
             &run_started,
             &mut run_loop_tracker,
             std::time::Duration::from_secs(5),
+            None,
             None,
         )?;
 
@@ -18055,6 +18088,7 @@ index 1111111..2222222 100644
             &run_started,
             &mut run_loop_tracker,
             std::time::Duration::from_secs(5),
+            None,
             None,
         )?;
 

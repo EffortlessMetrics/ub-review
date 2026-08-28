@@ -54,6 +54,11 @@ impl TaskLedgerRecorder {
         })
     }
 
+    /// Return the immutable revision admitted for every adapter sharing this recorder.
+    pub(crate) fn revision(&self) -> &RevisionRef {
+        &self.inner.revision
+    }
+
     pub(crate) fn now(&self) -> Result<MonotonicInstant> {
         let elapsed = u64::try_from(self.inner.run_started.elapsed().as_millis())
             .context("task-ledger recorder monotonic time exceeds u64")?;
@@ -69,6 +74,14 @@ impl TaskLedgerRecorder {
         Ok(())
     }
 
+    /// Append one event without making adapters rebuild the input envelope.
+    pub(crate) fn append_event(&self, task_id: &TaskId, event: TaskEvent) -> Result<()> {
+        self.append([TaskLedgerInput {
+            task_id: task_id.clone(),
+            event,
+        }])
+    }
+
     pub(crate) fn write_artifacts(&self, out: &std::path::Path) -> Result<()> {
         let inputs = self
             .inner
@@ -80,6 +93,16 @@ impl TaskLedgerRecorder {
             return remove_task_ledger_artifacts(out);
         }
         write_task_ledger_artifacts(out, &self.inner.revision, &inputs)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn inputs(&self) -> Result<Vec<TaskLedgerInput>> {
+        Ok(self
+            .inner
+            .inputs
+            .lock()
+            .map_err(|_| anyhow::anyhow!("task-ledger recorder mutex poisoned"))?
+            .clone())
     }
 }
 
@@ -148,6 +171,12 @@ impl SensorTaskLedger {
         }
         ledger.append(initial)?;
         Ok(ledger)
+    }
+
+    /// Return the run-owned recorder so another source adapter can append to
+    /// the exact same deterministic stream.
+    pub(crate) fn recorder(&self) -> TaskLedgerRecorder {
+        self.recorder.clone()
     }
 
     /// Observe the existing worker admitting a queued sensor and beginning

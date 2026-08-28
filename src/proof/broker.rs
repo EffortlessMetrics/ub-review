@@ -56,6 +56,7 @@ pub(crate) fn run_initial_diff_proof_broker_v0(
     box_state: &BoxState,
     run_started: &Instant,
     impact: &ImpactPlan,
+    task_ledger: Option<&ProofTaskLedger>,
 ) -> Result<ProofBrokerResult> {
     let budget = proof_budget(profile)?;
     let runtime = current_portfolio_runtime(profile, box_state, run_started)?;
@@ -77,7 +78,8 @@ pub(crate) fn run_initial_diff_proof_broker_v0(
         args,
         budget,
         selection.test_tasks,
-        run_command_to_files,
+        task_ledger,
+        run_command_to_files_with_spawn_observer,
         prepare_base_plus_tests_worktree,
     )?;
     let final_selection = select_proof_portfolio(ProofPortfolioInput {
@@ -109,6 +111,7 @@ pub(crate) fn run_seeded_proof_stream_v0(
     run_started: &Instant,
     box_state: &BoxState,
     impact: &ImpactPlan,
+    task_ledger: Option<&ProofTaskLedger>,
 ) -> Result<(ProofBrokerResult, Vec<RunLoopPhase>)> {
     let mut phases = Vec::new();
     let initial_result = run_initial_diff_proof_broker_v0(
@@ -120,6 +123,7 @@ pub(crate) fn run_seeded_proof_stream_v0(
         box_state,
         run_started,
         impact,
+        task_ledger,
     );
     let initial_status = if initial_result.is_ok() {
         "completed"
@@ -157,6 +161,7 @@ pub(crate) fn run_seeded_proof_stream_v0(
             args,
             box_state,
             run_started,
+            task_ledger,
         );
         let request_status = if request_result.is_ok() {
             "completed"
@@ -692,6 +697,7 @@ pub(crate) fn run_request_proof_broker_v0(
     args: &RunArgs,
     box_state: &BoxState,
     run_started: &Instant,
+    task_ledger: Option<&ProofTaskLedger>,
 ) -> Result<ProofBrokerResult> {
     run_request_proof_broker_v0_with_runners(
         root,
@@ -704,9 +710,10 @@ pub(crate) fn run_request_proof_broker_v0(
         args,
         box_state,
         run_started,
-        run_command_to_files,
+        task_ledger,
+        run_command_to_files_with_spawn_observer,
         prepare_base_plus_tests_worktree,
-        run_command_to_files,
+        run_command_to_files_with_spawn_observer,
     )
 }
 
@@ -725,6 +732,7 @@ fn run_request_proof_broker_v0_with_runners<F, G, H>(
     args: &RunArgs,
     box_state: &BoxState,
     run_started: &Instant,
+    task_ledger: Option<&ProofTaskLedger>,
     test_runner: F,
     prepare_base_plus_tests: G,
     build_runner: H,
@@ -737,6 +745,7 @@ where
         u64,
         &Path,
         &Path,
+        &mut dyn FnMut(CommandProcessObservation),
     ) -> Result<CommandStatus>,
     G: FnMut(&Path, &Path, &DiffContext) -> Result<PathBuf>,
     H: FnMut(
@@ -746,6 +755,7 @@ where
         u64,
         &Path,
         &Path,
+        &mut dyn FnMut(CommandProcessObservation),
     ) -> Result<CommandStatus>,
 {
     // Native v2 proof flow (Order 4b of #678): normalize v1 requests to typed
@@ -784,6 +794,7 @@ where
         args,
         budget,
         selection.test_tasks,
+        task_ledger,
         test_runner,
         prepare_base_plus_tests,
     )?;
@@ -812,6 +823,7 @@ where
         args,
         remaining_budget,
         replan.build_tasks,
+        task_ledger,
         build_runner,
     )?;
     result.proof_receipts.extend(build_result.proof_receipts);
@@ -862,6 +874,7 @@ pub(crate) fn run_follow_up_proof_broker_v0(
     args: &RunArgs,
     box_state: &BoxState,
     run_started: &Instant,
+    task_ledger: Option<&ProofTaskLedger>,
 ) -> Result<ProofBrokerResult> {
     let total_budget = proof_budget(profile)?;
     let budget = remaining_focused_proof_budget(total_budget, existing_leases);
@@ -890,7 +903,8 @@ pub(crate) fn run_follow_up_proof_broker_v0(
         args,
         budget,
         selection.test_tasks,
-        run_command_to_files,
+        task_ledger,
+        run_command_to_files_with_spawn_observer,
         prepare_base_plus_tests_worktree,
     )?;
     let mut consumed_leases = existing_leases.to_vec();
@@ -918,7 +932,8 @@ pub(crate) fn run_follow_up_proof_broker_v0(
         args,
         remaining_budget,
         replan.build_tasks,
-        run_command_to_files,
+        task_ledger,
+        run_command_to_files_with_spawn_observer,
     )?;
     result.proof_receipts.extend(build_result.proof_receipts);
     result.resource_leases.extend(build_result.resource_leases);
@@ -1038,6 +1053,7 @@ pub(crate) fn run_follow_up_proof_broker_v0_with_runner<F, G>(
     args: &RunArgs,
     budget: ProofBudget,
     tasks: Vec<FocusedTestTask>,
+    task_ledger: Option<&ProofTaskLedger>,
     runner: F,
     prepare_base_plus_tests: G,
 ) -> Result<ProofBrokerResult>
@@ -1049,6 +1065,7 @@ where
         u64,
         &Path,
         &Path,
+        &mut dyn FnMut(CommandProcessObservation),
     ) -> Result<CommandStatus>,
     G: FnMut(&Path, &Path, &DiffContext) -> Result<PathBuf>,
 {
@@ -1060,6 +1077,7 @@ where
         args,
         budget,
         tasks,
+        task_ledger,
         runner,
         prepare_base_plus_tests,
     )
@@ -1885,6 +1903,7 @@ mod tests {
                 github_actions: false,
             },
             &build_impact_plan(temp.path(), &diff.changed_files, "shadow"),
+            None,
         )?;
 
         assert!(
@@ -1981,7 +2000,8 @@ mod tests {
             &args,
             &box_state,
             &Instant::now(),
-            |_root, argv, env, timeout, stdout, stderr| {
+            None,
+            |_root, argv, env, timeout, stdout, stderr, _observe_process| {
                 test_commands.push(command_display_with_env(env, argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
                 ensure!(timeout == 60);
@@ -2003,7 +2023,7 @@ mod tests {
                 })
             },
             move |_root, _out, _diff| Ok(prepared_base_root.clone()),
-            |_root, argv, _env, _timeout, _stdout, _stderr| {
+            |_root, argv, _env, _timeout, _stdout, _stderr, _observe_process| {
                 build_commands.push(argv.join(" "));
                 Err(anyhow::anyhow!(
                     "build should remain unexecuted after test receipt"
@@ -2113,7 +2133,8 @@ mod tests {
             &args,
             &box_state,
             &Instant::now(),
-            |_root, _argv, _env, _timeout, _stdout, _stderr| {
+            None,
+            |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
                 Err(anyhow::anyhow!(
                     "existing evidence must prevent test execution"
                 ))
@@ -2123,7 +2144,7 @@ mod tests {
                     "existing evidence must prevent worktree preparation"
                 ))
             },
-            |_root, _argv, _env, _timeout, _stdout, _stderr| {
+            |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
                 Err(anyhow::anyhow!(
                     "existing evidence must prevent build execution"
                 ))
@@ -2210,7 +2231,8 @@ mod tests {
             &args,
             &box_state,
             &Instant::now(),
-            |_root, _argv, _env, _timeout, _stdout, _stderr| {
+            None,
+            |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
                 Err(anyhow::anyhow!(
                     "initial receipt must prevent rerunning the changed test"
                 ))
@@ -2220,7 +2242,7 @@ mod tests {
                     "initial receipt must prevent worktree preparation"
                 ))
             },
-            |_root, _argv, _env, _timeout, _stdout, _stderr| {
+            |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
                 Err(anyhow::anyhow!("build profile is disabled in this fixture"))
             },
         )?;
@@ -2317,6 +2339,7 @@ mod tests {
             &args,
             &box_state,
             &Instant::now(),
+            None,
         )?;
 
         assert_eq!(result.proof_receipts.len(), 0);
