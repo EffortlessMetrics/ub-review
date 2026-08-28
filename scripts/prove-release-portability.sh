@@ -276,6 +276,29 @@ then
   exit 1
 fi
 
+duplicate_tar="$negative_dir/duplicate-layout.tar"
+tar -cf "$duplicate_tar" -C /work/install ub-review
+tar -rf "$duplicate_tar" -C /work/install ub-review
+gzip "$duplicate_tar"
+if python3 - "${duplicate_tar}.gz" <<'PY'
+import sys
+import tarfile
+
+archive = sys.argv[1]
+with tarfile.open(archive, "r:gz") as bundle:
+    members = bundle.getmembers()
+valid = (
+    len(members) == 1
+    and members[0].name.lstrip("./") == "ub-review"
+    and members[0].isfile()
+)
+raise SystemExit(0 if valid else 1)
+PY
+then
+  echo "duplicate-member archive was accepted" >&2
+  exit 1
+fi
+
 mkdir -p "$negative_dir/impostor"
 cp /bin/true "$negative_dir/impostor/ub-review"
 tar -czf "$negative_dir/impostor.tar.gz" -C "$negative_dir/impostor" ub-review
@@ -307,6 +330,7 @@ cat > /receipt/negative-controls.json <<JSON
   "missing_asset_rejected": true,
   "tampered_asset_rejected_before_extraction": true,
   "wrong_layout_rejected_before_execution": true,
+  "duplicate_archive_member_rejected_before_execution": true,
   "checksum_valid_impostor_rejected_by_identity": true
 }
 JSON
@@ -625,7 +649,9 @@ matrix = {
     "minimum_glibc": rows[0]["minimum_glibc"],
     "rows": rows,
     "decision": {
-        "v0_1_0_supported_baseline": "Linux x86_64 with glibc 2.39 or newer",
+        "v0_1_0_proven_runtime": "Ubuntu 24.04 x86_64 with glibc 2.39",
+        "observed_loader_floor": "GLIBC_2.39",
+        "other_linux_x86_64": "not_proven",
         "ubuntu_24_04": "supported",
         "ubuntu_22_04": "explicitly_unsupported",
         "v0_1_0_init_generated_config": "policy_invalid_empty_defaults",
@@ -641,7 +667,7 @@ matrix = {
     "- **Immutable asset:** `ub-review-x86_64-unknown-linux-gnu.tar.gz` from tag `v0.1.0`, SHA-256 `87a660273e8d6f76d78b41d5bf2da1ed2928cb7987fbe114f9e1035d32b03465`.\n"
     "- **Runtime proof:** exact version/help identity, `doctor`, model-off dry-run packet, JSON/NDJSON parsing, and negative asset controls.\n"
     "- **Init defect:** the released `init` command executes, but its serialized `[providers].policy` and `[impact].mode` defaults are empty; the generated-config packet records those two policy failures. An explicit minimal valid policy produces a passing model-off packet.\n"
-    "- **Boundary:** no release, tag, asset, resolver, or default was mutated by this proof.\n"
+    "- **Boundary:** no release, tag, asset, resolver, or default was mutated by this proof. Other Linux distributions and architectures remain unproven.\n"
 )
 PY
 
