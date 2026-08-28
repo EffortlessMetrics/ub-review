@@ -1,0 +1,344 @@
++        self.reconcile_pending_references(&references)
++    }
++
++    /// Reconcile one standalone worker receipt after its canonical artifact is durable.
++    pub(crate) fn reconcile_worker_receipt(
++        &self,
++        out: &std::path::Path,
++        request_id: &str,
++    ) -> Result<()> {
++        let path = out.join("proof_receipt.json");
++        let receipt: ProofReceipt = serde_json::from_slice(
++            &fs::read(&path).with_context(|| format!("read {}", path.display()))?,
++        )
++        .with_context(|| format!("parse {}", path.display()))?;
++        ensure!(
++            receipt.id == request_id,
++            "worker receipt id {} does not match request {request_id}",
++            receipt.id
++        );
++        let references = self.validate_receipt_rows(
++            std::slice::from_ref(&receipt),
++            "proof_receipt.json",
++        )?;
++        self.reconcile_pending_references(&references)
++    }
++
++    fn validate_receipt_rows(
++        &self,
++        receipts: &[ProofReceipt],
++        artifact: &str,
++    ) -> Result<BTreeMap<String, String>> {
++        let (proposed, expected_sides) = {
+             let state = self
+                 .state
+                 .lock()
+@@ -288,10 +416,9 @@ impl ProofTaskLedger {
+             (
+                 state.proposed.clone(),
+                 state.expected_sides.clone(),
+-                state.pending_receipts.clone(),
+             )
+         };
+         let mut references = BTreeMap::new();
+-        for (receipt_index, receipt) in receipts.iter().enumerate() {
++        for (receipt_index, receipt) in receipts.iter().enumerate() {
+             ensure!(
+                 receipt.revision.as_ref() == Some(self.recorder.revision()),
+                 "published proof receipt {} does not bind the admitted revision",
+@@ -323,9 +450,13 @@ impl ProofTaskLedger {
+                 );
+                 let previous = references.insert(
+                     task_id.as_str().to_owned(),
+-                    format!(
+-                        "review/proof_receipts.json#/{receipt_index}/commands/{command_index}"
+-                    ),
++                    if receipts.len() == 1 && artifact == "proof_receipt.json" {
++                        format!("proof_receipt.json#/commands/{command_index}")
++                    } else {
++                        format!(
++                            "{artifact}#/{receipt_index}/commands/{command_index}"
++                        )
++                    },
+                 );
+                 ensure!(
+                     previous.is_none(),
+@@ -334,8 +465,18 @@ impl ProofTaskLedger {
+                 );
+             }
+         }
+-        for task in &pending {
++        Ok(references)
++    }
++
++    fn reconcile_pending_references(
++        &self,
++        references: &BTreeMap<String, String>,
++    ) -> Result<()> {
++        let pending = self
++            .state
++            .lock()
++            .map_err(|_| anyhow::anyhow!("proof task-ledger mutex poisoned"))?
++            .pending_receipts
++            .clone();
++        let mut events = Vec::new();
++        for task in &pending {
+             let task_id = TaskId::parse(task)?;
+             let at = self.recorder.now()?;
+             let reference = references
+                 .get(task)
+                 .with_context(|| format!("published proof receipt omitted task {task}"))?;
+-            self.recorder.append([
++            events.extend([
+                 input(
+                     &task_id,
+                     TaskEvent::ReceiptCreated {
+@@ -351,7 +492,8 @@ impl ProofTaskLedger {
+                     },
+                 ),
+-            ])?;
++            ]);
+         }
++        self.recorder.append(events)?;
+         self.state
+             .lock()
+             .map_err(|_| anyhow::anyhow!("proof task-ledger mutex poisoned"))?
+@@ -493,6 +635,36 @@ fn proof_request_task_id(request_id: &str) -> Result<TaskId> {
+     ))
+ }
+ 
++fn proof_command_source(required: bool, phase: ProofExecutionPhase) -> TaskSource {
++    if required {
++        return TaskSource::Required;
++    }
++    match phase {
++        ProofExecutionPhase::InitialImpact => TaskSource::Impact,
++        ProofExecutionPhase::ModelRequest => TaskSource::ReviewerTurn { model_on: true },
++        ProofExecutionPhase::FollowUp => TaskSource::Configured,
++        ProofExecutionPhase::Worker => TaskSource::Worker,
++    }
++}
++
++pub(crate) fn standalone_worker_revision(request: &ProofRequestV2) -> Result<RevisionRef> {
++    ensure!(
++        !request.head.trim().is_empty(),
++        "standalone worker request has empty head identity"
++    );
++    let digest = sha256_hex(
++        format!(
++            "ub-review.worker-task-ledger.v1\0{}\0{}\0{}\0{}\0{}",
++            request.id,
++            request.kind.key(),
++            request.base,
++            request.head,
++            request.target,
++        )
++        .as_bytes(),
++    );
++    let revision = RevisionRef {
++        digest,
++        semantics: "candidate_head".to_owned(),
++        reviewed_commit: request.head.clone(),
++    };
++    revision.validate().context("standalone worker revision")?;
++    Ok(revision)
++}
++
+ fn proof_reservations(
+     lease: &ResourceLease,
+     task: &ProofCommandTask,
+@@ -654,16 +826,47 @@ mod tests {
+         ProofExecutionPhase,
+     ) -> ProofCommandTask {
+         ProofCommandTask {
+             receipt_id: receipt_id.to_owned(),
+             side: side.to_owned(),
+             kind: "focused-test".to_owned(),
+             requested_by: requested_by
+                 .iter()
+                 .map(|value| (*value).to_owned())
+                 .collect(),
+             request_ids: request_ids
+                 .iter()
+                 .map(|value| (*value).to_owned())
+                 .collect(),
+             timeout_sec: 7,
++            source: proof_command_source(false, execution_phase),
++            required: false,
++            execution_phase,
+         }
+     }
+@@ -731,12 +934,58 @@ mod tests {
+     fn command_sources_preserve_impact_required_and_model_provenance() -> Result<()> {
+         ensure!(
+             task(
+                 "impact",
+                 "head",
+                 &["impact-planner"],
+-                &[],
++                &[],
++                ProofExecutionPhase::InitialImpact,
+             )
+             .source()
+                 == TaskSource::Impact
+@@ -749,6 +998,7 @@ mod tests {
+                 "head",
+                 &["proof-policy:smoke"],
+                 &["request-a"],
++                ProofExecutionPhase::ModelRequest,
+             )
+             .source()
+                 == TaskSource::Required
+@@ -760,9 +1010,77 @@ mod tests {
+                 "head",
+                 &["opposition"],
+                 &["request-b"],
++                ProofExecutionPhase::ModelRequest,
+             )
+             .source()
+                 == TaskSource::ReviewerTurn { model_on: true }
+         );
++        let follow_up = task(
++            "follow-up",
++            "head",
++            &["opposition"],
++            &["request-c"],
++            ProofExecutionPhase::FollowUp,
++        );
++        ensure!(follow_up.source() == TaskSource::Configured);
++        ensure!(follow_up.consumers()?.iter().any(|consumer| {
++            consumer.id() == "proof-phase:follow-up"
++        }));
++        let worker = ProofCommandTask::worker(
++            &ProofRequestV2 {
++                schema: crate::artifacts::PROOF_REQUEST_V2_SCHEMA.to_owned(),
++                id: "worker-request".to_owned(),
++                kind: crate::ProofKind::FocusedTest,
++                target: "cargo test --locked".to_owned(),
++                claim_ids: vec!["claim-a".to_owned()],
++                requested_by: vec!["controller".to_owned()],
++                expected_interpretation: "same receipt contract".to_owned(),
++                priority: "high".to_owned(),
++                timeout_sec: 7,
++                status: "approved".to_owned(),
++                base: "a".repeat(40),
++                head: "b".repeat(40),
++            },
++            7,
++        );
++        ensure!(worker.source() == TaskSource::Worker);
+         Ok(())
+     }
++
++    #[test]
++    fn standalone_worker_revision_is_stable_and_non_null() -> Result<()> {
++        let request = ProofRequestV2 {
++            schema: crate::artifacts::PROOF_REQUEST_V2_SCHEMA.to_owned(),
++            id: "worker-request".to_owned(),
++            kind: crate::ProofKind::FocusedTest,
++            target: "cargo test --locked".to_owned(),
++            claim_ids: vec!["claim-a".to_owned()],
++            requested_by: vec!["controller".to_owned()],
++            expected_interpretation: "same receipt contract".to_owned(),
++            priority: "high".to_owned(),
++            timeout_sec: 7,
++            status: "approved".to_owned(),
++            base: "a".repeat(40),
++            head: "b".repeat(40),
++        };
++        let first = standalone_worker_revision(&request)?;
++        let second = standalone_worker_revision(&request)?;
++        ensure!(first == second);
++        ensure!(first.digest.len() == 64);
++        ensure!(first.reviewed_commit == request.head);
++        Ok(())
++    }
+@@ -776,6 +1094,7 @@ mod tests {
+             "head",
+             &["tests-oracle"],
+             &["request-a"],
++            ProofExecutionPhase::ModelRequest,
+         );
+@@ -819,6 +1140,7 @@ mod tests {
+             "head",
+             &["tests-oracle"],
+             &["request-a"],
++            ProofExecutionPhase::ModelRequest,
+         );
+@@ -856,6 +1178,60 @@ mod tests {
+         Ok(())
+     }
++
++    #[test]
++    fn worker_receipt_reconciliation_binds_standalone_artifact() -> Result<()> {
++        let temp = tempfile::tempdir()?;
++        let request = ProofRequestV2 {
++            schema: crate::artifacts::PROOF_REQUEST_V2_SCHEMA.to_owned(),
++            id: "worker-request".to_owned(),
++            kind: crate::ProofKind::FocusedTest,
++            target: "cargo test --locked".to_owned(),
++            claim_ids: vec!["claim-a".to_owned()],
++            requested_by: vec!["controller".to_owned()],
++            expected_interpretation: "same receipt contract".to_owned(),
++            priority: "high".to_owned(),
++            timeout_sec: 7,
++            status: "approved".to_owned(),
++            base: "a".repeat(40),
++            head: "b".repeat(40),
++        };
++        let revision = standalone_worker_revision(&request)?;
++        let recorder = TaskLedgerRecorder::new(&revision, &Instant::now())?;
++        let ledger = ProofTaskLedger::new(recorder.clone());
++        let command_task = ProofCommandTask::worker(&request, 7);
++        execute_side(&ledger, &command_task, &granted_lease("worker-request"))?;
++        let published = ProofReceipt {
++            revision: Some(revision),
++            schema: crate::PROOF_RECEIPT_SCHEMA.to_owned(),
++            id: request.id.clone(),
++            kind: request.kind.key().to_owned(),
++            base: request.base,
++            head: request.head,
++            test_patch_mode: "head-only".to_owned(),
++            requested_by: request.requested_by,
++            request_ids: request.claim_ids,
++            commands: vec![command("head")],
++            result: "passed".to_owned(),
++            reason: "fixture".to_owned(),
++        };
++        fs::write(
++            temp.path().join("proof_receipt.json"),
++            serde_json::to_vec_pretty(&published)?,
++        )?;
++
++        ledger.reconcile_worker_receipt(temp.path(), "worker-request")?;
++
++        let snapshot = state_for(&recorder, &command_task.task_id()?)?;
++        ensure!(matches!(
++            snapshot.receipt,
++            Some(TaskReceiptOutcome::Created { reference })
++                if reference == "proof_receipt.json#/commands/0"
++        ));
++        ensure!(snapshot.timing.resources_released_at.is_some());
++        Ok(())
++    }
+ 
+     #[test]
+     fn red_green_side_swap_is_rejected_without_receipt_or_release() -> Result<()> {
+@@ -870,12 +1246,28 @@ mod tests {
+             "head",
+             &["tests-oracle"],
+             &["request-a"],
++            ProofExecutionPhase::ModelRequest,
+         );
+         let base = task(
+             "receipt-a",
+             "base-plus-tests",
+             &["tests-oracle"],
+             &["request-a"],
++            ProofExecutionPhase::ModelRequest,
+         );
+@@ -1010,4 +1402,3 @@ mod tests {
+         Ok(())
+     }
+ }
+-
