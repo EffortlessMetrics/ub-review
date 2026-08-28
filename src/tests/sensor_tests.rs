@@ -261,6 +261,36 @@ fn sensor_timeout_resolves_per_profile_with_repo_override_winning() -> Result<()
     capped_profile.budgets.default_timeout_sec = 300;
     let capped_plan = crate::plan_tool(&tool, &capped_profile, &diff, temp.path(), true, false);
     assert_eq!(capped_plan.timeout_sec, 300, "budget cap still bounds");
+
+    let mut zero_config: Config = toml::from_str(
+        r#"
+[tools.zero-probe]
+id = "zero-probe"
+command = "zero-probe"
+default = "always"
+timeout_sec = 0
+"#,
+    )?;
+    zero_config.merge_defaults();
+    let zero_tool = zero_config
+        .tools
+        .get("zero-probe")
+        .ok_or_else(|| anyhow::anyhow!("custom zero-timeout tool missing"))?;
+    let zero_run_plan = crate::plan_tool(zero_tool, &hosted, &diff, temp.path(), true, false);
+    assert!(zero_run_plan.run, "{}", zero_run_plan.reason);
+    assert_eq!(
+        zero_run_plan.timeout_sec, 1,
+        "explicit zero uses safe floor"
+    );
+
+    let mut zero_tool = zero_tool.clone();
+    zero_tool.enabled = false;
+    let zero_skipped_plan = crate::plan_tool(&zero_tool, &hosted, &diff, temp.path(), true, false);
+    assert!(!zero_skipped_plan.run);
+    assert_eq!(
+        zero_skipped_plan.timeout_sec, 1,
+        "skipped proposals use the same safe floor"
+    );
     Ok(())
 }
 

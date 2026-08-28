@@ -124,22 +124,42 @@ receipt_routes.ndjson          tool_gate_outcomes.ndjson
 resource_leases.ndjson
 ```
 
-Task-ledger A2.3 adds a dormant, optional pair before production task
-instrumentation lands in #925:
+Task-ledger A2.3 defines the strict pair, and A2.4 emits it for every planned
+sensor in production shadow mode:
 
 ```text
 task_ledger_events.ndjson          ub-review.task_ledger_event.v1 lines
 review/task_ledger_snapshot.json   ub-review.task_ledger_snapshot.v1
 ```
 
-Neither file is emitted by `run` yet, preserving the current production
-tree. If either is present, the verifier requires both and requires strong
-packet revision binding. Event records use contiguous caller order, a
+`run` emits both after the late sensor phase joins when the resolved plan has
+at least one sensor; a legitimately empty sensor plan omits the optional pair.
+Empty-plan runs remove a stale pair from a reused output directory as one
+rollback-safe pair transition.
+Publication stages both files and restores the prior on-disk pair state when
+either final publish fails, so a failed run does not leave a mixed pair.
+Every resolved sensor has one proposal. Runnable fast and late sensors record queued, admitted, setup,
+process, receipt-attempt, and release events around the unchanged runner;
+skipped and dry-run sensors terminate without fabricated process timing.
+Process completion is observed when the child or aggregate subprocess set
+returns, before sensor post-processing and status-receipt publication; cleanup,
+receipt validation, and resource release are recorded afterward in that order.
+Each attempt removes its prior sensor-status receipt before execution, so its
+terminal state can only derive from the current attempt. A tokmd proposal uses
+the aggregate ceiling for its version preflight, four required report commands,
+and optional changed-path context command because each subprocess receives the
+configured timeout independently.
+Plan construction normalizes a configured zero-second sensor timeout to a
+one-second safe floor for runnable, skipped, and dry-run proposals.
+Sensor phase remains scheduling metadata in the linked sensor status receipt,
+not a second lifecycle model. Event records use contiguous caller order, a
 SHA-256 source-digest chain, strict transition replay, canonical LF-delimited
 JSON bytes, and artifact-relative receipt references. The snapshot is only a
 derived cache: the verifier recomputes it from the event stream and requires
 byte equality. A structurally valid external receipt reference is a pointer,
-not proof; #925 owns joining it to a produced receipt.
+not proof; #957 owns joining it to every produced projection after #956 adds
+the remaining proof and worker sources. The verifier therefore still permits
+the pair to be absent in legacy/non-run packets during the shadow rollout.
 
 `review/` (the compiled review surface):
 
@@ -679,6 +699,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | tool-gate-outcomes.json + review/ mirror | stable | tool_gate_outcomes.v1; entries tool_gate_outcome.v1 | downstream automation; gate-check cross-check | required (require_tool_gate_outcome_artifacts) |
 | work_queue.json | stable | work_queue.v1; tasks work_queue_task.v1 | downstream automation | required (require_work_queue_artifacts) |
 | work_events.ndjson | stable | work_event.v1 lines | downstream automation | required (require_work_queue_artifacts) |
+| task_ledger_events.ndjson + review/task_ledger_snapshot.json | experimental shadow coverage | task_ledger_event.v1 lines + task_ledger_snapshot.v1 derived replay cache; sensor sources complete, proof/worker sources pending #956 | downstream reconciliation | emitted by `run`; verified when present (require_task_ledger_artifacts) |
 | events.ndjson | stable | none (ts/kind/payload; eight required kinds) | downstream automation | required (require_events) |
 | running-summary.md | stable | five required headings | humans (GitHub step summary) | required (require_summary) |
 | input/changed-files.txt, input/diff.patch, input/diff-context.json | stable | none | downstream automation | required (require_common_tree) |

@@ -60,9 +60,11 @@ pub(crate) use revision_identity::RevisionRef;
 mod revision_admission;
 pub(crate) use revision_admission::*;
 mod compiler_reconciliation;
+mod sensor_task_ledger;
 mod task_ledger;
 mod task_ledger_artifact;
 pub(crate) use compiler_reconciliation::*;
+pub(crate) use sensor_task_ledger::*;
 mod review_topics;
 pub(crate) use review_topics::*;
 mod impact_plan;
@@ -3733,6 +3735,16 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         },
     )?;
 
+    // A2.4 (#955): sensors are the first production TaskLedger source. The
+    // adapter observes the resolved plan and existing runner only; it owns no
+    // scheduling, command, or gate authority.
+    let revision_ref = RevisionRef::from_admission(&revision);
+    revision_ref
+        .validate()
+        .context("admitted revision reference")?;
+    let sensor_task_ledger =
+        SensorTaskLedger::initialize(&revision_ref, &plan, args.dry_run, &run_started)?;
+
     let event_log = Arc::new(EventLog::open(&args.review.out.join("events.ndjson"))?);
     let mut run_loop_tracker = RunLoopTracker::new();
     event_log.append(
@@ -3783,6 +3795,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
                     jobs,
                     fast.into(),
                     &event_log,
+                    Some(&sensor_task_ledger),
                 )?;
             }
             if !late.is_empty() {
@@ -3793,7 +3806,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
                     profile,
                     &event_log,
                     &run_started,
-                    late,
+                    LateSensorWork::new(late, Some(sensor_task_ledger.clone())),
                 )?);
             }
         }
@@ -3826,13 +3839,6 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         args.review.out.join("running-summary.md"),
         &preliminary_summary,
     )?;
-    // A1.3 (#950): one immutable reference joins every stamped artifact
-    // (claim graph, gate outcome, delivery exact-head) to the admitted
-    // revision.
-    let revision_ref = RevisionRef::from_admission(&revision);
-    revision_ref
-        .validate()
-        .context("admitted revision reference")?;
     let gate_outcome = write_review_artifacts(
         &args.review.root,
         &args.review.out,
@@ -3850,6 +3856,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         run_started.elapsed(),
         late_phase,
     )?;
+    sensor_task_ledger.write_artifacts(&args.review.out)?;
     let summary = render_summary(&args.review.out, &plan, &diff)?;
     fs::write(args.review.out.join("running-summary.md"), &summary)?;
     if config.review.github_summary && !args.no_github_summary {
@@ -6061,8 +6068,8 @@ mod tests {
         Config, DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog, FailOnGate,
         FollowUpOutputRecord, FollowUpQuestionTask, GateCheckArgs, GitHubReview,
         GitHubReviewComment, IssueBrokerPlanEntry, IssueCandidate, IssueCandidateEvidence,
-        LaneModelOutput, LanePlan, LanguageMix, Limits, MinimaxPromptCache, ModelAssignment,
-        ModelCacheUsage, ModelCallOutcome, ModelEvidenceIssue, ModelLaneReceipt,
+        LaneModelOutput, LanePlan, LanguageMix, LateSensorWork, Limits, MinimaxPromptCache,
+        ModelAssignment, ModelCacheUsage, ModelCallOutcome, ModelEvidenceIssue, ModelLaneReceipt,
         ModelLaneTaskResult, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
         ModelRunContext, Observation, ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs,
         PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg, ProofBudget,
@@ -15314,7 +15321,7 @@ required_proof_unprooven = true
             profile,
             &event_log,
             &run_started,
-            vec![late_sensor],
+            LateSensorWork::new(vec![late_sensor], None),
         )?;
         let gate_outcome = write_review_artifacts(
             temp.path(),

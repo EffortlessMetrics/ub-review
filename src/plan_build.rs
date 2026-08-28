@@ -444,20 +444,21 @@ pub(crate) fn plan_tool(
 ) -> SensorPlan {
     let required = tool_required_for_diff(tool, diff);
     if !tool.enabled {
-        return skipped(tool, "disabled by config", required);
+        return skipped(tool, profile, "disabled by config", required);
     }
     if tool.requires_lease && !allow_heavy {
         return skipped(
             tool,
+            profile,
             "heavy/manual witness requires --allow-heavy",
             required,
         );
     }
     if matches!(tool.class, ToolClass::Test) && profile.limits.tests == 0 {
-        return skipped(tool, "profile disables test leases", required);
+        return skipped(tool, profile, "profile disables test leases", required);
     }
     if matches!(tool.class, ToolClass::Build) && profile.limits.builds == 0 {
-        return skipped(tool, "profile disables build leases", required);
+        return skipped(tool, profile, "profile disables build leases", required);
     }
     match trigger_match(tool.default, &diff.flags) {
         Some(reason) => {
@@ -465,11 +466,17 @@ pub(crate) fn plan_tool(
                 match cargo_allow_policy_config_state(root) {
                     CargoAllowConfigState::Native => {}
                     CargoAllowConfigState::Absent => {
-                        return skipped(tool, "cargo-allow policy config not found", required);
+                        return skipped(
+                            tool,
+                            profile,
+                            "cargo-allow policy config not found",
+                            required,
+                        );
                     }
                     CargoAllowConfigState::ForeignDialect(path) => {
                         return skipped(
                             tool,
+                            profile,
                             &format!(
                                 "{path} is not a cargo-allow-dialect ledger; add \
                                  policy/cargo-allow.toml (see \
@@ -483,6 +490,7 @@ pub(crate) fn plan_tool(
             if !guard_ok && !matches!(tool.class, ToolClass::Packet) {
                 return skipped(
                     tool,
+                    profile,
                     "box guard failed; only packet generation is allowed",
                     required,
                 );
@@ -502,7 +510,7 @@ pub(crate) fn plan_tool(
                 gate: tool.gate.clone(),
             }
         }
-        None => skipped(tool, "trigger did not match this diff", false),
+        None => skipped(tool, profile, "trigger did not match this diff", false),
     }
 }
 
@@ -516,7 +524,7 @@ pub(crate) fn resolve_sensor_timeout_sec(tool: &ToolPolicy, profile: &Profile) -
             .copied()
             .unwrap_or(tool.timeout_sec)
     };
-    base.min(profile.budgets.default_timeout_sec)
+    base.max(1).min(profile.budgets.default_timeout_sec.max(1))
 }
 
 pub(crate) fn tool_required_for_diff(tool: &ToolPolicy, diff: &DiffContext) -> bool {
@@ -574,14 +582,19 @@ pub(crate) fn cargo_allow_dialect_matches(path: &Path) -> bool {
             .is_some_and(|schema_version| schema_version == "0.1")
 }
 
-pub(crate) fn skipped(tool: &ToolPolicy, reason: &str, required: bool) -> SensorPlan {
+pub(crate) fn skipped(
+    tool: &ToolPolicy,
+    profile: &Profile,
+    reason: &str,
+    required: bool,
+) -> SensorPlan {
     SensorPlan {
         id: tool.id.clone(),
         command: tool.command.clone(),
         run: false,
         reason: reason.to_owned(),
         required,
-        timeout_sec: tool.timeout_sec,
+        timeout_sec: resolve_sensor_timeout_sec(tool, profile),
         artifact_budget_mb: tool.artifact_budget_mb,
         class: tool.class,
         weight: tool.weight,

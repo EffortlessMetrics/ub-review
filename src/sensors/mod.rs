@@ -14,11 +14,13 @@ pub(crate) use unsafe_review::*;
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::io;
 use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 
 use crate::system_detect::command_on_path;
+use crate::task_ledger::TaskTerminalDisposition;
 use crate::*;
 
 /// Run a set of sensors on a bounded worker pool. Individual sensor failures
@@ -31,6 +33,7 @@ pub(crate) fn run_sensor_pool(
     jobs: usize,
     sensors: VecDeque<SensorPlan>,
     event_log: &EventLog,
+    task_ledger: Option<&SensorTaskLedger>,
 ) -> Result<()> {
     let failures = Arc::new(Mutex::new(Vec::<String>::new()));
 
@@ -38,7 +41,9 @@ pub(crate) fn run_sensor_pool(
         if jobs == 1 {
             let queue = Mutex::new(sensors);
             let failures = Arc::clone(&failures);
-            scope.spawn(move || drain_sensor_queue(root, out, plan, &queue, event_log, &failures));
+            scope.spawn(move || {
+                drain_sensor_queue(root, out, plan, &queue, event_log, task_ledger, &failures)
+            });
             return;
         }
 
@@ -47,7 +52,9 @@ pub(crate) fn run_sensor_pool(
         if cargo_worker_count == 1 {
             let queue = Mutex::new(cargo_queue);
             let failures = Arc::clone(&failures);
-            scope.spawn(move || drain_sensor_queue(root, out, plan, &queue, event_log, &failures));
+            scope.spawn(move || {
+                drain_sensor_queue(root, out, plan, &queue, event_log, task_ledger, &failures)
+            });
         }
 
         let parallel_worker_count = jobs
@@ -57,7 +64,9 @@ pub(crate) fn run_sensor_pool(
         for _ in 0..parallel_worker_count {
             let queue = Arc::clone(&queue);
             let failures = Arc::clone(&failures);
-            scope.spawn(move || drain_sensor_queue(root, out, plan, &queue, event_log, &failures));
+            scope.spawn(move || {
+                drain_sensor_queue(root, out, plan, &queue, event_log, task_ledger, &failures)
+            });
         }
     });
 
@@ -81,6 +90,7 @@ fn drain_sensor_queue(
     plan: &Plan,
     queue: &Mutex<VecDeque<SensorPlan>>,
     event_log: &EventLog,
+    task_ledger: Option<&SensorTaskLedger>,
     failures: &Mutex<Vec<String>>,
 ) {
     loop {
@@ -91,7 +101,13 @@ fn drain_sensor_queue(
         let Some(sensor) = sensor else {
             break;
         };
-        if let Err(err) = run_sensor(root, out, &sensor, event_log, plan)
+        let result = match task_ledger {
+            Some(ledger) => {
+                run_sensor_with_task_ledger(root, out, &sensor, event_log, plan, ledger)
+            }
+            None => run_sensor(root, out, &sensor, event_log, plan),
+        };
+        if let Err(err) = result
             && let Ok(mut failures) = failures.lock()
         {
             failures.push(format!("{}: {err:#}", sensor.id));
@@ -145,6 +161,22 @@ pub(crate) struct LateSensorPhase {
     run_loop: ActiveRunLoop,
 }
 
+/// Owned work transferred to the late sensor thread. Keeping the shadow
+/// observer beside its exact sensor set prevents separate argument drift.
+pub(crate) struct LateSensorWork {
+    sensors: Vec<SensorPlan>,
+    task_ledger: Option<SensorTaskLedger>,
+}
+
+impl LateSensorWork {
+    pub(crate) fn new(sensors: Vec<SensorPlan>, task_ledger: Option<SensorTaskLedger>) -> Self {
+        Self {
+            sensors,
+            task_ledger,
+        }
+    }
+}
+
 pub(crate) fn spawn_late_sensor_phase(
     root: &Path,
     out: &Path,
@@ -152,8 +184,12 @@ pub(crate) fn spawn_late_sensor_phase(
     profile: &Profile,
     event_log: &Arc<EventLog>,
     run_started: &Instant,
-    sensors: Vec<SensorPlan>,
+    work: LateSensorWork,
 ) -> Result<LateSensorPhase> {
+    let LateSensorWork {
+        sensors,
+        task_ledger,
+    } = work;
     let job_budget = sensor_job_count(profile, sensors.len())?;
     let jobs = sensor_pool_worker_count(job_budget, &sensors);
     let sensor_ids: Vec<String> = sensors.iter().map(|sensor| sensor.id.clone()).collect();
@@ -183,6 +219,7 @@ pub(crate) fn spawn_late_sensor_phase(
                 jobs,
                 queue,
                 &thread_log,
+                task_ledger.as_ref(),
             )
         })?;
     Ok(LateSensorPhase {
@@ -278,6 +315,24 @@ fn classify_sensor_command_result(
     ("failed", result.reason.clone())
 }
 
+#[derive(Clone, Copy)]
+enum SensorProcessObservation {
+    AttemptPrepared,
+    Spawned,
+    Finished(TaskTerminalDisposition),
+    CompletionUnconfirmed,
+}
+
+#[derive(Clone, Copy)]
+struct SensorCommandAttempt<'a> {
+    root: &'a Path,
+    out: &'a Path,
+    sensor: &'a SensorPlan,
+    event_log: &'a EventLog,
+    plan: &'a Plan,
+    command_available: bool,
+}
+
 pub(crate) fn run_sensor(
     root: &Path,
     out: &Path,
@@ -285,10 +340,231 @@ pub(crate) fn run_sensor(
     event_log: &EventLog,
     plan: &Plan,
 ) -> Result<()> {
+    let command_available = command_on_path(&sensor.command);
+    let mut ignore_process = |_| {};
+    run_sensor_with_command_availability(
+        root,
+        out,
+        sensor,
+        event_log,
+        plan,
+        command_available,
+        &mut ignore_process,
+    )
+}
+
+fn run_sensor_with_task_ledger(
+    root: &Path,
+    out: &Path,
+    sensor: &SensorPlan,
+    event_log: &EventLog,
+    plan: &Plan,
+    task_ledger: &SensorTaskLedger,
+) -> Result<()> {
+    // Observation must never suppress the existing process attempt. Defer any
+    // adapter error until after the runner and receipt path have completed.
+    let command_available = command_on_path(&sensor.command);
+    run_sensor_with_task_ledger_and_command_availability(
+        root,
+        out,
+        sensor,
+        event_log,
+        plan,
+        task_ledger,
+        command_available,
+    )
+}
+
+fn run_sensor_with_task_ledger_and_command_availability(
+    root: &Path,
+    out: &Path,
+    sensor: &SensorPlan,
+    event_log: &EventLog,
+    plan: &Plan,
+    task_ledger: &SensorTaskLedger,
+    command_available: bool,
+) -> Result<()> {
+    run_sensor_attempt_with_task_ledger(
+        SensorCommandAttempt {
+            root,
+            out,
+            sensor,
+            event_log,
+            plan,
+            command_available,
+        },
+        task_ledger,
+        &mut remove_prior_sensor_status,
+    )
+}
+
+fn run_sensor_attempt_with_task_ledger(
+    attempt: SensorCommandAttempt<'_>,
+    task_ledger: &SensorTaskLedger,
+    prepare_attempt: &mut dyn FnMut(&Path) -> Result<()>,
+) -> Result<()> {
+    let SensorCommandAttempt {
+        out,
+        sensor,
+        command_available,
+        ..
+    } = attempt;
+    let setup_observation = task_ledger.setup_started(sensor);
+    let mut process_started = false;
+    let mut process_finished = false;
+    let mut process_completion_unconfirmed = false;
+    let mut attempt_prepared = false;
+    let mut run_observation = Ok(());
+    let mut finish_observation = Ok(());
+    let mut observe_process = |observation| match observation {
+        SensorProcessObservation::AttemptPrepared => {
+            attempt_prepared = true;
+        }
+        SensorProcessObservation::Spawned => {
+            if !process_started {
+                process_started = true;
+                if setup_observation.is_ok() {
+                    run_observation = task_ledger.run_started(sensor);
+                }
+            }
+        }
+        SensorProcessObservation::Finished(disposition) => {
+            if process_started && !process_finished {
+                process_finished = true;
+                if setup_observation.is_ok() && run_observation.is_ok() {
+                    finish_observation = task_ledger.process_finished(sensor, disposition);
+                }
+            }
+        }
+        SensorProcessObservation::CompletionUnconfirmed => {
+            process_completion_unconfirmed = true;
+        }
+    };
+    let run_result = run_sensor_attempt(attempt, &mut observe_process, prepare_attempt);
+    if process_started && !process_finished && !process_completion_unconfirmed {
+        process_finished = true;
+        if setup_observation.is_ok() && run_observation.is_ok() {
+            finish_observation =
+                task_ledger.process_finished(sensor, TaskTerminalDisposition::DeterministicFailure);
+        }
+    }
+    let cleanup_observation = if setup_observation.is_ok()
+        && run_observation.is_ok()
+        && finish_observation.is_ok()
+        && process_finished
+    {
+        task_ledger.cleanup_finished(sensor)
+    } else {
+        Ok(())
+    };
+    let receipt_result = if attempt_prepared {
+        sensor_task_receipt_disposition(out, sensor, command_available)
+    } else {
+        Err(anyhow::anyhow!(
+            "sensor {} attempt was not prepared",
+            sensor.id
+        ))
+    };
+    let receipt_created = receipt_result.is_ok();
+    let terminal_observation = if setup_observation.is_err()
+        || run_observation.is_err()
+        || finish_observation.is_err()
+        || cleanup_observation.is_err()
+    {
+        Ok(())
+    } else if process_started {
+        ensure!(
+            process_finished,
+            "sensor {} process completion was not observed",
+            sensor.id
+        );
+        task_ledger.receipt_recorded_and_resources_released(sensor, receipt_created)
+    } else {
+        task_ledger.setup_failed(sensor, receipt_created)
+    };
+    run_result?;
+    receipt_result?;
+    setup_observation?;
+    run_observation?;
+    finish_observation?;
+    cleanup_observation?;
+    terminal_observation
+}
+
+fn sensor_task_receipt_disposition(
+    out: &Path,
+    sensor: &SensorPlan,
+    command_available: bool,
+) -> Result<TaskTerminalDisposition> {
+    let path = out
+        .join("sensors")
+        .join(&sensor.id)
+        .join("ub-review-sensor-status.json");
+    let value: serde_json::Value = serde_json::from_slice(
+        &fs::read(&path).with_context(|| format!("read sensor status {}", path.display()))?,
+    )
+    .with_context(|| format!("parse sensor status {}", path.display()))?;
+    ensure!(
+        value.get("sensor").and_then(serde_json::Value::as_str) == Some(sensor.id.as_str()),
+        "sensor status identity does not match {}",
+        sensor.id
+    );
+    let status = value
+        .get("status")
+        .and_then(serde_json::Value::as_str)
+        .context("sensor status receipt has no string status")?;
+    match status {
+        "ok" => Ok(TaskTerminalDisposition::Succeeded),
+        "failed" => Ok(TaskTerminalDisposition::DeterministicFailure),
+        "timed_out" => Ok(TaskTerminalDisposition::TimedOut),
+        "missing" if !command_available => Ok(TaskTerminalDisposition::SetupFailed),
+        "missing" => bail!("running sensor {} reported missing command", sensor.id),
+        other => bail!("sensor {} reported unsupported status {other}", sensor.id),
+    }
+}
+
+fn run_sensor_with_command_availability(
+    root: &Path,
+    out: &Path,
+    sensor: &SensorPlan,
+    event_log: &EventLog,
+    plan: &Plan,
+    command_available: bool,
+    observe_process: &mut dyn FnMut(SensorProcessObservation),
+) -> Result<()> {
+    run_sensor_attempt(
+        SensorCommandAttempt {
+            root,
+            out,
+            sensor,
+            event_log,
+            plan,
+            command_available,
+        },
+        observe_process,
+        &mut remove_prior_sensor_status,
+    )
+}
+
+fn run_sensor_attempt(
+    attempt: SensorCommandAttempt<'_>,
+    observe_process: &mut dyn FnMut(SensorProcessObservation),
+    prepare_attempt: &mut dyn FnMut(&Path) -> Result<()>,
+) -> Result<()> {
+    let SensorCommandAttempt {
+        root,
+        out,
+        sensor,
+        event_log,
+        plan,
+        command_available,
+    } = attempt;
     let dir = out.join("sensors").join(&sensor.id);
     fs::create_dir_all(&dir)?;
+    prepare_attempt(&dir)?;
+    observe_process(SensorProcessObservation::AttemptPrepared);
     let argv = build_sensor_argv(root, &dir, sensor, plan);
-    if !command_on_path(&sensor.command) {
+    if !command_available {
         write_sensor_status(
             out,
             sensor,
@@ -312,18 +588,33 @@ pub(crate) fn run_sensor(
         serde_json::json!({"sensor": sensor.id, "argv": argv}),
     )?;
     if sensor.id == "tokmd" {
-        return run_tokmd_sensor(root, out, &dir, sensor, event_log, plan, &argv);
+        return run_tokmd_sensor(root, out, sensor, event_log, plan, &argv, observe_process);
     }
     let stdout_path = dir.join("stdout.txt");
     let stderr_path = dir.join("stderr.txt");
-    let result = run_sensor_command_to_files(
-        root,
-        &argv,
-        &BTreeMap::new(),
-        sensor.timeout_sec,
-        &stdout_path,
-        &stderr_path,
-    );
+    let mut process_spawned = false;
+    let mut process_completion_unconfirmed = false;
+    let result = {
+        let mut observe_command_process = |observation| match observation {
+            CommandProcessObservation::Spawned => {
+                process_spawned = true;
+                observe_process(SensorProcessObservation::Spawned);
+            }
+            CommandProcessObservation::CompletionUnconfirmed => {
+                process_completion_unconfirmed = true;
+                observe_process(SensorProcessObservation::CompletionUnconfirmed);
+            }
+        };
+        run_sensor_command_to_files_with_spawn_observer(
+            root,
+            &argv,
+            &BTreeMap::new(),
+            sensor.timeout_sec,
+            &stdout_path,
+            &stderr_path,
+            &mut observe_command_process,
+        )
+    };
     match result {
         Ok(result) => {
             let (status, reason) = classify_sensor_command_result(&sensor.id, &result);
@@ -333,14 +624,41 @@ pub(crate) fn run_sensor(
             // a failed or timed-out sensor must stay missing evidence, never
             // a half-written receipt.
             if sensor.id == "ripr" && status == "ok" {
-                fs::copy(&stdout_path, dir.join("gate-decision.json"))
-                    .with_context(|| format!("copy {} gate receipt", sensor.id))?;
+                if let Err(error) = fs::copy(&stdout_path, dir.join("gate-decision.json")) {
+                    if process_spawned && !process_completion_unconfirmed {
+                        observe_process(SensorProcessObservation::Finished(
+                            sensor_process_disposition(status),
+                        ));
+                    }
+                    return Err(error).with_context(|| format!("copy {} gate receipt", sensor.id));
+                }
                 // #347: badge-json carries counts only, so a tool-gate red
                 // was not diagnosable from artifacts. A second bounded ripr
                 // pass persists per-finding exposure-gap detail; its failure
                 // never changes the sensor status - the threshold input
                 // stays the verbatim badge receipt above.
-                write_ripr_exposure_gap_details(root, &dir, &sensor.command, sensor.timeout_sec);
+                let mut observe_detail_process = |observation| match observation {
+                    CommandProcessObservation::Spawned => {
+                        process_spawned = true;
+                        observe_process(SensorProcessObservation::Spawned);
+                    }
+                    CommandProcessObservation::CompletionUnconfirmed => {
+                        process_completion_unconfirmed = true;
+                        observe_process(SensorProcessObservation::CompletionUnconfirmed);
+                    }
+                };
+                write_ripr_exposure_gap_details(
+                    root,
+                    &dir,
+                    &sensor.command,
+                    sensor.timeout_sec,
+                    &mut observe_detail_process,
+                )?;
+            }
+            if process_spawned && !process_completion_unconfirmed {
+                observe_process(SensorProcessObservation::Finished(
+                    sensor_process_disposition(status),
+                ));
             }
             write_sensor_status(
                 out,
@@ -364,6 +682,17 @@ pub(crate) fn run_sensor(
             )?;
         }
         Err(err) => {
+            if process_completion_unconfirmed {
+                return Err(err).context(format!(
+                    "{} child completion remains unconfirmed",
+                    sensor.id
+                ));
+            }
+            if process_spawned && !process_completion_unconfirmed {
+                observe_process(SensorProcessObservation::Finished(
+                    TaskTerminalDisposition::DeterministicFailure,
+                ));
+            }
             let reason = format!("{err:#}");
             write_sensor_status(
                 out,
@@ -386,17 +715,93 @@ pub(crate) fn run_sensor(
     Ok(())
 }
 
-pub(crate) fn run_tokmd_sensor(
+fn sensor_process_disposition(status: &str) -> TaskTerminalDisposition {
+    match status {
+        "ok" => TaskTerminalDisposition::Succeeded,
+        "timed_out" => TaskTerminalDisposition::TimedOut,
+        _ => TaskTerminalDisposition::DeterministicFailure,
+    }
+}
+
+fn remove_prior_sensor_status(dir: &Path) -> Result<()> {
+    let path = dir.join("ub-review-sensor-status.json");
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| format!("remove stale {}", path.display())),
+    }
+}
+
+fn run_tokmd_sensor(
     root: &Path,
     out: &Path,
-    dir: &Path,
     sensor: &SensorPlan,
     event_log: &EventLog,
     plan: &Plan,
     aggregate_argv: &[String],
+    observe_process: &mut dyn FnMut(SensorProcessObservation),
 ) -> Result<()> {
-    let mut commands = vec![build_tokmd_version_preflight_command(dir, sensor)];
-    commands.extend(build_tokmd_sensor_commands(root, dir, plan));
+    run_tokmd_sensor_with_command_runner(
+        TokmdSensorRun {
+            root,
+            out,
+            sensor,
+            event_log,
+            plan,
+            aggregate_argv,
+            observe_process,
+        },
+        &mut |root, argv, env, timeout_sec, stdout_path, stderr_path, observer| {
+            run_sensor_command_to_files_with_spawn_observer(
+                root,
+                argv,
+                env,
+                timeout_sec,
+                stdout_path,
+                stderr_path,
+                observer,
+            )
+        },
+    )
+}
+
+type SensorCommandRunner<'a> = dyn FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+        &mut dyn FnMut(CommandProcessObservation),
+    ) -> Result<CommandStatus>
+    + 'a;
+
+struct TokmdSensorRun<'a> {
+    root: &'a Path,
+    out: &'a Path,
+    sensor: &'a SensorPlan,
+    event_log: &'a EventLog,
+    plan: &'a Plan,
+    aggregate_argv: &'a [String],
+    observe_process: &'a mut dyn FnMut(SensorProcessObservation),
+}
+
+fn run_tokmd_sensor_with_command_runner(
+    run: TokmdSensorRun<'_>,
+    run_command: &mut SensorCommandRunner<'_>,
+) -> Result<()> {
+    let TokmdSensorRun {
+        root,
+        out,
+        sensor,
+        event_log,
+        plan,
+        aggregate_argv,
+        observe_process,
+    } = run;
+    let dir = out.join("sensors").join(&sensor.id);
+    let mut commands = vec![build_tokmd_version_preflight_command(&dir, sensor)];
+    commands.extend(build_tokmd_sensor_commands(root, &dir, plan));
     fs::write(
         dir.join("commands.json"),
         serde_json::to_vec_pretty(&commands_json(&commands))?,
@@ -417,15 +822,43 @@ pub(crate) fn run_tokmd_sensor(
         "sensor_subcommand_started",
         serde_json::json!({"sensor": sensor.id, "label": preflight.label, "argv": preflight.argv}),
     )?;
-    match run_sensor_command_to_files(
-        root,
-        &preflight.argv,
-        &BTreeMap::new(),
-        sensor.timeout_sec,
-        &preflight.stdout_path,
-        &preflight.stderr_path,
-    ) {
+    let mut process_spawned = false;
+    let mut process_completion_unconfirmed = false;
+    let preflight_result = {
+        let mut observe_command_process = |observation| match observation {
+            CommandProcessObservation::Spawned => {
+                process_spawned = true;
+                observe_process(SensorProcessObservation::Spawned);
+            }
+            CommandProcessObservation::CompletionUnconfirmed => {
+                process_completion_unconfirmed = true;
+                observe_process(SensorProcessObservation::CompletionUnconfirmed);
+            }
+        };
+        run_command(
+            root,
+            &preflight.argv,
+            &BTreeMap::new(),
+            sensor.timeout_sec,
+            &preflight.stdout_path,
+            &preflight.stderr_path,
+            &mut observe_command_process,
+        )
+    };
+    match preflight_result {
         Ok(result) => {
+            let preflight_failure_reason = tokmd_version_preflight_failure_reason(
+                &result,
+                &preflight.stdout_path,
+                &preflight.stderr_path,
+            );
+            if preflight_failure_reason.is_some() && process_spawned {
+                observe_process(SensorProcessObservation::Finished(if result.timed_out {
+                    TaskTerminalDisposition::TimedOut
+                } else {
+                    TaskTerminalDisposition::DeterministicFailure
+                }));
+            }
             append_tokmd_subcommand_receipts(
                 &aggregate_stdout_path,
                 &aggregate_stderr_path,
@@ -440,11 +873,7 @@ pub(crate) fn run_tokmd_sensor(
                 },
                 serde_json::json!({"sensor": sensor.id, "label": preflight.label, "exit_code": result.exit_code, "timed_out": result.timed_out, "reason": result.reason}),
             )?;
-            if let Some(reason) = tokmd_version_preflight_failure_reason(
-                &result,
-                &preflight.stdout_path,
-                &preflight.stderr_path,
-            ) {
+            if let Some(reason) = preflight_failure_reason {
                 write_sensor_status(
                     out,
                     sensor,
@@ -469,6 +898,14 @@ pub(crate) fn run_tokmd_sensor(
             }
         }
         Err(err) => {
+            if process_completion_unconfirmed {
+                return Err(err).context("tokmd version-preflight completion remains unconfirmed");
+            }
+            if process_spawned && !process_completion_unconfirmed {
+                observe_process(SensorProcessObservation::Finished(
+                    TaskTerminalDisposition::DeterministicFailure,
+                ));
+            }
             let reason = format!(
                 "tokmd version preflight failed: {err:#}; pin requires {} ({} preset); fix: {}",
                 expected_standard_image_tool_version("tokmd")
@@ -516,14 +953,27 @@ pub(crate) fn run_tokmd_sensor(
             "sensor_subcommand_started",
             serde_json::json!({"sensor": sensor.id, "label": command.label, "argv": command.argv}),
         )?;
-        let result = run_sensor_command_to_files(
-            root,
-            &command.argv,
-            &BTreeMap::new(),
-            sensor.timeout_sec,
-            &command.stdout_path,
-            &command.stderr_path,
-        );
+        let result = {
+            let mut observe_command_process = |observation| match observation {
+                CommandProcessObservation::Spawned => {
+                    process_spawned = true;
+                    observe_process(SensorProcessObservation::Spawned);
+                }
+                CommandProcessObservation::CompletionUnconfirmed => {
+                    process_completion_unconfirmed = true;
+                    observe_process(SensorProcessObservation::CompletionUnconfirmed);
+                }
+            };
+            run_command(
+                root,
+                &command.argv,
+                &BTreeMap::new(),
+                sensor.timeout_sec,
+                &command.stdout_path,
+                &command.stderr_path,
+                &mut observe_command_process,
+            )
+        };
         match result {
             Ok(result) => {
                 append_tokmd_subcommand_receipts(
@@ -551,6 +1001,11 @@ pub(crate) fn run_tokmd_sensor(
                 )?;
             }
             Err(err) => {
+                if process_completion_unconfirmed {
+                    return Err(err).with_context(|| {
+                        format!("tokmd {} completion remains unconfirmed", command.label)
+                    });
+                }
                 let reason = format!("{err:#}");
                 failures.push(format!("{} {reason}", command.label));
                 if exit_code == Some(0) {
@@ -564,6 +1019,15 @@ pub(crate) fn run_tokmd_sensor(
         }
     }
 
+    if process_spawned && !process_completion_unconfirmed {
+        observe_process(SensorProcessObservation::Finished(if timed_out {
+            TaskTerminalDisposition::TimedOut
+        } else if failures.is_empty() {
+            TaskTerminalDisposition::Succeeded
+        } else {
+            TaskTerminalDisposition::DeterministicFailure
+        }));
+    }
     let duration_ms = started.elapsed().as_millis();
     let context_path = dir.join("context.md");
     if !context_path.exists() {
@@ -804,6 +1268,7 @@ mod tests {
     use anyhow::{Context as _, Result, ensure};
 
     use super::{partition_sensor_queues, sensor_pool_worker_count};
+    use crate::task_ledger::TaskTerminalDisposition;
     use crate::tests::{run_test_command, sensor_plan, sleeper_argv, test_diff, test_plan};
     use crate::*;
 
@@ -1045,6 +1510,12 @@ mod tests {
         sensor.phase = SensorPhase::Late;
         sensor.timeout_sec = FIXTURE_SENSOR_TIMEOUT_SEC;
         let plan = test_plan(vec![sensor.clone()]);
+        let revision = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+        let task_ledger = SensorTaskLedger::initialize(&revision, &plan, false, &run_started)?;
 
         let phase = super::spawn_late_sensor_phase(
             &root,
@@ -1053,7 +1524,7 @@ mod tests {
             &Profile::default(),
             &event_log,
             &run_started,
-            vec![sensor],
+            LateSensorWork::new(vec![sensor], Some(task_ledger.clone())),
         )?;
         assert_eq!(phase.sensor_ids, vec!["late-probe".to_owned()]);
         phase.join(&event_log, &run_started, &mut tracker)?;
@@ -1071,6 +1542,20 @@ mod tests {
         assert!(
             events.contains("\"stage\":\"late-sensors\""),
             "late phase must open an evidence scheduler phase: {events}"
+        );
+        task_ledger.write_artifacts(&out)?;
+        let snapshot: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/task_ledger_snapshot.json"))?)?;
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/state/ResourcesReleased")
+                .and_then(serde_json::Value::as_str)
+                == Some("SetupFailed")
+        );
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/timing/process_started_at")
+                .is_some_and(serde_json::Value::is_null)
         );
         Ok(())
     }
@@ -1173,8 +1658,15 @@ mod tests {
         let mut sensor = sensor_plan("ripr", &fake_ripr.display().to_string(), true);
         sensor.timeout_sec = FIXTURE_SENSOR_TIMEOUT_SEC;
         let plan = test_plan(vec![sensor.clone()]);
+        let revision = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+        let task_ledger = SensorTaskLedger::initialize(&revision, &plan, false, &Instant::now())?;
 
-        run_sensor(&root, &out, &sensor, &event_log, &plan)?;
+        super::run_sensor_with_task_ledger(&root, &out, &sensor, &event_log, &plan, &task_ledger)?;
+        task_ledger.write_artifacts(&out)?;
 
         let sensor_dir = out.join("sensors/ripr");
         let status: serde_json::Value =
@@ -1246,6 +1738,70 @@ mod tests {
         assert!(sensor_dir.join("exposure-gaps.ripr.stderr").is_file());
         assert!(!sensor_dir.join("exposure-gaps.stdout.tmp").exists());
         assert!(!sensor_dir.join("exposure-gaps.stderr.tmp").exists());
+        let snapshot: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/task_ledger_snapshot.json"))?)?;
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/state/ResourcesReleased")
+                .and_then(serde_json::Value::as_str)
+                == Some("Succeeded")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn process_finish_observation_follows_ripr_detail_and_precedes_sensor_status() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("repo");
+        let out = temp.path().join("out");
+        let fake_bin = temp.path().join("fake-bin");
+        fs::create_dir_all(&root)?;
+        fs::create_dir_all(out.join("input"))?;
+        fs::write(
+            out.join("input/diff.patch"),
+            "diff --git a/src/lib.rs b/src/lib.rs\n",
+        )?;
+        let fake_ripr = write_fake_ripr_command(&fake_bin)?;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let mut sensor = sensor_plan("ripr", &fake_ripr.display().to_string(), true);
+        sensor.timeout_sec = FIXTURE_SENSOR_TIMEOUT_SEC;
+        let plan = test_plan(vec![sensor.clone()]);
+        let sensor_dir = out.join("sensors/ripr");
+        let mut observations = Vec::new();
+        let mut detail_ready_at_finish = false;
+        let mut status_absent_at_finish = false;
+        let mut disposition = None;
+        let mut observe_process = |observation| match observation {
+            super::SensorProcessObservation::AttemptPrepared => {}
+            super::SensorProcessObservation::Spawned => observations.push("spawned"),
+            super::SensorProcessObservation::Finished(observed) => {
+                observations.push("finished");
+                disposition = Some(observed);
+                detail_ready_at_finish = sensor_dir.join("gate-decision.json").is_file()
+                    && sensor_dir.join("exposure-gaps.json").is_file();
+                status_absent_at_finish = !sensor_dir.join("ub-review-sensor-status.json").exists();
+            }
+            super::SensorProcessObservation::CompletionUnconfirmed => {
+                observations.push("completion-unconfirmed");
+            }
+        };
+
+        super::run_sensor_with_command_availability(
+            &root,
+            &out,
+            &sensor,
+            &event_log,
+            &plan,
+            true,
+            &mut observe_process,
+        )?;
+
+        ensure!(observations == ["spawned", "spawned", "finished"]);
+        ensure!(disposition == Some(TaskTerminalDisposition::Succeeded));
+        ensure!(detail_ready_at_finish);
+        ensure!(status_absent_at_finish);
+        ensure!(sensor_dir.join("gate-decision.json").is_file());
+        ensure!(sensor_dir.join("ub-review-sensor-status.json").is_file());
         Ok(())
     }
 
@@ -1495,13 +2051,20 @@ mod tests {
         let out = temp.path().join("out");
         let fake_bin = temp.path().join("fake-bin");
         fs::create_dir_all(&root)?;
-        let fake_tokmd = write_fake_tokmd_command(&fake_bin, "1.11.1")?;
+        let fake_tokmd = write_fake_tokmd_command(&fake_bin, "1.11.1", None)?;
         let event_log = EventLog::open(&out.join("events.ndjson"))?;
         let mut sensor = sensor_plan("tokmd", &fake_tokmd.display().to_string(), true);
         sensor.timeout_sec = FIXTURE_SENSOR_TIMEOUT_SEC;
         let plan = test_plan(vec![sensor.clone()]);
+        let revision = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+        let task_ledger = SensorTaskLedger::initialize(&revision, &plan, false, &Instant::now())?;
 
-        run_sensor(&root, &out, &sensor, &event_log, &plan)?;
+        super::run_sensor_with_task_ledger(&root, &out, &sensor, &event_log, &plan, &task_ledger)?;
+        task_ledger.write_artifacts(&out)?;
 
         let sensor_dir = out.join("sensors/tokmd");
         let status: serde_json::Value =
@@ -1534,14 +2097,162 @@ mod tests {
         let aggregate_stdout = fs::read_to_string(sensor_dir.join("stdout.txt"))?;
         assert!(aggregate_stdout.contains("--version"));
         assert!(aggregate_stdout.contains("tokmd 1.11.1"));
+        let snapshot: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/task_ledger_snapshot.json"))?)?;
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/state/ResourcesReleased")
+                .and_then(serde_json::Value::as_str)
+                == Some("DeterministicFailure")
+        );
         Ok(())
     }
 
-    fn write_fake_tokmd_command(dir: &Path, version: &str) -> Result<PathBuf> {
+    #[test]
+    fn tokmd_post_spawn_error_still_terminalizes_the_task() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("repo");
+        let out = temp.path().join("out");
+        let fake_bin = temp.path().join("fake-bin");
+        let aggregate_stdout = out.join("sensors/tokmd/stdout.txt");
+        fs::create_dir_all(&root)?;
+        let fake_tokmd = write_fake_tokmd_command(
+            &fake_bin,
+            STANDARD_IMAGE_TOKMD_VERSION,
+            Some(&aggregate_stdout),
+        )?;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let mut sensor = sensor_plan("tokmd", &fake_tokmd.display().to_string(), true);
+        sensor.timeout_sec = FIXTURE_SENSOR_TIMEOUT_SEC;
+        let plan = test_plan(vec![sensor.clone()]);
+        let revision = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+        let task_ledger = SensorTaskLedger::initialize(&revision, &plan, false, &Instant::now())?;
+
+        let result = super::run_sensor_with_task_ledger(
+            &root,
+            &out,
+            &sensor,
+            &event_log,
+            &plan,
+            &task_ledger,
+        );
+        ensure!(result.is_err());
+        task_ledger.write_artifacts(&out)?;
+
+        let snapshot: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/task_ledger_snapshot.json"))?)?;
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/state/ResourcesReleased")
+                .and_then(serde_json::Value::as_str)
+                == Some("DeterministicFailure")
+        );
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/receipt/CreationFailed/reason")
+                .and_then(serde_json::Value::as_str)
+                == Some("sensor status receipt missing or invalid")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn tokmd_unconfirmed_subcommand_completion_stops_later_commands() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("repo");
+        let out = temp.path().join("out");
+        fs::create_dir_all(&root)?;
+        fs::create_dir_all(out.join("sensors/tokmd"))?;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let mut sensor = sensor_plan("tokmd", "tokmd", true);
+        sensor.timeout_sec = FIXTURE_SENSOR_TIMEOUT_SEC;
+        let plan = test_plan(vec![sensor.clone()]);
+        let aggregate_argv = vec!["tokmd".to_owned()];
+        let mut command_calls = 0_usize;
+        let mut run_command =
+            |_root: &Path,
+             _argv: &[String],
+             _env: &BTreeMap<String, String>,
+             _timeout_sec: u64,
+             stdout_path: &Path,
+             stderr_path: &Path,
+             observe_command: &mut dyn FnMut(CommandProcessObservation)| {
+                command_calls += 1;
+                fs::write(stderr_path, b"")?;
+                observe_command(CommandProcessObservation::Spawned);
+                if command_calls == 1 {
+                    fs::write(
+                        stdout_path,
+                        format!("tokmd {STANDARD_IMAGE_TOKMD_VERSION}\n"),
+                    )?;
+                    return Ok(CommandStatus {
+                        exit_code: Some(0),
+                        timed_out: false,
+                        success: true,
+                        reason: "completed".to_owned(),
+                        duration_ms: 1,
+                    });
+                }
+                observe_command(CommandProcessObservation::CompletionUnconfirmed);
+                Err(anyhow::anyhow!("injected unconfirmed completion"))
+            };
+
+        let result = super::run_tokmd_sensor_with_command_runner(
+            super::TokmdSensorRun {
+                root: &root,
+                out: &out,
+                sensor: &sensor,
+                event_log: &event_log,
+                plan: &plan,
+                aggregate_argv: &aggregate_argv,
+                observe_process: &mut |_| {},
+            },
+            &mut run_command,
+        );
+
+        ensure!(result.is_err());
+        ensure!(command_calls == 2);
+        let planned_commands: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("sensors/tokmd/commands.json"))?)?;
+        ensure!(
+            planned_commands
+                .as_array()
+                .is_some_and(|commands| commands.len() > command_calls)
+        );
+        let aggregate_stdout = fs::read_to_string(out.join("sensors/tokmd/stdout.txt"))?;
+        ensure!(
+            aggregate_stdout
+                .lines()
+                .filter(|line| line.starts_with("$ "))
+                .count()
+                == 1
+        );
+        ensure!(
+            !out.join("sensors/tokmd/ub-review-sensor-status.json")
+                .exists()
+        );
+        Ok(())
+    }
+
+    fn write_fake_tokmd_command(
+        dir: &Path,
+        version: &str,
+        aggregate_stdout_failure: Option<&Path>,
+    ) -> Result<PathBuf> {
         fs::create_dir_all(dir)?;
         #[cfg(windows)]
         {
             let source = dir.join("fake_tokmd.rs");
+            let sabotage = aggregate_stdout_failure.map_or_else(String::new, |path| {
+                format!(
+                    "let path = {path:?}; let _ = std::fs::remove_file(path); let _ = std::fs::create_dir(path);",
+                    path = path.display().to_string()
+                )
+            });
             fs::write(
                 &source,
                 format!(
@@ -1553,6 +2264,7 @@ fn main() {{
     let args = env::args().skip(1).collect::<Vec<_>>();
     if args == ["--version"] {{
         println!("tokmd {{VERSION}}");
+        {sabotage}
         return;
     }}
     eprintln!("unexpected tokmd subcommand: {{}}", args.join(" "));
@@ -1570,10 +2282,16 @@ fn main() {{
         #[cfg(not(windows))]
         {
             let script = dir.join("fake_tokmd");
+            let sabotage = aggregate_stdout_failure.map_or_else(String::new, |path| {
+                format!(
+                    "rm -f -- {path:?}\nmkdir -- {path:?}\n",
+                    path = path.display().to_string()
+                )
+            });
             fs::write(
                 &script,
                 format!(
-                    "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo \"tokmd {version}\"; exit 0; fi\necho \"unexpected tokmd subcommand: $*\" >&2\nexit 42\n"
+                    "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo \"tokmd {version}\"\n{sabotage}exit 0; fi\necho \"unexpected tokmd subcommand: $*\" >&2\nexit 42\n"
                 ),
             )?;
             #[cfg(unix)]
@@ -1766,8 +2484,15 @@ esac
         let event_log = EventLog::open(&out.join("events.ndjson"))?;
         let sensor = sensor_plan("ripr", "ub-review-test-tool-that-does-not-exist", true);
         let plan = test_plan(vec![sensor.clone()]);
+        let revision = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+        let task_ledger = SensorTaskLedger::initialize(&revision, &plan, false, &Instant::now())?;
 
-        run_sensor(root, &out, &sensor, &event_log, &plan)?;
+        super::run_sensor_with_task_ledger(root, &out, &sensor, &event_log, &plan, &task_ledger)?;
+        task_ledger.write_artifacts(&out)?;
 
         let status_path = out.join("sensors/ripr/ub-review-sensor-status.json");
         let value: serde_json::Value = serde_json::from_slice(&fs::read(status_path)?)?;
@@ -1776,6 +2501,256 @@ esac
         assert_eq!(value["reason"], "command not found");
         assert!(out.join("sensors/ripr/stdout.txt").exists());
         assert!(out.join("sensors/ripr/stderr.txt").exists());
+        let snapshot: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/task_ledger_snapshot.json"))?)?;
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/state/ResourcesReleased")
+                .and_then(serde_json::Value::as_str)
+                == Some("SetupFailed")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn failed_attempt_cannot_reuse_a_prior_sensor_status_receipt() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("repo");
+        let out = temp.path().join("out");
+        let fake_bin = temp.path().join("fake-bin");
+        fs::create_dir_all(&root)?;
+        fs::create_dir_all(out.join("input"))?;
+        fs::write(
+            out.join("input/diff.patch"),
+            "diff --git a/src/lib.rs b/src/lib.rs\n",
+        )?;
+        let fake_ripr = write_fake_ripr_command(&fake_bin)?;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let mut sensor = sensor_plan("ripr", &fake_ripr.display().to_string(), true);
+        sensor.timeout_sec = FIXTURE_SENSOR_TIMEOUT_SEC;
+        let plan = test_plan(vec![sensor.clone()]);
+        let revision = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+        let task_ledger = SensorTaskLedger::initialize(&revision, &plan, false, &Instant::now())?;
+        let sensor_dir = out.join("sensors/ripr");
+        fs::create_dir_all(&sensor_dir)?;
+        fs::write(
+            sensor_dir.join("ub-review-sensor-status.json"),
+            serde_json::to_vec(&serde_json::json!({"sensor": "ripr", "status": "ok"}))?,
+        )?;
+        // A directory at the receipt target forces the post-process copy to
+        // fail after the fake subprocess has started but before status publish.
+        fs::create_dir_all(sensor_dir.join("gate-decision.json"))?;
+
+        let result = super::run_sensor_with_task_ledger(
+            &root,
+            &out,
+            &sensor,
+            &event_log,
+            &plan,
+            &task_ledger,
+        );
+        ensure!(result.is_err());
+        ensure!(!sensor_dir.join("ub-review-sensor-status.json").exists());
+        task_ledger.write_artifacts(&out)?;
+
+        let snapshot: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/task_ledger_snapshot.json"))?)?;
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/state/ResourcesReleased")
+                .and_then(serde_json::Value::as_str)
+                == Some("Succeeded")
+        );
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/receipt/CreationFailed/reason")
+                .and_then(serde_json::Value::as_str)
+                == Some("sensor status receipt missing or invalid")
+        );
+        let events = fs::read_to_string(out.join("task_ledger_events.ndjson"))?;
+        let process_finished = events
+            .find("\"ProcessFinished\"")
+            .context("task ledger has no process-finished event")?;
+        let cleanup_finished = events
+            .find("\"CleanupFinished\"")
+            .context("task ledger has no cleanup-finished event")?;
+        let receipt_failed = events
+            .find("\"ReceiptCreationFailed\"")
+            .context("task ledger has no receipt-failed event")?;
+        let resources_released = events
+            .find("\"ResourcesReleased\"")
+            .context("task ledger has no resources-released event")?;
+        ensure!(process_finished < cleanup_finished);
+        ensure!(cleanup_finished < receipt_failed);
+        ensure!(receipt_failed < resources_released);
+        Ok(())
+    }
+
+    #[test]
+    fn stale_status_removal_failure_cannot_create_a_receipt() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("repo");
+        let out = temp.path().join("out");
+        fs::create_dir_all(&root)?;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let sensor = sensor_plan("probe", "probe", true);
+        let plan = test_plan(vec![sensor.clone()]);
+        let revision = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+        let task_ledger = SensorTaskLedger::initialize(&revision, &plan, false, &Instant::now())?;
+        let stale_status = out.join("sensors/probe/ub-review-sensor-status.json");
+        fs::create_dir_all(
+            stale_status
+                .parent()
+                .context("stale status fixture has no parent")?,
+        )?;
+        fs::write(
+            &stale_status,
+            serde_json::to_vec(&serde_json::json!({"sensor": "probe", "status": "ok"}))?,
+        )?;
+        let mut reject_removal = |_dir: &Path| Err(anyhow::anyhow!("injected removal failure"));
+
+        let result = super::run_sensor_attempt_with_task_ledger(
+            super::SensorCommandAttempt {
+                root: &root,
+                out: &out,
+                sensor: &sensor,
+                event_log: &event_log,
+                plan: &plan,
+                command_available: true,
+            },
+            &task_ledger,
+            &mut reject_removal,
+        );
+        ensure!(result.is_err());
+        let stale_value: serde_json::Value = serde_json::from_slice(&fs::read(&stale_status)?)?;
+        ensure!(stale_value["status"] == "ok");
+        task_ledger.write_artifacts(&out)?;
+
+        let snapshot: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/task_ledger_snapshot.json"))?)?;
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/receipt/CreationFailed/reason")
+                .and_then(serde_json::Value::as_str)
+                == Some("sensor status receipt missing or invalid")
+        );
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/state/ResourcesReleased")
+                .and_then(serde_json::Value::as_str)
+                == Some("SetupFailed")
+        );
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/timing/process_started_at")
+                .is_some_and(serde_json::Value::is_null)
+        );
+        let events = fs::read_to_string(out.join("task_ledger_events.ndjson"))?;
+        ensure!(!events.contains("\"RunStarted\""));
+        ensure!(!events.contains("\"CleanupFinished\""));
+        ensure!(!events.contains("\"ReceiptCreated\""));
+        ensure!(!events.contains("\"Succeeded\""));
+        ensure!(events.contains("\"SetupFailed\""));
+        ensure!(events.contains("\"ReceiptCreationFailed\""));
+        ensure!(events.contains("\"ResourcesReleased\""));
+        Ok(())
+    }
+
+    #[test]
+    fn sensor_task_receipt_mapping_rejects_missing_mismatched_and_unknown_status() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let sensor = sensor_plan("probe", "probe", true);
+        let status_path = out.join("sensors/probe/ub-review-sensor-status.json");
+        let status_dir = status_path
+            .parent()
+            .context("sensor status fixture has no parent")?;
+        fs::create_dir_all(status_dir)?;
+
+        ensure!(super::sensor_task_receipt_disposition(&out, &sensor, true).is_err());
+        fs::write(
+            &status_path,
+            serde_json::to_vec(&serde_json::json!({
+                "sensor": "another-probe",
+                "status": "ok"
+            }))?,
+        )?;
+        ensure!(super::sensor_task_receipt_disposition(&out, &sensor, true).is_err());
+
+        for (status, expected) in [
+            ("ok", TaskTerminalDisposition::Succeeded),
+            ("failed", TaskTerminalDisposition::DeterministicFailure),
+            ("timed_out", TaskTerminalDisposition::TimedOut),
+        ] {
+            fs::write(
+                &status_path,
+                serde_json::to_vec(&serde_json::json!({
+                    "sensor": "probe",
+                    "status": status
+                }))?,
+            )?;
+            ensure!(super::sensor_task_receipt_disposition(&out, &sensor, true)? == expected);
+        }
+        fs::write(
+            &status_path,
+            serde_json::to_vec(&serde_json::json!({
+                "sensor": "probe",
+                "status": "future-status"
+            }))?,
+        )?;
+        ensure!(super::sensor_task_receipt_disposition(&out, &sensor, true).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn sensor_spawn_setup_failure_records_no_process_timing() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("root");
+        let out = temp.path().join("out");
+        fs::create_dir_all(&root)?;
+        fs::create_dir_all(out.join("sensors/probe/stdout.txt"))?;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let sensor = sensor_plan("probe", "probe", true);
+        let plan = test_plan(vec![sensor.clone()]);
+        let revision = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+        let task_ledger = SensorTaskLedger::initialize(&revision, &plan, false, &Instant::now())?;
+
+        super::run_sensor_with_task_ledger_and_command_availability(
+            &root,
+            &out,
+            &sensor,
+            &event_log,
+            &plan,
+            &task_ledger,
+            true,
+        )?;
+        task_ledger.write_artifacts(&out)?;
+
+        let snapshot: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/task_ledger_snapshot.json"))?)?;
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/state/ResourcesReleased")
+                .and_then(serde_json::Value::as_str)
+                == Some("SetupFailed")
+        );
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/timing/process_started_at")
+                .is_some_and(serde_json::Value::is_null)
+        );
         Ok(())
     }
 

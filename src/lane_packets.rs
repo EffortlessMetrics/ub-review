@@ -4,6 +4,7 @@
 use crate::diff_posture::review_posture_for_diff_class;
 use crate::*;
 use anyhow::Context;
+use std::io;
 
 pub(crate) fn trigger_match(trigger: Trigger, flags: &DiffFlags) -> Option<String> {
     match trigger {
@@ -228,6 +229,7 @@ pub(crate) fn run_command_to_files(
     stderr_path: &Path,
 ) -> Result<CommandStatus> {
     let ambient = BTreeMap::new();
+    let mut ignore_process = |_| {};
     run_command_to_files_inner(CommandRun {
         root,
         argv,
@@ -237,10 +239,12 @@ pub(crate) fn run_command_to_files(
         stdout_path,
         stderr_path,
         quarantine_environment: false,
+        observe_process: &mut ignore_process,
     })
 }
 
 /// Run a sensor subprocess with the deny-by-default environment contract.
+#[cfg(test)]
 pub(crate) fn run_sensor_command_to_files(
     root: &Path,
     argv: &[String],
@@ -248,6 +252,35 @@ pub(crate) fn run_sensor_command_to_files(
     timeout_sec: u64,
     stdout_path: &Path,
     stderr_path: &Path,
+) -> Result<CommandStatus> {
+    let mut ignore_process = |_| {};
+    run_sensor_command_to_files_with_spawn_observer(
+        root,
+        argv,
+        env,
+        timeout_sec,
+        stdout_path,
+        stderr_path,
+        &mut ignore_process,
+    )
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CommandProcessObservation {
+    Spawned,
+    CompletionUnconfirmed,
+}
+
+/// Run a sensor subprocess and report process creation or an unconfirmed
+/// cleanup. The callback is observational and cannot suppress the child.
+pub(crate) fn run_sensor_command_to_files_with_spawn_observer(
+    root: &Path,
+    argv: &[String],
+    env: &BTreeMap<String, String>,
+    timeout_sec: u64,
+    stdout_path: &Path,
+    stderr_path: &Path,
+    observe_process: &mut dyn FnMut(CommandProcessObservation),
 ) -> Result<CommandStatus> {
     let ambient = std::env::vars().collect();
     run_command_to_files_inner(CommandRun {
@@ -259,6 +292,7 @@ pub(crate) fn run_sensor_command_to_files(
         stdout_path,
         stderr_path,
         quarantine_environment: true,
+        observe_process,
     })
 }
 
@@ -271,9 +305,20 @@ struct CommandRun<'a> {
     stdout_path: &'a Path,
     stderr_path: &'a Path,
     quarantine_environment: bool,
+    observe_process: &'a mut dyn FnMut(CommandProcessObservation),
 }
 
 fn run_command_to_files_inner(run: CommandRun<'_>) -> Result<CommandStatus> {
+    run_command_to_files_inner_with_wait(run, &mut |child, timeout| child.wait_timeout(timeout))
+}
+
+fn run_command_to_files_inner_with_wait(
+    run: CommandRun<'_>,
+    wait_for_child: &mut dyn FnMut(
+        &mut std::process::Child,
+        Duration,
+    ) -> io::Result<Option<std::process::ExitStatus>>,
+) -> Result<CommandStatus> {
     let CommandRun {
         root,
         argv,
@@ -283,6 +328,7 @@ fn run_command_to_files_inner(run: CommandRun<'_>) -> Result<CommandStatus> {
         stdout_path,
         stderr_path,
         quarantine_environment,
+        observe_process,
     } = run;
     let Some((program, args)) = argv.split_first() else {
         bail!("empty command");
@@ -310,11 +356,11 @@ fn run_command_to_files_inner(run: CommandRun<'_>) -> Result<CommandStatus> {
     let mut child = command
         .spawn()
         .with_context(|| format!("spawn {program}"))?;
-    let status = match child.wait_timeout(Duration::from_secs(timeout_sec))? {
-        Some(status) => status,
-        None => {
-            let _ = child.kill();
-            let _ = child.wait();
+    observe_process(CommandProcessObservation::Spawned);
+    let status = match wait_for_child(&mut child, Duration::from_secs(timeout_sec)) {
+        Ok(Some(status)) => status,
+        Ok(None) => {
+            terminate_and_reap_child(&mut child, observe_process)?;
             return Ok(CommandStatus {
                 exit_code: None,
                 timed_out: true,
@@ -322,6 +368,9 @@ fn run_command_to_files_inner(run: CommandRun<'_>) -> Result<CommandStatus> {
                 reason: format!("timed out after {timeout_sec}s"),
                 duration_ms: started.elapsed().as_millis(),
             });
+        }
+        Err(wait_error) => {
+            return reconcile_wait_failure(&mut child, observe_process, wait_error);
         }
     };
     Ok(CommandStatus {
@@ -335,6 +384,69 @@ fn run_command_to_files_inner(run: CommandRun<'_>) -> Result<CommandStatus> {
         },
         duration_ms: started.elapsed().as_millis(),
     })
+}
+
+fn reconcile_wait_failure(
+    child: &mut impl TerminateAndReap,
+    observe_process: &mut dyn FnMut(CommandProcessObservation),
+    wait_error: io::Error,
+) -> Result<CommandStatus> {
+    match terminate_and_reap_child(child, observe_process) {
+        Ok(()) => Err(wait_error).context("wait for child process"),
+        Err(cleanup_error) => Err(cleanup_error).context(format!(
+            "terminate child after wait-timeout failure; original wait error: {wait_error}"
+        )),
+    }
+}
+
+trait TerminateAndReap {
+    fn kill_process(&mut self) -> io::Result<()>;
+    fn reap_process(&mut self) -> io::Result<()>;
+}
+
+impl TerminateAndReap for std::process::Child {
+    fn kill_process(&mut self) -> io::Result<()> {
+        self.kill()
+    }
+
+    fn reap_process(&mut self) -> io::Result<()> {
+        self.wait().map(|_| ())
+    }
+}
+
+fn terminate_and_reap_child(
+    child: &mut impl TerminateAndReap,
+    observe_process: &mut dyn FnMut(CommandProcessObservation),
+) -> Result<()> {
+    const MAX_INTERRUPTED_REAP_ATTEMPTS: usize = 16;
+    let kill_error = child.kill_process().err();
+    let mut interrupted_attempts = 0_usize;
+    while interrupted_attempts < MAX_INTERRUPTED_REAP_ATTEMPTS {
+        match child.reap_process() {
+            Ok(()) => return Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {
+                interrupted_attempts += 1;
+            }
+            Err(wait_error) => {
+                observe_process(CommandProcessObservation::CompletionUnconfirmed);
+                let kill_detail = kill_error.map_or_else(
+                    || "kill request succeeded".to_owned(),
+                    |error| format!("kill request failed: {error}"),
+                );
+                bail!(
+                    "child completion remains unconfirmed ({kill_detail}; wait failed: {wait_error})"
+                );
+            }
+        }
+    }
+    observe_process(CommandProcessObservation::CompletionUnconfirmed);
+    let kill_detail = kill_error.map_or_else(
+        || "kill request succeeded".to_owned(),
+        |error| format!("kill request failed: {error}"),
+    );
+    bail!(
+        "child completion remains unconfirmed ({kill_detail}; reap interrupted {MAX_INTERRUPTED_REAP_ATTEMPTS} consecutive times)"
+    )
 }
 
 /// Keep only the non-secret execution metadata needed by sensor tools.
@@ -551,9 +663,208 @@ pub(crate) fn render_claim_prompt(diff: &DiffContext) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::run_sensor_command_to_files;
-    use anyhow::{Result, ensure};
-    use std::{collections::BTreeMap, fs};
+    use super::{
+        CommandProcessObservation, CommandRun, TerminateAndReap, reconcile_wait_failure,
+        run_command_to_files_inner_with_wait, run_sensor_command_to_files,
+        terminate_and_reap_child,
+    };
+    use anyhow::{Context, Result, ensure};
+    use std::{collections::BTreeMap, collections::VecDeque, fs, io, thread, time::Duration};
+
+    struct FakeChild {
+        kill_fails: bool,
+        reap_errors: VecDeque<io::ErrorKind>,
+        calls: Vec<&'static str>,
+    }
+
+    impl TerminateAndReap for FakeChild {
+        fn kill_process(&mut self) -> io::Result<()> {
+            self.calls.push("kill");
+            if self.kill_fails {
+                Err(io::Error::other("injected kill failure"))
+            } else {
+                Ok(())
+            }
+        }
+
+        fn reap_process(&mut self) -> io::Result<()> {
+            self.calls.push("wait");
+            self.reap_errors.pop_front().map_or(Ok(()), |kind| {
+                Err(io::Error::new(kind, "injected wait failure"))
+            })
+        }
+    }
+
+    #[test]
+    fn child_cleanup_waits_for_confirmed_exit_even_when_kill_reports_an_error() -> Result<()> {
+        let mut child = FakeChild {
+            kill_fails: true,
+            reap_errors: VecDeque::new(),
+            calls: Vec::new(),
+        };
+        let mut observations = Vec::new();
+
+        terminate_and_reap_child(&mut child, &mut |event| observations.push(event))?;
+
+        ensure!(child.calls == ["kill", "wait"]);
+        ensure!(observations.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn child_cleanup_marks_release_unconfirmed_when_reaping_fails() -> Result<()> {
+        let mut child = FakeChild {
+            kill_fails: false,
+            reap_errors: VecDeque::from([io::ErrorKind::Other]),
+            calls: Vec::new(),
+        };
+        let mut observations = Vec::new();
+
+        let result = terminate_and_reap_child(&mut child, &mut |event| observations.push(event));
+
+        ensure!(result.is_err());
+        ensure!(child.calls == ["kill", "wait"]);
+        ensure!(observations == [CommandProcessObservation::CompletionUnconfirmed]);
+        Ok(())
+    }
+
+    #[test]
+    fn child_cleanup_retries_interrupted_reaps_until_exit_is_confirmed() -> Result<()> {
+        let mut child = FakeChild {
+            kill_fails: false,
+            reap_errors: VecDeque::from([io::ErrorKind::Interrupted, io::ErrorKind::Interrupted]),
+            calls: Vec::new(),
+        };
+        let mut observations = Vec::new();
+
+        terminate_and_reap_child(&mut child, &mut |event| observations.push(event))?;
+
+        ensure!(child.calls == ["kill", "wait", "wait", "wait"]);
+        ensure!(observations.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn child_cleanup_bounds_persistent_interrupted_reaps() -> Result<()> {
+        let mut child = FakeChild {
+            kill_fails: false,
+            reap_errors: VecDeque::from([io::ErrorKind::Interrupted; 16]),
+            calls: Vec::new(),
+        };
+        let mut observations = Vec::new();
+
+        let result = terminate_and_reap_child(&mut child, &mut |event| observations.push(event));
+
+        let error = result
+            .err()
+            .context("persistent interrupts must fail closed")?;
+        ensure!(format!("{error:#}").contains("reap interrupted 16 consecutive times"));
+        ensure!(child.calls.len() == 17);
+        ensure!(child.calls.first() == Some(&"kill"));
+        ensure!(child.calls.iter().skip(1).all(|call| *call == "wait"));
+        ensure!(observations == [CommandProcessObservation::CompletionUnconfirmed]);
+        Ok(())
+    }
+
+    #[test]
+    fn wait_cleanup_failure_preserves_wait_and_reap_errors() -> Result<()> {
+        let mut child = FakeChild {
+            kill_fails: false,
+            reap_errors: VecDeque::from([io::ErrorKind::Other]),
+            calls: Vec::new(),
+        };
+        let mut observations = Vec::new();
+
+        let result = reconcile_wait_failure(
+            &mut child,
+            &mut |event| observations.push(event),
+            io::Error::other("injected wait_timeout failure"),
+        );
+
+        let error = result.err().context("cleanup failure must propagate")?;
+        let diagnostic = format!("{error:#}");
+        ensure!(diagnostic.contains("injected wait_timeout failure"));
+        ensure!(diagnostic.contains("injected wait failure"));
+        ensure!(observations == [CommandProcessObservation::CompletionUnconfirmed]);
+        Ok(())
+    }
+
+    #[test]
+    fn wait_error_branch_reaps_live_child_before_returning() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let started_marker = temp.path().join("started");
+        let delayed_marker = temp.path().join("delayed");
+        let stdout = temp.path().join("stdout.txt");
+        let stderr = temp.path().join("stderr.txt");
+        let argv = vec![
+            std::env::current_exe()?.display().to_string(),
+            "--exact".to_owned(),
+            "lane_packets::tests::fake_delayed_marker_child".to_owned(),
+            "--nocapture".to_owned(),
+        ];
+        let env = BTreeMap::from([
+            (
+                "UB_REVIEW_WAIT_ERROR_STARTED".to_owned(),
+                started_marker.display().to_string(),
+            ),
+            (
+                "UB_REVIEW_WAIT_ERROR_DELAYED".to_owned(),
+                delayed_marker.display().to_string(),
+            ),
+        ]);
+        let ambient = BTreeMap::new();
+        let mut observations = Vec::new();
+        let mut wait_for_child = |_child: &mut std::process::Child, _timeout: Duration| {
+            for _ in 0..100 {
+                if started_marker.is_file() {
+                    return Err(io::Error::other("injected wait_timeout failure"));
+                }
+                thread::sleep(Duration::from_millis(20));
+            }
+            Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "child did not publish its start marker",
+            ))
+        };
+
+        let result = run_command_to_files_inner_with_wait(
+            CommandRun {
+                root: temp.path(),
+                argv: &argv,
+                env: &env,
+                ambient: &ambient,
+                timeout_sec: 5,
+                stdout_path: &stdout,
+                stderr_path: &stderr,
+                quarantine_environment: false,
+                observe_process: &mut |event| observations.push(event),
+            },
+            &mut wait_for_child,
+        );
+
+        let error = result
+            .err()
+            .context("injected wait failure must propagate")?;
+        ensure!(format!("{error:#}").contains("injected wait_timeout failure"));
+        ensure!(started_marker.is_file());
+        ensure!(observations == [CommandProcessObservation::Spawned]);
+        thread::sleep(Duration::from_millis(2300));
+        ensure!(!delayed_marker.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn fake_delayed_marker_child() -> Result<()> {
+        let Some(started) = std::env::var_os("UB_REVIEW_WAIT_ERROR_STARTED") else {
+            return Ok(());
+        };
+        let delayed = std::env::var_os("UB_REVIEW_WAIT_ERROR_DELAYED")
+            .context("delayed marker path missing")?;
+        fs::write(started, b"started")?;
+        thread::sleep(Duration::from_secs(2));
+        fs::write(delayed, b"still running")?;
+        Ok(())
+    }
 
     #[test]
     fn sensor_environment_excludes_credentials_and_keeps_execution_metadata() -> Result<()> {

@@ -1592,6 +1592,7 @@ fn active_len_tracks_view_after_resize() {
         "events.ndjson",
         "work_queue.json",
         "work_events.ndjson",
+        "task_ledger_events.ndjson",
         "resolved-profile.json",
         "resolved-plan.json",
         "resolved-tools.json",
@@ -1623,6 +1624,7 @@ fn active_len_tracks_view_after_resize() {
         "review/quality-receipt.json",
         "review/quality-trend.json",
         "review/scheduler.json",
+        "review/task_ledger_snapshot.json",
         "review/review.json",
         "review/review.md",
         "review/candidates.json",
@@ -1666,6 +1668,24 @@ fn active_len_tracks_view_after_resize() {
     assert!(out.join("candidates").is_dir());
     assert!(out.join("proof_requests").is_dir());
     assert!(out.join("questions").is_dir());
+
+    let task_ledger: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/task_ledger_snapshot.json"))?)?;
+    let task_snapshots = task_ledger["tasks"]
+        .as_array()
+        .context("task-ledger snapshot tasks must be an array")?;
+    if task_snapshots.is_empty()
+        || task_snapshots.iter().any(|task| {
+            task.pointer("/state/TerminallyDeclined")
+                .and_then(serde_json::Value::as_str)
+                != Some("Refused")
+                || task
+                    .pointer("/timing/process_started_at")
+                    .is_none_or(|value| !value.is_null())
+        })
+    {
+        bail!("dry-run sensors must be declined without fabricated process timing");
+    }
 
     assert!(!out.join("review/github-review.json").exists());
     let github_skip: serde_json::Value =
