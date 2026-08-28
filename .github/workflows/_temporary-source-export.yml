@@ -27,7 +27,7 @@ jobs:
             echo 'state=source' >> "$GITHUB_OUTPUT"
           elif [[ ${#chunks[@]} -eq 0 ]]; then
             echo 'state=none' >> "$GITHUB_OUTPUT"
-          elif [[ -f .github/ub-review-proof-adapter.patch.02 && ${#chunks[@]} -eq 3 ]]; then
+          elif [[ -f .github/ub-review-proof-adapter.patch.00 && ${#chunks[@]} -eq 1 ]]; then
             echo 'state=ready' >> "$GITHUB_OUTPUT"
           else
             echo 'state=partial' >> "$GITHUB_OUTPUT"
@@ -50,12 +50,12 @@ jobs:
         run: |
           set -euo pipefail
           cat .github/ub-review-proof-adapter.patch.* > /tmp/ub-review-proof-adapter.patch
-          printf '%s  %s\n' 'b95772444ddcbea2f1c23e546114a3352ac46840d60f932ac8d89f0b5c47d829' /tmp/ub-review-proof-adapter.patch | sha256sum --check --strict
+          printf '%s  %s\n' '703f317b05d44a1e99bbe55cc9f5eab827694682b334db17f7f32d62566cd7c1' /tmp/ub-review-proof-adapter.patch | sha256sum --check --strict
           git apply --index /tmp/ub-review-proof-adapter.patch
           git rm .github/ub-review-proof-adapter.patch.*
           git config user.name 'EffortlessSteven'
           git config user.email 'git@effortlesssteven.com'
-          git commit -m 'fix(task-ledger): repair proof adapter compile surface'
+          git commit -m 'fix(task-ledger): close remaining proof compile gaps'
           git push origin HEAD:codex/956-proof-worker-task-ledger
 
   validate:
