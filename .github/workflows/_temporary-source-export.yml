@@ -1,5 +1,5 @@
 name: Temporary #956 apply and validation
-# Staging the exact-head Clippy simplification after proof lifecycle tests passed.
+# Validation trigger for simplified proof adapter head 60267099477c84d6f34c79ab6b0f7d6ca6ef2622.
 
 on:
   push:
