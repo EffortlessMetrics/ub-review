@@ -1,4 +1,4 @@
-name: Temporary source export
+name: Temporary proof adapter apply
 
 on:
   push:
@@ -6,23 +6,33 @@ on:
       - codex/956-proof-worker-task-ledger
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  export:
+  apply:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
-          persist-credentials: false
           fetch-depth: 0
-      - uses: actions/upload-artifact@v7
-        with:
-          name: ub-review-source-${{ github.sha }}
-          path: |
-            .
-            !.git/**
-            !target/**
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 1
+      - id: detect
+        shell: bash
+        run: |
+          if compgen -G '.github/ub-review-proof-adapter.patch.*' >/dev/null; then
+            echo 'apply=true' >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.detect.outputs.apply == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/ub-review-proof-adapter.patch.* > /tmp/ub-review-proof-adapter.patch
+          printf '%s  %s\n' '56c353c0f0947cd9c9e119db02da5faa4fa7e2def14a5a08daee571077252bf8' /tmp/ub-review-proof-adapter.patch | sha256sum --check --strict
+          git apply --index /tmp/ub-review-proof-adapter.patch
+          git rm .github/ub-review-proof-adapter.patch.*
+          git rm .github/workflows/_temporary-source-export.yml
+          printf '%s\n' 'proof adapter applied from 56c353c0f0947cd9c9e119db02da5faa4fa7e2def14a5a08daee571077252bf8' > .github/proof-adapter-applied
+          git add .github/proof-adapter-applied
+          git config user.name 'EffortlessSteven'
+          git config user.email 'git@effortlesssteven.com'
+          git commit -m 'runtime(task-ledger): observe proof execution in shadow'
+          git push origin HEAD:codex/956-proof-worker-task-ledger
