@@ -1,0 +1,156 @@
+         RevisionRef {
+@@ -725,7 +725,11 @@ mod tests {
+         let focused = focused_task("proof-command-observed");
+         let command_task = ProofCommandTask::focused_test(&focused, "head", 7);
+         let spec = ProofCommandSpec {
+-            argv: vec!["cargo".to_owned(), "test".to_owned(), "focused_case".to_owned()],
++            argv: vec![
++                "cargo".to_owned(),
++                "test".to_owned(),
++                "focused_case".to_owned(),
++            ],
+             env: BTreeMap::new(),
+         };
+         let lease = granted_lease("lease-proof-command-observed");
+@@ -764,7 +768,11 @@ mod tests {
+             .filter(|input| input.task_id == task_id)
+             .map(|input| input.event)
+             .collect::<Vec<_>>();
+-        ensure!(events.iter().any(|event| matches!(event, TaskEvent::RunStarted { .. })));
++        ensure!(
++            events
++                .iter()
++                .any(|event| matches!(event, TaskEvent::RunStarted { .. }))
++        );
+         ensure!(events.iter().any(|event| matches!(
+             event,
+             TaskEvent::ProcessFinished {
+@@ -772,9 +780,21 @@ mod tests {
+                 ..
+             }
+         )));
+-        ensure!(events.iter().any(|event| matches!(event, TaskEvent::CleanupFinished { .. })));
+-        ensure!(!events.iter().any(|event| matches!(event, TaskEvent::ReceiptCreated { .. })));
+-        ensure!(!events.iter().any(|event| matches!(event, TaskEvent::ResourcesReleased { .. })));
++        ensure!(
++            events
++                .iter()
++                .any(|event| matches!(event, TaskEvent::CleanupFinished { .. }))
++        );
++        ensure!(
++            !events
++                .iter()
++                .any(|event| matches!(event, TaskEvent::ReceiptCreated { .. }))
++        );
++        ensure!(
++            !events
++                .iter()
++                .any(|event| matches!(event, TaskEvent::ResourcesReleased { .. }))
++        );
+         Ok(())
+     }
+ 
+@@ -787,7 +807,11 @@ mod tests {
+         let focused = focused_task("proof-command-unconfirmed");
+         let command_task = ProofCommandTask::focused_test(&focused, "head", 7);
+         let spec = ProofCommandSpec {
+-            argv: vec!["cargo".to_owned(), "test".to_owned(), "focused_case".to_owned()],
++            argv: vec![
++                "cargo".to_owned(),
++                "test".to_owned(),
++                "focused_case".to_owned(),
++            ],
+             env: BTreeMap::new(),
+         };
+         let lease = granted_lease("lease-proof-command-unconfirmed");
+@@ -821,7 +845,11 @@ mod tests {
+             .filter(|input| input.task_id == task_id)
+             .map(|input| input.event)
+             .collect::<Vec<_>>();
+-        ensure!(events.iter().any(|event| matches!(event, TaskEvent::RunStarted { .. })));
++        ensure!(
++            events
++                .iter()
++                .any(|event| matches!(event, TaskEvent::RunStarted { .. }))
++        );
+         for event in &events {
+             ensure!(!matches!(
+                 event,
+@@ -874,10 +902,21 @@ mod tests {
+             .filter(|input| input.task_id == task_id)
+             .map(|input| input.event)
+             .collect::<Vec<_>>();
+-        ensure!(events.iter().any(|event| matches!(event, TaskEvent::SetupFailed { .. })));
+-        ensure!(!events.iter().any(|event| matches!(event, TaskEvent::RunStarted { .. })));
+-        ensure!(!events.iter().any(|event| matches!(event, TaskEvent::ProcessFinished { .. })));
++        ensure!(
++            events
++                .iter()
++                .any(|event| matches!(event, TaskEvent::SetupFailed { .. }))
++        );
++        ensure!(
++            !events
++                .iter()
++                .any(|event| matches!(event, TaskEvent::RunStarted { .. }))
++        );
++        ensure!(
++            !events
++                .iter()
++                .any(|event| matches!(event, TaskEvent::ProcessFinished { .. }))
++        );
+         Ok(())
+     }
+-
+ }
+diff --git a/src/proof/red_green.rs b/src/proof/red_green.rs
+index dd12bf0..e373edc 100644
+--- a/src/proof/red_green.rs
++++ b/src/proof/red_green.rs
+@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
+ 
+ use anyhow::Result;
+ 
++use crate::task_ledger::TaskNonExecutionDisposition;
+ use crate::*;
+ 
+ #[expect(
+@@ -348,8 +349,9 @@ where
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+-    use anyhow::{Context as _, ensure};
++    use crate::task_ledger::TaskEvent;
+     use crate::tests::{run_test_command, test_diff, test_run_args};
++    use anyhow::ensure;
+     use std::fs;
+     use std::time::Instant;
+ 
+@@ -611,5 +613,4 @@ mod tests {
+         }));
+         Ok(())
+     }
+-
+ }
+diff --git a/src/proof_task_ledger.rs b/src/proof_task_ledger.rs
+index 8892af3..ac0c868 100644
+--- a/src/proof_task_ledger.rs
++++ b/src/proof_task_ledger.rs
+@@ -157,9 +157,7 @@ impl ProofTaskLedger {
+             TaskEvent::Proposed {
+                 revision: self.recorder.revision().clone(),
+                 source: task.source(),
+-                limits: TaskExecutionLimits::new(
+-                    task.timeout_sec.max(1).saturating_mul(1_000),
+-                )?,
++                limits: TaskExecutionLimits::new(task.timeout_sec.max(1).saturating_mul(1_000))?,
+             },
+         )];
+         for consumer in task.consumers()? {
+@@ -196,9 +194,7 @@ impl ProofTaskLedger {
+             TaskEvent::Proposed {
+                 revision: self.recorder.revision().clone(),
+                 source: task.source(),
+-                limits: TaskExecutionLimits::new(
+-                    task.timeout_sec.max(1).saturating_mul(1_000),
+-                )?,
++                limits: TaskExecutionLimits::new(task.timeout_sec.max(1).saturating_mul(1_000))?,
