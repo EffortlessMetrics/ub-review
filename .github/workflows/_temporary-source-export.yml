@@ -18,16 +18,19 @@ jobs:
       - id: detect
         shell: bash
         run: |
-          if [[ -f .github/ub-review-proof-adapter.patch ]]; then
+          shopt -s nullglob
+          chunks=(.github/ub-review-proof-adapter.patch.*)
+          if [[ -f .github/ub-review-proof-adapter.patch.08 && ${#chunks[@]} -eq 9 ]]; then
             echo 'apply=true' >> "$GITHUB_OUTPUT"
           fi
       - if: steps.detect.outputs.apply == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s  %s\n' '56c353c0f0947cd9c9e119db02da5faa4fa7e2def14a5a08daee571077252bf8' .github/ub-review-proof-adapter.patch | sha256sum --check --strict
-          git apply --index .github/ub-review-proof-adapter.patch
-          git rm .github/ub-review-proof-adapter.patch
+          cat .github/ub-review-proof-adapter.patch.* > /tmp/ub-review-proof-adapter.patch
+          printf '%s  %s\n' '56c353c0f0947cd9c9e119db02da5faa4fa7e2def14a5a08daee571077252bf8' /tmp/ub-review-proof-adapter.patch | sha256sum --check --strict
+          git apply --index /tmp/ub-review-proof-adapter.patch
+          git rm .github/ub-review-proof-adapter.patch.*
           git rm .github/workflows/_temporary-source-export.yml
           printf '%s\n' 'proof adapter applied from 56c353c0f0947cd9c9e119db02da5faa4fa7e2def14a5a08daee571077252bf8' > .github/proof-adapter-applied
           git add .github/proof-adapter-applied
