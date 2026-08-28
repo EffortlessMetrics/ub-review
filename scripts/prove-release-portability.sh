@@ -91,10 +91,9 @@ if [[ "$actual_sha" != "$RELEASE_SHA256" ]]; then
   echo "release asset digest mismatch: expected $RELEASE_SHA256, got $actual_sha" >&2
   exit 1
 fi
-(
-  cd /work/download
-  sha256sum --check "${RELEASE_ASSET}.sha256"
-) > /receipt/checksum-verification.txt
+cp "$checksum" /receipt/published-checksum.txt
+printf '%s  %s\n' "$remote_sha" "$archive" \
+  | sha256sum --check - > /receipt/checksum-verification.txt
 
 python3 - "$archive" /receipt/archive-layout.json <<'PY'
 import json
