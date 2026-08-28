@@ -132,8 +132,9 @@ task_ledger_events.ndjson          ub-review.task_ledger_event.v1 lines
 review/task_ledger_snapshot.json   ub-review.task_ledger_snapshot.v1
 ```
 
-`run` emits both after the late sensor phase joins. Every resolved sensor has
-one proposal. Runnable fast and late sensors record queued, admitted, setup,
+`run` emits both after the late sensor phase joins when the resolved plan has
+at least one sensor; a legitimately empty sensor plan omits the optional pair.
+Every resolved sensor has one proposal. Runnable fast and late sensors record queued, admitted, setup,
 process, receipt-attempt, and release events around the unchanged runner;
 skipped and dry-run sensors terminate without fabricated process timing.
 Sensor phase remains scheduling metadata in the linked sensor status receipt,

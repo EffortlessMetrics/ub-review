@@ -162,6 +162,9 @@ impl SensorTaskLedger {
             .lock()
             .map_err(|_| anyhow::anyhow!("sensor task-ledger mutex poisoned"))?
             .clone();
+        if inputs.is_empty() {
+            return Ok(());
+        }
         write_task_ledger_artifacts(out, &self.inner.revision, &inputs)
     }
 
@@ -367,6 +370,24 @@ mod tests {
                 })
         );
         ensure!(timeout_task["resources_released"] == true);
+        Ok(())
+    }
+
+    #[test]
+    fn empty_sensor_plan_omits_the_optional_artifact_pair() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let plan = test_plan(Vec::new());
+        let ledger = SensorTaskLedger::initialize(&revision(), &plan, false, &Instant::now())?;
+
+        ledger.write_artifacts(temp.path())?;
+
+        ensure!(!temp.path().join("task_ledger_events.ndjson").exists());
+        ensure!(
+            !temp
+                .path()
+                .join("review/task_ledger_snapshot.json")
+                .exists()
+        );
         Ok(())
     }
 }
