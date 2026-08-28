@@ -223,10 +223,10 @@ fn sensor_task_id(sensor: &SensorPlan) -> Result<TaskId> {
 }
 
 fn sensor_timeout_ms(sensor: &SensorPlan) -> Result<u64> {
-    let subprocess_count = if sensor.id == "tokmd" {
-        TOKMD_MAX_SUBPROCESS_COUNT
-    } else {
-        1
+    let subprocess_count = match sensor.id.as_str() {
+        "tokmd" => TOKMD_MAX_SUBPROCESS_COUNT,
+        "ripr" => 2,
+        _ => 1,
     };
     sensor
         .timeout_sec
@@ -449,6 +449,25 @@ mod tests {
         let snapshot = read_snapshot(temp.path())?;
         let task = snapshot_task(&snapshot, "sensor-tokmd")?;
         ensure!(task.pointer("/limits/timeout_ceiling_ms") == Some(&serde_json::json!(42_000)));
+        Ok(())
+    }
+
+    #[test]
+    fn ripr_reserves_primary_and_detail_subprocess_timeout_ceilings() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let revision = revision();
+        let mut ripr = sensor_plan("ripr", "ripr", false);
+        ripr.timeout_sec = 7;
+        ripr.reason = "fixture does not execute ripr".to_owned();
+        let plan = test_plan(vec![ripr]);
+        let ledger = SensorTaskLedger::initialize(&revision, &plan, false, &Instant::now())?;
+
+        ledger.write_artifacts(temp.path())?;
+
+        let snapshot = read_snapshot(temp.path())?;
+        let task = snapshot_task(&snapshot, "sensor-ripr")?;
+
+        ensure!(task.pointer("/limits/timeout_ceiling_ms") == Some(&serde_json::json!(14_000)));
         Ok(())
     }
 }

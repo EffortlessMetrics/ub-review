@@ -244,6 +244,7 @@ pub(crate) fn run_command_to_files(
 }
 
 /// Run a sensor subprocess with the deny-by-default environment contract.
+#[cfg(test)]
 pub(crate) fn run_sensor_command_to_files(
     root: &Path,
     argv: &[String],
@@ -369,9 +370,7 @@ fn run_command_to_files_inner_with_wait(
             });
         }
         Err(wait_error) => {
-            terminate_and_reap_child(&mut child, observe_process)
-                .context("terminate child after wait-timeout failure")?;
-            return Err(wait_error).context("wait for child process");
+            return reconcile_wait_failure(&mut child, observe_process, wait_error);
         }
     };
     Ok(CommandStatus {
@@ -385,6 +384,19 @@ fn run_command_to_files_inner_with_wait(
         },
         duration_ms: started.elapsed().as_millis(),
     })
+}
+
+fn reconcile_wait_failure(
+    child: &mut impl TerminateAndReap,
+    observe_process: &mut dyn FnMut(CommandProcessObservation),
+    wait_error: io::Error,
+) -> Result<CommandStatus> {
+    match terminate_and_reap_child(child, observe_process) {
+        Ok(()) => Err(wait_error).context("wait for child process"),
+        Err(cleanup_error) => Err(cleanup_error).context(format!(
+            "terminate child after wait-timeout failure; original wait error: {wait_error}"
+        )),
+    }
 }
 
 trait TerminateAndReap {
@@ -406,11 +418,15 @@ fn terminate_and_reap_child(
     child: &mut impl TerminateAndReap,
     observe_process: &mut dyn FnMut(CommandProcessObservation),
 ) -> Result<()> {
+    const MAX_INTERRUPTED_REAP_ATTEMPTS: usize = 16;
     let kill_error = child.kill_process().err();
-    loop {
+    let mut interrupted_attempts = 0_usize;
+    while interrupted_attempts < MAX_INTERRUPTED_REAP_ATTEMPTS {
         match child.reap_process() {
-            Ok(()) => break,
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Ok(()) => return Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {
+                interrupted_attempts += 1;
+            }
             Err(wait_error) => {
                 observe_process(CommandProcessObservation::CompletionUnconfirmed);
                 let kill_detail = kill_error.map_or_else(
@@ -423,7 +439,14 @@ fn terminate_and_reap_child(
             }
         }
     }
-    Ok(())
+    observe_process(CommandProcessObservation::CompletionUnconfirmed);
+    let kill_detail = kill_error.map_or_else(
+        || "kill request succeeded".to_owned(),
+        |error| format!("kill request failed: {error}"),
+    );
+    bail!(
+        "child completion remains unconfirmed ({kill_detail}; reap interrupted {MAX_INTERRUPTED_REAP_ATTEMPTS} consecutive times)"
+    )
 }
 
 /// Keep only the non-secret execution metadata needed by sensor tools.
@@ -641,7 +664,7 @@ pub(crate) fn render_claim_prompt(diff: &DiffContext) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        CommandProcessObservation, CommandRun, TerminateAndReap,
+        CommandProcessObservation, CommandRun, TerminateAndReap, reconcile_wait_failure,
         run_command_to_files_inner_with_wait, run_sensor_command_to_files,
         terminate_and_reap_child,
     };
@@ -718,6 +741,51 @@ mod tests {
 
         ensure!(child.calls == ["kill", "wait", "wait", "wait"]);
         ensure!(observations.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn child_cleanup_bounds_persistent_interrupted_reaps() -> Result<()> {
+        let mut child = FakeChild {
+            kill_fails: false,
+            reap_errors: VecDeque::from([io::ErrorKind::Interrupted; 16]),
+            calls: Vec::new(),
+        };
+        let mut observations = Vec::new();
+
+        let result = terminate_and_reap_child(&mut child, &mut |event| observations.push(event));
+
+        let error = result
+            .err()
+            .context("persistent interrupts must fail closed")?;
+        ensure!(format!("{error:#}").contains("reap interrupted 16 consecutive times"));
+        ensure!(child.calls.len() == 17);
+        ensure!(child.calls.first() == Some(&"kill"));
+        ensure!(child.calls.iter().skip(1).all(|call| *call == "wait"));
+        ensure!(observations == [CommandProcessObservation::CompletionUnconfirmed]);
+        Ok(())
+    }
+
+    #[test]
+    fn wait_cleanup_failure_preserves_wait_and_reap_errors() -> Result<()> {
+        let mut child = FakeChild {
+            kill_fails: false,
+            reap_errors: VecDeque::from([io::ErrorKind::Other]),
+            calls: Vec::new(),
+        };
+        let mut observations = Vec::new();
+
+        let result = reconcile_wait_failure(
+            &mut child,
+            &mut |event| observations.push(event),
+            io::Error::other("injected wait_timeout failure"),
+        );
+
+        let error = result.err().context("cleanup failure must propagate")?;
+        let diagnostic = format!("{error:#}");
+        ensure!(diagnostic.contains("injected wait_timeout failure"));
+        ensure!(diagnostic.contains("injected wait failure"));
+        ensure!(observations == [CommandProcessObservation::CompletionUnconfirmed]);
         Ok(())
     }
 

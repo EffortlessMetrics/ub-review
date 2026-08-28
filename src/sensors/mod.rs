@@ -618,25 +618,47 @@ fn run_sensor_attempt(
     match result {
         Ok(result) => {
             let (status, reason) = classify_sensor_command_result(&sensor.id, &result);
-            if process_spawned && !process_completion_unconfirmed {
-                observe_process(SensorProcessObservation::Finished(
-                    sensor_process_disposition(status),
-                ));
-            }
             // ripr emits its badge-json receipt on stdout; the verbatim bytes
             // become the gate-decision receipt so the threshold evaluates
             // against exactly what the tool shipped (#316). Copy only on ok:
             // a failed or timed-out sensor must stay missing evidence, never
             // a half-written receipt.
             if sensor.id == "ripr" && status == "ok" {
-                fs::copy(&stdout_path, dir.join("gate-decision.json"))
-                    .with_context(|| format!("copy {} gate receipt", sensor.id))?;
+                if let Err(error) = fs::copy(&stdout_path, dir.join("gate-decision.json")) {
+                    if process_spawned && !process_completion_unconfirmed {
+                        observe_process(SensorProcessObservation::Finished(
+                            sensor_process_disposition(status),
+                        ));
+                    }
+                    return Err(error).with_context(|| format!("copy {} gate receipt", sensor.id));
+                }
                 // #347: badge-json carries counts only, so a tool-gate red
                 // was not diagnosable from artifacts. A second bounded ripr
                 // pass persists per-finding exposure-gap detail; its failure
                 // never changes the sensor status - the threshold input
                 // stays the verbatim badge receipt above.
-                write_ripr_exposure_gap_details(root, &dir, &sensor.command, sensor.timeout_sec);
+                let mut observe_detail_process = |observation| match observation {
+                    CommandProcessObservation::Spawned => {
+                        process_spawned = true;
+                        observe_process(SensorProcessObservation::Spawned);
+                    }
+                    CommandProcessObservation::CompletionUnconfirmed => {
+                        process_completion_unconfirmed = true;
+                        observe_process(SensorProcessObservation::CompletionUnconfirmed);
+                    }
+                };
+                write_ripr_exposure_gap_details(
+                    root,
+                    &dir,
+                    &sensor.command,
+                    sensor.timeout_sec,
+                    &mut observe_detail_process,
+                )?;
+            }
+            if process_spawned && !process_completion_unconfirmed {
+                observe_process(SensorProcessObservation::Finished(
+                    sensor_process_disposition(status),
+                ));
             }
             write_sensor_status(
                 out,
@@ -1728,7 +1750,7 @@ mod tests {
     }
 
     #[test]
-    fn process_finish_observation_precedes_ripr_receipt_post_processing() -> Result<()> {
+    fn process_finish_observation_follows_ripr_detail_and_precedes_sensor_status() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let root = temp.path().join("repo");
         let out = temp.path().join("out");
@@ -1746,7 +1768,8 @@ mod tests {
         let plan = test_plan(vec![sensor.clone()]);
         let sensor_dir = out.join("sensors/ripr");
         let mut observations = Vec::new();
-        let mut receipt_absent_at_finish = false;
+        let mut detail_ready_at_finish = false;
+        let mut status_absent_at_finish = false;
         let mut disposition = None;
         let mut observe_process = |observation| match observation {
             super::SensorProcessObservation::AttemptPrepared => {}
@@ -1754,8 +1777,9 @@ mod tests {
             super::SensorProcessObservation::Finished(observed) => {
                 observations.push("finished");
                 disposition = Some(observed);
-                receipt_absent_at_finish = !sensor_dir.join("gate-decision.json").exists()
-                    && !sensor_dir.join("ub-review-sensor-status.json").exists();
+                detail_ready_at_finish = sensor_dir.join("gate-decision.json").is_file()
+                    && sensor_dir.join("exposure-gaps.json").is_file();
+                status_absent_at_finish = !sensor_dir.join("ub-review-sensor-status.json").exists();
             }
             super::SensorProcessObservation::CompletionUnconfirmed => {
                 observations.push("completion-unconfirmed");
@@ -1772,9 +1796,10 @@ mod tests {
             &mut observe_process,
         )?;
 
-        ensure!(observations == ["spawned", "finished"]);
+        ensure!(observations == ["spawned", "spawned", "finished"]);
         ensure!(disposition == Some(TaskTerminalDisposition::Succeeded));
-        ensure!(receipt_absent_at_finish);
+        ensure!(detail_ready_at_finish);
+        ensure!(status_absent_at_finish);
         ensure!(sensor_dir.join("gate-decision.json").is_file());
         ensure!(sensor_dir.join("ub-review-sensor-status.json").is_file());
         Ok(())
@@ -2629,10 +2654,13 @@ esac
                 .is_some_and(serde_json::Value::is_null)
         );
         let events = fs::read_to_string(out.join("task_ledger_events.ndjson"))?;
-        ensure!(!events.contains("\"ProcessStarted\""));
+        ensure!(!events.contains("\"RunStarted\""));
         ensure!(!events.contains("\"CleanupFinished\""));
         ensure!(!events.contains("\"ReceiptCreated\""));
         ensure!(!events.contains("\"Succeeded\""));
+        ensure!(events.contains("\"SetupFailed\""));
+        ensure!(events.contains("\"ReceiptCreationFailed\""));
+        ensure!(events.contains("\"ResourcesReleased\""));
         Ok(())
     }
 

@@ -174,7 +174,47 @@ pub(crate) fn write_ripr_exposure_gap_details(
     dir: &Path,
     command: &str,
     timeout_sec: u64,
-) {
+    observe_process: &mut dyn FnMut(CommandProcessObservation),
+) -> Result<()> {
+    write_ripr_exposure_gap_details_with_runner(
+        root,
+        dir,
+        command,
+        timeout_sec,
+        observe_process,
+        &mut |root, argv, env, timeout_sec, stdout_path, stderr_path, observer| {
+            run_sensor_command_to_files_with_spawn_observer(
+                root,
+                argv,
+                env,
+                timeout_sec,
+                stdout_path,
+                stderr_path,
+                observer,
+            )
+        },
+    )
+}
+
+type RiprCommandRunner<'a> = dyn FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+        &mut dyn FnMut(CommandProcessObservation),
+    ) -> Result<CommandStatus>
+    + 'a;
+
+fn write_ripr_exposure_gap_details_with_runner(
+    root: &Path,
+    dir: &Path,
+    command: &str,
+    timeout_sec: u64,
+    observe_process: &mut dyn FnMut(CommandProcessObservation),
+    run_command: &mut RiprCommandRunner<'_>,
+) -> Result<()> {
     let artifact_path = dir.join("exposure-gaps.json");
     let raw_stdout_path = dir.join("exposure-gaps.ripr.stdout");
     let raw_stderr_path = dir.join("exposure-gaps.ripr.stderr");
@@ -196,14 +236,22 @@ pub(crate) fn write_ripr_exposure_gap_details(
         "--format".to_owned(),
         "json".to_owned(),
     ];
-    let detail = (|| -> Result<serde_json::Value> {
-        let result = run_sensor_command_to_files(
+    let mut completion_unconfirmed = false;
+    let detail_result = (|| -> Result<serde_json::Value> {
+        let mut observe_detail_process = |observation| {
+            if observation == CommandProcessObservation::CompletionUnconfirmed {
+                completion_unconfirmed = true;
+            }
+            observe_process(observation);
+        };
+        let result = run_command(
             root,
             &argv,
             &BTreeMap::new(),
             timeout_sec,
             &stdout_path,
             &stderr_path,
+            &mut observe_detail_process,
         )?;
         let stdout = fs::read(&stdout_path).with_context(|| "read detail stdout")?;
         fs::write(&raw_stdout_path, &stdout).with_context(|| "write raw detail stdout")?;
@@ -223,8 +271,16 @@ pub(crate) fn write_ripr_exposure_gap_details(
         let value: serde_json::Value =
             serde_json::from_slice(&stdout).with_context(|| "parse ripr --format json output")?;
         ripr_exposure_gap_details_from_value(&value)
-    })()
-    .unwrap_or_else(|err| {
+    })();
+    if completion_unconfirmed {
+        let _ = fs::remove_file(&stdout_path);
+        let _ = fs::remove_file(&stderr_path);
+        return Err(detail_result
+            .err()
+            .unwrap_or_else(|| anyhow::anyhow!("ripr detail completion remains unconfirmed")))
+        .context("ripr detail subprocess completion remains unconfirmed");
+    }
+    let detail = detail_result.unwrap_or_else(|err| {
         serde_json::json!({
             "schema": RIPR_EXPOSURE_GAPS_V3_SCHEMA,
             "status": "detail_unavailable",
@@ -249,11 +305,17 @@ pub(crate) fn write_ripr_exposure_gap_details(
             eprintln!("ripr exposure-gap detail serialize failed (tolerated): {err:#}");
         }
     }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use anyhow::{Context as _, Result};
+    use std::collections::BTreeMap;
+    use std::path::Path;
+
+    use anyhow::{Context as _, Result, ensure};
+
+    use crate::{CommandProcessObservation, CommandStatus};
 
     #[test]
     fn ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable() -> Result<()> {
@@ -269,7 +331,8 @@ mod tests {
             &dir,
             "ub-review-test-missing-ripr",
             30,
-        );
+            &mut |_| {},
+        )?;
         let detail: serde_json::Value =
             serde_json::from_slice(&std::fs::read(dir.join("exposure-gaps.json"))?)?;
         assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v3");
@@ -284,6 +347,49 @@ mod tests {
         assert!(detail.get("entries").is_none());
         assert!(!dir.join("exposure-gaps.stdout.tmp").exists());
         assert!(!dir.join("exposure-gaps.stderr.tmp").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn ripr_detail_unconfirmed_completion_propagates_to_the_sensor() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let dir = temp.path().join("sensors/ripr");
+        std::fs::create_dir_all(&dir)?;
+        let mut observations = Vec::new();
+        let mut run_command = |_root: &Path,
+                               _argv: &[String],
+                               _env: &BTreeMap<String, String>,
+                               _timeout_sec: u64,
+                               _stdout_path: &Path,
+                               _stderr_path: &Path,
+                               observe_process: &mut dyn FnMut(CommandProcessObservation)|
+         -> Result<CommandStatus> {
+            observe_process(CommandProcessObservation::Spawned);
+            observe_process(CommandProcessObservation::CompletionUnconfirmed);
+            Err(anyhow::anyhow!("injected unconfirmed detail completion"))
+        };
+
+        let result = super::write_ripr_exposure_gap_details_with_runner(
+            temp.path(),
+            &dir,
+            "ripr",
+            30,
+            &mut |event| observations.push(event),
+            &mut run_command,
+        );
+
+        let error = result
+            .err()
+            .context("unconfirmed detail completion must propagate")?;
+        ensure!(format!("{error:#}").contains("injected unconfirmed detail completion"));
+        ensure!(
+            observations
+                == [
+                    CommandProcessObservation::Spawned,
+                    CommandProcessObservation::CompletionUnconfirmed,
+                ]
+        );
+        ensure!(!dir.join("exposure-gaps.json").exists());
         Ok(())
     }
 
