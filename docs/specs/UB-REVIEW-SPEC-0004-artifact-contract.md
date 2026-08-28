@@ -140,6 +140,9 @@ either final publish fails, so a failed run does not leave a mixed pair.
 Every resolved sensor has one proposal. Runnable fast and late sensors record queued, admitted, setup,
 process, receipt-attempt, and release events around the unchanged runner;
 skipped and dry-run sensors terminate without fabricated process timing.
+Process completion is observed when the child or aggregate subprocess set
+returns, before sensor post-processing and status-receipt publication; cleanup,
+receipt validation, and resource release are recorded afterward in that order.
 Each attempt removes its prior sensor-status receipt before execution, so its
 terminal state can only derive from the current attempt. A tokmd proposal uses
 the aggregate ceiling for its version preflight, four required report commands,

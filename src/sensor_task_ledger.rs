@@ -137,13 +137,12 @@ impl SensorTaskLedger {
         self.append(events)
     }
 
-    /// Terminalize a process outcome. Cleanup, receipt attempt, and resource
-    /// release stay explicit even when the sensor failed or timed out.
-    pub(crate) fn execution_finished(
+    /// Observe the process boundary before sensor post-processing and receipt
+    /// publication begin.
+    pub(crate) fn process_finished(
         &self,
         sensor: &SensorPlan,
         disposition: TaskTerminalDisposition,
-        receipt_created: bool,
     ) -> Result<()> {
         ensure!(
             disposition != TaskTerminalDisposition::SetupFailed,
@@ -151,11 +150,32 @@ impl SensorTaskLedger {
         );
         let task_id = sensor_task_id(sensor)?;
         let at = self.now()?;
+        self.append([input(
+            &task_id,
+            TaskEvent::ProcessFinished { at, disposition },
+        )])
+    }
+
+    /// Observe sensor post-processing completion before receipt validation.
+    pub(crate) fn cleanup_finished(&self, sensor: &SensorPlan) -> Result<()> {
+        let task_id = sensor_task_id(sensor)?;
+        let at = self.now()?;
+        self.append([input(&task_id, TaskEvent::CleanupFinished { at })])
+    }
+
+    /// Record the current-attempt receipt result, then release the existing
+    /// worker reservation.
+    pub(crate) fn receipt_recorded_and_resources_released(
+        &self,
+        sensor: &SensorPlan,
+        receipt_created: bool,
+    ) -> Result<()> {
+        let task_id = sensor_task_id(sensor)?;
+        let receipt_at = self.now()?;
+        let released_at = self.now()?;
         self.append([
-            input(&task_id, TaskEvent::ProcessFinished { at, disposition }),
-            input(&task_id, TaskEvent::CleanupFinished { at }),
-            receipt_event(sensor, at, receipt_created)?,
-            input(&task_id, TaskEvent::ResourcesReleased { at }),
+            receipt_event(sensor, receipt_at, receipt_created)?,
+            input(&task_id, TaskEvent::ResourcesReleased { at: released_at }),
         ])
     }
 
@@ -323,7 +343,9 @@ mod tests {
 
         ledger.setup_started(&runnable)?;
         ledger.run_started(&runnable)?;
-        ledger.execution_finished(&runnable, TaskTerminalDisposition::Succeeded, true)?;
+        ledger.process_finished(&runnable, TaskTerminalDisposition::Succeeded)?;
+        ledger.cleanup_finished(&runnable)?;
+        ledger.receipt_recorded_and_resources_released(&runnable, true)?;
         ledger.write_artifacts(temp.path())?;
 
         ensure!(temp.path().join("task_ledger_events.ndjson").is_file());
@@ -371,7 +393,9 @@ mod tests {
         ledger.setup_failed(&missing, true)?;
         ledger.setup_started(&timed_out)?;
         ledger.run_started(&timed_out)?;
-        ledger.execution_finished(&timed_out, TaskTerminalDisposition::TimedOut, false)?;
+        ledger.process_finished(&timed_out, TaskTerminalDisposition::TimedOut)?;
+        ledger.cleanup_finished(&timed_out)?;
+        ledger.receipt_recorded_and_resources_released(&timed_out, false)?;
         ledger.write_artifacts(temp.path())?;
 
         let snapshot = read_snapshot(temp.path())?;
