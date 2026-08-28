@@ -6,6 +6,7 @@
 
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+use std::{fs, io};
 
 use anyhow::{Context, Result, ensure};
 
@@ -163,7 +164,11 @@ impl SensorTaskLedger {
             .map_err(|_| anyhow::anyhow!("sensor task-ledger mutex poisoned"))?
             .clone();
         if inputs.is_empty() {
-            return Ok(());
+            let events_result = remove_optional_artifact(&out.join("task_ledger_events.ndjson"));
+            let snapshot_result =
+                remove_optional_artifact(&out.join("review/task_ledger_snapshot.json"));
+            events_result?;
+            return snapshot_result;
         }
         write_task_ledger_artifacts(out, &self.inner.revision, &inputs)
     }
@@ -181,6 +186,14 @@ impl SensorTaskLedger {
             .map_err(|_| anyhow::anyhow!("sensor task-ledger mutex poisoned"))?
             .extend(events);
         Ok(())
+    }
+}
+
+fn remove_optional_artifact(path: &std::path::Path) -> Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| format!("remove stale {}", path.display())),
     }
 }
 
@@ -378,6 +391,12 @@ mod tests {
         let temp = tempfile::tempdir()?;
         let plan = test_plan(Vec::new());
         let ledger = SensorTaskLedger::initialize(&revision(), &plan, false, &Instant::now())?;
+        fs::create_dir_all(temp.path().join("review"))?;
+        fs::write(temp.path().join("task_ledger_events.ndjson"), b"stale\n")?;
+        fs::write(
+            temp.path().join("review/task_ledger_snapshot.json"),
+            b"stale\n",
+        )?;
 
         ledger.write_artifacts(temp.path())?;
 

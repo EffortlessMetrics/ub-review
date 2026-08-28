@@ -134,6 +134,7 @@ review/task_ledger_snapshot.json   ub-review.task_ledger_snapshot.v1
 
 `run` emits both after the late sensor phase joins when the resolved plan has
 at least one sensor; a legitimately empty sensor plan omits the optional pair.
+Empty-plan runs remove a stale pair from a reused output directory.
 Every resolved sensor has one proposal. Runnable fast and late sensors record queued, admitted, setup,
 process, receipt-attempt, and release events around the unchanged runner;
 skipped and dry-run sensors terminate without fabricated process timing.
