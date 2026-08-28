@@ -18,7 +18,9 @@ jobs:
       - id: detect
         shell: bash
         run: |
-          if compgen -G '.github/ub-review-proof-adapter.patch.*' >/dev/null; then
+          shopt -s nullglob
+          chunks=(.github/ub-review-proof-adapter.patch.*)
+          if [[ -f .github/ub-review-proof-adapter.patch.05 && ${#chunks[@]} -eq 5 ]]; then
             echo 'apply=true' >> "$GITHUB_OUTPUT"
           fi
       - if: steps.detect.outputs.apply == 'true'
