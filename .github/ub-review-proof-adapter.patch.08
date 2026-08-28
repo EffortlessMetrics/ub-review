@@ -1,0 +1,153 @@
+                 max_total_seconds: 600,
+             },
+             vec![cargo_test_task()],
+-            |root, _argv, _env, _timeout, stdout, stderr| {
++            None,
++            |root, _argv, _env, _timeout, stdout, stderr, _observe_process| {
+                 // Stand in for `cargo test classifies_boundary`: the new test
+                 // only passes where the production fix is present.
+                 let source = fs::read_to_string(root.join("src/lib.rs"))?;
+@@ -476,7 +518,8 @@ mod tests {
+                 max_total_seconds: 600,
+             },
+             vec![cargo_test_task()],
+-            |_root, _argv, _env, _timeout, stdout, stderr| {
++            None,
++            |_root, _argv, _env, _timeout, stdout, stderr, _observe_process| {
+                 fs::write(stdout, b"ok\n")?;
+                 fs::write(stderr, b"")?;
+                 Ok(CommandStatus {
+@@ -501,4 +544,72 @@ mod tests {
+         );
+         Ok(())
+     }
++
++    #[test]
++    fn unconfirmed_head_completion_prevents_base_plus_tests_launch() -> Result<()> {
++        let temp = tempfile::tempdir()?;
++        let out = temp.path().join("out");
++        let diff = test_diff();
++        let task = cargo_test_task();
++        let revision = RevisionRef {
++            digest: "a".repeat(64),
++            semantics: "candidate_head".to_owned(),
++            reviewed_commit: "b".repeat(40),
++        };
++        let recorder = TaskLedgerRecorder::new(&revision, &Instant::now())?;
++        let ledger = ProofTaskLedger::new(recorder.clone());
++        let lease = ResourceLease {
++            revision: None,
++            schema: RESOURCE_LEASE_SCHEMA.to_owned(),
++            id: format!("lease-{}", task.id),
++            kind: "focused-test".to_owned(),
++            consumer: task.id.clone(),
++            status: "granted".to_owned(),
++            reason: "fixture lease".to_owned(),
++            cpu: 1,
++            memory_mb: 512,
++            disk_mb: 64,
++            timeout_sec: 60,
++            network: false,
++            scratch: false,
++            worktree: Some("fixture-worktree".to_owned()),
++            command: None,
++        };
++        let mut command_calls = 0_usize;
++        let mut prepare_called = false;
++
++        let error = run_focused_red_green_proof_task(
++            temp.path(),
++            &out,
++            &diff,
++            &task,
++            60,
++            &lease,
++            Some(&ledger),
++            &mut |_root, _argv, _env, _timeout, _stdout, _stderr, observe_process| {
++                command_calls += 1;
++                observe_process(CommandProcessObservation::Spawned);
++                observe_process(CommandProcessObservation::CompletionUnconfirmed);
++                Err(anyhow::anyhow!("injected unconfirmed head cleanup"))
++            },
++            &mut |_root, _out, _diff| {
++                prepare_called = true;
++                Ok(temp.path().join("base-plus-tests"))
++            },
++        )
++        .err()
++        .context("unconfirmed head must fail the proof task")?;
++
++        ensure!(format!("{error:#}").contains("completion remains unconfirmed"));
++        ensure!(command_calls == 1);
++        ensure!(!prepare_called);
++        let inputs = recorder.inputs()?;
++        ensure!(!inputs.iter().any(|input| {
++            input.task_id.as_str().contains("base-plus-tests")
++                || matches!(input.event, TaskEvent::ProcessFinished { .. })
++                || matches!(input.event, TaskEvent::ResourcesReleased { .. })
++        }));
++        Ok(())
++    }
++
+ }
+diff --git a/src/sensor_task_ledger.rs b/src/sensor_task_ledger.rs
+index a592c7d..aae666c 100644
+--- a/src/sensor_task_ledger.rs
++++ b/src/sensor_task_ledger.rs
+@@ -54,6 +54,11 @@ impl TaskLedgerRecorder {
+         })
+     }
+ 
++    /// Return the immutable revision admitted for every adapter sharing this recorder.
++    pub(crate) fn revision(&self) -> &RevisionRef {
++        &self.inner.revision
++    }
++
+     pub(crate) fn now(&self) -> Result<MonotonicInstant> {
+         let elapsed = u64::try_from(self.inner.run_started.elapsed().as_millis())
+             .context("task-ledger recorder monotonic time exceeds u64")?;
+@@ -69,6 +74,14 @@ impl TaskLedgerRecorder {
+         Ok(())
+     }
+ 
++    /// Append one event without making adapters rebuild the input envelope.
++    pub(crate) fn append_event(&self, task_id: &TaskId, event: TaskEvent) -> Result<()> {
++        self.append([TaskLedgerInput {
++            task_id: task_id.clone(),
++            event,
++        }])
++    }
++
+     pub(crate) fn write_artifacts(&self, out: &std::path::Path) -> Result<()> {
+         let inputs = self
+             .inner
+@@ -81,6 +94,16 @@ impl TaskLedgerRecorder {
+         }
+         write_task_ledger_artifacts(out, &self.inner.revision, &inputs)
+     }
++
++    #[cfg(test)]
++    pub(crate) fn inputs(&self) -> Result<Vec<TaskLedgerInput>> {
++        Ok(self
++            .inner
++            .inputs
++            .lock()
++            .map_err(|_| anyhow::anyhow!("task-ledger recorder mutex poisoned"))?
++            .clone())
++    }
+ }
+ 
+ #[derive(Clone)]
+@@ -150,6 +173,12 @@ impl SensorTaskLedger {
+         Ok(ledger)
+     }
+ 
++    /// Return the run-owned recorder so another source adapter can append to
++    /// the exact same deterministic stream.
++    pub(crate) fn recorder(&self) -> TaskLedgerRecorder {
++        self.recorder.clone()
++    }
++
+     /// Observe the existing worker admitting a queued sensor and beginning
+     /// command setup. Resource rows mirror the current work-queue lease.
+     pub(crate) fn setup_started(&self, sensor: &SensorPlan) -> Result<()> {
