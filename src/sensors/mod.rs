@@ -322,7 +322,16 @@ pub(crate) fn run_sensor(
     plan: &Plan,
 ) -> Result<()> {
     let command_available = command_on_path(&sensor.command);
-    run_sensor_with_command_availability(root, out, sensor, event_log, plan, command_available)
+    let mut ignore_spawn = || {};
+    run_sensor_with_command_availability(
+        root,
+        out,
+        sensor,
+        event_log,
+        plan,
+        command_available,
+        &mut ignore_spawn,
+    )
 }
 
 fn run_sensor_with_task_ledger(
@@ -335,20 +344,52 @@ fn run_sensor_with_task_ledger(
 ) -> Result<()> {
     // Observation must never suppress the existing process attempt. Defer any
     // adapter error until after the runner and receipt path have completed.
-    let setup_observation = task_ledger.setup_started(sensor);
     let command_available = command_on_path(&sensor.command);
-    let run_observation = if command_available && setup_observation.is_ok() {
-        task_ledger.run_started(sensor)
-    } else {
-        Ok(())
+    run_sensor_with_task_ledger_and_command_availability(
+        root,
+        out,
+        sensor,
+        event_log,
+        plan,
+        task_ledger,
+        command_available,
+    )
+}
+
+fn run_sensor_with_task_ledger_and_command_availability(
+    root: &Path,
+    out: &Path,
+    sensor: &SensorPlan,
+    event_log: &EventLog,
+    plan: &Plan,
+    task_ledger: &SensorTaskLedger,
+    command_available: bool,
+) -> Result<()> {
+    let setup_observation = task_ledger.setup_started(sensor);
+    let mut process_started = false;
+    let mut run_observation = Ok(());
+    let mut observe_spawn = || {
+        if !process_started {
+            process_started = true;
+            if setup_observation.is_ok() {
+                run_observation = task_ledger.run_started(sensor);
+            }
+        }
     };
-    let run_result =
-        run_sensor_with_command_availability(root, out, sensor, event_log, plan, command_available);
+    let run_result = run_sensor_with_command_availability(
+        root,
+        out,
+        sensor,
+        event_log,
+        plan,
+        command_available,
+        &mut observe_spawn,
+    );
     let receipt_result = sensor_task_receipt_disposition(out, sensor, command_available);
     let receipt_created = receipt_result.is_ok();
     let terminal_observation = if setup_observation.is_err() || run_observation.is_err() {
         Ok(())
-    } else if command_available {
+    } else if process_started {
         let disposition = receipt_result
             .as_ref()
             .copied()
@@ -403,6 +444,7 @@ fn run_sensor_with_command_availability(
     event_log: &EventLog,
     plan: &Plan,
     command_available: bool,
+    on_spawn: &mut dyn FnMut(),
 ) -> Result<()> {
     let dir = out.join("sensors").join(&sensor.id);
     fs::create_dir_all(&dir)?;
@@ -431,17 +473,18 @@ fn run_sensor_with_command_availability(
         serde_json::json!({"sensor": sensor.id, "argv": argv}),
     )?;
     if sensor.id == "tokmd" {
-        return run_tokmd_sensor(root, out, &dir, sensor, event_log, plan, &argv);
+        return run_tokmd_sensor(root, out, sensor, event_log, plan, &argv, on_spawn);
     }
     let stdout_path = dir.join("stdout.txt");
     let stderr_path = dir.join("stderr.txt");
-    let result = run_sensor_command_to_files(
+    let result = run_sensor_command_to_files_with_spawn_observer(
         root,
         &argv,
         &BTreeMap::new(),
         sensor.timeout_sec,
         &stdout_path,
         &stderr_path,
+        on_spawn,
     );
     match result {
         Ok(result) => {
@@ -508,14 +551,15 @@ fn run_sensor_with_command_availability(
 pub(crate) fn run_tokmd_sensor(
     root: &Path,
     out: &Path,
-    dir: &Path,
     sensor: &SensorPlan,
     event_log: &EventLog,
     plan: &Plan,
     aggregate_argv: &[String],
+    on_spawn: &mut dyn FnMut(),
 ) -> Result<()> {
-    let mut commands = vec![build_tokmd_version_preflight_command(dir, sensor)];
-    commands.extend(build_tokmd_sensor_commands(root, dir, plan));
+    let dir = out.join("sensors").join(&sensor.id);
+    let mut commands = vec![build_tokmd_version_preflight_command(&dir, sensor)];
+    commands.extend(build_tokmd_sensor_commands(root, &dir, plan));
     fs::write(
         dir.join("commands.json"),
         serde_json::to_vec_pretty(&commands_json(&commands))?,
@@ -536,13 +580,14 @@ pub(crate) fn run_tokmd_sensor(
         "sensor_subcommand_started",
         serde_json::json!({"sensor": sensor.id, "label": preflight.label, "argv": preflight.argv}),
     )?;
-    match run_sensor_command_to_files(
+    match run_sensor_command_to_files_with_spawn_observer(
         root,
         &preflight.argv,
         &BTreeMap::new(),
         sensor.timeout_sec,
         &preflight.stdout_path,
         &preflight.stderr_path,
+        on_spawn,
     ) {
         Ok(result) => {
             append_tokmd_subcommand_receipts(
@@ -635,13 +680,14 @@ pub(crate) fn run_tokmd_sensor(
             "sensor_subcommand_started",
             serde_json::json!({"sensor": sensor.id, "label": command.label, "argv": command.argv}),
         )?;
-        let result = run_sensor_command_to_files(
+        let result = run_sensor_command_to_files_with_spawn_observer(
             root,
             &command.argv,
             &BTreeMap::new(),
             sensor.timeout_sec,
             &command.stdout_path,
             &command.stderr_path,
+            on_spawn,
         );
         match result {
             Ok(result) => {
@@ -1992,6 +2038,50 @@ esac
             }))?,
         )?;
         ensure!(super::sensor_task_receipt_disposition(&out, &sensor, true).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn sensor_spawn_setup_failure_records_no_process_timing() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("root");
+        let out = temp.path().join("out");
+        fs::create_dir_all(&root)?;
+        fs::create_dir_all(out.join("sensors/probe/stdout.txt"))?;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let sensor = sensor_plan("probe", "probe", true);
+        let plan = test_plan(vec![sensor.clone()]);
+        let revision = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+        let task_ledger = SensorTaskLedger::initialize(&revision, &plan, false, &Instant::now())?;
+
+        super::run_sensor_with_task_ledger_and_command_availability(
+            &root,
+            &out,
+            &sensor,
+            &event_log,
+            &plan,
+            &task_ledger,
+            true,
+        )?;
+        task_ledger.write_artifacts(&out)?;
+
+        let snapshot: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/task_ledger_snapshot.json"))?)?;
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/state/ResourcesReleased")
+                .and_then(serde_json::Value::as_str)
+                == Some("SetupFailed")
+        );
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/timing/process_started_at")
+                .is_some_and(serde_json::Value::is_null)
+        );
         Ok(())
     }
 

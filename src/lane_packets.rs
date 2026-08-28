@@ -228,6 +228,7 @@ pub(crate) fn run_command_to_files(
     stderr_path: &Path,
 ) -> Result<CommandStatus> {
     let ambient = BTreeMap::new();
+    let mut ignore_spawn = || {};
     run_command_to_files_inner(CommandRun {
         root,
         argv,
@@ -237,6 +238,7 @@ pub(crate) fn run_command_to_files(
         stdout_path,
         stderr_path,
         quarantine_environment: false,
+        on_spawn: &mut ignore_spawn,
     })
 }
 
@@ -249,6 +251,29 @@ pub(crate) fn run_sensor_command_to_files(
     stdout_path: &Path,
     stderr_path: &Path,
 ) -> Result<CommandStatus> {
+    let mut ignore_spawn = || {};
+    run_sensor_command_to_files_with_spawn_observer(
+        root,
+        argv,
+        env,
+        timeout_sec,
+        stdout_path,
+        stderr_path,
+        &mut ignore_spawn,
+    )
+}
+
+/// Run a sensor subprocess and notify the caller only after process creation
+/// succeeds. The callback is observational and cannot suppress the child.
+pub(crate) fn run_sensor_command_to_files_with_spawn_observer(
+    root: &Path,
+    argv: &[String],
+    env: &BTreeMap<String, String>,
+    timeout_sec: u64,
+    stdout_path: &Path,
+    stderr_path: &Path,
+    on_spawn: &mut dyn FnMut(),
+) -> Result<CommandStatus> {
     let ambient = std::env::vars().collect();
     run_command_to_files_inner(CommandRun {
         root,
@@ -259,6 +284,7 @@ pub(crate) fn run_sensor_command_to_files(
         stdout_path,
         stderr_path,
         quarantine_environment: true,
+        on_spawn,
     })
 }
 
@@ -271,6 +297,7 @@ struct CommandRun<'a> {
     stdout_path: &'a Path,
     stderr_path: &'a Path,
     quarantine_environment: bool,
+    on_spawn: &'a mut dyn FnMut(),
 }
 
 fn run_command_to_files_inner(run: CommandRun<'_>) -> Result<CommandStatus> {
@@ -283,6 +310,7 @@ fn run_command_to_files_inner(run: CommandRun<'_>) -> Result<CommandStatus> {
         stdout_path,
         stderr_path,
         quarantine_environment,
+        on_spawn,
     } = run;
     let Some((program, args)) = argv.split_first() else {
         bail!("empty command");
@@ -310,6 +338,7 @@ fn run_command_to_files_inner(run: CommandRun<'_>) -> Result<CommandStatus> {
     let mut child = command
         .spawn()
         .with_context(|| format!("spawn {program}"))?;
+    on_spawn();
     let status = match child.wait_timeout(Duration::from_secs(timeout_sec))? {
         Some(status) => status,
         None => {
