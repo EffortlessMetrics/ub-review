@@ -319,6 +319,7 @@ fn classify_sensor_command_result(
 enum SensorProcessObservation {
     Spawned,
     Finished(TaskTerminalDisposition),
+    CompletionUnconfirmed,
 }
 
 pub(crate) fn run_sensor(
@@ -375,6 +376,7 @@ fn run_sensor_with_task_ledger_and_command_availability(
     let setup_observation = task_ledger.setup_started(sensor);
     let mut process_started = false;
     let mut process_finished = false;
+    let mut process_completion_unconfirmed = false;
     let mut run_observation = Ok(());
     let mut finish_observation = Ok(());
     let mut observe_process = |observation| match observation {
@@ -394,6 +396,9 @@ fn run_sensor_with_task_ledger_and_command_availability(
                 }
             }
         }
+        SensorProcessObservation::CompletionUnconfirmed => {
+            process_completion_unconfirmed = true;
+        }
     };
     let run_result = run_sensor_with_command_availability(
         root,
@@ -404,7 +409,7 @@ fn run_sensor_with_task_ledger_and_command_availability(
         command_available,
         &mut observe_process,
     );
-    if process_started && !process_finished {
+    if process_started && !process_finished && !process_completion_unconfirmed {
         process_finished = true;
         if setup_observation.is_ok() && run_observation.is_ok() {
             finish_observation =
@@ -521,10 +526,17 @@ fn run_sensor_with_command_availability(
     let stdout_path = dir.join("stdout.txt");
     let stderr_path = dir.join("stderr.txt");
     let mut process_spawned = false;
+    let mut process_completion_unconfirmed = false;
     let result = {
-        let mut on_spawn = || {
-            process_spawned = true;
-            observe_process(SensorProcessObservation::Spawned);
+        let mut observe_command_process = |observation| match observation {
+            CommandProcessObservation::Spawned => {
+                process_spawned = true;
+                observe_process(SensorProcessObservation::Spawned);
+            }
+            CommandProcessObservation::CompletionUnconfirmed => {
+                process_completion_unconfirmed = true;
+                observe_process(SensorProcessObservation::CompletionUnconfirmed);
+            }
         };
         run_sensor_command_to_files_with_spawn_observer(
             root,
@@ -533,13 +545,13 @@ fn run_sensor_with_command_availability(
             sensor.timeout_sec,
             &stdout_path,
             &stderr_path,
-            &mut on_spawn,
+            &mut observe_command_process,
         )
     };
     match result {
         Ok(result) => {
             let (status, reason) = classify_sensor_command_result(&sensor.id, &result);
-            if process_spawned {
+            if process_spawned && !process_completion_unconfirmed {
                 observe_process(SensorProcessObservation::Finished(
                     sensor_process_disposition(status),
                 ));
@@ -581,7 +593,7 @@ fn run_sensor_with_command_availability(
             )?;
         }
         Err(err) => {
-            if process_spawned {
+            if process_spawned && !process_completion_unconfirmed {
                 observe_process(SensorProcessObservation::Finished(
                     TaskTerminalDisposition::DeterministicFailure,
                 ));
@@ -658,10 +670,17 @@ fn run_tokmd_sensor(
         serde_json::json!({"sensor": sensor.id, "label": preflight.label, "argv": preflight.argv}),
     )?;
     let mut process_spawned = false;
+    let mut process_completion_unconfirmed = false;
     let preflight_result = {
-        let mut on_spawn = || {
-            process_spawned = true;
-            observe_process(SensorProcessObservation::Spawned);
+        let mut observe_command_process = |observation| match observation {
+            CommandProcessObservation::Spawned => {
+                process_spawned = true;
+                observe_process(SensorProcessObservation::Spawned);
+            }
+            CommandProcessObservation::CompletionUnconfirmed => {
+                process_completion_unconfirmed = true;
+                observe_process(SensorProcessObservation::CompletionUnconfirmed);
+            }
         };
         run_sensor_command_to_files_with_spawn_observer(
             root,
@@ -670,7 +689,7 @@ fn run_tokmd_sensor(
             sensor.timeout_sec,
             &preflight.stdout_path,
             &preflight.stderr_path,
-            &mut on_spawn,
+            &mut observe_command_process,
         )
     };
     match preflight_result {
@@ -726,7 +745,7 @@ fn run_tokmd_sensor(
             }
         }
         Err(err) => {
-            if process_spawned {
+            if process_spawned && !process_completion_unconfirmed {
                 observe_process(SensorProcessObservation::Finished(
                     TaskTerminalDisposition::DeterministicFailure,
                 ));
@@ -779,9 +798,15 @@ fn run_tokmd_sensor(
             serde_json::json!({"sensor": sensor.id, "label": command.label, "argv": command.argv}),
         )?;
         let result = {
-            let mut on_spawn = || {
-                process_spawned = true;
-                observe_process(SensorProcessObservation::Spawned);
+            let mut observe_command_process = |observation| match observation {
+                CommandProcessObservation::Spawned => {
+                    process_spawned = true;
+                    observe_process(SensorProcessObservation::Spawned);
+                }
+                CommandProcessObservation::CompletionUnconfirmed => {
+                    process_completion_unconfirmed = true;
+                    observe_process(SensorProcessObservation::CompletionUnconfirmed);
+                }
             };
             run_sensor_command_to_files_with_spawn_observer(
                 root,
@@ -790,7 +815,7 @@ fn run_tokmd_sensor(
                 sensor.timeout_sec,
                 &command.stdout_path,
                 &command.stderr_path,
-                &mut on_spawn,
+                &mut observe_command_process,
             )
         };
         match result {
@@ -833,7 +858,7 @@ fn run_tokmd_sensor(
         }
     }
 
-    if process_spawned {
+    if process_spawned && !process_completion_unconfirmed {
         observe_process(SensorProcessObservation::Finished(if timed_out {
             TaskTerminalDisposition::TimedOut
         } else if failures.is_empty() {
@@ -1591,6 +1616,9 @@ mod tests {
                 disposition = Some(observed);
                 receipt_absent_at_finish = !sensor_dir.join("gate-decision.json").exists()
                     && !sensor_dir.join("ub-review-sensor-status.json").exists();
+            }
+            super::SensorProcessObservation::CompletionUnconfirmed => {
+                observations.push("completion-unconfirmed");
             }
         };
 

@@ -4,6 +4,7 @@
 use crate::diff_posture::review_posture_for_diff_class;
 use crate::*;
 use anyhow::Context;
+use std::io;
 
 pub(crate) fn trigger_match(trigger: Trigger, flags: &DiffFlags) -> Option<String> {
     match trigger {
@@ -228,7 +229,7 @@ pub(crate) fn run_command_to_files(
     stderr_path: &Path,
 ) -> Result<CommandStatus> {
     let ambient = BTreeMap::new();
-    let mut ignore_spawn = || {};
+    let mut ignore_process = |_| {};
     run_command_to_files_inner(CommandRun {
         root,
         argv,
@@ -238,7 +239,7 @@ pub(crate) fn run_command_to_files(
         stdout_path,
         stderr_path,
         quarantine_environment: false,
-        on_spawn: &mut ignore_spawn,
+        observe_process: &mut ignore_process,
     })
 }
 
@@ -251,7 +252,7 @@ pub(crate) fn run_sensor_command_to_files(
     stdout_path: &Path,
     stderr_path: &Path,
 ) -> Result<CommandStatus> {
-    let mut ignore_spawn = || {};
+    let mut ignore_process = |_| {};
     run_sensor_command_to_files_with_spawn_observer(
         root,
         argv,
@@ -259,12 +260,18 @@ pub(crate) fn run_sensor_command_to_files(
         timeout_sec,
         stdout_path,
         stderr_path,
-        &mut ignore_spawn,
+        &mut ignore_process,
     )
 }
 
-/// Run a sensor subprocess and notify the caller only after process creation
-/// succeeds. The callback is observational and cannot suppress the child.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CommandProcessObservation {
+    Spawned,
+    CompletionUnconfirmed,
+}
+
+/// Run a sensor subprocess and report process creation or an unconfirmed
+/// cleanup. The callback is observational and cannot suppress the child.
 pub(crate) fn run_sensor_command_to_files_with_spawn_observer(
     root: &Path,
     argv: &[String],
@@ -272,7 +279,7 @@ pub(crate) fn run_sensor_command_to_files_with_spawn_observer(
     timeout_sec: u64,
     stdout_path: &Path,
     stderr_path: &Path,
-    on_spawn: &mut dyn FnMut(),
+    observe_process: &mut dyn FnMut(CommandProcessObservation),
 ) -> Result<CommandStatus> {
     let ambient = std::env::vars().collect();
     run_command_to_files_inner(CommandRun {
@@ -284,7 +291,7 @@ pub(crate) fn run_sensor_command_to_files_with_spawn_observer(
         stdout_path,
         stderr_path,
         quarantine_environment: true,
-        on_spawn,
+        observe_process,
     })
 }
 
@@ -297,7 +304,7 @@ struct CommandRun<'a> {
     stdout_path: &'a Path,
     stderr_path: &'a Path,
     quarantine_environment: bool,
-    on_spawn: &'a mut dyn FnMut(),
+    observe_process: &'a mut dyn FnMut(CommandProcessObservation),
 }
 
 fn run_command_to_files_inner(run: CommandRun<'_>) -> Result<CommandStatus> {
@@ -310,7 +317,7 @@ fn run_command_to_files_inner(run: CommandRun<'_>) -> Result<CommandStatus> {
         stdout_path,
         stderr_path,
         quarantine_environment,
-        on_spawn,
+        observe_process,
     } = run;
     let Some((program, args)) = argv.split_first() else {
         bail!("empty command");
@@ -338,12 +345,11 @@ fn run_command_to_files_inner(run: CommandRun<'_>) -> Result<CommandStatus> {
     let mut child = command
         .spawn()
         .with_context(|| format!("spawn {program}"))?;
-    on_spawn();
-    let status = match child.wait_timeout(Duration::from_secs(timeout_sec))? {
-        Some(status) => status,
-        None => {
-            let _ = child.kill();
-            let _ = child.wait();
+    observe_process(CommandProcessObservation::Spawned);
+    let status = match child.wait_timeout(Duration::from_secs(timeout_sec)) {
+        Ok(Some(status)) => status,
+        Ok(None) => {
+            terminate_and_reap_child(&mut child, observe_process)?;
             return Ok(CommandStatus {
                 exit_code: None,
                 timed_out: true,
@@ -351,6 +357,11 @@ fn run_command_to_files_inner(run: CommandRun<'_>) -> Result<CommandStatus> {
                 reason: format!("timed out after {timeout_sec}s"),
                 duration_ms: started.elapsed().as_millis(),
             });
+        }
+        Err(wait_error) => {
+            terminate_and_reap_child(&mut child, observe_process)
+                .context("terminate child after wait-timeout failure")?;
+            return Err(wait_error).context("wait for child process");
         }
     };
     Ok(CommandStatus {
@@ -364,6 +375,37 @@ fn run_command_to_files_inner(run: CommandRun<'_>) -> Result<CommandStatus> {
         },
         duration_ms: started.elapsed().as_millis(),
     })
+}
+
+trait TerminateAndReap {
+    fn kill_process(&mut self) -> io::Result<()>;
+    fn reap_process(&mut self) -> io::Result<()>;
+}
+
+impl TerminateAndReap for std::process::Child {
+    fn kill_process(&mut self) -> io::Result<()> {
+        self.kill()
+    }
+
+    fn reap_process(&mut self) -> io::Result<()> {
+        self.wait().map(|_| ())
+    }
+}
+
+fn terminate_and_reap_child(
+    child: &mut impl TerminateAndReap,
+    observe_process: &mut dyn FnMut(CommandProcessObservation),
+) -> Result<()> {
+    let kill_error = child.kill_process().err();
+    if let Err(wait_error) = child.reap_process() {
+        observe_process(CommandProcessObservation::CompletionUnconfirmed);
+        let kill_detail = kill_error.map_or_else(
+            || "kill request succeeded".to_owned(),
+            |error| format!("kill request failed: {error}"),
+        );
+        bail!("child completion remains unconfirmed ({kill_detail}; wait failed: {wait_error})");
+    }
+    Ok(())
 }
 
 /// Keep only the non-secret execution metadata needed by sensor tools.
@@ -580,9 +622,71 @@ pub(crate) fn render_claim_prompt(diff: &DiffContext) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::run_sensor_command_to_files;
+    use super::{
+        CommandProcessObservation, TerminateAndReap, run_sensor_command_to_files,
+        terminate_and_reap_child,
+    };
     use anyhow::{Result, ensure};
-    use std::{collections::BTreeMap, fs};
+    use std::{collections::BTreeMap, fs, io};
+
+    struct FakeChild {
+        kill_fails: bool,
+        reap_fails: bool,
+        calls: Vec<&'static str>,
+    }
+
+    impl TerminateAndReap for FakeChild {
+        fn kill_process(&mut self) -> io::Result<()> {
+            self.calls.push("kill");
+            if self.kill_fails {
+                Err(io::Error::other("injected kill failure"))
+            } else {
+                Ok(())
+            }
+        }
+
+        fn reap_process(&mut self) -> io::Result<()> {
+            self.calls.push("wait");
+            if self.reap_fails {
+                Err(io::Error::other("injected wait failure"))
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    #[test]
+    fn child_cleanup_waits_for_confirmed_exit_even_when_kill_reports_an_error() -> Result<()> {
+        let mut child = FakeChild {
+            kill_fails: true,
+            reap_fails: false,
+            calls: Vec::new(),
+        };
+        let mut observations = Vec::new();
+
+        terminate_and_reap_child(&mut child, &mut |event| observations.push(event))?;
+
+        ensure!(child.calls == ["kill", "wait"]);
+        ensure!(observations.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn child_cleanup_marks_release_unconfirmed_when_reaping_fails() -> Result<()> {
+        let mut child = FakeChild {
+            kill_fails: false,
+            reap_fails: true,
+            calls: Vec::new(),
+        };
+        let mut observations = Vec::new();
+
+        let result = terminate_and_reap_child(&mut child, &mut |event| observations.push(event));
+
+        ensure!(result.is_err());
+        ensure!(child.calls == ["kill", "wait"]);
+        ensure!(observations == [CommandProcessObservation::CompletionUnconfirmed]);
+        Ok(())
+    }
 
     #[test]
     fn sensor_environment_excludes_credentials_and_keeps_execution_metadata() -> Result<()> {
