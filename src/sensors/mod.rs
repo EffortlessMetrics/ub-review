@@ -323,6 +323,16 @@ enum SensorProcessObservation {
     CompletionUnconfirmed,
 }
 
+#[derive(Clone, Copy)]
+struct SensorCommandAttempt<'a> {
+    root: &'a Path,
+    out: &'a Path,
+    sensor: &'a SensorPlan,
+    event_log: &'a EventLog,
+    plan: &'a Plan,
+    command_available: bool,
+}
+
 pub(crate) fn run_sensor(
     root: &Path,
     out: &Path,
@@ -374,6 +384,31 @@ fn run_sensor_with_task_ledger_and_command_availability(
     task_ledger: &SensorTaskLedger,
     command_available: bool,
 ) -> Result<()> {
+    run_sensor_attempt_with_task_ledger(
+        SensorCommandAttempt {
+            root,
+            out,
+            sensor,
+            event_log,
+            plan,
+            command_available,
+        },
+        task_ledger,
+        &mut remove_prior_sensor_status,
+    )
+}
+
+fn run_sensor_attempt_with_task_ledger(
+    attempt: SensorCommandAttempt<'_>,
+    task_ledger: &SensorTaskLedger,
+    prepare_attempt: &mut dyn FnMut(&Path) -> Result<()>,
+) -> Result<()> {
+    let SensorCommandAttempt {
+        out,
+        sensor,
+        command_available,
+        ..
+    } = attempt;
     let setup_observation = task_ledger.setup_started(sensor);
     let mut process_started = false;
     let mut process_finished = false;
@@ -405,15 +440,7 @@ fn run_sensor_with_task_ledger_and_command_availability(
             process_completion_unconfirmed = true;
         }
     };
-    let run_result = run_sensor_with_command_availability(
-        root,
-        out,
-        sensor,
-        event_log,
-        plan,
-        command_available,
-        &mut observe_process,
-    );
+    let run_result = run_sensor_attempt(attempt, &mut observe_process, prepare_attempt);
     if process_started && !process_finished && !process_completion_unconfirmed {
         process_finished = true;
         if setup_observation.is_ok() && run_observation.is_ok() {
@@ -505,9 +532,36 @@ fn run_sensor_with_command_availability(
     command_available: bool,
     observe_process: &mut dyn FnMut(SensorProcessObservation),
 ) -> Result<()> {
+    run_sensor_attempt(
+        SensorCommandAttempt {
+            root,
+            out,
+            sensor,
+            event_log,
+            plan,
+            command_available,
+        },
+        observe_process,
+        &mut remove_prior_sensor_status,
+    )
+}
+
+fn run_sensor_attempt(
+    attempt: SensorCommandAttempt<'_>,
+    observe_process: &mut dyn FnMut(SensorProcessObservation),
+    prepare_attempt: &mut dyn FnMut(&Path) -> Result<()>,
+) -> Result<()> {
+    let SensorCommandAttempt {
+        root,
+        out,
+        sensor,
+        event_log,
+        plan,
+        command_available,
+    } = attempt;
     let dir = out.join("sensors").join(&sensor.id);
     fs::create_dir_all(&dir)?;
-    remove_prior_sensor_status(&dir)?;
+    prepare_attempt(&dir)?;
     observe_process(SensorProcessObservation::AttemptPrepared);
     let argv = build_sensor_argv(root, &dir, sensor, plan);
     if !command_available {
@@ -2527,18 +2581,32 @@ esac
         };
         let task_ledger = SensorTaskLedger::initialize(&revision, &plan, false, &Instant::now())?;
         let stale_status = out.join("sensors/probe/ub-review-sensor-status.json");
-        fs::create_dir_all(&stale_status)?;
+        fs::create_dir_all(
+            stale_status
+                .parent()
+                .context("stale status fixture has no parent")?,
+        )?;
+        fs::write(
+            &stale_status,
+            serde_json::to_vec(&serde_json::json!({"sensor": "probe", "status": "ok"}))?,
+        )?;
+        let mut reject_removal = |_dir: &Path| Err(anyhow::anyhow!("injected removal failure"));
 
-        let result = super::run_sensor_with_task_ledger_and_command_availability(
-            &root,
-            &out,
-            &sensor,
-            &event_log,
-            &plan,
+        let result = super::run_sensor_attempt_with_task_ledger(
+            super::SensorCommandAttempt {
+                root: &root,
+                out: &out,
+                sensor: &sensor,
+                event_log: &event_log,
+                plan: &plan,
+                command_available: true,
+            },
             &task_ledger,
-            true,
+            &mut reject_removal,
         );
         ensure!(result.is_err());
+        let stale_value: serde_json::Value = serde_json::from_slice(&fs::read(&stale_status)?)?;
+        ensure!(stale_value["status"] == "ok");
         task_ledger.write_artifacts(&out)?;
 
         let snapshot: serde_json::Value =
@@ -2551,9 +2619,20 @@ esac
         );
         ensure!(
             snapshot
+                .pointer("/tasks/0/state/ResourcesReleased")
+                .and_then(serde_json::Value::as_str)
+                == Some("SetupFailed")
+        );
+        ensure!(
+            snapshot
                 .pointer("/tasks/0/timing/process_started_at")
                 .is_some_and(serde_json::Value::is_null)
         );
+        let events = fs::read_to_string(out.join("task_ledger_events.ndjson"))?;
+        ensure!(!events.contains("\"ProcessStarted\""));
+        ensure!(!events.contains("\"CleanupFinished\""));
+        ensure!(!events.contains("\"ReceiptCreated\""));
+        ensure!(!events.contains("\"Succeeded\""));
         Ok(())
     }
 
