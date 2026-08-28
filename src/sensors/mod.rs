@@ -317,6 +317,7 @@ fn classify_sensor_command_result(
 
 #[derive(Clone, Copy)]
 enum SensorProcessObservation {
+    AttemptPrepared,
     Spawned,
     Finished(TaskTerminalDisposition),
     CompletionUnconfirmed,
@@ -377,9 +378,13 @@ fn run_sensor_with_task_ledger_and_command_availability(
     let mut process_started = false;
     let mut process_finished = false;
     let mut process_completion_unconfirmed = false;
+    let mut attempt_prepared = false;
     let mut run_observation = Ok(());
     let mut finish_observation = Ok(());
     let mut observe_process = |observation| match observation {
+        SensorProcessObservation::AttemptPrepared => {
+            attempt_prepared = true;
+        }
         SensorProcessObservation::Spawned => {
             if !process_started {
                 process_started = true;
@@ -425,7 +430,14 @@ fn run_sensor_with_task_ledger_and_command_availability(
     } else {
         Ok(())
     };
-    let receipt_result = sensor_task_receipt_disposition(out, sensor, command_available);
+    let receipt_result = if attempt_prepared {
+        sensor_task_receipt_disposition(out, sensor, command_available)
+    } else {
+        Err(anyhow::anyhow!(
+            "sensor {} attempt was not prepared",
+            sensor.id
+        ))
+    };
     let receipt_created = receipt_result.is_ok();
     let terminal_observation = if setup_observation.is_err()
         || run_observation.is_err()
@@ -496,6 +508,7 @@ fn run_sensor_with_command_availability(
     let dir = out.join("sensors").join(&sensor.id);
     fs::create_dir_all(&dir)?;
     remove_prior_sensor_status(&dir)?;
+    observe_process(SensorProcessObservation::AttemptPrepared);
     let argv = build_sensor_argv(root, &dir, sensor, plan);
     if !command_available {
         write_sensor_status(
@@ -1624,6 +1637,7 @@ mod tests {
         let mut receipt_absent_at_finish = false;
         let mut disposition = None;
         let mut observe_process = |observation| match observation {
+            super::SensorProcessObservation::AttemptPrepared => {}
             super::SensorProcessObservation::Spawned => observations.push("spawned"),
             super::SensorProcessObservation::Finished(observed) => {
                 observations.push("finished");
@@ -2358,6 +2372,52 @@ esac
         ensure!(process_finished < cleanup_finished);
         ensure!(cleanup_finished < receipt_failed);
         ensure!(receipt_failed < resources_released);
+        Ok(())
+    }
+
+    #[test]
+    fn stale_status_removal_failure_cannot_create_a_receipt() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("repo");
+        let out = temp.path().join("out");
+        fs::create_dir_all(&root)?;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let sensor = sensor_plan("probe", "probe", true);
+        let plan = test_plan(vec![sensor.clone()]);
+        let revision = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+        let task_ledger = SensorTaskLedger::initialize(&revision, &plan, false, &Instant::now())?;
+        let stale_status = out.join("sensors/probe/ub-review-sensor-status.json");
+        fs::create_dir_all(&stale_status)?;
+
+        let result = super::run_sensor_with_task_ledger_and_command_availability(
+            &root,
+            &out,
+            &sensor,
+            &event_log,
+            &plan,
+            &task_ledger,
+            true,
+        );
+        ensure!(result.is_err());
+        task_ledger.write_artifacts(&out)?;
+
+        let snapshot: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/task_ledger_snapshot.json"))?)?;
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/receipt/CreationFailed/reason")
+                .and_then(serde_json::Value::as_str)
+                == Some("sensor status receipt missing or invalid")
+        );
+        ensure!(
+            snapshot
+                .pointer("/tasks/0/timing/process_started_at")
+                .is_some_and(serde_json::Value::is_null)
+        );
         Ok(())
     }
 
