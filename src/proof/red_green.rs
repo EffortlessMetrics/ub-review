@@ -134,16 +134,28 @@ where
             "focused red/green proof lease granted by runtime profile",
         );
         let receipt = match task.mode {
-            FocusedProofMode::HeadOnly => run_focused_head_proof_task(
-                root,
-                out,
-                diff,
-                &task,
-                task_timeout_sec,
-                &lease,
-                task_ledger,
-                &mut runner,
-            )?,
+            FocusedProofMode::HeadOnly => {
+                let head_spec = proof_task_command_spec(&task, "head");
+                let head = run_proof_command_receipt_for_task(
+                    root,
+                    out,
+                    &task,
+                    "head",
+                    &head_spec,
+                    task_timeout_sec,
+                    &lease,
+                    task_ledger,
+                    &mut runner,
+                )?;
+                let result = match head.status.as_str() {
+                    "passed" => "head_passed",
+                    "failed" => "head_failed",
+                    "timed_out" => "timed_out",
+                    _ => "skipped_profile",
+                };
+                let reason = format!("HEAD proof {}: {}", head.status, head.reason);
+                focused_head_receipt(diff, &task, vec![head], result.to_owned(), reason)
+            }
             FocusedProofMode::RedGreen => run_focused_red_green_proof_task(
                 root,
                 out,
@@ -168,54 +180,6 @@ where
     })
 }
 
-fn run_focused_head_proof_task<F>(
-    root: &Path,
-    out: &Path,
-    diff: &DiffContext,
-    task: &FocusedTestTask,
-    timeout_sec: u64,
-    lease: &ResourceLease,
-    task_ledger: Option<&ProofTaskLedger>,
-    runner: &mut F,
-) -> Result<ProofReceipt>
-where
-    F: FnMut(
-        &Path,
-        &[String],
-        &BTreeMap<String, String>,
-        u64,
-        &Path,
-        &Path,
-        &mut dyn FnMut(CommandProcessObservation),
-    ) -> Result<CommandStatus>,
-{
-    let head_spec = proof_task_command_spec(task, "head");
-    let head = run_proof_command_receipt_for_task(
-        root,
-        out,
-        task,
-        "head",
-        &head_spec,
-        timeout_sec,
-        lease,
-        task_ledger,
-        runner,
-    )?;
-    let result = match head.status.as_str() {
-        "passed" => "head_passed",
-        "failed" => "head_failed",
-        "timed_out" => "timed_out",
-        _ => "skipped_profile",
-    };
-    let reason = format!("HEAD proof {}: {}", head.status, head.reason);
-    Ok(focused_head_receipt(
-        diff,
-        task,
-        vec![head],
-        result.to_owned(),
-        reason,
-    ))
-}
 
 #[expect(
     clippy::too_many_arguments,

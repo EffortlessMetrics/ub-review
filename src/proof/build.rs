@@ -125,16 +125,36 @@ where
             "granted",
             "focused build proof lease granted by runtime profile",
         );
-        receipts.push(run_focused_build_proof_task(
-            root,
-            out,
+        let spec = focused_build_command_spec_for_task(&task);
+        let command_task = ProofCommandTask::focused_build(&task, task_timeout_sec);
+        let head = run_proof_command_receipt(
+            ProofCommandInvocation {
+                command_root: root,
+                out,
+                receipt_id: &task.id,
+                side: "head",
+                spec: &spec,
+                timeout_sec: task_timeout_sec,
+                lease: &lease,
+                task_ledger,
+                task: task_ledger.map(|_| &command_task),
+            },
+            &mut runner,
+        )?;
+        let result = match head.status.as_str() {
+            "passed" => "head_passed",
+            "failed" => "head_failed",
+            "timed_out" => "timed_out",
+            _ => "skipped_profile",
+        };
+        let reason = format!("HEAD build proof {}: {}", head.status, head.reason);
+        receipts.push(focused_build_receipt(
             diff,
             &task,
-            task_timeout_sec,
-            &lease,
-            task_ledger,
-            &mut runner,
-        )?);
+            vec![head],
+            result.to_owned(),
+            reason,
+        ));
         leases.push(lease);
         executed_tasks += 1;
         estimated_seconds = estimated_seconds.saturating_add(task_timeout_sec);
@@ -155,58 +175,6 @@ fn focused_build_budget_allows_next(
         && estimated_seconds.saturating_add(next_timeout_sec) <= budget.max_total_seconds
 }
 
-fn run_focused_build_proof_task<F>(
-    root: &Path,
-    out: &Path,
-    diff: &DiffContext,
-    task: &FocusedBuildTask,
-    timeout_sec: u64,
-    lease: &ResourceLease,
-    task_ledger: Option<&ProofTaskLedger>,
-    runner: &mut F,
-) -> Result<ProofReceipt>
-where
-    F: FnMut(
-        &Path,
-        &[String],
-        &BTreeMap<String, String>,
-        u64,
-        &Path,
-        &Path,
-        &mut dyn FnMut(CommandProcessObservation),
-    ) -> Result<CommandStatus>,
-{
-    let spec = focused_build_command_spec_for_task(task);
-    let command_task = ProofCommandTask::focused_build(task, timeout_sec);
-    let head = run_proof_command_receipt(
-        ProofCommandInvocation {
-            command_root: root,
-            out,
-            receipt_id: &task.id,
-            side: "head",
-            spec: &spec,
-            timeout_sec,
-            lease,
-            task_ledger,
-            task: task_ledger.map(|_| &command_task),
-        },
-        runner,
-    )?;
-    let result = match head.status.as_str() {
-        "passed" => "head_passed",
-        "failed" => "head_failed",
-        "timed_out" => "timed_out",
-        _ => "skipped_profile",
-    };
-    let reason = format!("HEAD build proof {}: {}", head.status, head.reason);
-    Ok(focused_build_receipt(
-        diff,
-        task,
-        vec![head],
-        result.to_owned(),
-        reason,
-    ))
-}
 
 #[cfg(test)]
 mod tests {
