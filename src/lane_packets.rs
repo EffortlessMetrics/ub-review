@@ -308,6 +308,16 @@ struct CommandRun<'a> {
 }
 
 fn run_command_to_files_inner(run: CommandRun<'_>) -> Result<CommandStatus> {
+    run_command_to_files_inner_with_wait(run, &mut |child, timeout| child.wait_timeout(timeout))
+}
+
+fn run_command_to_files_inner_with_wait(
+    run: CommandRun<'_>,
+    wait_for_child: &mut dyn FnMut(
+        &mut std::process::Child,
+        Duration,
+    ) -> io::Result<Option<std::process::ExitStatus>>,
+) -> Result<CommandStatus> {
     let CommandRun {
         root,
         argv,
@@ -346,7 +356,7 @@ fn run_command_to_files_inner(run: CommandRun<'_>) -> Result<CommandStatus> {
         .spawn()
         .with_context(|| format!("spawn {program}"))?;
     observe_process(CommandProcessObservation::Spawned);
-    let status = match child.wait_timeout(Duration::from_secs(timeout_sec)) {
+    let status = match wait_for_child(&mut child, Duration::from_secs(timeout_sec)) {
         Ok(Some(status)) => status,
         Ok(None) => {
             terminate_and_reap_child(&mut child, observe_process)?;
@@ -397,13 +407,21 @@ fn terminate_and_reap_child(
     observe_process: &mut dyn FnMut(CommandProcessObservation),
 ) -> Result<()> {
     let kill_error = child.kill_process().err();
-    if let Err(wait_error) = child.reap_process() {
-        observe_process(CommandProcessObservation::CompletionUnconfirmed);
-        let kill_detail = kill_error.map_or_else(
-            || "kill request succeeded".to_owned(),
-            |error| format!("kill request failed: {error}"),
-        );
-        bail!("child completion remains unconfirmed ({kill_detail}; wait failed: {wait_error})");
+    loop {
+        match child.reap_process() {
+            Ok(()) => break,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(wait_error) => {
+                observe_process(CommandProcessObservation::CompletionUnconfirmed);
+                let kill_detail = kill_error.map_or_else(
+                    || "kill request succeeded".to_owned(),
+                    |error| format!("kill request failed: {error}"),
+                );
+                bail!(
+                    "child completion remains unconfirmed ({kill_detail}; wait failed: {wait_error})"
+                );
+            }
+        }
     }
     Ok(())
 }
@@ -623,15 +641,16 @@ pub(crate) fn render_claim_prompt(diff: &DiffContext) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        CommandProcessObservation, TerminateAndReap, run_sensor_command_to_files,
+        CommandProcessObservation, CommandRun, TerminateAndReap,
+        run_command_to_files_inner_with_wait, run_sensor_command_to_files,
         terminate_and_reap_child,
     };
-    use anyhow::{Result, ensure};
-    use std::{collections::BTreeMap, fs, io};
+    use anyhow::{Context, Result, ensure};
+    use std::{collections::BTreeMap, collections::VecDeque, fs, io, thread, time::Duration};
 
     struct FakeChild {
         kill_fails: bool,
-        reap_fails: bool,
+        reap_errors: VecDeque<io::ErrorKind>,
         calls: Vec<&'static str>,
     }
 
@@ -647,11 +666,9 @@ mod tests {
 
         fn reap_process(&mut self) -> io::Result<()> {
             self.calls.push("wait");
-            if self.reap_fails {
-                Err(io::Error::other("injected wait failure"))
-            } else {
-                Ok(())
-            }
+            self.reap_errors.pop_front().map_or(Ok(()), |kind| {
+                Err(io::Error::new(kind, "injected wait failure"))
+            })
         }
     }
 
@@ -659,7 +676,7 @@ mod tests {
     fn child_cleanup_waits_for_confirmed_exit_even_when_kill_reports_an_error() -> Result<()> {
         let mut child = FakeChild {
             kill_fails: true,
-            reap_fails: false,
+            reap_errors: VecDeque::new(),
             calls: Vec::new(),
         };
         let mut observations = Vec::new();
@@ -675,7 +692,7 @@ mod tests {
     fn child_cleanup_marks_release_unconfirmed_when_reaping_fails() -> Result<()> {
         let mut child = FakeChild {
             kill_fails: false,
-            reap_fails: true,
+            reap_errors: VecDeque::from([io::ErrorKind::Other]),
             calls: Vec::new(),
         };
         let mut observations = Vec::new();
@@ -685,6 +702,99 @@ mod tests {
         ensure!(result.is_err());
         ensure!(child.calls == ["kill", "wait"]);
         ensure!(observations == [CommandProcessObservation::CompletionUnconfirmed]);
+        Ok(())
+    }
+
+    #[test]
+    fn child_cleanup_retries_interrupted_reaps_until_exit_is_confirmed() -> Result<()> {
+        let mut child = FakeChild {
+            kill_fails: false,
+            reap_errors: VecDeque::from([io::ErrorKind::Interrupted, io::ErrorKind::Interrupted]),
+            calls: Vec::new(),
+        };
+        let mut observations = Vec::new();
+
+        terminate_and_reap_child(&mut child, &mut |event| observations.push(event))?;
+
+        ensure!(child.calls == ["kill", "wait", "wait", "wait"]);
+        ensure!(observations.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn wait_error_branch_reaps_live_child_before_returning() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let started_marker = temp.path().join("started");
+        let delayed_marker = temp.path().join("delayed");
+        let stdout = temp.path().join("stdout.txt");
+        let stderr = temp.path().join("stderr.txt");
+        let argv = vec![
+            std::env::current_exe()?.display().to_string(),
+            "--exact".to_owned(),
+            "lane_packets::tests::fake_delayed_marker_child".to_owned(),
+            "--nocapture".to_owned(),
+        ];
+        let env = BTreeMap::from([
+            (
+                "UB_REVIEW_WAIT_ERROR_STARTED".to_owned(),
+                started_marker.display().to_string(),
+            ),
+            (
+                "UB_REVIEW_WAIT_ERROR_DELAYED".to_owned(),
+                delayed_marker.display().to_string(),
+            ),
+        ]);
+        let ambient = BTreeMap::new();
+        let mut observations = Vec::new();
+        let mut wait_for_child = |_child: &mut std::process::Child, _timeout: Duration| {
+            for _ in 0..100 {
+                if started_marker.is_file() {
+                    return Err(io::Error::other("injected wait_timeout failure"));
+                }
+                thread::sleep(Duration::from_millis(20));
+            }
+            Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "child did not publish its start marker",
+            ))
+        };
+
+        let result = run_command_to_files_inner_with_wait(
+            CommandRun {
+                root: temp.path(),
+                argv: &argv,
+                env: &env,
+                ambient: &ambient,
+                timeout_sec: 5,
+                stdout_path: &stdout,
+                stderr_path: &stderr,
+                quarantine_environment: false,
+                observe_process: &mut |event| observations.push(event),
+            },
+            &mut wait_for_child,
+        );
+
+        let error = result
+            .err()
+            .context("injected wait failure must propagate")?;
+        ensure!(format!("{error:#}").contains("injected wait_timeout failure"));
+        ensure!(started_marker.is_file());
+        ensure!(observations == [CommandProcessObservation::Spawned]);
+        thread::sleep(Duration::from_millis(2300));
+        ensure!(!delayed_marker.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn fake_delayed_marker_child() -> Result<()> {
+        let Some(started) = std::env::var_os("UB_REVIEW_WAIT_ERROR_STARTED") else {
+            return Ok(());
+        };
+        let delayed = std::env::var_os("UB_REVIEW_WAIT_ERROR_DELAYED")
+            .context("delayed marker path missing")?;
+        fs::write(started, b"started")?;
+        thread::sleep(Duration::from_secs(2));
+        fs::write(delayed, b"still running")?;
         Ok(())
     }
 

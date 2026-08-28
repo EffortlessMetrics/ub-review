@@ -665,6 +665,64 @@ fn run_tokmd_sensor(
     aggregate_argv: &[String],
     observe_process: &mut dyn FnMut(SensorProcessObservation),
 ) -> Result<()> {
+    run_tokmd_sensor_with_command_runner(
+        TokmdSensorRun {
+            root,
+            out,
+            sensor,
+            event_log,
+            plan,
+            aggregate_argv,
+            observe_process,
+        },
+        &mut |root, argv, env, timeout_sec, stdout_path, stderr_path, observer| {
+            run_sensor_command_to_files_with_spawn_observer(
+                root,
+                argv,
+                env,
+                timeout_sec,
+                stdout_path,
+                stderr_path,
+                observer,
+            )
+        },
+    )
+}
+
+type SensorCommandRunner<'a> = dyn FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+        &mut dyn FnMut(CommandProcessObservation),
+    ) -> Result<CommandStatus>
+    + 'a;
+
+struct TokmdSensorRun<'a> {
+    root: &'a Path,
+    out: &'a Path,
+    sensor: &'a SensorPlan,
+    event_log: &'a EventLog,
+    plan: &'a Plan,
+    aggregate_argv: &'a [String],
+    observe_process: &'a mut dyn FnMut(SensorProcessObservation),
+}
+
+fn run_tokmd_sensor_with_command_runner(
+    run: TokmdSensorRun<'_>,
+    run_command: &mut SensorCommandRunner<'_>,
+) -> Result<()> {
+    let TokmdSensorRun {
+        root,
+        out,
+        sensor,
+        event_log,
+        plan,
+        aggregate_argv,
+        observe_process,
+    } = run;
     let dir = out.join("sensors").join(&sensor.id);
     let mut commands = vec![build_tokmd_version_preflight_command(&dir, sensor)];
     commands.extend(build_tokmd_sensor_commands(root, &dir, plan));
@@ -701,7 +759,7 @@ fn run_tokmd_sensor(
                 observe_process(SensorProcessObservation::CompletionUnconfirmed);
             }
         };
-        run_sensor_command_to_files_with_spawn_observer(
+        run_command(
             root,
             &preflight.argv,
             &BTreeMap::new(),
@@ -830,7 +888,7 @@ fn run_tokmd_sensor(
                     observe_process(SensorProcessObservation::CompletionUnconfirmed);
                 }
             };
-            run_sensor_command_to_files_with_spawn_observer(
+            run_command(
                 root,
                 &command.argv,
                 &BTreeMap::new(),
@@ -2019,6 +2077,84 @@ mod tests {
                 .pointer("/tasks/0/receipt/CreationFailed/reason")
                 .and_then(serde_json::Value::as_str)
                 == Some("sensor status receipt missing or invalid")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn tokmd_unconfirmed_subcommand_completion_stops_later_commands() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("repo");
+        let out = temp.path().join("out");
+        fs::create_dir_all(&root)?;
+        fs::create_dir_all(out.join("sensors/tokmd"))?;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let mut sensor = sensor_plan("tokmd", "tokmd", true);
+        sensor.timeout_sec = FIXTURE_SENSOR_TIMEOUT_SEC;
+        let plan = test_plan(vec![sensor.clone()]);
+        let aggregate_argv = vec!["tokmd".to_owned()];
+        let mut command_calls = 0_usize;
+        let mut run_command =
+            |_root: &Path,
+             _argv: &[String],
+             _env: &BTreeMap<String, String>,
+             _timeout_sec: u64,
+             stdout_path: &Path,
+             stderr_path: &Path,
+             observe_command: &mut dyn FnMut(CommandProcessObservation)| {
+                command_calls += 1;
+                fs::write(stderr_path, b"")?;
+                observe_command(CommandProcessObservation::Spawned);
+                if command_calls == 1 {
+                    fs::write(
+                        stdout_path,
+                        format!("tokmd {STANDARD_IMAGE_TOKMD_VERSION}\n"),
+                    )?;
+                    return Ok(CommandStatus {
+                        exit_code: Some(0),
+                        timed_out: false,
+                        success: true,
+                        reason: "completed".to_owned(),
+                        duration_ms: 1,
+                    });
+                }
+                observe_command(CommandProcessObservation::CompletionUnconfirmed);
+                Err(anyhow::anyhow!("injected unconfirmed completion"))
+            };
+
+        let result = super::run_tokmd_sensor_with_command_runner(
+            super::TokmdSensorRun {
+                root: &root,
+                out: &out,
+                sensor: &sensor,
+                event_log: &event_log,
+                plan: &plan,
+                aggregate_argv: &aggregate_argv,
+                observe_process: &mut |_| {},
+            },
+            &mut run_command,
+        );
+
+        ensure!(result.is_err());
+        ensure!(command_calls == 2);
+        let planned_commands: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("sensors/tokmd/commands.json"))?)?;
+        ensure!(
+            planned_commands
+                .as_array()
+                .is_some_and(|commands| commands.len() > command_calls)
+        );
+        let aggregate_stdout = fs::read_to_string(out.join("sensors/tokmd/stdout.txt"))?;
+        ensure!(
+            aggregate_stdout
+                .lines()
+                .filter(|line| line.starts_with("$ "))
+                .count()
+                == 1
+        );
+        ensure!(
+            !out.join("sensors/tokmd/ub-review-sensor-status.json")
+                .exists()
         );
         Ok(())
     }
