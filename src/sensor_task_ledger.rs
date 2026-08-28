@@ -42,7 +42,9 @@ struct TaskLedgerRecorderInner {
 
 impl TaskLedgerRecorder {
     pub(crate) fn new(revision: &RevisionRef, run_started: &Instant) -> Result<Self> {
-        revision.validate().context("task-ledger recorder revision")?;
+        revision
+            .validate()
+            .context("task-ledger recorder revision")?;
         Ok(Self {
             inner: Arc::new(TaskLedgerRecorderInner {
                 revision: revision.clone(),
@@ -58,10 +60,7 @@ impl TaskLedgerRecorder {
         Ok(MonotonicInstant::from_millis(elapsed))
     }
 
-    pub(crate) fn append(
-        &self,
-        events: impl IntoIterator<Item = TaskLedgerInput>,
-    ) -> Result<()> {
+    pub(crate) fn append(&self, events: impl IntoIterator<Item = TaskLedgerInput>) -> Result<()> {
         self.inner
             .inputs
             .lock()
