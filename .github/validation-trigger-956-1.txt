@@ -1,0 +1,1 @@
+Connector-authored state reconciliation trigger for the exact #956 branch. Remove before landing.
