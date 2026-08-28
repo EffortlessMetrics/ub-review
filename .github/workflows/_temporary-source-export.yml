@@ -1,5 +1,5 @@
 name: Temporary #956 apply and validation
-# Validation trigger for proof adapter head 19fa42d429d75bfd39f9a77bafba3c995cd55b15.
+# Staging the exact-head Clippy simplification after proof lifecycle tests passed.
 
 on:
   push:
@@ -50,12 +50,12 @@ jobs:
         run: |
           set -euo pipefail
           cat .github/ub-review-proof-adapter.patch.* > /tmp/ub-review-proof-adapter.patch
-          printf '%s  %s\n' '703f317b05d44a1e99bbe55cc9f5eab827694682b334db17f7f32d62566cd7c1' /tmp/ub-review-proof-adapter.patch | sha256sum --check --strict
+          printf '%s  %s\n' 'd49c7c2df64b7756bf6f6fa5ad3ef347fa45db959cd0bb8ab10375f956372f5d' /tmp/ub-review-proof-adapter.patch | sha256sum --check --strict
           git apply --index /tmp/ub-review-proof-adapter.patch
           git rm .github/ub-review-proof-adapter.patch.*
           git config user.name 'EffortlessSteven'
           git config user.email 'git@effortlesssteven.com'
-          git commit -m 'fix(task-ledger): close remaining proof compile gaps'
+          git commit -m 'refactor(proof): inline single-use task runners'
           git push origin HEAD:codex/956-proof-worker-task-ledger
 
   validate:
