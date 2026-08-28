@@ -86,6 +86,8 @@ jobs:
         if: always()
         env:
           STEP_OUTCOME: ${{ steps.missing_release.outcome }}
+          ACTION_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           if [[ "$STEP_OUTCOME" != "failure" ]]; then
@@ -106,7 +108,8 @@ jobs:
           cat > target/release-portability/resolver-no-fallback.json <<JSON
           {
             "schema": "ub-review.release_resolver_no_fallback.v1",
-            "action_head_sha": "${GITHUB_SHA}",
+            "action_head_sha": "${ACTION_HEAD_SHA}",
+            "workflow_sha": "${WORKFLOW_SHA}",
             "release_tag": "v0.1.0",
             "requested_asset": "ub-review-missing-x86_64-unknown-linux-gnu.tar.gz",
             "step_outcome": "${STEP_OUTCOME}",
