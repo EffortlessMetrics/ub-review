@@ -593,6 +593,12 @@ fn run_sensor_with_command_availability(
             )?;
         }
         Err(err) => {
+            if process_completion_unconfirmed {
+                return Err(err).context(format!(
+                    "{} child completion remains unconfirmed",
+                    sensor.id
+                ));
+            }
             if process_spawned && !process_completion_unconfirmed {
                 observe_process(SensorProcessObservation::Finished(
                     TaskTerminalDisposition::DeterministicFailure,
@@ -745,6 +751,9 @@ fn run_tokmd_sensor(
             }
         }
         Err(err) => {
+            if process_completion_unconfirmed {
+                return Err(err).context("tokmd version-preflight completion remains unconfirmed");
+            }
             if process_spawned && !process_completion_unconfirmed {
                 observe_process(SensorProcessObservation::Finished(
                     TaskTerminalDisposition::DeterministicFailure,
@@ -845,6 +854,11 @@ fn run_tokmd_sensor(
                 )?;
             }
             Err(err) => {
+                if process_completion_unconfirmed {
+                    return Err(err).with_context(|| {
+                        format!("tokmd {} completion remains unconfirmed", command.label)
+                    });
+                }
                 let reason = format!("{err:#}");
                 failures.push(format!("{} {reason}", command.label));
                 if exit_code == Some(0) {
