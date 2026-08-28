@@ -1,5 +1,5 @@
 name: Temporary #956 apply and validation
-# Validation trigger for simplified proof adapter head 60267099477c84d6f34c79ab6b0f7d6ca6ef2622.
+# One-shot transport for the exact worker, cleanup, and provenance repair.
 
 on:
   push:
@@ -22,40 +22,25 @@ jobs:
         shell: bash
         run: |
           shopt -s nullglob
-          chunks=(.github/ub-review-proof-adapter.patch.*)
-          if [[ -f .github/proof_task_ledger.rs.gz.b64 ]]; then
-            echo 'state=source' >> "$GITHUB_OUTPUT"
-          elif [[ ${#chunks[@]} -eq 0 ]]; then
+          chunks=(.github/ub-review-authority-repair.patch.*)
+          if [[ ${#chunks[@]} -eq 0 ]]; then
             echo 'state=none' >> "$GITHUB_OUTPUT"
-          elif [[ -f .github/ub-review-proof-adapter.patch.00 && ${#chunks[@]} -eq 1 ]]; then
+          elif [[ -f .github/ub-review-authority-repair.patch.04 && ${#chunks[@]} -eq 5 ]]; then
             echo 'state=ready' >> "$GITHUB_OUTPUT"
           else
             echo 'state=partial' >> "$GITHUB_OUTPUT"
           fi
-      - if: steps.detect.outputs.state == 'source'
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf '%s  %s\n' 'c6240757b0701eb3011ac62da88330fe5afe3e620de6d58605840277806b0a8e' .github/proof_task_ledger.rs.gz.b64 | sha256sum --check --strict
-          base64 --decode .github/proof_task_ledger.rs.gz.b64 | gzip --decompress > src/proof_task_ledger.rs
-          printf '%s  %s\n' '06e85e6ed4679c23657f7e818ca7f4041c82716951d9214687441f436543bc68' src/proof_task_ledger.rs | sha256sum --check --strict
-          git add src/proof_task_ledger.rs
-          git rm .github/proof_task_ledger.rs.gz.b64
-          git config user.name 'EffortlessSteven'
-          git config user.email 'git@effortlesssteven.com'
-          git commit -m 'runtime(task-ledger): add the proof execution adapter'
-          git push origin HEAD:codex/956-proof-worker-task-ledger
       - if: steps.detect.outputs.state == 'ready'
         shell: bash
         run: |
           set -euo pipefail
-          cat .github/ub-review-proof-adapter.patch.* > /tmp/ub-review-proof-adapter.patch
-          printf '%s  %s\n' 'd49c7c2df64b7756bf6f6fa5ad3ef347fa45db959cd0bb8ab10375f956372f5d' /tmp/ub-review-proof-adapter.patch | sha256sum --check --strict
-          git apply --index /tmp/ub-review-proof-adapter.patch
-          git rm .github/ub-review-proof-adapter.patch.*
+          cat .github/ub-review-authority-repair.patch.* > /tmp/ub-review-authority-repair.patch
+          printf '%s  %s\n' 'b17b0f18bddd1c083c752ba99e990aeccf7823a731cfa9769b91f9c667564760' /tmp/ub-review-authority-repair.patch | sha256sum --check --strict
+          git apply --index /tmp/ub-review-authority-repair.patch
+          git rm .github/ub-review-authority-repair.patch.*
           git config user.name 'EffortlessSteven'
           git config user.email 'git@effortlesssteven.com'
-          git commit -m 'refactor(proof): inline single-use task runners'
+          git commit -m 'fix(task-ledger): retain worker and cleanup authority'
           git push origin HEAD:codex/956-proof-worker-task-ledger
 
   validate:
