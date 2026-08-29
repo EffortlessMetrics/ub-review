@@ -1,0 +1,38 @@
+name: Scratch #1266 source export
+
+on:
+  push:
+    branches:
+      - chatgpt/1266-required-proof-fix
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    name: export exact scratch source
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact scratch head
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify checkout identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Upload exact source tree
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ub-review-1266-source-${{ github.sha }}
+          path: |
+            .
+            !.git/**
+            !target/**
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
