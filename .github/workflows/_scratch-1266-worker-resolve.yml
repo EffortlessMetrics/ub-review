@@ -1,0 +1,297 @@
+name: Scratch #1266 guarded review reconciliation
+
+on:
+  push:
+    branches:
+      - chatgpt/1266-worker-resolve
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: ub-review-1266-worker-resolve
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OWNER: EffortlessMetrics
+      REPO: ub-review
+      PR_NUMBER: "1266"
+      PR_BRANCH: codex/956-proof-worker-task-ledger
+      EXPECTED_PARENT: c1e6872eee908f6f46134a3e0a148b31fd9df555
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout control branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify immutable promoted product surface
+        id: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/$PR_BRANCH:refs/remotes/origin/$PR_BRANCH"
+          head_sha="$(git rev-parse "refs/remotes/origin/$PR_BRANCH")"
+          parent_sha="$(git rev-parse "$head_sha^")"
+          test "$parent_sha" = "$EXPECTED_PARENT"
+          changed="$(git diff --name-only "$EXPECTED_PARENT" "$head_sha" | sort)"
+          expected="$(printf '%s\n' \
+            src/main.rs \
+            src/proof/command.rs \
+            src/proof_task_ledger.rs | sort)"
+          test "$changed" = "$expected"
+          git show "$head_sha:src/main.rs" | grep -q 'fn worker_timeout_sec'
+          git show "$head_sha:src/main.rs" | grep -q 'fn validate_worker_request_id'
+          git show "$head_sha:src/proof_task_ledger.rs" | grep -q 'fn validate_worker_checkout'
+          git show "$head_sha:src/proof/command.rs" | grep -q 'fn combine_proof_post_run_results'
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Require exact-head hosted authorities and clean Codex review
+        shell: bash
+        env:
+          HEAD_SHA: ${{ steps.candidate.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          runs=$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$OWNER/$REPO/actions/runs?head_sha=$HEAD_SHA&per_page=100")
+          candidate=$(jq -c '[.workflow_runs[] | select(.name == "ub-review/gate" and .head_sha == $sha and .status == "completed")] | sort_by(.created_at) | last // empty' --arg sha "$HEAD_SHA" <<<"$runs")
+          baseline=$(jq -c '[.workflow_runs[] | select(.name == "ub-review/independent-baseline" and .head_sha == $sha and .status == "completed")] | sort_by(.created_at) | last // empty' --arg sha "$HEAD_SHA" <<<"$runs")
+          test "$(jq -r '.conclusion // empty' <<<"${candidate:-{}}")" = success
+          test "$(jq -r '.conclusion // empty' <<<"${baseline:-{}}")" = success
+
+          gh api --paginate \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews?per_page=100" \
+            --slurp | jq 'add' > "$RUNNER_TEMP/reviews.json"
+          jq -e --arg sha "$HEAD_SHA" '
+            [.[] | select(
+              .commit_id == $sha
+              and (.user.login | contains("chatgpt-codex-connector"))
+              and .state != "DISMISSED"
+            )] | length > 0
+          ' "$RUNNER_TEMP/reviews.json" >/dev/null
+          jq --arg sha "$HEAD_SHA" '
+            [.[] | select(
+              .commit_id == $sha
+              and (.user.login | contains("chatgpt-codex-connector"))
+              and .state != "DISMISSED"
+            ) | .id]
+          ' "$RUNNER_TEMP/reviews.json" > "$RUNNER_TEMP/exact-review-ids.json"
+          gh api --paginate \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments?per_page=100" \
+            --slurp | jq 'add' > "$RUNNER_TEMP/review-comments.json"
+          jq -e --slurpfile ids "$RUNNER_TEMP/exact-review-ids.json" '
+            [.[] | select(.pull_request_review_id as $id | $ids[0] | index($id))] | length == 0
+          ' "$RUNNER_TEMP/review-comments.json" >/dev/null
+
+      - name: Select exactly the five superseded authority findings
+        shell: bash
+        env:
+          HEAD_SHA: ${{ steps.candidate.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg query 'query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){pageInfo{hasNextPage}nodes{id isResolved path comments(first:100){nodes{databaseId body createdAt author{login}}}}}}}}' \
+            --arg owner "$OWNER" \
+            --arg name "$REPO" \
+            --argjson number "$PR_NUMBER" \
+            '{query:$query,variables:{owner:$owner,name:$name,number:$number}}' \
+            > "$RUNNER_TEMP/thread-query.json"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Content-Type: application/json" \
+            "$GITHUB_API_URL/graphql" \
+            --data-binary @"$RUNNER_TEMP/thread-query.json" \
+            > "$RUNNER_TEMP/threads-before.json"
+          jq -e '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage == false' \
+            "$RUNNER_TEMP/threads-before.json" >/dev/null
+
+          python - "$RUNNER_TEMP/threads-before.json" "$RUNNER_TEMP/matches.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          source = json.loads(Path(sys.argv[1]).read_text())
+          threads = source["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"]
+
+          def root(thread):
+              nodes = thread.get("comments", {}).get("nodes", [])
+              return nodes[0] if nodes else {}
+
+          def classify(thread):
+              if thread.get("isResolved"):
+                  return None
+              path = thread.get("path") or ""
+              body = (root(thread).get("body") or "").lower()
+              if path == "src/main.rs" and (
+                  ("request id" in body or "request.id" in body)
+                  and any(token in body for token in ("path", "escape", "output directory", "filesystem"))
+              ):
+                  return "path_safe_request_id"
+              if path == "src/proof_task_ledger.rs" and "checkout" in body and any(
+                  token in body for token in ("head", "revision", "clean")
+              ):
+                  return "exact_clean_checkout"
+              if path == "src/main.rs" and "timeout" in body and any(
+                  token in body for token in ("operator", "ceiling", "raise", ".max")
+              ):
+                  return "operator_timeout_ceiling"
+              if path == "src/main.rs" and any(
+                  token in body for token in ("proof_receipt.json", "resource_lease.json", "canonical artifact")
+              ) and any(token in body for token in ("publication", "reconciliation", "stale", "remove")):
+                  return "canonical_artifact_rollback"
+              if path == "src/proof/command.rs" and "cleanup" in body and any(
+                  token in body for token in ("unconfirmed", "observation", "fail-closed", "process")
+              ):
+                  return "physical_cleanup_authority"
+              return None
+
+          selected = []
+          for thread in threads:
+              category = classify(thread)
+              if category:
+                  comment = root(thread)
+                  selected.append({
+                      "category": category,
+                      "thread_id": thread["id"],
+                      "comment_id": comment["databaseId"],
+                      "path": thread.get("path"),
+                      "body": comment.get("body") or "",
+                  })
+
+          categories = [item["category"] for item in selected]
+          expected = {
+              "path_safe_request_id",
+              "exact_clean_checkout",
+              "operator_timeout_ceiling",
+              "canonical_artifact_rollback",
+              "physical_cleanup_authority",
+          }
+          if len(selected) != 5 or set(categories) != expected or len(set(categories)) != 5:
+              Path(sys.argv[2]).write_text(json.dumps(selected, indent=2))
+              raise SystemExit(
+                  f"refusing review mutation: expected exactly five unique authority findings, got {categories}"
+              )
+          Path(sys.argv[2]).write_text(json.dumps(selected, indent=2))
+          PY
+
+      - name: Reply to and resolve only the matched superseded threads
+        shell: bash
+        env:
+          HEAD_SHA: ${{ steps.candidate.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r item; do
+            category=$(jq -r '.category' <<<"$item")
+            thread_id=$(jq -r '.thread_id' <<<"$item")
+            comment_id=$(jq -r '.comment_id' <<<"$item")
+            case "$category" in
+              path_safe_request_id)
+                detail='Worker request IDs are now rejected before filesystem use unless they are one portable path component; the absolute-path sentinel regression proves no external path is touched.'
+                ;;
+              exact_clean_checkout)
+                detail='Standalone worker execution now verifies the checkout HEAD equals the admitted head and rejects any tracked or untracked dirt before constructing the proof diff or spawning a command.'
+                ;;
+              operator_timeout_ceiling)
+                detail='The effective timeout is now min(request timeout, operator ceiling), with a one-second floor; both preflight and proof command receipts are pinned to that bounded value.'
+                ;;
+              canonical_artifact_rollback)
+                detail='Failed publication or receipt reconciliation now removes both canonical worker artifacts and their temporary forms before writing the failed TaskLedger receipt projection.'
+                ;;
+              physical_cleanup_authority)
+                detail='Every post-begin fail-closed proof path now attempts physical cleanup and retains correlated failures; CleanupFinished is emitted only after terminal observation, stream bounding, and physical cleanup all succeed.'
+                ;;
+              *) exit 1 ;;
+            esac
+            body="Fixed at exact promoted head \`$HEAD_SHA\`, a direct child of \`$EXPECTED_PARENT\`. $detail Rust 1.95 focused and full local gates, the exact-head candidate gate, the independent baseline, and a fresh exact-head Codex review are green."
+            jq -n --arg body "$body" '{body:$body}' > "$RUNNER_TEMP/reply.json"
+            curl --fail-with-body --silent --show-error \
+              -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$GITHUB_API_URL/repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments/$comment_id/replies" \
+              --data-binary @"$RUNNER_TEMP/reply.json" >/dev/null
+            jq -n \
+              --arg query 'mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id isResolved}}}' \
+              --arg threadId "$thread_id" \
+              '{query:$query,variables:{threadId:$threadId}}' \
+              > "$RUNNER_TEMP/resolve.json"
+            resolved=$(curl --fail-with-body --silent --show-error \
+              -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Content-Type: application/json" \
+              "$GITHUB_API_URL/graphql" \
+              --data-binary @"$RUNNER_TEMP/resolve.json")
+            test "$(jq -r '.data.resolveReviewThread.thread.isResolved' <<<"$resolved")" = true
+          done < <(jq -c '.[]' "$RUNNER_TEMP/matches.json")
+
+      - name: Requery remaining review state and report receipt
+        shell: bash
+        env:
+          HEAD_SHA: ${{ steps.candidate.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Content-Type: application/json" \
+            "$GITHUB_API_URL/graphql" \
+            --data-binary @"$RUNNER_TEMP/thread-query.json" \
+            > "$RUNNER_TEMP/threads-after.json"
+          remaining=$(jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length' "$RUNNER_TEMP/threads-after.json")
+          jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false) | {
+            id,
+            path,
+            root_author: .comments.nodes[0].author.login,
+            root_body: .comments.nodes[0].body
+          }]' "$RUNNER_TEMP/threads-after.json" > "$RUNNER_TEMP/remaining.json"
+          body=$(cat <<EOF
+          Review reconciliation receipt for exact head \`$HEAD_SHA\`:
+
+          - resolved: 5 superseded worker/proof authority findings
+          - remaining unresolved threads: $remaining
+          - candidate gate: green
+          - independent baseline: green
+          - fresh exact-head Codex review: no inline findings
+
+          Any remaining thread stays open for source-specific review; this operation did not treat green CI as merge authority.
+          EOF
+          )
+          jq -n --arg body "$body" '{body:$body}' > "$RUNNER_TEMP/summary-comment.json"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$OWNER/$REPO/issues/$PR_NUMBER/comments" \
+            --data-binary @"$RUNNER_TEMP/summary-comment.json" >/dev/null
+
+      - name: Upload reconciliation evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ub-review-1266-review-reconciliation-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/threads-before.json
+            ${{ runner.temp }}/matches.json
+            ${{ runner.temp }}/threads-after.json
+            ${{ runner.temp }}/remaining.json
+            ${{ runner.temp }}/reviews.json
+            ${{ runner.temp }}/exact-review-ids.json
+            ${{ runner.temp }}/review-comments.json
+          if-no-files-found: warn
+          retention-days: 7
