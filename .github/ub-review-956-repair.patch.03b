@@ -1,0 +1,177 @@
+     prepare_base_plus_tests: &mut G,
+ ) -> Result<ProofReceipt>
+@@ -207,6 +226,51 @@ where
+         &mut dyn FnMut(CommandProcessObservation),
+     ) -> Result<CommandStatus>,
+     G: FnMut(&Path, &Path, &DiffContext) -> Result<PathBuf>,
++{
++    run_focused_red_green_proof_task_with_cleanup(
++        root,
++        out,
++        diff,
++        task,
++        timeout_sec,
++        lease,
++        task_ledger,
++        execution_phase,
++        runner,
++        prepare_base_plus_tests,
++        &mut cleanup_base_plus_tests_worktree,
++    )
++}
++
++#[expect(
++    clippy::too_many_arguments,
++    reason = "lease is an execution precondition for the proof command; keeping it explicit pins the no-lease-no-command broker contract"
++)]
++fn run_focused_red_green_proof_task_with_cleanup<F, G, H>(
++    root: &Path,
++    out: &Path,
++    diff: &DiffContext,
++    task: &FocusedTestTask,
++    timeout_sec: u64,
++    lease: &ResourceLease,
++    task_ledger: Option<&ProofTaskLedger>,
++    execution_phase: ProofExecutionPhase,
++    runner: &mut F,
++    prepare_base_plus_tests: &mut G,
++    cleanup_base_plus_tests: &mut H,
++) -> Result<ProofReceipt>
++where
++    F: FnMut(
++        &Path,
++        &[String],
++        &BTreeMap<String, String>,
++        u64,
++        &Path,
++        &Path,
++        &mut dyn FnMut(CommandProcessObservation),
++    ) -> Result<CommandStatus>,
++    G: FnMut(&Path, &Path, &DiffContext) -> Result<PathBuf>,
++    H: FnMut(&Path, &Path) -> Result<()>,
+ {
+     let head_spec = proof_task_command_spec(task, "head");
+     let head = run_proof_command_receipt_for_task(
+@@ -218,6 +282,7 @@ where
+         timeout_sec,
+         lease,
+         task_ledger,
++        execution_phase,
+         runner,
+     )?;
+     let head_status = head.status.clone();
+@@ -245,7 +310,12 @@ where
+             let patch_reason = format!("base+tests patch failed: {error:#}");
+             if let Some(ledger) = task_ledger {
+                 ledger.decline_command(
+-                    &ProofCommandTask::focused_test(task, "base-plus-tests", timeout_sec),
++                    &ProofCommandTask::focused_test(
++                        task,
++                        "base-plus-tests",
++                        timeout_sec,
++                        execution_phase,
++                    ),
+                     TaskNonExecutionDisposition::Refused,
+                     &patch_reason,
+                 )?;
+@@ -268,21 +338,20 @@ where
+         }
+     };
+     let base_spec = proof_task_command_spec(task, "base-plus-tests");
+-    let base = {
+-        let result = run_proof_command_receipt_for_task(
+-            &base_root,
+-            out,
+-            task,
+-            "base-plus-tests",
+-            &base_spec,
+-            timeout_sec,
+-            lease,
+-            task_ledger,
+-            runner,
+-        );
+-        let _ = cleanup_base_plus_tests_worktree(root, &base_root);
+-        result?
+-    };
++    let mut cleanup = || cleanup_base_plus_tests(root, &base_root);
++    let base = run_proof_command_receipt_for_task_with_cleanup(
++        &base_root,
++        out,
++        task,
++        "base-plus-tests",
++        &base_spec,
++        timeout_sec,
++        lease,
++        task_ledger,
++        execution_phase,
++        Some(&mut cleanup),
++        runner,
++    )?;
+     let (result, reason) = match base.status.as_str() {
+         "failed" => (
+             "discriminating".to_owned(),
+@@ -420,6 +489,7 @@ mod tests {
+             },
+             vec![cargo_test_task()],
+             None,
++            ProofExecutionPhase::ModelRequest,
+             |root, _argv, _env, _timeout, stdout, stderr, _observe_process| {
+                 // Stand in for `cargo test classifies_boundary`: the new test
+                 // only passes where the production fix is present.
+@@ -485,6 +555,7 @@ mod tests {
+             },
+             vec![cargo_test_task()],
+             None,
++            ProofExecutionPhase::ModelRequest,
+             |_root, _argv, _env, _timeout, stdout, stderr, _observe_process| {
+                 fs::write(stdout, b"ok\n")?;
+                 fs::write(stderr, b"")?;
+@@ -511,6 +582,109 @@ mod tests {
+         Ok(())
+     }
+ 
++    #[test]
++    fn base_worktree_cleanup_precedes_ledger_cleanup_completion() -> Result<()> {
++        let temp = tempfile::tempdir()?;
++        let out = temp.path().join("out");
++        let diff = test_diff();
++        let task = cargo_test_task();
++        let revision = RevisionRef {
++            digest: "a".repeat(64),
++            semantics: "candidate_head".to_owned(),
++            reviewed_commit: "b".repeat(40),
++        };
++        let recorder = TaskLedgerRecorder::new(&revision, &Instant::now())?;
++        let ledger = ProofTaskLedger::new(recorder.clone());
++        let lease = ResourceLease {
++            revision: Some(revision),
++            schema: RESOURCE_LEASE_SCHEMA.to_owned(),
++            id: format!("lease-{}", task.id),
++            kind: "focused-test".to_owned(),
++            consumer: task.id.clone(),
++            status: "granted".to_owned(),
++            reason: "fixture lease".to_owned(),
++            cpu: 1,
++            memory_mb: 512,
++            disk_mb: 64,
++            timeout_sec: 60,
++            network: false,
++            scratch: false,
++            worktree: Some("fixture-worktree".to_owned()),
++            command: None,
++        };
++        let base_root = temp.path().join("base-plus-tests");
++        let prepared_base_root = base_root.clone();
++        let mut cleanup_observed = false;
++
++        let receipt = run_focused_red_green_proof_task_with_cleanup(
++            temp.path(),
++            &out,
++            &diff,
++            &task,
++            60,
++            &lease,
++            Some(&ledger),
++            ProofExecutionPhase::ModelRequest,
++            &mut |_root, _argv, _env, _timeout, stdout, stderr, observe_process| {
++                observe_process(CommandProcessObservation::Spawned);
