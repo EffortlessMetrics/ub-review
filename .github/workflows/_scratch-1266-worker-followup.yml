@@ -1,0 +1,139 @@
+name: Scratch #1266 exact-head follow-up
+
+on:
+  push:
+    branches:
+      - chatgpt/1266-worker-followup
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  actions: read
+
+concurrency:
+  group: ub-review-1266-worker-followup
+  cancel-in-progress: false
+
+jobs:
+  verify-review-and-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      EXPECTED_PARENT: c1e6872eee908f6f46134a3e0a148b31fd9df555
+      PR_BRANCH: codex/956-proof-worker-task-ledger
+      PR_NUMBER: "1266"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout control branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify promoted exact-head product tree
+        id: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          promoted_sha=""
+          for _ in $(seq 1 120); do
+            git fetch --no-tags origin "+refs/heads/$PR_BRANCH:refs/remotes/origin/$PR_BRANCH"
+            promoted_sha="$(git rev-parse "refs/remotes/origin/$PR_BRANCH")"
+            if [ "$promoted_sha" != "$EXPECTED_PARENT" ]; then
+              break
+            fi
+            sleep 10
+          done
+          test -n "$promoted_sha"
+          test "$promoted_sha" != "$EXPECTED_PARENT"
+          test "$(git rev-parse "$promoted_sha^")" = "$EXPECTED_PARENT"
+          changed="$(git diff --name-only "$EXPECTED_PARENT" "$promoted_sha" | sort)"
+          expected="$(printf '%s\n' \
+            src/main.rs \
+            src/proof/command.rs \
+            src/proof_task_ledger.rs | sort)"
+          test "$changed" = "$expected"
+          git show "$promoted_sha:src/main.rs" | grep -q 'fn worker_timeout_sec'
+          git show "$promoted_sha:src/main.rs" | grep -q 'fn validate_worker_request_id'
+          git show "$promoted_sha:src/proof_task_ledger.rs" | grep -q 'fn validate_worker_checkout'
+          git show "$promoted_sha:src/proof/command.rs" | grep -q 'fn combine_proof_post_run_results'
+          echo "promoted_sha=$promoted_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Request fresh exact-head reviews
+        shell: bash
+        env:
+          PROMOTED_SHA: ${{ steps.candidate.outputs.promoted_sha }}
+        run: |
+          set -euo pipefail
+          body=$(cat <<EOF
+          @codex review
+
+          @coderabbitai review
+
+          Review exact promoted head \`$PROMOTED_SHA\`, a direct child of \`$EXPECTED_PARENT\`. The validated product diff is exactly:
+
+          - \`src/main.rs\`
+          - \`src/proof/command.rs\`
+          - \`src/proof_task_ledger.rs\`
+
+          The repair rejects path-unsafe worker IDs before filesystem use, binds execution to a clean checkout at the admitted head, prevents request timeouts from raising the operator ceiling, removes canonical worker artifacts after failed publication/reconciliation, and attempts physical cleanup on every post-begin fail-closed proof path without fabricating TaskLedger completion. Rust 1.95 accepted eight focused regressions, workspace check, strict all-feature Clippy, policy-check, artifact-verifier self-test, and the full all-target workspace suite before promotion.
+          EOF
+          )
+          jq -n --arg body "$body" '{body: $body}' > "$RUNNER_TEMP/comment.json"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            --data-binary @"$RUNNER_TEMP/comment.json"
+
+      - name: Report exact-head hosted gates
+        shell: bash
+        env:
+          PROMOTED_SHA: ${{ steps.candidate.outputs.promoted_sha }}
+        run: |
+          set -euo pipefail
+          candidate_json=""
+          baseline_json=""
+          for _ in $(seq 1 180); do
+            runs=$(curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$PROMOTED_SHA&per_page=100")
+            candidate_json=$(jq -c '[.workflow_runs[] | select(.name == "ub-review/gate" and .head_sha == $sha)] | sort_by(.created_at) | last // empty' --arg sha "$PROMOTED_SHA" <<<"$runs")
+            baseline_json=$(jq -c '[.workflow_runs[] | select(.name == "ub-review/independent-baseline" and .head_sha == $sha)] | sort_by(.created_at) | last // empty' --arg sha "$PROMOTED_SHA" <<<"$runs")
+            candidate_status=$(jq -r '.status // empty' <<<"${candidate_json:-{}}")
+            baseline_status=$(jq -r '.status // empty' <<<"${baseline_json:-{}}")
+            if [ "$candidate_status" = completed ] && [ "$baseline_status" = completed ]; then
+              break
+            fi
+            sleep 10
+          done
+          test "$(jq -r '.status // empty' <<<"${candidate_json:-{}}")" = completed
+          test "$(jq -r '.status // empty' <<<"${baseline_json:-{}}")" = completed
+          candidate_conclusion=$(jq -r '.conclusion' <<<"$candidate_json")
+          baseline_conclusion=$(jq -r '.conclusion' <<<"$baseline_json")
+          candidate_url=$(jq -r '.html_url' <<<"$candidate_json")
+          baseline_url=$(jq -r '.html_url' <<<"$baseline_json")
+          body=$(cat <<EOF
+          Exact-head gate receipt for \`$PROMOTED_SHA\`:
+
+          - candidate gate: **$candidate_conclusion** — $candidate_url
+          - independent baseline: **$baseline_conclusion** — $baseline_url
+
+          These conclusions apply to the promoted three-file product tree. They do not authenticate superseded transport or audit commits.
+          EOF
+          )
+          jq -n --arg body "$body" '{body: $body}' > "$RUNNER_TEMP/gate-comment.json"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            --data-binary @"$RUNNER_TEMP/gate-comment.json"
+          test "$candidate_conclusion" = success
+          test "$baseline_conclusion" = success
