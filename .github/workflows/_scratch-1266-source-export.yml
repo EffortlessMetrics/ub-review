@@ -36,8 +36,8 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git hash-object "$PATCH_PATH")" = "$PATCH_BLOB_SHA"
-          git apply --check "$PATCH_PATH"
-          git apply "$PATCH_PATH"
+          git apply --check --ignore-space-change "$PATCH_PATH"
+          git apply --ignore-space-change "$PATCH_PATH"
           rm "$PATCH_PATH" "$WORKFLOW_PATH"
 
       - name: Install fixed Rust toolchain
