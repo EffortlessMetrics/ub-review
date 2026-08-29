@@ -1,0 +1,148 @@
++        ensure!(physical_cleanup_ran);
++
++        let task_id = proof_command_task_id(&focused.id, "head")?;
++        let events = recorder
++            .inputs()?
++            .into_iter()
++            .filter(|input| input.task_id == task_id)
++            .map(|input| input.event)
++            .collect::<Vec<_>>();
++        ensure!(events.iter().any(|event| matches!(
++            event,
++            TaskEvent::ProcessFinished {
++                disposition: TaskTerminalDisposition::Succeeded,
++                ..
++            }
++        )));
++        ensure!(!events.iter().any(|event| matches!(
++            event,
++            TaskEvent::CleanupFinished { .. }
++                | TaskEvent::ReceiptCreated { .. }
++                | TaskEvent::ResourcesReleased { .. }
++        )));
++        Ok(())
++    }
++
+     #[test]
+     fn completion_unconfirmed_stops_before_terminal_receipt_and_release() -> Result<()> {
+         let temp = tempfile::tempdir()?;
+@@ -805,7 +1025,12 @@ mod tests {
+         let recorder = TaskLedgerRecorder::new(&revision(), &Instant::now())?;
+         let ledger = ProofTaskLedger::new(recorder.clone());
+         let focused = focused_task("proof-command-unconfirmed");
+-        let command_task = ProofCommandTask::focused_test(&focused, "head", 7);
++        let command_task = ProofCommandTask::focused_test(
++            &focused,
++            "head",
++            7,
++            ProofExecutionPhase::ModelRequest,
++        );
+         let spec = ProofCommandSpec {
+             argv: vec![
+                 "cargo".to_owned(),
+@@ -827,6 +1052,7 @@ mod tests {
+                 lease: &lease,
+                 task_ledger: Some(&ledger),
+                 task: Some(&command_task),
++                cleanup: None,
+             },
+             &mut |_root, _argv, _env, _timeout, _stdout, _stderr, observe_process| {
+                 observe_process(CommandProcessObservation::Spawned);
+@@ -870,7 +1096,12 @@ mod tests {
+         let recorder = TaskLedgerRecorder::new(&revision(), &Instant::now())?;
+         let ledger = ProofTaskLedger::new(recorder.clone());
+         let focused = focused_task("proof-command-setup-failure");
+-        let command_task = ProofCommandTask::focused_test(&focused, "head", 7);
++        let command_task = ProofCommandTask::focused_test(
++            &focused,
++            "head",
++            7,
++            ProofExecutionPhase::ModelRequest,
++        );
+         let spec = ProofCommandSpec {
+             argv: vec!["missing-proof-command".to_owned()],
+             env: BTreeMap::new(),
+@@ -888,6 +1119,7 @@ mod tests {
+                 lease: &lease,
+                 task_ledger: Some(&ledger),
+                 task: Some(&command_task),
++                cleanup: None,
+             },
+             &mut |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
+                 Err(anyhow::anyhow!("injected pre-spawn failure"))
+diff --git a/src/proof/red_green.rs b/src/proof/red_green.rs
+index 51ad7b0..623d589 100644
+--- a/src/proof/red_green.rs
++++ b/src/proof/red_green.rs
+@@ -22,6 +22,7 @@ pub(crate) fn run_focused_red_green_proof_tasks_with_runner<F, G>(
+     budget: ProofBudget,
+     tasks: Vec<FocusedTestTask>,
+     task_ledger: Option<&ProofTaskLedger>,
++    execution_phase: ProofExecutionPhase,
+     mut runner: F,
+     mut prepare_base_plus_tests: G,
+ ) -> Result<ProofBrokerResult>
+@@ -55,7 +56,12 @@ where
+             ));
+             if let Some(ledger) = task_ledger {
+                 ledger.decline_command(
+-                    &ProofCommandTask::focused_test(&task, "head", task_timeout_sec),
++                    &ProofCommandTask::focused_test(
++                        &task,
++                        "head",
++                        task_timeout_sec,
++                        execution_phase,
++                    ),
+                     TaskNonExecutionDisposition::Refused,
+                     "dry-run; proof broker did not execute focused tests",
+                 )?;
+@@ -79,7 +85,12 @@ where
+             ));
+             if let Some(ledger) = task_ledger {
+                 ledger.decline_command(
+-                    &ProofCommandTask::focused_test(&task, "head", task_timeout_sec),
++                    &ProofCommandTask::focused_test(
++                        &task,
++                        "head",
++                        task_timeout_sec,
++                        execution_phase,
++                    ),
+                     TaskNonExecutionDisposition::Refused,
+                     "profile allows zero focused test leases",
+                 )?;
+@@ -111,7 +122,12 @@ where
+             ));
+             if let Some(ledger) = task_ledger {
+                 ledger.decline_command(
+-                    &ProofCommandTask::focused_test(&task, "head", task_timeout_sec),
++                    &ProofCommandTask::focused_test(
++                        &task,
++                        "head",
++                        task_timeout_sec,
++                        execution_phase,
++                    ),
+                     TaskNonExecutionDisposition::BudgetDeferred,
+                     "focused red/green proof lease budget exhausted by runtime profile",
+                 )?;
+@@ -145,6 +161,7 @@ where
+                     task_timeout_sec,
+                     &lease,
+                     task_ledger,
++                    execution_phase,
+                     &mut runner,
+                 )?;
+                 let result = match head.status.as_str() {
+@@ -164,6 +181,7 @@ where
+                 task_timeout_sec,
+                 &lease,
+                 task_ledger,
++                execution_phase,
+                 &mut runner,
+                 &mut prepare_base_plus_tests,
+             )?,
+@@ -193,6 +211,7 @@ pub(crate) fn run_focused_red_green_proof_task<F, G>(
+     timeout_sec: u64,
+     lease: &ResourceLease,
+     task_ledger: Option<&ProofTaskLedger>,
++    execution_phase: ProofExecutionPhase,
+     runner: &mut F,
