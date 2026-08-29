@@ -12,34 +12,51 @@ concurrency:
   group: ub-review-956-authoritative-apply
   cancel-in-progress: false
 
+env:
+  VALIDATION_DIR: ${{ runner.temp }}/ub-review-956-validation
+
 jobs:
   apply-validate-publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
+
       - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
         with:
           toolchain: 1.95.0
           components: rustfmt,clippy
-      - name: Reconstruct and apply authoritative source patch
+
+      - name: Reconstruct exact source repair
+        id: repair
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p validation
-          cat .github/ub-review-956-repair.patch.* > /tmp/ub-review-956-repair.patch
-          printf '%s  %s\n' 'baf4008e0271e0aa23589506fd6b3f86ab8b032659ed6eb9a7e711bb3b6c31ee' /tmp/ub-review-956-repair.patch | sha256sum --check --strict
-          git apply --check /tmp/ub-review-956-repair.patch
-          git apply /tmp/ub-review-956-repair.patch
+          shopt -s nullglob
+          chunks=(.github/ub-review-956-authoritative.patch.*)
+          if [[ ${#chunks[@]} -ne 7 || ! -f .github/ub-review-956-authoritative.patch.06 ]]; then
+            printf 'Authoritative source transfer incomplete: %s/7 chunks present.\n' "${#chunks[@]}"
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          mkdir -p "$VALIDATION_DIR"
+          cat "${chunks[@]}" > /tmp/ub-review-956-authoritative.patch
+          printf '%s  %s\n' 'f869505f4ee91282b76d84f7f5baf31d9777974b56efe7b9decfd99f10d24d07' /tmp/ub-review-956-authoritative.patch | sha256sum --check --strict
+          git apply --check --verbose /tmp/ub-review-956-authoritative.patch
+          git apply /tmp/ub-review-956-authoritative.patch
           cargo fmt --all
           git diff --check
-          git diff --binary > validation/formatted-source.patch
+          git diff --binary > "$VALIDATION_DIR/formatted-source.patch"
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
+
       - name: Validate proof and worker TaskLedger slice
+        if: steps.repair.outputs.ready == 'true'
         shell: bash
         run: |
           set -o pipefail
@@ -47,38 +64,43 @@ jobs:
             cargo fmt --all -- --check
             cargo check --locked --all-targets --all-features
             cargo test --locked --all-targets proof_task_ledger
+            cargo test --locked --all-targets worker_proof_tests
             cargo test --locked --all-targets proof::command
             cargo test --locked --all-targets proof::red_green
             cargo test --locked --all-targets proof::build
             cargo test --locked --all-targets proof::broker
-            cargo test --locked --all-targets worker_proof_tests
+            cargo test --locked --all-targets sensor_task_ledger
             cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
             cargo xtask policy-check
-          } 2>&1 | tee validation/validation.log
+            python scripts/verify-bun-review-artifacts.py --self-test
+            cargo test --locked --workspace --all-targets
+          } 2>&1 | tee "$VALIDATION_DIR/validation.log"
+
       - name: Replace transport with validated source
+        if: steps.repair.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
+          git rm -f .github/ub-review-956-authoritative.patch.*
           git rm -f .github/ub-review-956-repair.patch.*
           git rm -f .github/ub-review-authority-repair.patch.*
-          git rm -f .github/validation-trigger-956-1.txt
-          git rm -f .github/validation-trigger-956-2.txt
-          git rm -f .github/validation-trigger-d192c61.txt
+          git rm -f .github/validation-trigger-*.txt
           git rm -f .github/workflows/_temporary-authority-apply.yml
           git rm -f .github/workflows/_temporary-finalize-956.yml
           git rm -f .github/workflows/_temporary-source-export.yml
           git rm -f .github/workflows/_temporary-apply-956-authoritative.yml
-          git add src/main.rs src/proof/broker.rs src/proof/build.rs src/proof/command.rs src/proof/red_green.rs src/proof_task_ledger.rs
+          git add -A
           git diff --cached --check
           git config user.name 'EffortlessSteven'
           git config user.email 'git@effortlesssteven.com'
           git commit -m 'fix(task-ledger): observe proof and worker execution'
           git push origin HEAD:codex/956-proof-worker-task-ledger
+
       - name: Upload validation receipts
-        if: always()
+        if: always() && steps.repair.outputs.ready == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: proof-task-ledger-validation-${{ github.sha }}
-          path: validation
+          path: ${{ env.VALIDATION_DIR }}
           if-no-files-found: warn
           retention-days: 1
