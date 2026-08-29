@@ -98,7 +98,7 @@ impl ProofCommandTask {
         timeout_sec: u64,
         execution_phase: ProofExecutionPhase,
     ) -> Self {
-        let required = is_configured_proof(&task.requested_by);
+        let required = task.required || is_configured_proof(&task.requested_by);
         Self {
             receipt_id: task.id.clone(),
             side: side.to_owned(),
@@ -118,7 +118,7 @@ impl ProofCommandTask {
         timeout_sec: u64,
         execution_phase: ProofExecutionPhase,
     ) -> Self {
-        let required = is_configured_proof(&task.requested_by);
+        let required = task.required || is_configured_proof(&task.requested_by);
         Self {
             receipt_id: task.id.clone(),
             side: "head".to_owned(),
@@ -1006,6 +1006,48 @@ mod tests {
                 .iter()
                 .any(|consumer| consumer.id() == "proof-phase:follow-up")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn required_model_request_produces_required_gate_critical_command_task() -> Result<()> {
+        let request = ProofRequest {
+            schema: crate::PROOF_REQUEST_SCHEMA.to_owned(),
+            id: "required-model-proof".to_owned(),
+            lane: "opposition".to_owned(),
+            requested_by: vec!["opposition".to_owned()],
+            command: "cargo test --locked --test config_tests".to_owned(),
+            reason: "required evidence for a load-bearing objection".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 30,
+            required: true,
+            status: "requested".to_owned(),
+        };
+        let candidate = crate::focused_test_candidates_from_requests(&[request])
+            .into_iter()
+            .next()
+            .context("required request must produce a focused test candidate")?;
+        ensure!(candidate.required);
+
+        let command_task = ProofCommandTask::focused_test(
+            &candidate,
+            "head",
+            30,
+            ProofExecutionPhase::ModelRequest,
+        );
+        ensure!(command_task.required);
+        ensure!(command_task.source() == TaskSource::Required);
+        let consumers = command_task.consumers()?;
+        ensure!(consumers.contains(&crate::task_ledger::TaskConsumer::parse(
+            "proof-request:required-model-proof",
+            crate::task_ledger::TaskRequirement::Required,
+            crate::task_ledger::TaskValueClass::GateCritical,
+        )?));
+        ensure!(consumers.contains(&crate::task_ledger::TaskConsumer::parse(
+            "proof-phase:model-request",
+            crate::task_ledger::TaskRequirement::Required,
+            crate::task_ledger::TaskValueClass::GateCritical,
+        )?));
         Ok(())
     }
 

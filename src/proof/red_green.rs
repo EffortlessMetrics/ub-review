@@ -457,6 +457,7 @@ mod tests {
                 base_plus_tests: spec,
             }),
             timeout_sec: Some(60),
+            required: false,
             requested_by: vec!["tests".to_owned()],
             request_ids: vec!["proof-rust-001".to_owned()],
         }

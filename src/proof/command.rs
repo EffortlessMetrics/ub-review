@@ -566,6 +566,7 @@ mod tests {
             mode: FocusedProofMode::HeadOnly,
             command_specs: None,
             timeout_sec: Some(7),
+            required: false,
             requested_by: vec!["tests-oracle".to_owned()],
             request_ids: vec!["request-a".to_owned()],
         }
