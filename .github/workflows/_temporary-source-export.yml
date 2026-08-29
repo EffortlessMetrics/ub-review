@@ -1,5 +1,4 @@
-name: Temporary #956 apply and validation
-# One-shot transport for the exact worker, cleanup, and provenance repair.
+name: Temporary #956 source export
 
 on:
   push:
@@ -7,101 +6,31 @@ on:
       - codex/956-proof-worker-task-ledger
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: ub-review-956-source-export-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  apply:
+  export:
+    name: export exact candidate source
     runs-on: ubuntu-latest
-    outputs:
-      patch_state: ${{ steps.detect.outputs.state }}
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout exact branch head without credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
-      - id: detect
-        shell: bash
-        run: |
-          shopt -s nullglob
-          chunks=(.github/ub-review-authority-repair.patch.*)
-          if [[ ${#chunks[@]} -eq 0 ]]; then
-            echo 'state=none' >> "$GITHUB_OUTPUT"
-          elif [[ -f .github/ub-review-authority-repair.patch.04 && ${#chunks[@]} -eq 5 ]]; then
-            echo 'state=ready' >> "$GITHUB_OUTPUT"
-          else
-            echo 'state=partial' >> "$GITHUB_OUTPUT"
-          fi
-      - if: steps.detect.outputs.state == 'ready'
+          persist-credentials: false
+      - name: Verify exact candidate identity
         shell: bash
         run: |
           set -euo pipefail
-          cat .github/ub-review-authority-repair.patch.* > /tmp/ub-review-authority-repair.patch
-          printf '%s  %s\n' 'b17b0f18bddd1c083c752ba99e990aeccf7823a731cfa9769b91f9c667564760' /tmp/ub-review-authority-repair.patch | sha256sum --check --strict
-          git apply --index /tmp/ub-review-authority-repair.patch
-          git rm .github/ub-review-authority-repair.patch.*
-          git config user.name 'EffortlessSteven'
-          git config user.email 'git@effortlesssteven.com'
-          git commit -m 'fix(task-ledger): retain worker and cleanup authority'
-          git push origin HEAD:codex/956-proof-worker-task-ledger
-
-  validate:
-    needs: apply
-    if: needs.apply.outputs.patch_state == 'none'
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.95.0
-          components: rustfmt,clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - name: Format and validate the proof TaskLedger slice
-        shell: bash
-        run: |
-          set -o pipefail
-          mkdir -p validation
-          {
-            cargo fmt --all
-            git diff --check
-            git diff --binary > validation/formatted.patch
-            cargo fmt --all -- --check
-            cargo check --locked --all-targets --all-features
-            cargo test --locked --all-targets proof_task_ledger
-            cargo test --locked --all-targets proof::command
-            cargo test --locked --all-targets proof::red_green
-            cargo test --locked --all-targets proof::build
-            cargo test --locked --all-targets proof::broker
-            cargo test --locked --all-targets sensor_task_ledger
-            cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
-            cargo xtask policy-check
-          } 2>&1 | tee validation/validation.log
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: proof-task-ledger-validation-${{ github.sha }}
-          path: validation
-          if-no-files-found: error
-          retention-days: 1
-
-  export:
-    needs: apply
-    if: needs.apply.outputs.patch_state == 'none'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - uses: actions/upload-artifact@v7
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Upload exact source tree
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ub-review-source-${{ github.sha }}
           path: |
