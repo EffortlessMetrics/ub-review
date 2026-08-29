@@ -1,0 +1,25 @@
+name: Temporary RIPR ledger export
+
+on:
+  push:
+    branches:
+      - chore/956-ripr-ledger-export
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ripr-ledger-${{ github.sha }}
+          path: .ripr/suppressions.toml
+          if-no-files-found: error
+          retention-days: 1
