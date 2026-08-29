@@ -1,0 +1,27 @@
+       request_ids: request.claim_ids,
++            commands: vec![command("nightly-preflight"), command("head")],
++            result: "passed".to_owned(),
++            reason: "fixture".to_owned(),
++        };
++        fs::write(
++            temp.path().join("proof_receipt.json"),
++            serde_json::to_vec_pretty(&published)?,
++        )?;
++
++        ledger.reconcile_worker_receipt(temp.path(), "worker-request")?;
++
++        for (task, index) in [(&preflight, 0), (&command_task, 1)] {
++            let snapshot = state_for(&recorder, &task.task_id()?)?;
++            ensure!(matches!(
++                snapshot.receipt,
++                Some(TaskReceiptOutcome::Created { reference })
++                    if reference == format!("proof_receipt.json#/commands/{index}")
++            ));
++            ensure!(snapshot.timing.resources_released_at.is_some());
++        }
++        Ok(())
++    }
++
+     #[test]
+     fn red_green_side_swap_is_rejected_without_receipt_or_release() -> Result<()> {
+         let temp = tempfile::tempdir()?;
