@@ -48,10 +48,13 @@ jobs:
           cat "${chunks[@]}" > /tmp/ub-review-956-authoritative.patch
           printf '%s  %s\n' 'bb6b6dbcf34910c3ff60cfe6ef1bb03a0921ab4859ed5ad6c8fe33d38d0c438b' /tmp/ub-review-956-authoritative.patch | sha256sum --check --strict
           printf '%s  %s\n' 'b3ed673a34690957d42a7d30dffe10a328462217dc18f0ef7a2e12b10cdd43fc' .github/ub-review-956-compile-fix.patch | sha256sum --check --strict
+          printf '%s  %s\n' 'f817c8c460ba1a6c16042dc3d523bf4cbf12683fbf453a9d9030df77fb2a7f30' .github/ub-review-956-cleanup-fix.patch | sha256sum --check --strict
           git apply --check --verbose /tmp/ub-review-956-authoritative.patch
           git apply /tmp/ub-review-956-authoritative.patch
           git apply --check --verbose .github/ub-review-956-compile-fix.patch
           git apply .github/ub-review-956-compile-fix.patch
+          git apply --check --verbose .github/ub-review-956-cleanup-fix.patch
+          git apply .github/ub-review-956-cleanup-fix.patch
           cargo fmt --all
           git diff --check
           git diff --binary > "$VALIDATION_DIR/formatted-source.patch"
@@ -87,6 +90,7 @@ jobs:
           git rm -f .github/ub-review-956-repair.patch.*
           git rm -f .github/ub-review-authority-repair.patch.*
           git rm -f .github/ub-review-956-compile-fix.patch
+          git rm -f .github/ub-review-956-cleanup-fix.patch
           git rm -f .github/validation-trigger-*.txt
           git rm -f .github/workflows/_temporary-authority-apply.yml
           git rm -f .github/workflows/_temporary-finalize-956.yml
