@@ -1,0 +1,147 @@
+name: Temporary exact RIPR reconciliation
+
+on:
+  push:
+    branches:
+      - chore/956-ripr-ledger-export
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: ub-review-956-ripr-reconcile
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TARGET_HEAD: df6ece7a2ab46658fa88309d6a39f25feec6af9b
+      GATE_ARTIFACT_ID: '9710760865'
+      GATE_ZIP_SHA256: f2b3ea095c14c429e295a419a866830066c6710f1168eb9bd9277dd71b1ff7a3
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: codex/956-proof-worker-task-ledger
+          fetch-depth: 0
+          path: repo
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: 1.95.0
+      - name: Download and verify exact hosted RIPR evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C repo rev-parse HEAD)" = "$TARGET_HEAD"
+          gh api "/repos/EffortlessMetrics/ub-review/actions/artifacts/$GATE_ARTIFACT_ID/zip" > /tmp/ub-review-gate.zip
+          printf '%s  %s\n' "$GATE_ZIP_SHA256" /tmp/ub-review-gate.zip | sha256sum --check --strict
+          unzip -p /tmp/ub-review-gate.zip target/ub-review/sensors/ripr/exposure-gaps.json > /tmp/exposure-gaps.json
+      - name: Replace displaced receipts with exact current IDs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import re
+          import tomllib
+          from pathlib import Path
+
+          evidence = json.loads(Path('/tmp/exposure-gaps.json').read_text())
+          entries = evidence['entries']
+          if evidence.get('status') != 'ok' or len(entries) != 492:
+              raise SystemExit(f"unexpected exact-head RIPR evidence: status={evidence.get('status')} entries={len(entries)}")
+
+          reasons = {
+              'src_lane_packets.rs': 'RIPR 0.10.0 cannot statically connect the shared spawn-observer forwarding seam to its lifecycle oracles (ripr-swarm#1054/#1055). child_cleanup_bounds_persistent_interrupted_reaps, child_cleanup_marks_release_unconfirmed_when_reaping_fails, child_cleanup_retries_interrupted_reaps_until_exit_is_confirmed, and the proof-command lifecycle regressions pin spawn, unconfirmed completion, bounded reap, and environment quarantine. Re-verify after semantic edits to src/lane_packets.rs.',
+              'src_main.rs': 'RIPR 0.10.0 cannot statically connect the fallible standalone-worker orchestration branches to the injected runner, stale-artifact, revision, publication, and snapshot oracles (ripr-swarm#1054/#1055). worker_preflight_and_proof_are_distinct_revision_bound_tasks, unresolved_worker_request_never_spawns_the_proof_command, symbolic_worker_revision_is_rejected_before_any_spawn, readable_stale_receipt_cannot_survive_failed_attempt_preparation, and worker_publication_failure_releases_only_receipt_pending_tasks pin these paths. Re-verify after semantic edits to the worker path in src/main.rs.',
+              'src_proof_broker.rs': 'RIPR 0.10.0 cannot statically attribute proof execution-phase forwarding through the broker wrappers to the existing broker result oracles (ripr-swarm#1054/#1055). broker_keeps_same_named_tests_with_distinct_commands_separate, broker_merges_equivalent_focused_test_commands_and_request_ids, broker_replans_after_discriminating_test_receipt_before_build, and the phase provenance tests pin initial-impact, model-request, and follow-up routing without changing selection or budget authority. Re-verify after semantic edits to src/proof/broker.rs.',
+              'src_proof_build.rs': 'RIPR 0.10.0 cannot statically connect focused-build phase/source propagation and TaskLedger decline/admission calls to the broker and ledger assertions (ripr-swarm#1054/#1055). focused_build_request_skips_when_profile_disables_build_leases, proof_broker_v0_executes_allowlisted_focused_build_request, command_sources_preserve_impact_required_and_model_provenance, and fake_clock_keeps_all_execution_phases_distinct pin refusal, admission, execution, and phase identity. Re-verify after semantic edits to src/proof/build.rs.',
+              'src_proof_command.rs': 'RIPR 0.10.0 cannot statically link the shared proof-command process, stream, physical-cleanup, receipt, and release branches to their injected lifecycle oracles (ripr-swarm#1054/#1055). proof_command_receipt_bounds_stdout_and_stderr_artifacts, completion_unconfirmed_stops_before_terminal_receipt_and_release, spawned_runner_error_is_cancelled_and_serialized_as_skipped, stream_bounding_failure_does_not_claim_cleanup_completion, and the setup-failure tests pin the exact transitions and artifacts. Re-verify after semantic edits to src/proof/command.rs.',
+              'src_proof_red_green.rs': 'RIPR 0.10.0 cannot statically connect red/green worktree preparation and cleanup callbacks to the ordered process/cleanup/receipt assertions (ripr-swarm#1054/#1055). base_worktree_cleanup_precedes_ledger_cleanup_completion, proof_broker_v0_cleans_base_plus_tests_worktree_when_base_receipt_errors, unconfirmed_head_completion_prevents_base_plus_tests_launch, same_file_rust_unit_test_discriminates_against_its_own_fix, and unbuildable_base_plus_tests_is_skipped pin physical cleanup, launch refusal, and proof classification. Re-verify after semantic edits to src/proof/red_green.rs.',
+              'src_proof_task_ledger.rs': 'RIPR 0.10.0 cannot statically connect the TaskLedger adapter fallible proposal, source/phase, receipt reconciliation, failure, and release branches to its replayed snapshot oracles (ripr-swarm#1054/#1055). command_receipt_and_release_wait_for_current_aggregate_publication, command_sources_preserve_impact_required_and_model_provenance, duplicate_source_requests_remain_distinct, worker_tasks_are_optional_and_source_bound, worker_receipt_reconciliation_binds_standalone_artifact, and the receipt-failure tests pin these contracts. Re-verify after semantic edits to src/proof_task_ledger.rs.',
+              'src_sensor_task_ledger.rs': 'RIPR 0.10.0 cannot statically connect the shared recorder and RIPR aggregate-timeout adapter branches to the co-located lifecycle and artifact oracles (ripr-swarm#1054/#1055). empty_sensor_plan_omits_the_optional_artifact_pair, runnable_and_skipped_sensors_share_one_shadow_contract, ripr_reserves_primary_and_detail_subprocess_timeout_ceilings, timeout/setup/receipt terminal tests, and CLI emission coverage pin reservations, timing, terminal states, and releases. Re-verify after semantic edits to src/sensor_task_ledger.rs.',
+          }
+
+          grouped = {token: [] for token in reasons}
+          for entry in entries:
+              finding_id = entry['id']
+              parts = finding_id.split(':', 2)
+              if len(parts) != 3 or parts[1] not in grouped:
+                  raise SystemExit(f'unexpected finding identity: {finding_id}')
+              grouped[parts[1]].append(finding_id)
+          exact_ids = {finding_id for ids in grouped.values() for finding_id in ids}
+          if len(exact_ids) != 492:
+              raise SystemExit('duplicate exact-head exposure-gap IDs')
+
+          path = Path('repo/.ripr/suppressions.toml')
+          original = path.read_text()
+          block_re = re.compile(r'(?ms)^\[\[suppressions\]\]\n.*?(?=^\[\[suppressions\]\]\n|\Z)')
+          matches = list(block_re.finditer(original))
+          if not matches:
+              raise SystemExit('suppression ledger has no entries')
+          header = original[:matches[0].start()].rstrip()
+          kept = []
+          removed = 0
+          for match in matches:
+              block = match.group(0).rstrip()
+              identity = re.search(r'(?m)^finding_id = "([^"]+)"$', block)
+              finding_id = identity.group(1) if identity else ''
+              if any(finding_id.startswith(f'probe:{token}:') for token in reasons):
+                  removed += 1
+              else:
+                  kept.append(block)
+
+          def toml_string(value: str) -> str:
+              return json.dumps(value, ensure_ascii=False)
+
+          current = []
+          for token in sorted(grouped):
+              for finding_id in sorted(grouped[token]):
+                  current.append('\n'.join([
+                      '[[suppressions]]',
+                      'kind = "exposure_gap"',
+                      f'finding_id = {toml_string(finding_id)}',
+                      'owner = "ub-review/core"',
+                      f'reason = {toml_string(reasons[token])}',
+                  ]))
+
+          updated = header + '\n\n' + '\n\n'.join(kept + current) + '\n'
+          parsed = tomllib.loads(updated)
+          observed = [item['finding_id'] for item in parsed['suppressions'] if item['finding_id'] in exact_ids]
+          if len(observed) != 492 or set(observed) != exact_ids:
+              raise SystemExit('updated ledger does not contain every exact ID exactly once')
+          for item in parsed['suppressions']:
+              finding_id = item['finding_id']
+              if any(finding_id.startswith(f'probe:{token}:') for token in reasons) and finding_id not in exact_ids:
+                  raise SystemExit(f'displaced changed-file receipt remained: {finding_id}')
+          path.write_text(updated)
+          print(f'removed={removed} added={len(current)} total={len(parsed["suppressions"])}')
+          for token in sorted(grouped):
+              print(f'{token}={len(grouped[token])}')
+          PY
+          git -C repo diff --check
+          git -C repo diff --stat
+      - name: Validate policy ledger
+        working-directory: repo
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo xtask policy-check
+          python scripts/verify-bun-review-artifacts.py --self-test
+      - name: Publish policy-only reconciliation
+        working-directory: repo
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_HEAD"
+          git add .ripr/suppressions.toml
+          git diff --cached --check
+          git config user.name EffortlessSteven
+          git config user.email git@effortlesssteven.com
+          git commit -m 'policy(ripr): receipt proof and worker lifecycle probes'
+          git push origin HEAD:codex/956-proof-worker-task-ledger
