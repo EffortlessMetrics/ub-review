@@ -1,0 +1,180 @@
+name: Scratch #1266 finalize exact-head metadata
+
+on:
+  push:
+    branches:
+      - chatgpt/1266-finalize-metadata
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: ub-review-1266-finalize-metadata
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OWNER: EffortlessMetrics
+      REPO: ub-review
+      PR_NUMBER: "1266"
+      PR_BRANCH: codex/956-proof-worker-task-ledger
+      EXPECTED_PARENT: c1e6872eee908f6f46134a3e0a148b31fd9df555
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout control branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify immutable final product head
+        id: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/$PR_BRANCH:refs/remotes/origin/$PR_BRANCH"
+          head_sha="$(git rev-parse "refs/remotes/origin/$PR_BRANCH")"
+          test "$(git rev-parse "$head_sha^")" = "$EXPECTED_PARENT"
+          changed="$(git diff --name-only "$EXPECTED_PARENT" "$head_sha" | sort)"
+          expected="$(printf '%s\n' \
+            src/main.rs \
+            src/proof/command.rs \
+            src/proof_task_ledger.rs | sort)"
+          test "$changed" = "$expected"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Collect and require final authorities
+        id: authority
+        shell: bash
+        env:
+          HEAD_SHA: ${{ steps.candidate.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          runs=$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$OWNER/$REPO/actions/runs?head_sha=$HEAD_SHA&per_page=100")
+          candidate=$(jq -c '[.workflow_runs[] | select(.name == "ub-review/gate" and .head_sha == $sha and .status == "completed")] | sort_by(.created_at) | last // empty' --arg sha "$HEAD_SHA" <<<"$runs")
+          baseline=$(jq -c '[.workflow_runs[] | select(.name == "ub-review/independent-baseline" and .head_sha == $sha and .status == "completed")] | sort_by(.created_at) | last // empty' --arg sha "$HEAD_SHA" <<<"$runs")
+          test "$(jq -r '.conclusion // empty' <<<"${candidate:-{}}")" = success
+          test "$(jq -r '.conclusion // empty' <<<"${baseline:-{}}")" = success
+          echo "candidate_url=$(jq -r '.html_url' <<<"$candidate")" >> "$GITHUB_OUTPUT"
+          echo "baseline_url=$(jq -r '.html_url' <<<"$baseline")" >> "$GITHUB_OUTPUT"
+
+          jq -n \
+            --arg query 'query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){pageInfo{hasNextPage}nodes{id isResolved}}}}}' \
+            --arg owner "$OWNER" \
+            --arg name "$REPO" \
+            --argjson number "$PR_NUMBER" \
+            '{query:$query,variables:{owner:$owner,name:$name,number:$number}}' \
+            > "$RUNNER_TEMP/thread-query.json"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Content-Type: application/json" \
+            "$GITHUB_API_URL/graphql" \
+            --data-binary @"$RUNNER_TEMP/thread-query.json" \
+            > "$RUNNER_TEMP/threads.json"
+          jq -e '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage == false' "$RUNNER_TEMP/threads.json" >/dev/null
+          jq -e '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length == 0' "$RUNNER_TEMP/threads.json" >/dev/null
+
+          gh api --paginate \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews?per_page=100" \
+            --slurp | jq 'add' > "$RUNNER_TEMP/reviews.json"
+          jq --arg sha "$HEAD_SHA" '
+            [.[] | select(
+              .commit_id == $sha
+              and (.user.login | contains("chatgpt-codex-connector"))
+              and .state != "DISMISSED"
+            ) | .id]
+          ' "$RUNNER_TEMP/reviews.json" > "$RUNNER_TEMP/exact-review-ids.json"
+          jq -e 'length > 0' "$RUNNER_TEMP/exact-review-ids.json" >/dev/null
+          gh api --paginate \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments?per_page=100" \
+            --slurp | jq 'add' > "$RUNNER_TEMP/review-comments.json"
+          jq -e --slurpfile ids "$RUNNER_TEMP/exact-review-ids.json" '
+            [.[] | select(.pull_request_review_id as $id | $ids[0] | index($id))] | length == 0
+          ' "$RUNNER_TEMP/review-comments.json" >/dev/null
+
+      - name: Append authoritative exact-head receipt to the PR body
+        shell: bash
+        env:
+          HEAD_SHA: ${{ steps.candidate.outputs.head_sha }}
+          CANDIDATE_URL: ${{ steps.authority.outputs.candidate_url }}
+          BASELINE_URL: ${{ steps.authority.outputs.baseline_url }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$OWNER/$REPO/pulls/$PR_NUMBER" \
+            > "$RUNNER_TEMP/pr.json"
+          python - "$RUNNER_TEMP/pr.json" "$RUNNER_TEMP/pr-update.json" <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          pr = json.loads(Path(sys.argv[1]).read_text())
+          body = pr.get("body") or ""
+          start = "<!-- exact-head-receipt:start -->"
+          end = "<!-- exact-head-receipt:end -->"
+          block = f"""{start}
+          ## Exact-head completion receipt
+
+          - **Candidate:** `{os.environ['HEAD_SHA']}`. This is a direct child of `{os.environ['EXPECTED_PARENT']}`; the final authority repair changes only `src/main.rs`, `src/proof/command.rs`, and `src/proof_task_ledger.rs` relative to that reviewed parent.
+          - **Worker admission:** request IDs are path-safe before filesystem use; execution is bound to a clean checkout whose `HEAD` equals the admitted immutable revision; request timeouts cannot raise the operator ceiling.
+          - **Execution authority:** post-begin proof failures attempt physical cleanup, retain correlated diagnostics, and emit `CleanupFinished` only after terminal observation, stream bounding, and physical cleanup all succeed.
+          - **Receipt authority:** failed publication or reconciliation removes canonical worker artifacts before the failed TaskLedger receipt projection is persisted.
+          - **Local verification:** Rust 1.95 rustfmt, eight focused worker/proof authority regressions, all-feature workspace check and strict Clippy, policy-check, artifact-verifier self-test, full all-target workspace tests, and `git diff --check` passed on the promoted source tree.
+          - **Hosted verification:** [candidate gate]({os.environ['CANDIDATE_URL']}) and [independent base-owned baseline]({os.environ['BASELINE_URL']}) both passed at the exact candidate head.
+          - **Review:** a fresh exact-head Codex review produced no inline finding, and all review threads are resolved. Green checks are recorded as evidence, not treated as merge authorization.
+          - **Boundary:** cross-projection receipt reconciliation remains in #957. This PR remains unmerged pending an explicit merge decision.
+          {end}"""
+          block = "\n".join(line.strip() if line.startswith("          ") else line for line in block.splitlines())
+          pattern = re.compile(re.escape(start) + r".*?" + re.escape(end), re.S)
+          if pattern.search(body):
+              body = pattern.sub(block, body)
+          else:
+              body = body.rstrip() + "\n\n" + block + "\n"
+          Path(sys.argv[2]).write_text(json.dumps({"body": body}))
+          PY
+          curl --fail-with-body --silent --show-error \
+            -X PATCH \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$OWNER/$REPO/pulls/$PR_NUMBER" \
+            --data-binary @"$RUNNER_TEMP/pr-update.json" >/dev/null
+
+      - name: Post final non-merge readiness receipt
+        shell: bash
+        env:
+          HEAD_SHA: ${{ steps.candidate.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          body=$(cat <<EOF
+          Exact-head #956 readiness receipt is now canonical in the PR body for \`$HEAD_SHA\`.
+
+          Source, local verification, both hosted authorities, and exact-head review reconciliation are complete. The PR was **not merged**; merge remains an explicit decision boundary.
+          EOF
+          )
+          jq -n --arg body "$body" '{body:$body}' > "$RUNNER_TEMP/readiness-comment.json"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$OWNER/$REPO/issues/$PR_NUMBER/comments" \
+            --data-binary @"$RUNNER_TEMP/readiness-comment.json" >/dev/null
