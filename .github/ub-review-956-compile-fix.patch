@@ -1,0 +1,73 @@
+diff --git a/src/main.rs b/src/main.rs
+index 8a398b5..0d687ac 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -433,7 +433,7 @@ where
+         let reason = format!("executor adapter could not resolve {kind_str} intent");
+         task_ledger.decline_command(
+             &command_task,
+-            TaskNonExecutionDisposition::Unsupported,
++            crate::task_ledger::TaskNonExecutionDisposition::Unsupported,
+             &reason,
+         )?;
+         let spec = ProofCommandSpec {
+@@ -574,7 +574,7 @@ fn classify_worker_proof_result(kind: &ProofKind, command: &ProofCommandReceipt)
+ #[cfg(test)]
+ mod worker_proof_tests {
+     use super::*;
+-    use crate::proof::ProofCommandSpec;
++    use anyhow::ensure;
+ 
+     fn receipt_with_status(status: &str) -> ProofCommandReceipt {
+         ProofCommandReceipt {
+@@ -6407,7 +6407,9 @@ fn load_previous_quality_backfill(
+ 
+ #[cfg(test)]
+ mod tests {
+-    use crate::{CommandProcessObservation, InternalAuditClassification};
++    use crate::{
++        CommandProcessObservation, InternalAuditClassification, ProofExecutionPhase,
++    };
+     use std::collections::{BTreeMap, BTreeSet};
+     use std::fs;
+     use std::io::{BufRead, BufReader, Write as _};
+@@ -6417,7 +6419,7 @@ mod tests {
+     use std::thread;
+     use std::time::{Duration, Instant};
+ 
+-    use anyhow::{Context as _, Result, bail};
++    use anyhow::{Context as _, Result, bail, ensure};
+ 
+     use super::diff_posture::{NO_LGTM_POSTURE, default_lanes_for_diff_context};
+     use super::quality_artifact::{build_quality_receipt, build_quality_trend_artifact};
+diff --git a/src/proof/command.rs b/src/proof/command.rs
+index 5effccb..841d015 100644
+--- a/src/proof/command.rs
++++ b/src/proof/command.rs
+@@ -25,7 +25,7 @@ pub(crate) struct ProofCommandSpec {
+     pub(crate) env: BTreeMap<String, String>,
+ }
+ 
+-pub(crate) struct ProofCommandInvocation<'a> {
++pub(crate) struct ProofCommandInvocation<'a, 'cleanup> {
+     pub(crate) command_root: &'a Path,
+     pub(crate) out: &'a Path,
+     pub(crate) receipt_id: &'a str,
+@@ -35,7 +35,7 @@ pub(crate) struct ProofCommandInvocation<'a> {
+     pub(crate) lease: &'a ResourceLease,
+     pub(crate) task_ledger: Option<&'a ProofTaskLedger>,
+     pub(crate) task: Option<&'a ProofCommandTask>,
+-    pub(crate) cleanup: Option<&'a mut dyn FnMut() -> Result<()>>,
++    pub(crate) cleanup: Option<&'cleanup mut dyn FnMut() -> Result<()>>,
+ }
+ 
+ #[derive(Default)]
+@@ -45,7 +45,7 @@ pub(crate) struct ProofBrokerResult {
+ }
+ 
+ pub(crate) fn run_proof_command_receipt<F>(
+-    invocation: ProofCommandInvocation<'_>,
++    invocation: ProofCommandInvocation<'_, '_>,
+     runner: &mut F,
+ ) -> Result<ProofCommandReceipt>
+ where
