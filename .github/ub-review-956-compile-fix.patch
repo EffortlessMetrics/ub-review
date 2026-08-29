@@ -1,6 +1,8 @@
+diff --git a/src/main.rs b/src/main.rs
+index 528330e..1f69c7c 100644
 --- a/src/main.rs
 +++ b/src/main.rs
-@@ -309,7 +309,7 @@
+@@ -309,7 +309,7 @@ fn run_worker_request_with_runner_and_boundaries<F>(
      args: &WorkerArgs,
      request: ProofRequestV2,
      runner: &mut F,
@@ -9,7 +11,77 @@
  ) -> Result<()>
  where
      F: FnMut(
-@@ -690,7 +690,7 @@
+@@ -343,10 +343,11 @@ where
+         &request,
+         "nightly-preflight",
+         "worker-preflight",
+-        "granted",
+-        "standalone worker nightly capability preflight admitted",
+         timeout_sec,
+         &preflight_spec,
++        WorkerLeaseAdmission::Granted(
++            "standalone worker nightly capability preflight admitted",
++        ),
+     );
+ 
+     if let Err(error) = (boundaries.prepare)(out, &request.id) {
+@@ -390,10 +391,11 @@ where
+                 &request,
+                 "head",
+                 &kind_str,
+-                "granted",
+-                "standalone worker proof command admitted",
+                 timeout_sec,
+                 &spec,
++                WorkerLeaseAdmission::Granted(
++                    "standalone worker proof command admitted",
++                ),
+             );
+             (spec, lease)
+         }
+@@ -407,10 +409,11 @@ where
+                 &request,
+                 "head",
+                 &kind_str,
+-                "refused",
+-                "executor adapter could not resolve the typed proof intent",
+                 timeout_sec,
+                 &spec,
++                WorkerLeaseAdmission::Refused(
++                    "executor adapter could not resolve the typed proof intent",
++                ),
+             );
+             (spec, lease)
+         }
+@@ -535,17 +538,24 @@ where
+     }
+ }
+ 
++enum WorkerLeaseAdmission {
++    Granted(&'static str),
++    Refused(&'static str),
++}
++
+ fn worker_lease(
+     revision: &RevisionRef,
+     request: &ProofRequestV2,
+     side: &str,
+     kind: &str,
+-    status: &str,
+-    reason: &str,
+     timeout_sec: u64,
+     spec: &ProofCommandSpec,
++    admission: WorkerLeaseAdmission,
+ ) -> ResourceLease {
+-    let granted = status == "granted";
++    let (status, reason, granted) = match admission {
++        WorkerLeaseAdmission::Granted(reason) => ("granted", reason, true),
++        WorkerLeaseAdmission::Refused(reason) => ("refused", reason, false),
++    };
+     ResourceLease {
+         revision: Some(revision.clone()),
+         schema: crate::artifacts::RESOURCE_LEASE_SCHEMA.to_owned(),
+@@ -690,7 +700,7 @@ fn classify_worker_proof_result(kind: &ProofKind, command: &ProofCommandReceipt)
  #[cfg(test)]
  mod worker_proof_tests {
      use super::*;
@@ -18,7 +90,7 @@
      use crate::task_ledger::TaskId;
  
      fn receipt_with_status(status: &str) -> ProofCommandReceipt {
-@@ -6522,7 +6522,9 @@
+@@ -6522,7 +6532,9 @@ fn load_previous_quality_backfill(
  
  #[cfg(test)]
  mod tests {
@@ -29,9 +101,11 @@
      use std::collections::{BTreeMap, BTreeSet};
      use std::fs;
      use std::io::{BufRead, BufReader, Write as _};
+diff --git a/src/proof/command.rs b/src/proof/command.rs
+index 2ca23d4..b804659 100644
 --- a/src/proof/command.rs
 +++ b/src/proof/command.rs
-@@ -25,7 +25,7 @@
+@@ -25,7 +25,7 @@ pub(crate) struct ProofCommandSpec {
      pub(crate) env: BTreeMap<String, String>,
  }
  
@@ -40,7 +114,7 @@
      pub(crate) command_root: &'a Path,
      pub(crate) out: &'a Path,
      pub(crate) receipt_id: &'a str,
-@@ -35,7 +35,7 @@
+@@ -35,7 +35,7 @@ pub(crate) struct ProofCommandInvocation<'a> {
      pub(crate) lease: &'a ResourceLease,
      pub(crate) task_ledger: Option<&'a ProofTaskLedger>,
      pub(crate) task: Option<&'a ProofCommandTask>,
@@ -49,7 +123,7 @@
  }
  
  #[derive(Default)]
-@@ -45,7 +45,7 @@
+@@ -45,7 +45,7 @@ pub(crate) struct ProofBrokerResult {
  }
  
  pub(crate) fn run_proof_command_receipt<F>(
