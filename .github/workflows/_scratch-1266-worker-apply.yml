@@ -1,0 +1,151 @@
+name: Scratch #1266 worker authority validation
+
+on:
+  push:
+    branches:
+      - chatgpt/1266-worker-authority-fix
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ub-review-1266-worker-authority
+  cancel-in-progress: false
+
+jobs:
+  apply-validate-publish:
+    name: apply, validate, and publish source-only repair
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      SCRATCH_BRANCH: chatgpt/1266-worker-authority-fix
+      TRANSFORM: .github/ub-review-1266-worker-transform.py
+      EXPORT_WORKFLOW: .github/workflows/_scratch-1266-worker-source-export.yml
+      APPLY_WORKFLOW: .github/workflows/_scratch-1266-worker-apply.yml
+    steps:
+      - name: Checkout exact scratch head
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Verify exact input and apply bounded source transform
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python "$TRANSFORM"
+          rm "$TRANSFORM" "$EXPORT_WORKFLOW" "$APPLY_WORKFLOW"
+          git diff --check
+
+      - name: Install fixed Rust toolchain
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: 1.95.0
+          components: rustfmt,clippy
+
+      - name: Format and run falsifying regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          cargo fmt --all -- --check
+          cargo test --workspace --all-targets --locked worker_request_timeout_cannot_raise_operator_ceiling -- --nocapture
+          cargo test --workspace --all-targets --locked worker_request_id_cannot_escape_the_output_directory -- --nocapture
+          cargo test --workspace --all-targets --locked worker_checkout_head_must_match_the_admitted_request -- --nocapture
+          cargo test --workspace --all-targets --locked worker_checkout_must_be_clean_before_proof_execution -- --nocapture
+          cargo test --workspace --all-targets --locked worker_publication_failure_releases_only_receipt_pending_tasks -- --nocapture
+          cargo test --workspace --all-targets --locked worker_reconciliation_failure_removes_canonical_artifacts -- --nocapture
+          cargo test --workspace --all-targets --locked unconfirmed_child_completion_does_not_fabricate_terminal_state -- --nocapture
+          cargo test --workspace --all-targets --locked early_proof_observation_failure_runs_cleanup_and_retains_both_errors -- --nocapture
+
+      - name: Run deterministic repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo check --workspace --all-targets --all-features --locked
+          cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+          cargo run --locked --package xtask -- policy-check
+          python scripts/verify-bun-review-artifacts.py --self-test
+          cargo test --workspace --all-targets --locked
+          git diff --check
+
+      - name: Verify bounded final surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git diff --name-only --diff-filter=ACDMRTUXB | sort)"
+          expected="$(printf '%s\n' \
+            .github/ub-review-1266-worker-transform.py \
+            .github/workflows/_scratch-1266-worker-apply.yml \
+            .github/workflows/_scratch-1266-worker-source-export.yml \
+            src/main.rs \
+            src/proof/command.rs \
+            src/proof_task_ledger.rs | sort)"
+          test "$actual" = "$expected"
+          test ! -e "$TRANSFORM"
+          test ! -e "$EXPORT_WORKFLOW"
+          test ! -e "$APPLY_WORKFLOW"
+          git status --short
+
+      - name: Commit validated source-only repair
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name EffortlessSteven
+          git config user.email git@effortlesssteven.com
+          git add -A
+          git commit -m "fix(task-ledger): close worker execution authority gaps"
+          repaired_sha="$(git rev-parse HEAD)"
+          repaired_tree="$(git rev-parse HEAD^{tree})"
+          echo "repaired_sha=$repaired_sha" >> "$GITHUB_OUTPUT"
+          echo "repaired_tree=$repaired_tree" >> "$GITHUB_OUTPUT"
+          git push origin "HEAD:refs/heads/$SCRATCH_BRANCH"
+
+      - name: Write validation receipt
+        if: ${{ always() }}
+        shell: bash
+        env:
+          REPAIRED_SHA: ${{ steps.commit.outputs.repaired_sha }}
+          REPAIRED_TREE: ${{ steps.commit.outputs.repaired_tree }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          receipt_dir="$RUNNER_TEMP/ub-review-1266-worker-validation"
+          mkdir -p "$receipt_dir"
+          jq -n \
+            --arg schema "ub-review.scratch_validation.v1" \
+            --arg status "$JOB_STATUS" \
+            --arg input_sha "$GITHUB_SHA" \
+            --arg repaired_sha "${REPAIRED_SHA:-}" \
+            --arg repaired_tree "${REPAIRED_TREE:-}" \
+            '{
+              schema: $schema,
+              status: $status,
+              input_sha: $input_sha,
+              repaired_sha: $repaired_sha,
+              repaired_tree: $repaired_tree,
+              rust_toolchain: "1.95.0",
+              scope: ["src/main.rs", "src/proof/command.rs", "src/proof_task_ledger.rs"],
+              checks: [
+                "cargo fmt --all -- --check",
+                "eight focused worker/proof authority regressions",
+                "cargo check --workspace --all-targets --all-features --locked",
+                "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings",
+                "cargo run --locked --package xtask -- policy-check",
+                "python scripts/verify-bun-review-artifacts.py --self-test",
+                "cargo test --workspace --all-targets --locked",
+                "git diff --check"
+              ]
+            }' > "$receipt_dir/receipt.json"
+
+      - name: Upload validation receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ub-review-1266-worker-validation-${{ github.sha }}
+          path: ${{ runner.temp }}/ub-review-1266-worker-validation
+          if-no-files-found: error
+          retention-days: 7
