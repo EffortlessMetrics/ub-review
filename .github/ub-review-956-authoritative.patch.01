@@ -1,0 +1,406 @@
+            task_ledger.write_artifacts(out)?;
++            }
++            Err(error)
++        }
++    }
++}
++
++fn worker_lease(
++    revision: &RevisionRef,
++    request: &ProofRequestV2,
++    side: &str,
++    kind: &str,
++    status: &str,
++    reason: &str,
++    timeout_sec: u64,
++    spec: &ProofCommandSpec,
++) -> ResourceLease {
++    let granted = status == "granted";
++    ResourceLease {
++        revision: Some(revision.clone()),
++        schema: crate::artifacts::RESOURCE_LEASE_SCHEMA.to_owned(),
++        id: format!("worker-lease-{}-{side}", request.id),
++        kind: kind.to_owned(),
++        consumer: request.id.clone(),
++        status: status.to_owned(),
++        reason: reason.to_owned(),
++        cpu: if granted { 1 } else { 0 },
++        memory_mb: if granted { 512 } else { 0 },
++        disk_mb: if granted { 64 } else { 0 },
++        timeout_sec,
++        network: false,
++        scratch: granted,
++        worktree: None,
++        command: Some(format!("{side}: {}", spec.argv.join(" "))),
++    }
++}
++
++fn prepare_worker_attempt(out: &Path, request_id: &str) -> Result<()> {
++    fs::create_dir_all(out).with_context(|| format!("create {}", out.display()))?;
++    crate::task_ledger_artifact::remove_task_ledger_artifacts(out)?;
++    remove_optional_worker_file(&out.join("proof_receipt.json"))?;
++    remove_optional_worker_file(&out.join("resource_lease.json"))?;
++    remove_optional_worker_file(&out.join("proof_receipt.json.tmp"))?;
++    remove_optional_worker_file(&out.join("resource_lease.json.tmp"))?;
++    let proof_dir = out.join("proof").join(request_id);
++    match fs::remove_dir_all(&proof_dir) {
++        Ok(()) => Ok(()),
++        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
++        Err(error) => Err(error).with_context(|| format!("remove stale {}", proof_dir.display())),
++    }
++}
++
++fn remove_optional_worker_file(path: &Path) -> Result<()> {
++    match fs::remove_file(path) {
++        Ok(()) => Ok(()),
++        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
++        Err(error) => Err(error).with_context(|| format!("remove stale {}", path.display())),
++    }
++}
++
++fn publish_worker_artifacts(
++    out: &Path,
++    lease: &ResourceLease,
++    receipt: &ProofReceipt,
++) -> Result<()> {
++    fs::create_dir_all(out).with_context(|| format!("create {}", out.display()))?;
++    let lease_path = out.join("resource_lease.json");
++    let receipt_path = out.join("proof_receipt.json");
++    let lease_tmp = out.join("resource_lease.json.tmp");
++    let receipt_tmp = out.join("proof_receipt.json.tmp");
++    anyhow::ensure!(
++        !lease_path.exists() && !receipt_path.exists(),
++        "standalone worker canonical outputs were not cleared before publication"
+     );
++    remove_optional_worker_file(&lease_tmp)?;
++    remove_optional_worker_file(&receipt_tmp)?;
++    fs::write(&lease_tmp, serde_json::to_vec_pretty(lease)?)
++        .with_context(|| format!("write {}", lease_tmp.display()))?;
++    if let Err(error) = fs::write(&receipt_tmp, serde_json::to_vec_pretty(receipt)?) {
++        let _ = fs::remove_file(&lease_tmp);
++        return Err(error).with_context(|| format!("write {}", receipt_tmp.display()));
++    }
++    if let Err(error) = fs::rename(&lease_tmp, &lease_path) {
++        let _ = fs::remove_file(&lease_tmp);
++        let _ = fs::remove_file(&receipt_tmp);
++        return Err(error).with_context(|| format!("publish {}", lease_path.display()));
++    }
++    if let Err(error) = fs::rename(&receipt_tmp, &receipt_path) {
++        let _ = fs::remove_file(&lease_path);
++        let _ = fs::remove_file(&receipt_tmp);
++        return Err(error).with_context(|| format!("publish {}", receipt_path.display()));
++    }
++    Ok(())
++}
++
++fn validate_published_worker_lease(
++    out: &Path,
++    revision: &RevisionRef,
++    expected: &ResourceLease,
++) -> Result<()> {
++    let path = out.join("resource_lease.json");
++    let lease: ResourceLease = serde_json::from_slice(
++        &fs::read(&path).with_context(|| format!("read {}", path.display()))?,
++    )
++    .with_context(|| format!("parse {}", path.display()))?;
++    anyhow::ensure!(
++        lease.schema == crate::artifacts::RESOURCE_LEASE_SCHEMA,
++        "standalone worker lease schema is not canonical"
++    );
++    anyhow::ensure!(
++        lease.revision.as_ref() == Some(revision),
++        "standalone worker lease does not bind the admitted revision"
++    );
++    anyhow::ensure!(
++        lease.id == expected.id && lease.consumer == expected.consumer,
++        "standalone worker lease identity changed during publication"
++    );
++    Ok(())
++}
++
++fn fail_pending_worker_receipts<'a>(
++    task_ledger: &ProofTaskLedger,
++    tasks: impl IntoIterator<Item = &'a ProofCommandTask>,
++    reason: &str,
++) -> Result<()> {
++    for task in tasks {
++        if task_ledger.receipt_pending(task)? {
++            task_ledger.receipt_creation_failed_and_resources_released(task, reason)?;
++        }
++    }
+     Ok(())
+ }
+ 
+@@ -446,7 +690,8 @@ fn classify_worker_proof_result(kind: &ProofKind, command: &ProofCommandReceipt)
+ #[cfg(test)]
+ mod worker_proof_tests {
+     use super::*;
+-    use crate::proof::ProofCommandSpec;
++    use anyhow::{Context as _, Result, ensure};
++    use crate::task_ledger::TaskId;
+ 
+     fn receipt_with_status(status: &str) -> ProofCommandReceipt {
+         ProofCommandReceipt {
+@@ -464,10 +709,86 @@ mod worker_proof_tests {
+         }
+     }
+ 
+-    /// The old worker labeled ANY nightly failure as `sanitizer_ub_detected`.
+-    /// A Miri failure must NOT be mislabeled as sanitizer UB — it is a generic
+-    /// `failed` under per-kind classification. Only SanitizerWitness failures
+-    /// carry the UB-detected result.
++    fn worker_repo(temp: &tempfile::TempDir) -> Result<(PathBuf, String, String)> {
++        let root = temp.path().join("repo");
++        fs::create_dir_all(&root)?;
++        crate::tests::run_test_command(&root, "git", &["init", "--initial-branch=main"])?;
++        crate::tests::run_test_command(
++            &root,
++            "git",
++            &["config", "user.email", "ub-review@example.invalid"],
++        )?;
++        crate::tests::run_test_command(
++            &root,
++            "git",
++            &["config", "user.name", "UB Review Test"],
++        )?;
++        fs::write(root.join("fixture.txt"), "base\n")?;
++        crate::tests::run_test_command(&root, "git", &["add", "fixture.txt"])?;
++        crate::tests::run_test_command(&root, "git", &["commit", "-m", "base"])?;
++        let base = git_text(&root, &["rev-parse", "HEAD"])?.trim().to_owned();
++        fs::write(root.join("fixture.txt"), "head\n")?;
++        crate::tests::run_test_command(&root, "git", &["add", "fixture.txt"])?;
++        crate::tests::run_test_command(&root, "git", &["commit", "-m", "head"])?;
++        let head = git_text(&root, &["rev-parse", "HEAD"])?.trim().to_owned();
++        Ok((root, base, head))
++    }
++
++    fn request(
++        id: &str,
++        base: &str,
++        head: &str,
++        kind: ProofKind,
++        target: &str,
++    ) -> ProofRequestV2 {
++        ProofRequestV2 {
++            schema: crate::artifacts::PROOF_REQUEST_V2_SCHEMA.to_owned(),
++            id: id.to_owned(),
++            kind,
++            target: target.to_owned(),
++            claim_ids: vec!["claim-a".to_owned()],
++            requested_by: vec!["worker-test".to_owned()],
++            expected_interpretation: "worker receipt remains canonical".to_owned(),
++            priority: "high".to_owned(),
++            timeout_sec: 30,
++            status: "approved".to_owned(),
++            base: base.to_owned(),
++            head: head.to_owned(),
++        }
++    }
++
++    fn args(root: &Path, out: &Path) -> WorkerArgs {
++        WorkerArgs {
++            proof_request: out.join("unused-request.json").display().to_string(),
++            root: root.display().to_string(),
++            out: out.display().to_string(),
++            timeout_sec: 30,
++        }
++    }
++
++    fn successful_status() -> CommandStatus {
++        CommandStatus {
++            exit_code: Some(0),
++            timed_out: false,
++            success: true,
++            reason: "completed".to_owned(),
++            duration_ms: 1,
++        }
++    }
++
++    fn snapshot_task(out: &Path, task_id: &TaskId) -> Result<serde_json::Value> {
++        let snapshot: serde_json::Value = serde_json::from_slice(&fs::read(
++            out.join("review/task_ledger_snapshot.json"),
++        )?)?;
++        snapshot["tasks"]
++            .as_array()
++            .context("worker task snapshot array missing")?
++            .iter()
++            .find(|task| task["id"] == task_id.as_str())
++            .cloned()
++            .with_context(|| format!("worker task {} missing", task_id.as_str()))
++    }
++
+     #[test]
+     fn classify_scopes_sanitizer_ub_to_sanitizer_kind_only() {
+         assert_eq!(
+@@ -475,23 +796,19 @@ mod worker_proof_tests {
+                 &ProofKind::SanitizerWitness,
+                 &receipt_with_status("failed")
+             ),
+-            "sanitizer_ub_detected",
+-            "sanitizer-witness failure is UB-class"
++            "sanitizer_ub_detected"
+         );
+         assert_eq!(
+             classify_worker_proof_result(&ProofKind::MiriWitness, &receipt_with_status("failed")),
+-            "failed",
+-            "miri failure must not be mislabeled as sanitizer UB"
++            "failed"
+         );
+         assert_eq!(
+             classify_worker_proof_result(&ProofKind::FocusedTest, &receipt_with_status("failed")),
+-            "failed",
+-            "focused-test failure is a generic failure"
++            "failed"
+         );
+         assert_eq!(
+             classify_worker_proof_result(&ProofKind::FocusedBuild, &receipt_with_status("failed")),
+-            "failed",
+-            "focused-build failure is a generic failure"
++            "failed"
+         );
+     }
+ 
+@@ -506,8 +823,7 @@ mod worker_proof_tests {
+                 &ProofKind::SanitizerWitness,
+                 &receipt_with_status("timed_out")
+             ),
+-            "timed_out",
+-            "timeout is timeout regardless of kind"
++            "timed_out"
+         );
+         assert_eq!(
+             classify_worker_proof_result(&ProofKind::MiriWitness, &receipt_with_status("skipped")),
+@@ -515,118 +831,255 @@ mod worker_proof_tests {
+         );
+     }
+ 
+-    /// Worker and local execution must emit the SAME canonical ProofReceipt
+-    /// schema and core fields. This constructs a worker receipt through the
+-    /// same `run_proof_command_receipt` path the broker uses, then asserts the
+-    /// resulting ProofReceipt matches the canonical shape (schema, base/head,
+-    /// requested_by, request_ids, commands[].stdout artifact path) that local
+-    /// focused-proof receipts produce. This is the Order 8 "shared
+-    /// local/remote receipts (same schema)" end-state criterion.
+     #[test]
+-    fn worker_canonical_receipt_matches_local_schema_shape() -> Result<()> {
++    fn worker_preflight_and_proof_are_distinct_revision_bound_tasks() -> Result<()> {
+         let temp = tempfile::tempdir()?;
++        let (root, base, head) = worker_repo(&temp)?;
+         let out = temp.path().join("out");
+-        let spec = ProofCommandSpec {
+-            argv: vec!["cargo".to_owned(), "test".to_owned(), "--locked".to_owned()],
+-            env: BTreeMap::new(),
+-        };
+-        let lease = ResourceLease {
+-            revision: None,
+-            schema: crate::artifacts::RESOURCE_LEASE_SCHEMA.to_owned(),
+-            id: "worker-lease-req-1".to_owned(),
+-            kind: "focused-test".to_owned(),
+-            consumer: "req-1".to_owned(),
+-            status: "granted".to_owned(),
+-            reason: "test lease".to_owned(),
+-            cpu: 1,
+-            memory_mb: 512,
+-            disk_mb: 64,
+-            timeout_sec: 30,
+-            network: false,
+-            scratch: true,
+-            worktree: None,
+-            command: None,
+-        };
+-        // Use the real production runner against an inert command (echo on the
+-        // runner's argv is not allowlisted; instead exercise the path with a
+-        // no-op runner that writes the stream files, proving the canonical
+-        // receipt + artifact-path contract).
+-        let mut runner =
+-            |_root: &Path,
+-             _argv: &[String],
+-             _env: &BTreeMap<String, String>,
+-             _timeout: u64,
+-             stdout: &Path,
+-             stderr: &Path,
+-             _observe_process: &mut dyn FnMut(CommandProcessObservation)| {
++        let request = request(
++            "proof-request-test",
++            &base,
++            &head,
++            ProofKind::FocusedTest,
++            "cargo test --locked worker_test",
++        );
++        let mut calls = Vec::new();
++        run_worker_request_with_runner(
++            &args(&root, &out),
++            request,
++            &mut |_root, argv, _env, _timeout, stdout, stderr, observe_process| {
++                calls.push(argv.to_vec());
++                observe_process(CommandProcessObservation::Spawned);
+                 fs::write(stdout, b"ok\n")?;
+                 fs::write(stderr, b"")?;
+-                Ok(CommandStatus {
+-                    exit_code: Some(0),
+-                    timed_out: false,
+-                    success: true,
+-                    reason: "completed".to_owned(),
+-                    duration_ms: 5,
+-                })
+-            };
+-        let command_receipt = run_proof_command_receipt(
+-            ProofCommandInvocation {
+-                command_root: temp.path(),
+-                out: &out,
+-                receipt_id: "req-1",
+-                side: "head",
+-                spec: &spec,
+-                timeout_sec: 30,
+-                lease: &lease,
+-                task_ledger: None,
+-                task: None,
++                Ok(successful_status())
+             },
+-            &mut runner,
+         )?;
+ 
+-        // Assemble the canonical ProofReceipt exactly as cmd_worker does.
+-        let receipt = ProofReceipt {
+-            revision: None,
+-            schema: crate::artifacts::PROOF_RECEIPT_SCHEMA.to_owned(),
+-            id: "req-1".to_owned(),
+-            kind: "focused-test".to_owned(),
+-            base: "abc1234".to_owned(),
+-            head: "def5678".to_owned(),
+-            test_patch_mode: "head-only".to_owned(),
+-            requested_by: vec!["tests-oracle".to_owned()],
+-            request_ids: vec!["claim-7".to_owned()],
+-            commands: vec![command_receipt.clone()],
+-            result: "passed".to_owned(),
+-            reason: "focused-test: passed".to_owned(),
++        ensure!(
++            calls
++                == [
++                    vec![
++                        "cargo".to_owned(),
++                        "+nightly".to_owned(),
++                        "--version".to_owned(),
++                    ],
++                    vec![
++                        "cargo".to_owned(),
++                        "test".to_owned(),
++                        "--locked".to_owned(),
++                        "worker_test".to_owned(),
++                    ],
++                ]
++        );
++        let receipt: ProofReceipt =
++            serde_json::from_slice(&fs::read(out.join("proof_receipt.json"))?)?;
++        let lease: ResourceLease =
++            serde_json::from_slice(&fs::read(out.join("resource_lease.json"))?)?;
++        ensure!(receipt.revision.is_some());
++        ensure!(receipt.revision == lease.revision);
++        ensure!(receipt.commands.len() == 2);
++        ensure!(receipt.commands[0].side == "nightly-preflight");
++        ensure!(receipt.commands[1].side == "head");
++        ensure!(receipt.commands.iter().all(|command| command.status == "passed"));
++
++        for (side, index) in [("nightly-preflight", 0), ("head", 1)] {
++            let task_id = proof_command_task_id("proof-request-test", side)?;
++            let task = snaps
