@@ -1,0 +1,152 @@
+name: Scratch #957 hosted source validation
+
+on:
+  push:
+    branches:
+      - chatgpt/957-hosted-validate
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: ub-review-957-hosted-validation
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      BASE_BRANCH: codex/956-proof-worker-task-ledger
+      PRODUCT_BRANCH: chatgpt/957-cross-projection-reconciliation
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout control branch with complete history
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve and verify immutable product tree
+        id: product
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin \
+            "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH" \
+            "+refs/heads/$PRODUCT_BRANCH:refs/remotes/origin/$PRODUCT_BRANCH"
+          base_sha="$(git rev-parse "refs/remotes/origin/$BASE_BRANCH")"
+          product_sha="$(git rev-parse "refs/remotes/origin/$PRODUCT_BRANCH")"
+          test "$(git merge-base "$base_sha" "$product_sha")" = "$base_sha"
+          test "$product_sha" != "$base_sha"
+          git diff --name-only "$base_sha" "$product_sha" | sort > "$RUNNER_TEMP/changed-files.txt"
+          test -s "$RUNNER_TEMP/changed-files.txt"
+          ! grep -q '^\.ripr/suppressions\.toml$' "$RUNNER_TEMP/changed-files.txt"
+          ! grep -q '^\.github/workflows/' "$RUNNER_TEMP/changed-files.txt"
+          git checkout --detach "$product_sha"
+          test "$(git rev-parse HEAD)" = "$product_sha"
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          echo "product_sha=$product_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Install fixed Rust toolchain
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: 1.95.0
+          components: rustfmt,clippy
+
+      - name: Run focused cross-projection reconciliation tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo test --workspace --all-targets --locked reconciliation -- --nocapture
+
+      - name: Run complete deterministic repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo check --workspace --all-targets --all-features --locked
+          cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+          cargo run --locked --package xtask -- policy-check
+          python scripts/verify-bun-review-artifacts.py --self-test
+          cargo test --workspace --all-targets --locked
+          git diff --check
+
+      - name: Build hosted validation receipt
+        if: ${{ always() }}
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.product.outputs.base_sha }}
+          PRODUCT_SHA: ${{ steps.product.outputs.product_sha }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          receipt_dir="$RUNNER_TEMP/ub-review-957-validation"
+          mkdir -p "$receipt_dir"
+          cp "$RUNNER_TEMP/changed-files.txt" "$receipt_dir/changed-files.txt" 2>/dev/null || true
+          git show --stat --oneline --decorate --no-renames HEAD > "$receipt_dir/commit-stat.txt" 2>/dev/null || true
+          jq -n \
+            --arg schema "ub-review.scratch_validation.v1" \
+            --arg issue "957" \
+            --arg status "$JOB_STATUS" \
+            --arg base_sha "${BASE_SHA:-}" \
+            --arg product_sha "${PRODUCT_SHA:-}" \
+            '{
+              schema: $schema,
+              issue: ($issue | tonumber),
+              status: $status,
+              base_sha: $base_sha,
+              product_sha: $product_sha,
+              rust_toolchain: "1.95.0",
+              checks: [
+                "cargo fmt --all -- --check",
+                "cargo test --workspace --all-targets --locked reconciliation -- --nocapture",
+                "cargo check --workspace --all-targets --all-features --locked",
+                "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings",
+                "cargo run --locked --package xtask -- policy-check",
+                "python scripts/verify-bun-review-artifacts.py --self-test",
+                "cargo test --workspace --all-targets --locked",
+                "git diff --check"
+              ],
+              policy_suppressions_changed: false,
+              workflow_files_changed: false
+            }' > "$receipt_dir/receipt.json"
+
+      - name: Upload hosted validation receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ub-review-957-hosted-validation-${{ github.sha }}
+          path: ${{ runner.temp }}/ub-review-957-validation
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Report successful scratch validation to issue
+        if: ${{ success() }}
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.product.outputs.base_sha }}
+          PRODUCT_SHA: ${{ steps.product.outputs.product_sha }}
+        run: |
+          set -euo pipefail
+          changed=$(sed 's/^/- `/' "$RUNNER_TEMP/changed-files.txt" | sed 's/$/`/')
+          body=$(cat <<EOF
+          Hosted source validation passed for scratch #957 commit \`$PRODUCT_SHA\`, based on reviewed #1266 head \`$BASE_SHA\`.
+
+          Changed files:
+          $changed
+
+          Rust 1.95 rustfmt, focused reconciliation tests, all-feature workspace check and strict Clippy, policy-check, artifact-verifier self-test, the full all-target workspace suite, and \`git diff --check\` passed. No suppression-ledger or workflow file is part of the product diff.
+
+          This is a source-ready scratch receipt only. No stacked PR was opened and nothing was merged.
+          EOF
+          )
+          jq -n --arg body "$body" '{body:$body}' > "$RUNNER_TEMP/issue-comment.json"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/issues/957/comments" \
+            --data-binary @"$RUNNER_TEMP/issue-comment.json" >/dev/null
