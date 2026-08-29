@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 60
     env:
       PATCH_PATH: .github/ub-review-1266-required.patch
-      PATCH_SHA256: 426c47447490e82feea03c2736d7e1eb4b3d08bcfd2a9c428165e46a26670d5a
+      PATCH_BLOB_SHA: d063d50082e365b5f3194adf069dd1b5a605d29e
       SCRATCH_BRANCH: chatgpt/1266-required-proof-fix
       WORKFLOW_PATH: .github/workflows/_scratch-1266-source-export.yml
     steps:
@@ -35,7 +35,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          echo "$PATCH_SHA256  $PATCH_PATH" | sha256sum --check --strict
+          test "$(git hash-object "$PATCH_PATH")" = "$PATCH_BLOB_SHA"
           git apply --check "$PATCH_PATH"
           git apply "$PATCH_PATH"
           rm "$PATCH_PATH" "$WORKFLOW_PATH"
@@ -108,12 +108,12 @@ jobs:
             --arg schema "ub-review.scratch_validation.v1" \
             --arg input_sha "$GITHUB_SHA" \
             --arg repaired_sha "${REPAIRED_SHA:-}" \
-            --arg patch_sha256 "$PATCH_SHA256" \
+            --arg patch_blob_sha "$PATCH_BLOB_SHA" \
             '{
               schema: $schema,
               input_sha: $input_sha,
               repaired_sha: $repaired_sha,
-              patch_sha256: $patch_sha256,
+              patch_blob_sha: $patch_blob_sha,
               rust_toolchain: "1.95.0",
               checks: [
                 "cargo fmt --all -- --check",
