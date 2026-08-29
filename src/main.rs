@@ -243,148 +243,198 @@ mod lane_identity_artifact_ref_tests {
     }
 }
 
-/// Execute a single proof request and write its receipt.
-/// (Order 8 of epic #655 — the execution-plane worker command.)
+/// Execute one admitted standalone proof request and publish its local receipt.
 ///
-/// Reads a typed `proof_request.v2` JSON, deserializes it into a
-/// `ProofRequestV2`, validates the schema tag, resolves it via the executor
-/// adapter, executes the approved command, and writes the receipt to the
-/// output directory. This enables distributed proof execution: a `plan` job
-/// emits proof requests, `worker` jobs execute them (locally or remotely),
-/// and a `finalize` job (currently `run`) collects receipts and produces
-/// the gate verdict.
+/// The repository does not yet contain a distributed collector. The worker
+/// therefore records only execution it can observe in this checkout: immutable
+/// revision admission, a separately identified nightly-capability preflight,
+/// the requested proof command, and current-attempt publication of the worker
+/// lease and proof receipt.
 ///
-/// Security contract: the worker only executes commands produced by
-/// `resolve_proof_command` from a typed, allowlisted intent. It never parses
-/// a free-form `target` string into argv. An intent that does not resolve to
-/// an approved command template is written as a `skipped_unresolved` receipt
-/// and never executed. This is the boundary that keeps distributed workers
-/// safe to run on untrusted-but-typed requests: the type system + allowlist
-/// are the trust root, not the request string.
+/// Security contract: only `resolve_proof_command` may construct the requested
+/// command. Display labels never become revision identity, stale output files
+/// never satisfy the current attempt, and an unconfirmed child completion
+/// prevents receipt credit and resource release.
 fn cmd_worker(args: WorkerArgs) -> Result<()> {
     let request_path = Path::new(&args.proof_request);
-    let out = Path::new(&args.out);
-    let root = Path::new(&args.root);
-
-    // Read and deserialize the typed proof request. A `serde_json::Value`
-    // grab of `kind`/`target` would bypass schema validation and is
-    // deliberately not used: the worker must consume the same `ProofRequestV2`
-    // struct the planner emits, so a malformed or foreign-shaped request is
-    // rejected at deserialization rather than reaching the executor adapter.
     let request_json = fs::read_to_string(request_path)
         .with_context(|| format!("read proof request: {}", request_path.display()))?;
     let request: ProofRequestV2 =
         serde_json::from_str(&request_json).context("parse proof_request.v2 JSON")?;
-
-    // Enforce the schema tag so a v1 request (or arbitrary JSON) cannot be
-    // processed as v2. `deny_unknown_fields` is intentionally NOT set on the
-    // struct (it serializes extra metadata for the planner); the schema field
-    // is the explicit version gate.
     anyhow::ensure!(
         request.schema == crate::artifacts::PROOF_REQUEST_V2_SCHEMA,
         "worker requires {}, got `{}`",
         crate::artifacts::PROOF_REQUEST_V2_SCHEMA,
         request.schema,
     );
-
-    let kind = request.kind;
-    let kind_str = kind.key().to_owned();
-    let target = request.target.as_str();
-
-    // Check nightly availability.
-    let nightly = std::process::Command::new("cargo")
-        .args(["+nightly", "--version"])
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
-
-    // Resolve via the executor adapter. `None` means the typed intent does
-    // not map to an approved command template — this is the only path to an
-    // executable argv. There is no fallback that turns a raw target string
-    // into argv.
-    let resolved = resolve_proof_command(&kind, target, nightly);
-    let Some(cmd) = resolved else {
-        let receipt = serde_json::json!({
-            "schema": "ub-review.proof_receipt.v1",
-            "kind": kind_str,
-            "result": "skipped_unresolved",
-            "reason": format!("executor adapter could not resolve {kind_str} intent"),
-        });
-        let receipt_path = out.join("proof_receipt.json");
-        if let Some(dir) = receipt_path.parent() {
-            fs::create_dir_all(dir)?;
-        }
-        fs::write(&receipt_path, serde_json::to_string_pretty(&receipt)?)?;
-        println!(
-            "worker: proof request {kind_str} unresolved, receipt written to {}",
-            receipt_path.display()
-        );
-        return Ok(());
-    };
-
-    // Execute via the SAME canonical path local proof uses, so worker and
-    // local execution emit equivalent receipts. This gives the worker the
-    // broker's lease admission, wall-clock timeout (WorkerArgs.timeout_sec),
-    // bounded stdout/stderr artifact files, and the canonical
-    // ProofCommandReceipt — closing the Order 8 "equivalent receipts" gap.
-    //
-    // The runner (`run_command_to_files`) is the production focused-proof
-    // runner: it spawns the process, applies `wait_timeout`, kills on timeout,
-    // and writes stdout/stderr to the paths `run_proof_command_receipt`
-    // allocates under proof/<id>/head/.
-    let timeout_sec = args.timeout_sec.max(request.timeout_sec);
-    let env_map: BTreeMap<String, String> = cmd.env.iter().cloned().collect();
-    let spec = ProofCommandSpec {
-        argv: cmd.argv.clone(),
-        env: env_map,
-    };
-    let lease = ResourceLease {
-        revision: None,
-        schema: crate::artifacts::RESOURCE_LEASE_SCHEMA.to_owned(),
-        id: format!("worker-lease-{}", request.id),
-        kind: kind_str.clone(),
-        consumer: request.id.clone(),
-        status: "granted".to_owned(),
-        reason: "worker proof lease granted".to_owned(),
-        cpu: 1,
-        memory_mb: 512,
-        disk_mb: 64,
-        timeout_sec,
-        network: false,
-        scratch: true,
-        worktree: None,
-        command: Some(format!("head: {}", cmd.argv.join(" "))),
-    };
     let mut runner = crate::run_command_to_files_with_spawn_observer;
-    let command_receipt = run_proof_command_receipt(
-        ProofCommandInvocation {
-            command_root: root,
-            out,
-            receipt_id: &request.id,
-            side: "head",
-            spec: &spec,
-            timeout_sec,
-            lease: &lease,
-            task_ledger: None,
-            task: None,
+    run_worker_request_with_runner(&args, request, &mut runner)
+}
+
+struct WorkerAttemptBoundaries<'a> {
+    prepare: &'a mut dyn FnMut(&Path, &str) -> Result<()>,
+    publish: &'a mut dyn FnMut(&Path, &ResourceLease, &ProofReceipt) -> Result<()>,
+}
+
+fn run_worker_request_with_runner<F>(
+    args: &WorkerArgs,
+    request: ProofRequestV2,
+    runner: &mut F,
+) -> Result<()>
+where
+    F: FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+        &mut dyn FnMut(CommandProcessObservation),
+    ) -> Result<CommandStatus>,
+{
+    let mut prepare = prepare_worker_attempt;
+    let mut publish = publish_worker_artifacts;
+    run_worker_request_with_runner_and_boundaries(
+        args,
+        request,
+        runner,
+        WorkerAttemptBoundaries {
+            prepare: &mut prepare,
+            publish: &mut publish,
         },
-        &mut runner,
+    )
+}
+
+fn run_worker_request_with_runner_and_boundaries<F>(
+    args: &WorkerArgs,
+    request: ProofRequestV2,
+    runner: &mut F,
+    boundaries: WorkerAttemptBoundaries<'_>,
+) -> Result<()>
+where
+    F: FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+        &mut dyn FnMut(CommandProcessObservation),
+    ) -> Result<CommandStatus>,
+{
+    let out = Path::new(&args.out);
+    let root = Path::new(&args.root);
+    let revision = standalone_worker_revision(root, &request)?;
+    let recorder = TaskLedgerRecorder::new(&revision, &Instant::now())?;
+    let task_ledger = ProofTaskLedger::new(recorder);
+    let timeout_sec = args.timeout_sec.max(request.timeout_sec).max(1);
+
+    let preflight_task = ProofCommandTask::worker_preflight(&request, timeout_sec);
+    let preflight_spec = ProofCommandSpec {
+        argv: vec![
+            "cargo".to_owned(),
+            "+nightly".to_owned(),
+            "--version".to_owned(),
+        ],
+        env: BTreeMap::new(),
+    };
+    let preflight_lease = worker_lease(
+        &revision,
+        &request,
+        "nightly-preflight",
+        "worker-preflight",
+        timeout_sec,
+        &preflight_spec,
+        WorkerLeaseAdmission::Granted("standalone worker nightly capability preflight admitted"),
+    );
+
+    if let Err(error) = (boundaries.prepare)(out, &request.id) {
+        task_ledger.begin_command(&preflight_task, &preflight_lease)?;
+        task_ledger.setup_failed(&preflight_task)?;
+        let failure = format!("standalone worker attempt preparation failed: {error:#}");
+        task_ledger.receipt_creation_failed_and_resources_released(&preflight_task, &failure)?;
+        task_ledger.write_artifacts(out)?;
+        return Err(error).context("prepare standalone worker attempt");
+    }
+
+    let preflight_receipt = run_worker_command_receipt(
+        root,
+        out,
+        &request.id,
+        "nightly-preflight",
+        &preflight_spec,
+        timeout_sec,
+        &preflight_lease,
+        &task_ledger,
+        &preflight_task,
+        runner,
+    )?;
+    let nightly_available = preflight_receipt.status == "passed";
+
+    let command_task = ProofCommandTask::worker(&request, timeout_sec);
+    let kind_str = request.kind.key().to_owned();
+    let (command_spec, lease) =
+        match resolve_proof_command(&request.kind, &request.target, nightly_available) {
+            Some(command) => {
+                let spec = ProofCommandSpec {
+                    argv: command.argv,
+                    env: command.env.into_iter().collect(),
+                };
+                let lease = worker_lease(
+                    &revision,
+                    &request,
+                    "head",
+                    &kind_str,
+                    timeout_sec,
+                    &spec,
+                    WorkerLeaseAdmission::Granted("standalone worker proof command admitted"),
+                );
+                (spec, lease)
+            }
+            None => {
+                let spec = ProofCommandSpec {
+                    argv: vec!["ub-review-unresolved-proof".to_owned()],
+                    env: BTreeMap::new(),
+                };
+                let lease = worker_lease(
+                    &revision,
+                    &request,
+                    "head",
+                    &kind_str,
+                    timeout_sec,
+                    &spec,
+                    WorkerLeaseAdmission::Refused(
+                        "executor adapter could not resolve the typed proof intent",
+                    ),
+                );
+                (spec, lease)
+            }
+        };
+
+    let command_receipt = run_worker_command_receipt(
+        root,
+        out,
+        &request.id,
+        "head",
+        &command_spec,
+        timeout_sec,
+        &lease,
+        &task_ledger,
+        &command_task,
+        runner,
     )?;
 
-    // Per-ProofKind result classification. The old worker labeled ANY failure
-    // of a nightly-requiring command as `sanitizer_ub_detected`, conflating
-    // sanitizer UB with Miri findings, compile errors, missing components, and
-    // ordinary test failures. Classification now keys off ProofKind + the
-    // command receipt's status/timed_out, so each witness kind gets its own
-    // outcome string.
-    let result = classify_worker_proof_result(&kind, &command_receipt);
-    let reason = format!("{kind_str}: {result}");
-
-    // Canonical ProofReceipt — same schema and fields the broker's
-    // focused_head_receipt / focused_build_receipt produce, stamped with the
-    // base/head identity and requesters from the v2 request.
+    let result = if lease.status == "granted" {
+        classify_worker_proof_result(&request.kind, &command_receipt)
+    } else {
+        "skipped_unresolved".to_owned()
+    };
+    let reason = format!(
+        "{}: {}; nightly preflight {}",
+        kind_str, result, preflight_receipt.status
+    );
     let receipt = ProofReceipt {
-        revision: None,
+        revision: Some(revision.clone()),
         schema: crate::artifacts::PROOF_RECEIPT_SCHEMA.to_owned(),
         id: request.id.clone(),
         kind: kind_str.clone(),
@@ -393,27 +443,218 @@ fn cmd_worker(args: WorkerArgs) -> Result<()> {
         test_patch_mode: "head-only".to_owned(),
         requested_by: request.requested_by.clone(),
         request_ids: request.claim_ids.clone(),
-        commands: vec![command_receipt],
+        commands: vec![preflight_receipt, command_receipt],
         result,
         reason,
     };
 
-    let lease_path = out.join("resource_lease.json");
-    if let Some(dir) = lease_path.parent() {
-        fs::create_dir_all(dir)?;
+    let publish_result = (|| -> Result<()> {
+        (boundaries.publish)(out, &lease, &receipt)?;
+        validate_published_worker_lease(out, &revision, &lease)?;
+        task_ledger.reconcile_worker_receipt(out, &request.id)
+    })();
+    if let Err(error) = publish_result {
+        let failure = format!("standalone worker result publication failed: {error:#}");
+        fail_pending_worker_receipts(&task_ledger, [&preflight_task, &command_task], &failure)?;
+        task_ledger.write_artifacts(out)?;
+        return Err(error).context("publish standalone worker proof result");
     }
-    fs::write(&lease_path, serde_json::to_string_pretty(&lease)?)?;
-    let receipt_path = out.join("proof_receipt.json");
-    if let Some(dir) = receipt_path.parent() {
-        fs::create_dir_all(dir)?;
-    }
-    fs::write(&receipt_path, serde_json::to_string_pretty(&receipt)?)?;
+
+    task_ledger.write_artifacts(out)?;
     println!(
         "worker: proof request {} ({kind_str}) result '{}'; receipt written to {}",
         request.id,
         receipt.result,
-        receipt_path.display()
+        out.join("proof_receipt.json").display()
     );
+    Ok(())
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the worker command adapter passes the shared execution, lease, and TaskLedger authorities without introducing a parallel runner"
+)]
+fn run_worker_command_receipt<F>(
+    root: &Path,
+    out: &Path,
+    receipt_id: &str,
+    side: &str,
+    spec: &ProofCommandSpec,
+    timeout_sec: u64,
+    lease: &ResourceLease,
+    task_ledger: &ProofTaskLedger,
+    task: &ProofCommandTask,
+    runner: &mut F,
+) -> Result<ProofCommandReceipt>
+where
+    F: FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+        &mut dyn FnMut(CommandProcessObservation),
+    ) -> Result<CommandStatus>,
+{
+    let result = run_proof_command_receipt(
+        ProofCommandInvocation {
+            command_root: root,
+            out,
+            receipt_id,
+            side,
+            spec,
+            timeout_sec,
+            lease,
+            task_ledger: Some(task_ledger),
+            task: Some(task),
+            cleanup: None,
+        },
+        runner,
+    );
+    match result {
+        Ok(receipt) => Ok(receipt),
+        Err(error) => {
+            if task_ledger.receipt_pending(task)? {
+                let failure = format!("standalone worker command receipt unavailable: {error:#}");
+                task_ledger.receipt_creation_failed_and_resources_released(task, &failure)?;
+                task_ledger.write_artifacts(out)?;
+            }
+            Err(error)
+        }
+    }
+}
+
+enum WorkerLeaseAdmission {
+    Granted(&'static str),
+    Refused(&'static str),
+}
+
+fn worker_lease(
+    revision: &RevisionRef,
+    request: &ProofRequestV2,
+    side: &str,
+    kind: &str,
+    timeout_sec: u64,
+    spec: &ProofCommandSpec,
+    admission: WorkerLeaseAdmission,
+) -> ResourceLease {
+    let (status, reason, granted) = match admission {
+        WorkerLeaseAdmission::Granted(reason) => ("granted", reason, true),
+        WorkerLeaseAdmission::Refused(reason) => ("refused", reason, false),
+    };
+    ResourceLease {
+        revision: Some(revision.clone()),
+        schema: crate::artifacts::RESOURCE_LEASE_SCHEMA.to_owned(),
+        id: format!("worker-lease-{}-{side}", request.id),
+        kind: kind.to_owned(),
+        consumer: request.id.clone(),
+        status: status.to_owned(),
+        reason: reason.to_owned(),
+        cpu: if granted { 1 } else { 0 },
+        memory_mb: if granted { 512 } else { 0 },
+        disk_mb: if granted { 64 } else { 0 },
+        timeout_sec,
+        network: false,
+        scratch: granted,
+        worktree: None,
+        command: Some(format!("{side}: {}", spec.argv.join(" "))),
+    }
+}
+
+fn prepare_worker_attempt(out: &Path, request_id: &str) -> Result<()> {
+    fs::create_dir_all(out).with_context(|| format!("create {}", out.display()))?;
+    crate::task_ledger_artifact::remove_task_ledger_artifacts(out)?;
+    remove_optional_worker_file(&out.join("proof_receipt.json"))?;
+    remove_optional_worker_file(&out.join("resource_lease.json"))?;
+    remove_optional_worker_file(&out.join("proof_receipt.json.tmp"))?;
+    remove_optional_worker_file(&out.join("resource_lease.json.tmp"))?;
+    let proof_dir = out.join("proof").join(request_id);
+    match fs::remove_dir_all(&proof_dir) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| format!("remove stale {}", proof_dir.display())),
+    }
+}
+
+fn remove_optional_worker_file(path: &Path) -> Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| format!("remove stale {}", path.display())),
+    }
+}
+
+fn publish_worker_artifacts(
+    out: &Path,
+    lease: &ResourceLease,
+    receipt: &ProofReceipt,
+) -> Result<()> {
+    fs::create_dir_all(out).with_context(|| format!("create {}", out.display()))?;
+    let lease_path = out.join("resource_lease.json");
+    let receipt_path = out.join("proof_receipt.json");
+    let lease_tmp = out.join("resource_lease.json.tmp");
+    let receipt_tmp = out.join("proof_receipt.json.tmp");
+    anyhow::ensure!(
+        !lease_path.exists() && !receipt_path.exists(),
+        "standalone worker canonical outputs were not cleared before publication"
+    );
+    remove_optional_worker_file(&lease_tmp)?;
+    remove_optional_worker_file(&receipt_tmp)?;
+    fs::write(&lease_tmp, serde_json::to_vec_pretty(lease)?)
+        .with_context(|| format!("write {}", lease_tmp.display()))?;
+    if let Err(error) = fs::write(&receipt_tmp, serde_json::to_vec_pretty(receipt)?) {
+        let _ = fs::remove_file(&lease_tmp);
+        return Err(error).with_context(|| format!("write {}", receipt_tmp.display()));
+    }
+    if let Err(error) = fs::rename(&lease_tmp, &lease_path) {
+        let _ = fs::remove_file(&lease_tmp);
+        let _ = fs::remove_file(&receipt_tmp);
+        return Err(error).with_context(|| format!("publish {}", lease_path.display()));
+    }
+    if let Err(error) = fs::rename(&receipt_tmp, &receipt_path) {
+        let _ = fs::remove_file(&lease_path);
+        let _ = fs::remove_file(&receipt_tmp);
+        return Err(error).with_context(|| format!("publish {}", receipt_path.display()));
+    }
+    Ok(())
+}
+
+fn validate_published_worker_lease(
+    out: &Path,
+    revision: &RevisionRef,
+    expected: &ResourceLease,
+) -> Result<()> {
+    let path = out.join("resource_lease.json");
+    let lease: ResourceLease = serde_json::from_slice(
+        &fs::read(&path).with_context(|| format!("read {}", path.display()))?,
+    )
+    .with_context(|| format!("parse {}", path.display()))?;
+    anyhow::ensure!(
+        lease.schema == crate::artifacts::RESOURCE_LEASE_SCHEMA,
+        "standalone worker lease schema is not canonical"
+    );
+    anyhow::ensure!(
+        lease.revision.as_ref() == Some(revision),
+        "standalone worker lease does not bind the admitted revision"
+    );
+    anyhow::ensure!(
+        lease.id == expected.id && lease.consumer == expected.consumer,
+        "standalone worker lease identity changed during publication"
+    );
+    Ok(())
+}
+
+fn fail_pending_worker_receipts<'a>(
+    task_ledger: &ProofTaskLedger,
+    tasks: impl IntoIterator<Item = &'a ProofCommandTask>,
+    reason: &str,
+) -> Result<()> {
+    for task in tasks {
+        if task_ledger.receipt_pending(task)? {
+            task_ledger.receipt_creation_failed_and_resources_released(task, reason)?;
+        }
+    }
     Ok(())
 }
 
@@ -446,7 +687,8 @@ fn classify_worker_proof_result(kind: &ProofKind, command: &ProofCommandReceipt)
 #[cfg(test)]
 mod worker_proof_tests {
     use super::*;
-    use crate::proof::ProofCommandSpec;
+    use crate::task_ledger::TaskId;
+    use anyhow::{Result, ensure};
 
     fn receipt_with_status(status: &str) -> ProofCommandReceipt {
         ProofCommandReceipt {
@@ -464,10 +706,75 @@ mod worker_proof_tests {
         }
     }
 
-    /// The old worker labeled ANY nightly failure as `sanitizer_ub_detected`.
-    /// A Miri failure must NOT be mislabeled as sanitizer UB — it is a generic
-    /// `failed` under per-kind classification. Only SanitizerWitness failures
-    /// carry the UB-detected result.
+    fn worker_repo(temp: &tempfile::TempDir) -> Result<(PathBuf, String, String)> {
+        let root = temp.path().join("repo");
+        fs::create_dir_all(&root)?;
+        crate::tests::run_test_command(&root, "git", &["init", "--initial-branch=main"])?;
+        crate::tests::run_test_command(
+            &root,
+            "git",
+            &["config", "user.email", "ub-review@example.invalid"],
+        )?;
+        crate::tests::run_test_command(&root, "git", &["config", "user.name", "UB Review Test"])?;
+        fs::write(root.join("fixture.txt"), "base\n")?;
+        crate::tests::run_test_command(&root, "git", &["add", "fixture.txt"])?;
+        crate::tests::run_test_command(&root, "git", &["commit", "-m", "base"])?;
+        let base = git_text(&root, &["rev-parse", "HEAD"])?.trim().to_owned();
+        fs::write(root.join("fixture.txt"), "head\n")?;
+        crate::tests::run_test_command(&root, "git", &["add", "fixture.txt"])?;
+        crate::tests::run_test_command(&root, "git", &["commit", "-m", "head"])?;
+        let head = git_text(&root, &["rev-parse", "HEAD"])?.trim().to_owned();
+        Ok((root, base, head))
+    }
+
+    fn request(id: &str, base: &str, head: &str, kind: ProofKind, target: &str) -> ProofRequestV2 {
+        ProofRequestV2 {
+            schema: crate::artifacts::PROOF_REQUEST_V2_SCHEMA.to_owned(),
+            id: id.to_owned(),
+            kind,
+            target: target.to_owned(),
+            claim_ids: vec!["claim-a".to_owned()],
+            requested_by: vec!["worker-test".to_owned()],
+            expected_interpretation: "worker receipt remains canonical".to_owned(),
+            priority: "high".to_owned(),
+            timeout_sec: 30,
+            status: "approved".to_owned(),
+            base: base.to_owned(),
+            head: head.to_owned(),
+        }
+    }
+
+    fn args(root: &Path, out: &Path) -> WorkerArgs {
+        WorkerArgs {
+            proof_request: out.join("unused-request.json").display().to_string(),
+            root: root.display().to_string(),
+            out: out.display().to_string(),
+            timeout_sec: 30,
+        }
+    }
+
+    fn successful_status() -> CommandStatus {
+        CommandStatus {
+            exit_code: Some(0),
+            timed_out: false,
+            success: true,
+            reason: "completed".to_owned(),
+            duration_ms: 1,
+        }
+    }
+
+    fn snapshot_task(out: &Path, task_id: &TaskId) -> Result<serde_json::Value> {
+        let snapshot: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/task_ledger_snapshot.json"))?)?;
+        snapshot["tasks"]
+            .as_array()
+            .context("worker task snapshot array missing")?
+            .iter()
+            .find(|task| task["id"] == task_id.as_str())
+            .cloned()
+            .with_context(|| format!("worker task {} missing", task_id.as_str()))
+    }
+
     #[test]
     fn classify_scopes_sanitizer_ub_to_sanitizer_kind_only() {
         assert_eq!(
@@ -475,23 +782,19 @@ mod worker_proof_tests {
                 &ProofKind::SanitizerWitness,
                 &receipt_with_status("failed")
             ),
-            "sanitizer_ub_detected",
-            "sanitizer-witness failure is UB-class"
+            "sanitizer_ub_detected"
         );
         assert_eq!(
             classify_worker_proof_result(&ProofKind::MiriWitness, &receipt_with_status("failed")),
-            "failed",
-            "miri failure must not be mislabeled as sanitizer UB"
+            "failed"
         );
         assert_eq!(
             classify_worker_proof_result(&ProofKind::FocusedTest, &receipt_with_status("failed")),
-            "failed",
-            "focused-test failure is a generic failure"
+            "failed"
         );
         assert_eq!(
             classify_worker_proof_result(&ProofKind::FocusedBuild, &receipt_with_status("failed")),
-            "failed",
-            "focused-build failure is a generic failure"
+            "failed"
         );
     }
 
@@ -506,8 +809,7 @@ mod worker_proof_tests {
                 &ProofKind::SanitizerWitness,
                 &receipt_with_status("timed_out")
             ),
-            "timed_out",
-            "timeout is timeout regardless of kind"
+            "timed_out"
         );
         assert_eq!(
             classify_worker_proof_result(&ProofKind::MiriWitness, &receipt_with_status("skipped")),
@@ -515,118 +817,262 @@ mod worker_proof_tests {
         );
     }
 
-    /// Worker and local execution must emit the SAME canonical ProofReceipt
-    /// schema and core fields. This constructs a worker receipt through the
-    /// same `run_proof_command_receipt` path the broker uses, then asserts the
-    /// resulting ProofReceipt matches the canonical shape (schema, base/head,
-    /// requested_by, request_ids, commands[].stdout artifact path) that local
-    /// focused-proof receipts produce. This is the Order 8 "shared
-    /// local/remote receipts (same schema)" end-state criterion.
     #[test]
-    fn worker_canonical_receipt_matches_local_schema_shape() -> Result<()> {
+    fn worker_preflight_and_proof_are_distinct_revision_bound_tasks() -> Result<()> {
         let temp = tempfile::tempdir()?;
+        let (root, base, head) = worker_repo(&temp)?;
         let out = temp.path().join("out");
-        let spec = ProofCommandSpec {
-            argv: vec!["cargo".to_owned(), "test".to_owned(), "--locked".to_owned()],
-            env: BTreeMap::new(),
-        };
-        let lease = ResourceLease {
-            revision: None,
-            schema: crate::artifacts::RESOURCE_LEASE_SCHEMA.to_owned(),
-            id: "worker-lease-req-1".to_owned(),
-            kind: "focused-test".to_owned(),
-            consumer: "req-1".to_owned(),
-            status: "granted".to_owned(),
-            reason: "test lease".to_owned(),
-            cpu: 1,
-            memory_mb: 512,
-            disk_mb: 64,
-            timeout_sec: 30,
-            network: false,
-            scratch: true,
-            worktree: None,
-            command: None,
-        };
-        // Use the real production runner against an inert command (echo on the
-        // runner's argv is not allowlisted; instead exercise the path with a
-        // no-op runner that writes the stream files, proving the canonical
-        // receipt + artifact-path contract).
-        let mut runner =
-            |_root: &Path,
-             _argv: &[String],
-             _env: &BTreeMap<String, String>,
-             _timeout: u64,
-             stdout: &Path,
-             stderr: &Path,
-             _observe_process: &mut dyn FnMut(CommandProcessObservation)| {
+        let request = request(
+            "proof-request-test",
+            &base,
+            &head,
+            ProofKind::FocusedTest,
+            "cargo test --locked worker_test",
+        );
+        let mut calls = Vec::new();
+        run_worker_request_with_runner(
+            &args(&root, &out),
+            request,
+            &mut |_root, argv, _env, _timeout, stdout, stderr, observe_process| {
+                calls.push(argv.to_vec());
+                observe_process(CommandProcessObservation::Spawned);
                 fs::write(stdout, b"ok\n")?;
                 fs::write(stderr, b"")?;
-                Ok(CommandStatus {
-                    exit_code: Some(0),
-                    timed_out: false,
-                    success: true,
-                    reason: "completed".to_owned(),
-                    duration_ms: 5,
-                })
-            };
-        let command_receipt = run_proof_command_receipt(
-            ProofCommandInvocation {
-                command_root: temp.path(),
-                out: &out,
-                receipt_id: "req-1",
-                side: "head",
-                spec: &spec,
-                timeout_sec: 30,
-                lease: &lease,
-                task_ledger: None,
-                task: None,
+                Ok(successful_status())
             },
-            &mut runner,
         )?;
 
-        // Assemble the canonical ProofReceipt exactly as cmd_worker does.
-        let receipt = ProofReceipt {
-            revision: None,
-            schema: crate::artifacts::PROOF_RECEIPT_SCHEMA.to_owned(),
-            id: "req-1".to_owned(),
-            kind: "focused-test".to_owned(),
-            base: "abc1234".to_owned(),
-            head: "def5678".to_owned(),
-            test_patch_mode: "head-only".to_owned(),
-            requested_by: vec!["tests-oracle".to_owned()],
-            request_ids: vec!["claim-7".to_owned()],
-            commands: vec![command_receipt.clone()],
-            result: "passed".to_owned(),
-            reason: "focused-test: passed".to_owned(),
-        };
+        ensure!(
+            calls
+                == [
+                    vec![
+                        "cargo".to_owned(),
+                        "+nightly".to_owned(),
+                        "--version".to_owned(),
+                    ],
+                    vec![
+                        "cargo".to_owned(),
+                        "test".to_owned(),
+                        "--locked".to_owned(),
+                        "worker_test".to_owned(),
+                    ],
+                ]
+        );
+        let receipt: ProofReceipt =
+            serde_json::from_slice(&fs::read(out.join("proof_receipt.json"))?)?;
+        let lease: ResourceLease =
+            serde_json::from_slice(&fs::read(out.join("resource_lease.json"))?)?;
+        ensure!(receipt.revision.is_some());
+        ensure!(receipt.revision == lease.revision);
+        ensure!(receipt.commands.len() == 2);
+        ensure!(receipt.commands[0].side == "nightly-preflight");
+        ensure!(receipt.commands[1].side == "head");
+        ensure!(
+            receipt
+                .commands
+                .iter()
+                .all(|command| command.status == "passed")
+        );
 
-        // Canonical schema + identity fields present and non-empty.
-        assert_eq!(receipt.schema, "ub-review.proof_receipt.v1");
-        assert_eq!(receipt.base, "abc1234");
-        assert_eq!(receipt.head, "def5678");
-        assert_eq!(receipt.requested_by, vec!["tests-oracle".to_owned()]);
-        assert_eq!(receipt.request_ids, vec!["claim-7".to_owned()]);
-        assert_eq!(receipt.commands.len(), 1);
-        // stdout/stderr are artifact PATHS (not inline content) and the files
-        // exist on disk — the bounding + artifact contract the old ad-hoc
-        // worker receipt lacked.
-        let stdout_rel = &receipt.commands[0].stdout;
-        assert!(
-            stdout_rel.starts_with("proof/req-1/head/"),
-            "stdout must be an artifact path under proof/<id>/head/, got {stdout_rel}"
+        for (side, index) in [("nightly-preflight", 0), ("head", 1)] {
+            let task_id = proof_command_task_id("proof-request-test", side)?;
+            let task = snapshot_task(&out, &task_id)?;
+            ensure!(task["source"] == "Worker");
+            ensure!(task["state"] == serde_json::json!({"ResourcesReleased": "Succeeded"}));
+            ensure!(
+                task["receipt"]
+                    == serde_json::json!({
+                        "Created": {"reference": format!("proof_receipt.json#/commands/{index}")}
+                    })
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn unresolved_worker_request_never_spawns_the_proof_command() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let (root, base, head) = worker_repo(&temp)?;
+        let out = temp.path().join("out");
+        let request = request(
+            "proof-request-unresolved",
+            &base,
+            &head,
+            ProofKind::SourceRouteProbe,
+            "src/main.rs",
         );
-        assert!(
-            out.join(stdout_rel).exists(),
-            "stdout artifact must exist on disk"
+        let mut calls = 0_usize;
+        run_worker_request_with_runner(
+            &args(&root, &out),
+            request,
+            &mut |_root, argv, _env, _timeout, stdout, stderr, observe_process| {
+                calls += 1;
+                ensure!(
+                    argv.iter()
+                        .map(String::as_str)
+                        .eq(["cargo", "+nightly", "--version"])
+                );
+                observe_process(CommandProcessObservation::Spawned);
+                fs::write(stdout, b"cargo nightly\n")?;
+                fs::write(stderr, b"")?;
+                Ok(successful_status())
+            },
+        )?;
+
+        ensure!(calls == 1);
+        let receipt: ProofReceipt =
+            serde_json::from_slice(&fs::read(out.join("proof_receipt.json"))?)?;
+        ensure!(receipt.result == "skipped_unresolved");
+        ensure!(receipt.commands.len() == 2);
+        ensure!(receipt.commands[1].status == "skipped");
+        let task = snapshot_task(
+            &out,
+            &proof_command_task_id("proof-request-unresolved", "head")?,
+        )?;
+        ensure!(task["state"] == serde_json::json!({"TerminallyDeclined": "Refused"}));
+        Ok(())
+    }
+
+    #[test]
+    fn symbolic_worker_revision_is_rejected_before_any_spawn() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let request = request(
+            "proof-request-symbolic",
+            &"a".repeat(40),
+            "HEAD",
+            ProofKind::FocusedTest,
+            "cargo test --locked worker_test",
         );
-        assert!(receipt.commands[0].stdout != receipt.commands[0].stderr);
-        // Serialize the whole receipt — it must round-trip as the canonical
-        // schema (the same JSON shape the gate and finalize consume).
-        let json = serde_json::to_string(&receipt)?;
-        let back: ProofReceipt = serde_json::from_str(&json)?;
-        assert_eq!(back.id, "req-1");
-        assert_eq!(back.commands.len(), 1);
-        assert_eq!(back.commands[0].status, "passed");
+        let mut calls = 0_usize;
+        let error = run_worker_request_with_runner(
+            &args(temp.path(), &out),
+            request,
+            &mut |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
+                calls += 1;
+                Ok(successful_status())
+            },
+        )
+        .err()
+        .context("symbolic head must fail closed")?;
+        ensure!(calls == 0);
+        ensure!(format!("{error:#}").contains("40- or 64-character object id"));
+        Ok(())
+    }
+
+    #[test]
+    fn readable_stale_receipt_cannot_survive_failed_attempt_preparation() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let (root, base, head) = worker_repo(&temp)?;
+        let out = temp.path().join("out");
+        fs::create_dir_all(&out)?;
+        let stale = serde_json::to_vec_pretty(&serde_json::json!({
+            "schema": crate::artifacts::PROOF_RECEIPT_SCHEMA,
+            "id": "stale",
+            "kind": "focused-test",
+            "base": base,
+            "head": head,
+            "commands": [],
+            "result": "passed",
+            "reason": "old attempt"
+        }))?;
+        fs::write(out.join("proof_receipt.json"), &stale)?;
+        let request = request(
+            "proof-request-stale",
+            &base,
+            &head,
+            ProofKind::FocusedTest,
+            "cargo test --locked worker_test",
+        );
+        let mut calls = 0_usize;
+        let mut prepare = |_out: &Path, _request_id: &str| -> Result<()> {
+            anyhow::bail!("injected worker preparation failure")
+        };
+        let mut publish = |_out: &Path, _lease: &ResourceLease, _receipt: &ProofReceipt| {
+            anyhow::bail!("publisher must not run")
+        };
+        let error = run_worker_request_with_runner_and_boundaries(
+            &args(&root, &out),
+            request,
+            &mut |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
+                calls += 1;
+                Ok(successful_status())
+            },
+            WorkerAttemptBoundaries {
+                prepare: &mut prepare,
+                publish: &mut publish,
+            },
+        )
+        .err()
+        .context("injected preparation failure must propagate")?;
+
+        ensure!(format!("{error:#}").contains("injected worker preparation failure"));
+        ensure!(calls == 0);
+        ensure!(fs::read(out.join("proof_receipt.json"))? == stale);
+        let task = snapshot_task(
+            &out,
+            &proof_command_task_id("proof-request-stale", "nightly-preflight")?,
+        )?;
+        ensure!(task["state"] == serde_json::json!({"ResourcesReleased": "SetupFailed"}));
+        ensure!(task["receipt"].get("CreationFailed").is_some());
+        let events = fs::read_to_string(out.join("task_ledger_events.ndjson"))?;
+        ensure!(!events.contains("\"RunStarted\""));
+        ensure!(events.contains("\"SetupFailed\""));
+        ensure!(events.contains("\"ReceiptCreationFailed\""));
+        ensure!(events.contains("\"ResourcesReleased\""));
+        Ok(())
+    }
+
+    #[test]
+    fn worker_publication_failure_releases_only_receipt_pending_tasks() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let (root, base, head) = worker_repo(&temp)?;
+        let out = temp.path().join("out");
+        let request = request(
+            "proof-request-write-failure",
+            &base,
+            &head,
+            ProofKind::FocusedTest,
+            "cargo test --locked worker_test",
+        );
+        let mut prepare = prepare_worker_attempt;
+        let mut publish = |_out: &Path, _lease: &ResourceLease, _receipt: &ProofReceipt| {
+            anyhow::bail!("injected worker publication failure")
+        };
+        let mut calls = 0_usize;
+        let error = run_worker_request_with_runner_and_boundaries(
+            &args(&root, &out),
+            request,
+            &mut |_root, _argv, _env, _timeout, stdout, stderr, observe_process| {
+                calls += 1;
+                observe_process(CommandProcessObservation::Spawned);
+                fs::write(stdout, b"ok\n")?;
+                fs::write(stderr, b"")?;
+                Ok(successful_status())
+            },
+            WorkerAttemptBoundaries {
+                prepare: &mut prepare,
+                publish: &mut publish,
+            },
+        )
+        .err()
+        .context("publication failure must propagate")?;
+
+        ensure!(calls == 2);
+        ensure!(format!("{error:#}").contains("publish standalone worker proof result"));
+        ensure!(!out.join("proof_receipt.json").exists());
+        for side in ["nightly-preflight", "head"] {
+            let task = snapshot_task(
+                &out,
+                &proof_command_task_id("proof-request-write-failure", side)?,
+            )?;
+            ensure!(task["state"] == serde_json::json!({"ResourcesReleased": "Succeeded"}));
+            ensure!(
+                task["receipt"]["CreationFailed"]["reason"]
+                    .as_str()
+                    .is_some_and(|reason| reason.contains("injected worker publication failure"))
+            );
+        }
         Ok(())
     }
 }
@@ -6069,7 +6515,7 @@ fn load_previous_quality_backfill(
 
 #[cfg(test)]
 mod tests {
-    use crate::{CommandProcessObservation, InternalAuditClassification};
+    use crate::{CommandProcessObservation, InternalAuditClassification, ProofExecutionPhase};
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
     use std::io::{BufRead, BufReader, Write as _};
@@ -9279,6 +9725,7 @@ index 1111111..2222222 100644
             },
             tasks,
             None,
+            ProofExecutionPhase::ModelRequest,
             |_root, argv, env, timeout, stdout, stderr, _observe_process| {
                 commands.push(super::test_parse::command_display_with_env(env, argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
@@ -9398,6 +9845,7 @@ index 1111111..2222222 100644
             },
             tasks,
             None,
+            ProofExecutionPhase::ModelRequest,
             |_root, argv, env, timeout, stdout, stderr, _observe_process| {
                 commands.push(super::test_parse::command_display_with_env(env, argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
@@ -9664,6 +10112,7 @@ index 1111111..2222222 100644
             },
             tasks,
             None,
+            ProofExecutionPhase::ModelRequest,
             |_root, argv, env, timeout, stdout, stderr, _observe_process| {
                 commands.push(command_display(argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
@@ -9814,6 +10263,7 @@ index 1111111..2222222 100644
             },
             tasks,
             None,
+            ProofExecutionPhase::ModelRequest,
             |_root, argv, env, _timeout, stdout, stderr, _observe_process| {
                 commands.push(command_display(argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
@@ -9914,6 +10364,7 @@ index 1111111..2222222 100644
             remaining,
             tasks,
             None,
+            ProofExecutionPhase::ModelRequest,
             |_root, argv, _env, _timeout, _stdout, _stderr, _observe_process| {
                 commands.push(command_display(argv));
                 Ok(CommandStatus {
@@ -10175,6 +10626,7 @@ index 1111111..2222222 100644
             },
             tasks,
             None,
+            ProofExecutionPhase::ModelRequest,
             |_root, argv, env, _timeout, stdout, stderr, _observe_process| {
                 commands.push(command_display(argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
@@ -10293,6 +10745,7 @@ index 3333333..4444444 100644
             },
             tasks,
             None,
+            ProofExecutionPhase::ModelRequest,
             |_root, argv, env, _timeout, stdout, stderr, _observe_process| {
                 commands.push(command_display(argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
@@ -10420,6 +10873,7 @@ index 3333333..4444444 100644
             300,
             &lease,
             None,
+            ProofExecutionPhase::ModelRequest,
             &mut runner,
             &mut prepare,
         )?;
@@ -10477,6 +10931,7 @@ index 3333333..4444444 100644
             300,
             &lease,
             None,
+            ProofExecutionPhase::ModelRequest,
             &mut runner,
             &mut prepare,
         )?;
@@ -10529,6 +10984,7 @@ index 3333333..4444444 100644
             300,
             &lease,
             None,
+            ProofExecutionPhase::ModelRequest,
             &mut runner,
             &mut prepare,
         )?;
@@ -10634,6 +11090,7 @@ index 3333333..4444444 100644
             300,
             &lease,
             None,
+            ProofExecutionPhase::ModelRequest,
             &mut runner,
             &mut prepare,
         );
@@ -10683,6 +11140,7 @@ index 3333333..4444444 100644
             },
             tasks,
             None,
+            ProofExecutionPhase::ModelRequest,
             |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
                 bail!("proof command should not run without a lease")
             },
@@ -10728,6 +11186,7 @@ index 3333333..4444444 100644
             },
             tasks,
             None,
+            ProofExecutionPhase::ModelRequest,
             |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
                 bail!("proof command should not run when proof budget is zero")
             },

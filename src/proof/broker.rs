@@ -79,6 +79,7 @@ pub(crate) fn run_initial_diff_proof_broker_v0(
         budget,
         selection.test_tasks,
         task_ledger,
+        ProofExecutionPhase::InitialImpact,
         run_command_to_files_with_spawn_observer,
         prepare_base_plus_tests_worktree,
     )?;
@@ -795,6 +796,7 @@ where
         budget,
         selection.test_tasks,
         task_ledger,
+        ProofExecutionPhase::ModelRequest,
         test_runner,
         prepare_base_plus_tests,
     )?;
@@ -824,6 +826,7 @@ where
         remaining_budget,
         replan.build_tasks,
         task_ledger,
+        ProofExecutionPhase::ModelRequest,
         build_runner,
     )?;
     result.proof_receipts.extend(build_result.proof_receipts);
@@ -904,6 +907,7 @@ pub(crate) fn run_follow_up_proof_broker_v0(
         budget,
         selection.test_tasks,
         task_ledger,
+        ProofExecutionPhase::FollowUp,
         run_command_to_files_with_spawn_observer,
         prepare_base_plus_tests_worktree,
     )?;
@@ -933,6 +937,7 @@ pub(crate) fn run_follow_up_proof_broker_v0(
         remaining_budget,
         replan.build_tasks,
         task_ledger,
+        ProofExecutionPhase::FollowUp,
         run_command_to_files_with_spawn_observer,
     )?;
     result.proof_receipts.extend(build_result.proof_receipts);
@@ -1054,6 +1059,7 @@ pub(crate) fn run_follow_up_proof_broker_v0_with_runner<F, G>(
     budget: ProofBudget,
     tasks: Vec<FocusedTestTask>,
     task_ledger: Option<&ProofTaskLedger>,
+    execution_phase: ProofExecutionPhase,
     runner: F,
     prepare_base_plus_tests: G,
 ) -> Result<ProofBrokerResult>
@@ -1078,6 +1084,7 @@ where
         budget,
         tasks,
         task_ledger,
+        execution_phase,
         runner,
         prepare_base_plus_tests,
     )

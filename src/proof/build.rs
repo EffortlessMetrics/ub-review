@@ -21,6 +21,7 @@ pub(crate) fn run_focused_build_proof_tasks_with_runner<F>(
     budget: ProofBudget,
     tasks: Vec<FocusedBuildTask>,
     task_ledger: Option<&ProofTaskLedger>,
+    execution_phase: ProofExecutionPhase,
     mut runner: F,
 ) -> Result<ProofBrokerResult>
 where
@@ -51,7 +52,7 @@ where
             ));
             if let Some(ledger) = task_ledger {
                 ledger.decline_command(
-                    &ProofCommandTask::focused_build(&task, task_timeout_sec),
+                    &ProofCommandTask::focused_build(&task, task_timeout_sec, execution_phase),
                     TaskNonExecutionDisposition::Refused,
                     "dry-run; proof broker did not execute focused build",
                 )?;
@@ -75,7 +76,7 @@ where
             ));
             if let Some(ledger) = task_ledger {
                 ledger.decline_command(
-                    &ProofCommandTask::focused_build(&task, task_timeout_sec),
+                    &ProofCommandTask::focused_build(&task, task_timeout_sec, execution_phase),
                     TaskNonExecutionDisposition::Refused,
                     "profile allows zero focused build leases",
                 )?;
@@ -104,7 +105,7 @@ where
             ));
             if let Some(ledger) = task_ledger {
                 ledger.decline_command(
-                    &ProofCommandTask::focused_build(&task, task_timeout_sec),
+                    &ProofCommandTask::focused_build(&task, task_timeout_sec, execution_phase),
                     TaskNonExecutionDisposition::BudgetDeferred,
                     "focused build proof lease budget exhausted by runtime profile",
                 )?;
@@ -126,7 +127,8 @@ where
             "focused build proof lease granted by runtime profile",
         );
         let spec = focused_build_command_spec_for_task(&task);
-        let command_task = ProofCommandTask::focused_build(&task, task_timeout_sec);
+        let command_task =
+            ProofCommandTask::focused_build(&task, task_timeout_sec, execution_phase);
         let head = run_proof_command_receipt(
             ProofCommandInvocation {
                 command_root: root,
@@ -138,6 +140,7 @@ where
                 lease: &lease,
                 task_ledger,
                 task: task_ledger.map(|_| &command_task),
+                cleanup: None,
             },
             &mut runner,
         )?;
@@ -174,7 +177,6 @@ fn focused_build_budget_allows_next(
     current_tasks < budget.max_focused_tests
         && estimated_seconds.saturating_add(next_timeout_sec) <= budget.max_total_seconds
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -231,6 +233,7 @@ mod tests {
             },
             tasks,
             None,
+            ProofExecutionPhase::ModelRequest,
             |_root, argv, env, timeout, stdout, stderr, _observe_process| {
                 commands.push(command_display_with_env(env, argv));
                 assert!(env.is_empty());
@@ -307,6 +310,7 @@ mod tests {
             },
             tasks,
             None,
+            ProofExecutionPhase::ModelRequest,
             |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
                 Err(anyhow::anyhow!("build runner should not execute"))
             },

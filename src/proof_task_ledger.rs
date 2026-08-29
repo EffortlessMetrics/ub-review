@@ -19,9 +19,50 @@ use crate::task_ledger::{
 };
 use crate::task_ledger_artifact::TaskLedgerInput;
 use crate::{
-    FocusedBuildTask, FocusedTestTask, ProofReceipt, ProofRequest, ResourceLease,
-    TaskLedgerRecorder, sanitize_artifact_name,
+    DiffContext, FocusedBuildTask, FocusedTestTask, ProofReceipt, ProofRequest, ProofRequestV2,
+    ResourceLease, RevisionRef, TaskLedgerRecorder, admit_revision, sanitize_artifact_name,
 };
+
+/// Production phase that caused one proof command to be executed.
+///
+/// The phase is carried explicitly because follow-up proof requests and the
+/// primary model wave can have identical requester and claim metadata while
+/// remaining distinct execution sources.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ProofExecutionPhase {
+    InitialImpact,
+    ModelRequest,
+    FollowUp,
+    Worker,
+}
+
+impl ProofExecutionPhase {
+    fn consumer_id(self) -> &'static str {
+        match self {
+            Self::InitialImpact => "proof-phase:initial-impact",
+            Self::ModelRequest => "proof-phase:model-request",
+            Self::FollowUp => "proof-phase:follow-up",
+            Self::Worker => "proof-phase:worker",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ReceiptArtifact {
+    Aggregate,
+    Standalone,
+}
+
+impl ReceiptArtifact {
+    fn reference(self, receipt_index: usize, command_index: usize) -> String {
+        match self {
+            Self::Aggregate => {
+                format!("review/proof_receipts.json#/{receipt_index}/commands/{command_index}")
+            }
+            Self::Standalone => format!("proof_receipt.json#/commands/{command_index}"),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub(crate) struct ProofTaskLedger {
@@ -44,10 +85,20 @@ pub(crate) struct ProofCommandTask {
     requested_by: Vec<String>,
     request_ids: Vec<String>,
     timeout_sec: u64,
+    source: TaskSource,
+    required: bool,
+    execution_phase: ProofExecutionPhase,
 }
 
 impl ProofCommandTask {
-    pub(crate) fn focused_test(task: &FocusedTestTask, side: &str, timeout_sec: u64) -> Self {
+    /// Build one focused-test command task for an explicit production phase.
+    pub(crate) fn focused_test(
+        task: &FocusedTestTask,
+        side: &str,
+        timeout_sec: u64,
+        execution_phase: ProofExecutionPhase,
+    ) -> Self {
+        let required = is_configured_proof(&task.requested_by);
         Self {
             receipt_id: task.id.clone(),
             side: side.to_owned(),
@@ -55,10 +106,19 @@ impl ProofCommandTask {
             requested_by: task.requested_by.clone(),
             request_ids: task.request_ids.clone(),
             timeout_sec,
+            source: proof_command_source(required, execution_phase),
+            required,
+            execution_phase,
         }
     }
 
-    pub(crate) fn focused_build(task: &FocusedBuildTask, timeout_sec: u64) -> Self {
+    /// Build one focused-build command task for an explicit production phase.
+    pub(crate) fn focused_build(
+        task: &FocusedBuildTask,
+        timeout_sec: u64,
+        execution_phase: ProofExecutionPhase,
+    ) -> Self {
+        let required = is_configured_proof(&task.requested_by);
         Self {
             receipt_id: task.id.clone(),
             side: "head".to_owned(),
@@ -66,6 +126,38 @@ impl ProofCommandTask {
             requested_by: task.requested_by.clone(),
             request_ids: task.request_ids.clone(),
             timeout_sec,
+            source: proof_command_source(required, execution_phase),
+            required,
+            execution_phase,
+        }
+    }
+
+    /// Build the standalone worker capability-preflight task.
+    pub(crate) fn worker_preflight(request: &ProofRequestV2, timeout_sec: u64) -> Self {
+        Self::worker_side(
+            request,
+            "nightly-preflight",
+            "worker-preflight",
+            timeout_sec,
+        )
+    }
+
+    /// Build the standalone worker's requested proof command task.
+    pub(crate) fn worker(request: &ProofRequestV2, timeout_sec: u64) -> Self {
+        Self::worker_side(request, "head", request.kind.key(), timeout_sec)
+    }
+
+    fn worker_side(request: &ProofRequestV2, side: &str, kind: &str, timeout_sec: u64) -> Self {
+        Self {
+            receipt_id: request.id.clone(),
+            side: side.to_owned(),
+            kind: kind.to_owned(),
+            requested_by: request.requested_by.clone(),
+            request_ids: request.claim_ids.clone(),
+            timeout_sec,
+            source: TaskSource::Worker,
+            required: false,
+            execution_phase: ProofExecutionPhase::Worker,
         }
     }
 
@@ -74,23 +166,16 @@ impl ProofCommandTask {
     }
 
     fn source(&self) -> TaskSource {
-        if is_configured_proof(&self.requested_by) {
-            TaskSource::Required
-        } else if self.request_ids.is_empty() {
-            TaskSource::Impact
-        } else {
-            TaskSource::ReviewerTurn { model_on: true }
-        }
+        self.source.clone()
     }
 
     fn consumers(&self) -> Result<Vec<TaskConsumer>> {
-        let required = is_configured_proof(&self.requested_by);
-        let requirement = if required {
+        let requirement = if self.required {
             TaskRequirement::Required
         } else {
             TaskRequirement::Optional
         };
-        let value = if required {
+        let value = if self.required {
             TaskValueClass::GateCritical
         } else if self.request_ids.is_empty() {
             TaskValueClass::Advisory
@@ -107,6 +192,7 @@ impl ProofCommandTask {
         } else if self.kind == "focused-build" {
             ids.insert("compiler".to_owned());
         }
+        ids.insert(self.execution_phase.consumer_id().to_owned());
         ids.extend(self.requested_by.iter().cloned());
         ids.extend(
             self.request_ids
@@ -128,6 +214,11 @@ impl ProofTaskLedger {
             recorder,
             state: Arc::new(Mutex::new(ProofTaskLedgerState::default())),
         }
+    }
+
+    /// Publish the replay-verified shared TaskLedger stream.
+    pub(crate) fn write_artifacts(&self, out: &std::path::Path) -> Result<()> {
+        self.recorder.write_artifacts(out)
     }
 
     /// Record selection, queueing, admission, and setup for one approved
@@ -261,6 +352,59 @@ impl ProofTaskLedger {
         self.mark_receipt_pending(&task_id)
     }
 
+    /// Fail durable receipt publication after execution terminalized, then
+    /// release admitted resources without claiming a receipt was created.
+    pub(crate) fn receipt_creation_failed_and_resources_released(
+        &self,
+        task: &ProofCommandTask,
+        reason: &str,
+    ) -> Result<()> {
+        let task_id = task.task_id()?;
+        ensure!(
+            self.receipt_pending(task)?,
+            "proof task {} has no pending receipt to fail",
+            task_id.as_str()
+        );
+        self.recorder.append([
+            input(
+                &task_id,
+                TaskEvent::ReceiptCreationFailed {
+                    at: self.recorder.now()?,
+                    reason: canonical_reason(reason),
+                },
+            ),
+            input(
+                &task_id,
+                TaskEvent::ResourcesReleased {
+                    at: self.recorder.now()?,
+                },
+            ),
+        ])?;
+        let removed = self
+            .state
+            .lock()
+            .map_err(|_| anyhow::anyhow!("proof task-ledger mutex poisoned"))?
+            .pending_receipts
+            .remove(task_id.as_str());
+        ensure!(
+            removed,
+            "proof task {} pending receipt disappeared during failure reconciliation",
+            task_id.as_str()
+        );
+        Ok(())
+    }
+
+    /// Return whether this command has completed cleanup or setup failure and
+    /// is waiting for one current-attempt receipt outcome.
+    pub(crate) fn receipt_pending(&self, task: &ProofCommandTask) -> Result<bool> {
+        Ok(self
+            .state
+            .lock()
+            .map_err(|_| anyhow::anyhow!("proof task-ledger mutex poisoned"))?
+            .pending_receipts
+            .contains(task.task_id()?.as_str()))
+    }
+
     /// Read the just-published aggregate receipt, validate its immutable
     /// revision and exact side order, then bind pending command tasks to their
     /// own receipt rows before releasing resources.
@@ -270,16 +414,43 @@ impl ProofTaskLedger {
             &fs::read(&path).with_context(|| format!("read {}", path.display()))?,
         )
         .with_context(|| format!("parse {}", path.display()))?;
-        let (proposed, expected_sides, pending) = {
+        let references = self.validate_receipt_rows(&receipts, ReceiptArtifact::Aggregate)?;
+        self.reconcile_pending_references(&references)
+    }
+
+    /// Re-read and reconcile the canonical standalone worker receipt after it
+    /// has been durably published.
+    pub(crate) fn reconcile_worker_receipt(
+        &self,
+        out: &std::path::Path,
+        request_id: &str,
+    ) -> Result<()> {
+        let path = out.join("proof_receipt.json");
+        let receipt: ProofReceipt = serde_json::from_slice(
+            &fs::read(&path).with_context(|| format!("read {}", path.display()))?,
+        )
+        .with_context(|| format!("parse {}", path.display()))?;
+        ensure!(
+            receipt.id == request_id,
+            "worker receipt id {} does not match request {request_id}",
+            receipt.id
+        );
+        let references = self
+            .validate_receipt_rows(std::slice::from_ref(&receipt), ReceiptArtifact::Standalone)?;
+        self.reconcile_pending_references(&references)
+    }
+
+    fn validate_receipt_rows(
+        &self,
+        receipts: &[ProofReceipt],
+        artifact: ReceiptArtifact,
+    ) -> Result<BTreeMap<String, String>> {
+        let (proposed, expected_sides) = {
             let state = self
                 .state
                 .lock()
                 .map_err(|_| anyhow::anyhow!("proof task-ledger mutex poisoned"))?;
-            (
-                state.proposed.clone(),
-                state.expected_sides.clone(),
-                state.pending_receipts.clone(),
-            )
+            (state.proposed.clone(), state.expected_sides.clone())
         };
         let mut references = BTreeMap::new();
         for (receipt_index, receipt) in receipts.iter().enumerate() {
@@ -313,7 +484,7 @@ impl ProofTaskLedger {
                 );
                 let previous = references.insert(
                     task_id.as_str().to_owned(),
-                    format!("review/proof_receipts.json#/{receipt_index}/commands/{command_index}"),
+                    artifact.reference(receipt_index, command_index),
                 );
                 ensure!(
                     previous.is_none(),
@@ -322,17 +493,27 @@ impl ProofTaskLedger {
                 );
             }
         }
+        Ok(references)
+    }
+
+    fn reconcile_pending_references(&self, references: &BTreeMap<String, String>) -> Result<()> {
+        let pending = self
+            .state
+            .lock()
+            .map_err(|_| anyhow::anyhow!("proof task-ledger mutex poisoned"))?
+            .pending_receipts
+            .clone();
+        let mut events = Vec::new();
         for task in &pending {
             let task_id = TaskId::parse(task)?;
-            let at = self.recorder.now()?;
             let reference = references
                 .get(task)
                 .with_context(|| format!("published proof receipt omitted task {task}"))?;
-            self.recorder.append([
+            events.extend([
                 input(
                     &task_id,
                     TaskEvent::ReceiptCreated {
-                        at,
+                        at: self.recorder.now()?,
                         reference: reference.clone(),
                     },
                 ),
@@ -342,8 +523,9 @@ impl ProofTaskLedger {
                         at: self.recorder.now()?,
                     },
                 ),
-            ])?;
+            ]);
         }
+        self.recorder.append(events)?;
         self.state
             .lock()
             .map_err(|_| anyhow::anyhow!("proof task-ledger mutex poisoned"))?
@@ -458,6 +640,68 @@ fn proof_request_task_id(request_id: &str) -> Result<TaskId> {
         "proof-request-{}",
         sanitize_artifact_name(request_id)
     ))
+}
+
+fn proof_command_source(required: bool, phase: ProofExecutionPhase) -> TaskSource {
+    if required {
+        return TaskSource::Required;
+    }
+    match phase {
+        ProofExecutionPhase::InitialImpact => TaskSource::Impact,
+        ProofExecutionPhase::ModelRequest | ProofExecutionPhase::FollowUp => {
+            TaskSource::ReviewerTurn { model_on: true }
+        }
+        ProofExecutionPhase::Worker => TaskSource::Worker,
+    }
+}
+
+/// Recompute the ordinary immutable revision admission from exact worker git
+/// objects and the reviewed diff. Display labels never become ledger identity.
+pub(crate) fn standalone_worker_revision(
+    root: &std::path::Path,
+    request: &ProofRequestV2,
+) -> Result<RevisionRef> {
+    validate_worker_oid("base", &request.base)?;
+    validate_worker_oid("head", &request.head)?;
+    let diff = DiffContext::from_git(root, &request.base, &request.head)
+        .context("compute standalone worker diff")?;
+    let admission = admit_revision(
+        root,
+        &request.base,
+        &request.head,
+        Some(&request.head),
+        &diff.changed_files,
+        &diff.patch,
+    )
+    .context("admit standalone worker revision")?;
+    let revision = RevisionRef::from_admission(&admission);
+    revision.validate().context("standalone worker revision")?;
+    ensure!(
+        revision.reviewed_commit == request.head,
+        "standalone worker admitted commit {} does not match request head {}",
+        revision.reviewed_commit,
+        request.head
+    );
+    Ok(revision)
+}
+
+fn validate_worker_oid(label: &str, value: &str) -> Result<()> {
+    let bytes = value.as_bytes();
+    ensure!(
+        bytes.len() == 40 || bytes.len() == 64,
+        "standalone worker request {label} must be a 40- or 64-character object id"
+    );
+    ensure!(
+        bytes
+            .iter()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte)),
+        "standalone worker request {label} must be lowercase hexadecimal"
+    );
+    ensure!(
+        bytes.iter().any(|byte| *byte != b'0'),
+        "standalone worker request {label} cannot be the null object id"
+    );
+    Ok(())
 }
 
 fn proof_reservations(
@@ -617,6 +861,24 @@ mod tests {
         requested_by: &[&str],
         request_ids: &[&str],
     ) -> ProofCommandTask {
+        let phase = if request_ids.is_empty() {
+            ProofExecutionPhase::InitialImpact
+        } else {
+            ProofExecutionPhase::ModelRequest
+        };
+        task_for_phase(receipt_id, side, requested_by, request_ids, phase)
+    }
+
+    fn task_for_phase(
+        receipt_id: &str,
+        side: &str,
+        requested_by: &[&str],
+        request_ids: &[&str],
+        execution_phase: ProofExecutionPhase,
+    ) -> ProofCommandTask {
+        let required = requested_by
+            .iter()
+            .any(|id| *id == crate::REQUIRED_PROOF_POLICY_LANE || id.starts_with("proof-policy:"));
         ProofCommandTask {
             receipt_id: receipt_id.to_owned(),
             side: side.to_owned(),
@@ -630,6 +892,9 @@ mod tests {
                 .map(|value| (*value).to_owned())
                 .collect(),
             timeout_sec: 7,
+            source: proof_command_source(required, execution_phase),
+            required,
+            execution_phase,
         }
     }
 
@@ -727,6 +992,43 @@ mod tests {
             task("model", "head", &["opposition"], &["request-b"]).source()
                 == TaskSource::ReviewerTurn { model_on: true }
         );
+        let follow_up = task_for_phase(
+            "follow-up",
+            "head",
+            &["opposition"],
+            &["request-c"],
+            ProofExecutionPhase::FollowUp,
+        );
+        ensure!(follow_up.source() == TaskSource::ReviewerTurn { model_on: true });
+        ensure!(
+            follow_up
+                .consumers()?
+                .iter()
+                .any(|consumer| consumer.id() == "proof-phase:follow-up")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn worker_tasks_are_optional_and_source_bound() -> Result<()> {
+        let request = ProofRequestV2 {
+            schema: crate::artifacts::PROOF_REQUEST_V2_SCHEMA.to_owned(),
+            id: "worker-source".to_owned(),
+            kind: crate::ProofKind::FocusedTest,
+            target: "cargo test --locked worker_source".to_owned(),
+            claim_ids: vec!["claim-a".to_owned()],
+            requested_by: vec!["controller".to_owned()],
+            expected_interpretation: "worker source remains explicit".to_owned(),
+            priority: "high".to_owned(),
+            timeout_sec: 7,
+            status: "approved".to_owned(),
+            base: "a".repeat(40),
+            head: "b".repeat(40),
+        };
+        let worker = ProofCommandTask::worker(&request, 7);
+
+        ensure!(worker.source() == TaskSource::Worker);
+        ensure!(!worker.required);
         Ok(())
     }
 
@@ -781,6 +1083,63 @@ mod tests {
         ensure!(task.state == TaskState::ReceiptPending(TaskTerminalDisposition::Succeeded));
         ensure!(task.receipt.is_none());
         ensure!(task.timing.resources_released_at.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn worker_receipt_reconciliation_binds_standalone_artifact() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let revision = revision('a');
+        let recorder = TaskLedgerRecorder::new(&revision, &Instant::now())?;
+        let ledger = ProofTaskLedger::new(recorder.clone());
+        let request = ProofRequestV2 {
+            schema: crate::artifacts::PROOF_REQUEST_V2_SCHEMA.to_owned(),
+            id: "worker-request".to_owned(),
+            kind: crate::ProofKind::FocusedTest,
+            target: "cargo test --locked".to_owned(),
+            claim_ids: vec!["claim-a".to_owned()],
+            requested_by: vec!["controller".to_owned()],
+            expected_interpretation: "same receipt contract".to_owned(),
+            priority: "high".to_owned(),
+            timeout_sec: 7,
+            status: "approved".to_owned(),
+            base: "a".repeat(40),
+            head: "b".repeat(40),
+        };
+        let preflight = ProofCommandTask::worker_preflight(&request, 7);
+        let command_task = ProofCommandTask::worker(&request, 7);
+        execute_side(&ledger, &preflight, &granted_lease("worker-request"))?;
+        execute_side(&ledger, &command_task, &granted_lease("worker-request"))?;
+        let published = ProofReceipt {
+            revision: Some(revision),
+            schema: crate::PROOF_RECEIPT_SCHEMA.to_owned(),
+            id: request.id.clone(),
+            kind: request.kind.key().to_owned(),
+            base: request.base,
+            head: request.head,
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: request.requested_by,
+            request_ids: request.claim_ids,
+            commands: vec![command("nightly-preflight"), command("head")],
+            result: "passed".to_owned(),
+            reason: "fixture".to_owned(),
+        };
+        fs::write(
+            temp.path().join("proof_receipt.json"),
+            serde_json::to_vec_pretty(&published)?,
+        )?;
+
+        ledger.reconcile_worker_receipt(temp.path(), "worker-request")?;
+
+        for (task, index) in [(&preflight, 0), (&command_task, 1)] {
+            let snapshot = state_for(&recorder, &task.task_id()?)?;
+            ensure!(matches!(
+                snapshot.receipt,
+                Some(TaskReceiptOutcome::Created { reference })
+                    if reference == format!("proof_receipt.json#/commands/{index}")
+            ));
+            ensure!(snapshot.timing.resources_released_at.is_some());
+        }
         Ok(())
     }
 

@@ -1,1 +1,0 @@
-Temporary connector-authored trigger for exact #956 validation after the self-applied source commit. Remove with the transport workflow before the PR is ready to merge.

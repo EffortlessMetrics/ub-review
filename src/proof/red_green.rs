@@ -22,6 +22,7 @@ pub(crate) fn run_focused_red_green_proof_tasks_with_runner<F, G>(
     budget: ProofBudget,
     tasks: Vec<FocusedTestTask>,
     task_ledger: Option<&ProofTaskLedger>,
+    execution_phase: ProofExecutionPhase,
     mut runner: F,
     mut prepare_base_plus_tests: G,
 ) -> Result<ProofBrokerResult>
@@ -55,7 +56,12 @@ where
             ));
             if let Some(ledger) = task_ledger {
                 ledger.decline_command(
-                    &ProofCommandTask::focused_test(&task, "head", task_timeout_sec),
+                    &ProofCommandTask::focused_test(
+                        &task,
+                        "head",
+                        task_timeout_sec,
+                        execution_phase,
+                    ),
                     TaskNonExecutionDisposition::Refused,
                     "dry-run; proof broker did not execute focused tests",
                 )?;
@@ -79,7 +85,12 @@ where
             ));
             if let Some(ledger) = task_ledger {
                 ledger.decline_command(
-                    &ProofCommandTask::focused_test(&task, "head", task_timeout_sec),
+                    &ProofCommandTask::focused_test(
+                        &task,
+                        "head",
+                        task_timeout_sec,
+                        execution_phase,
+                    ),
                     TaskNonExecutionDisposition::Refused,
                     "profile allows zero focused test leases",
                 )?;
@@ -111,7 +122,12 @@ where
             ));
             if let Some(ledger) = task_ledger {
                 ledger.decline_command(
-                    &ProofCommandTask::focused_test(&task, "head", task_timeout_sec),
+                    &ProofCommandTask::focused_test(
+                        &task,
+                        "head",
+                        task_timeout_sec,
+                        execution_phase,
+                    ),
                     TaskNonExecutionDisposition::BudgetDeferred,
                     "focused red/green proof lease budget exhausted by runtime profile",
                 )?;
@@ -145,6 +161,7 @@ where
                     task_timeout_sec,
                     &lease,
                     task_ledger,
+                    execution_phase,
                     &mut runner,
                 )?;
                 let result = match head.status.as_str() {
@@ -164,6 +181,7 @@ where
                 task_timeout_sec,
                 &lease,
                 task_ledger,
+                execution_phase,
                 &mut runner,
                 &mut prepare_base_plus_tests,
             )?,
@@ -180,7 +198,6 @@ where
     })
 }
 
-
 #[expect(
     clippy::too_many_arguments,
     reason = "lease is an execution precondition for the proof command; keeping it explicit pins the no-lease-no-command broker contract"
@@ -193,6 +210,7 @@ pub(crate) fn run_focused_red_green_proof_task<F, G>(
     timeout_sec: u64,
     lease: &ResourceLease,
     task_ledger: Option<&ProofTaskLedger>,
+    execution_phase: ProofExecutionPhase,
     runner: &mut F,
     prepare_base_plus_tests: &mut G,
 ) -> Result<ProofReceipt>
@@ -208,6 +226,51 @@ where
     ) -> Result<CommandStatus>,
     G: FnMut(&Path, &Path, &DiffContext) -> Result<PathBuf>,
 {
+    run_focused_red_green_proof_task_with_cleanup(
+        root,
+        out,
+        diff,
+        task,
+        timeout_sec,
+        lease,
+        task_ledger,
+        execution_phase,
+        runner,
+        prepare_base_plus_tests,
+        &mut cleanup_base_plus_tests_worktree,
+    )
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "lease is an execution precondition for the proof command; keeping it explicit pins the no-lease-no-command broker contract"
+)]
+fn run_focused_red_green_proof_task_with_cleanup<F, G, H>(
+    root: &Path,
+    out: &Path,
+    diff: &DiffContext,
+    task: &FocusedTestTask,
+    timeout_sec: u64,
+    lease: &ResourceLease,
+    task_ledger: Option<&ProofTaskLedger>,
+    execution_phase: ProofExecutionPhase,
+    runner: &mut F,
+    prepare_base_plus_tests: &mut G,
+    cleanup_base_plus_tests: &mut H,
+) -> Result<ProofReceipt>
+where
+    F: FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+        &mut dyn FnMut(CommandProcessObservation),
+    ) -> Result<CommandStatus>,
+    G: FnMut(&Path, &Path, &DiffContext) -> Result<PathBuf>,
+    H: FnMut(&Path, &Path) -> Result<()>,
+{
     let head_spec = proof_task_command_spec(task, "head");
     let head = run_proof_command_receipt_for_task(
         root,
@@ -218,6 +281,7 @@ where
         timeout_sec,
         lease,
         task_ledger,
+        execution_phase,
         runner,
     )?;
     let head_status = head.status.clone();
@@ -245,7 +309,12 @@ where
             let patch_reason = format!("base+tests patch failed: {error:#}");
             if let Some(ledger) = task_ledger {
                 ledger.decline_command(
-                    &ProofCommandTask::focused_test(task, "base-plus-tests", timeout_sec),
+                    &ProofCommandTask::focused_test(
+                        task,
+                        "base-plus-tests",
+                        timeout_sec,
+                        execution_phase,
+                    ),
                     TaskNonExecutionDisposition::Refused,
                     &patch_reason,
                 )?;
@@ -268,21 +337,20 @@ where
         }
     };
     let base_spec = proof_task_command_spec(task, "base-plus-tests");
-    let base = {
-        let result = run_proof_command_receipt_for_task(
-            &base_root,
-            out,
-            task,
-            "base-plus-tests",
-            &base_spec,
-            timeout_sec,
-            lease,
-            task_ledger,
-            runner,
-        );
-        let _ = cleanup_base_plus_tests_worktree(root, &base_root);
-        result?
-    };
+    let mut cleanup = || cleanup_base_plus_tests(root, &base_root);
+    let base = run_proof_command_receipt_for_task_with_cleanup(
+        &base_root,
+        out,
+        task,
+        "base-plus-tests",
+        &base_spec,
+        timeout_sec,
+        lease,
+        task_ledger,
+        execution_phase,
+        Some(&mut cleanup),
+        runner,
+    )?;
     let (result, reason) = match base.status.as_str() {
         "failed" => (
             "discriminating".to_owned(),
@@ -420,6 +488,7 @@ mod tests {
             },
             vec![cargo_test_task()],
             None,
+            ProofExecutionPhase::ModelRequest,
             |root, _argv, _env, _timeout, stdout, stderr, _observe_process| {
                 // Stand in for `cargo test classifies_boundary`: the new test
                 // only passes where the production fix is present.
@@ -485,6 +554,7 @@ mod tests {
             },
             vec![cargo_test_task()],
             None,
+            ProofExecutionPhase::ModelRequest,
             |_root, _argv, _env, _timeout, stdout, stderr, _observe_process| {
                 fs::write(stdout, b"ok\n")?;
                 fs::write(stderr, b"")?;
@@ -507,6 +577,112 @@ mod tests {
         assert!(
             receipt.reason.contains("classification refused"),
             "{receipt:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn base_worktree_cleanup_precedes_ledger_cleanup_completion() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let diff = test_diff();
+        let task = cargo_test_task();
+        let revision = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+        let recorder = TaskLedgerRecorder::new(&revision, &Instant::now())?;
+        let ledger = ProofTaskLedger::new(recorder.clone());
+        let lease = ResourceLease {
+            revision: Some(revision),
+            schema: RESOURCE_LEASE_SCHEMA.to_owned(),
+            id: format!("lease-{}", task.id),
+            kind: "focused-test".to_owned(),
+            consumer: task.id.clone(),
+            status: "granted".to_owned(),
+            reason: "fixture lease".to_owned(),
+            cpu: 1,
+            memory_mb: 512,
+            disk_mb: 64,
+            timeout_sec: 60,
+            network: false,
+            scratch: false,
+            worktree: Some("fixture-worktree".to_owned()),
+            command: None,
+        };
+        let base_root = temp.path().join("base-plus-tests");
+        let prepared_base_root = base_root.clone();
+        let mut cleanup_observed = false;
+
+        let receipt = run_focused_red_green_proof_task_with_cleanup(
+            temp.path(),
+            &out,
+            &diff,
+            &task,
+            60,
+            &lease,
+            Some(&ledger),
+            ProofExecutionPhase::ModelRequest,
+            &mut |_root, _argv, _env, _timeout, stdout, stderr, observe_process| {
+                observe_process(CommandProcessObservation::Spawned);
+                fs::write(stdout, b"ok\n")?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    exit_code: Some(0),
+                    timed_out: false,
+                    success: true,
+                    reason: "completed".to_owned(),
+                    duration_ms: 1,
+                })
+            },
+            &mut move |_root, _out, _diff| {
+                fs::create_dir_all(&prepared_base_root)?;
+                Ok(prepared_base_root.clone())
+            },
+            &mut |_root, worktree| {
+                ensure!(worktree.is_dir());
+                let base_task_id = proof_command_task_id(&task.id, "base-plus-tests")?;
+                let events = recorder
+                    .inputs()?
+                    .into_iter()
+                    .filter(|input| input.task_id == base_task_id)
+                    .map(|input| input.event)
+                    .collect::<Vec<_>>();
+                ensure!(
+                    events
+                        .iter()
+                        .any(|event| matches!(event, TaskEvent::ProcessFinished { .. }))
+                );
+                ensure!(!events.iter().any(|event| matches!(
+                    event,
+                    TaskEvent::CleanupFinished { .. } | TaskEvent::ResourcesReleased { .. }
+                )));
+                fs::remove_dir_all(worktree)?;
+                cleanup_observed = true;
+                Ok(())
+            },
+        )?;
+
+        ensure!(receipt.commands.len() == 2);
+        ensure!(cleanup_observed);
+        ensure!(!base_root.exists());
+        let base_task_id = proof_command_task_id(&task.id, "base-plus-tests")?;
+        let events = recorder
+            .inputs()?
+            .into_iter()
+            .filter(|input| input.task_id == base_task_id)
+            .map(|input| input.event)
+            .collect::<Vec<_>>();
+        ensure!(
+            events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::CleanupFinished { .. }))
+        );
+        ensure!(
+            !events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::ResourcesReleased { .. }))
         );
         Ok(())
     }
@@ -552,6 +728,7 @@ mod tests {
             60,
             &lease,
             Some(&ledger),
+            ProofExecutionPhase::ModelRequest,
             &mut |_root, _argv, _env, _timeout, _stdout, _stderr, observe_process| {
                 command_calls += 1;
                 observe_process(CommandProcessObservation::Spawned);

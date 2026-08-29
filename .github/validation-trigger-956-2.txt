@@ -1,1 +1,0 @@
-Connector-authored exact-head validation trigger after #956 authority reconciliation. Remove before landing.
