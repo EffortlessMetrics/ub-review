@@ -46,7 +46,7 @@ jobs:
 
           mkdir -p "$VALIDATION_DIR"
           cat "${chunks[@]}" > /tmp/ub-review-956-authoritative.patch
-          printf '%s  %s\n' 'f869505f4ee91282b76d84f7f5baf31d9777974b56efe7b9decfd99f10d24d07' /tmp/ub-review-956-authoritative.patch | sha256sum --check --strict
+          printf '%s  %s\n' 'bb6b6dbcf34910c3ff60cfe6ef1bb03a0921ab4859ed5ad6c8fe33d38d0c438b' /tmp/ub-review-956-authoritative.patch | sha256sum --check --strict
           git apply --check --verbose /tmp/ub-review-956-authoritative.patch
           git apply /tmp/ub-review-956-authoritative.patch
           cargo fmt --all
