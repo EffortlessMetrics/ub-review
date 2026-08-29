@@ -1,4 +1,4 @@
-name: Scratch #1266 source export
+name: Scratch #1266 apply and validate
 
 on:
   push:
@@ -6,33 +6,133 @@ on:
       - chatgpt/1266-required-proof-fix
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: ub-review-1266-required-fix
+  cancel-in-progress: false
 
 jobs:
-  export:
-    name: export exact scratch source
+  apply-validate-publish:
+    name: apply, validate, and publish scratch repair
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 60
+    env:
+      PATCH_PATH: .github/ub-review-1266-required.patch
+      PATCH_SHA256: 426c47447490e82feea03c2736d7e1eb4b3d08bcfd2a9c428165e46a26670d5a
+      SCRATCH_BRANCH: chatgpt/1266-required-proof-fix
+      WORKFLOW_PATH: .github/workflows/_scratch-1266-source-export.yml
     steps:
       - name: Checkout exact scratch head
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
-          persist-credentials: false
-      - name: Verify checkout identity
+          persist-credentials: true
+
+      - name: Verify exact input and apply bounded repair
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-      - name: Upload exact source tree
+          echo "$PATCH_SHA256  $PATCH_PATH" | sha256sum --check --strict
+          git apply --check "$PATCH_PATH"
+          git apply "$PATCH_PATH"
+          rm "$PATCH_PATH" "$WORKFLOW_PATH"
+
+      - name: Install fixed Rust toolchain
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: 1.95.0
+          components: rustfmt,clippy
+
+      - name: Format and run discriminating regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          cargo fmt --all -- --check
+          cargo test --workspace --all-targets --locked requiredness_survives_request_grouping_and_candidate_merging -- --nocapture
+          cargo test --workspace --all-targets --locked required_model_request_produces_required_gate_critical_command_task -- --nocapture
+
+      - name: Run deterministic repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo check --workspace --all-targets --locked
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo run --locked --package xtask -- policy-check
+          python scripts/verify-bun-review-artifacts.py --self-test
+          cargo test --workspace --all-targets --locked
+          git diff --check
+
+      - name: Verify bounded file surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --short
+          actual="$(git diff --name-only --diff-filter=ACDMRTUXB | sort)"
+          expected="$(printf '%s\n' \
+            .github/ub-review-1266-required.patch \
+            .github/workflows/_scratch-1266-source-export.yml \
+            src/proof/broker.rs \
+            src/proof/command.rs \
+            src/proof/red_green.rs \
+            src/proof/tasks.rs \
+            src/proof_task_ledger.rs | sort)"
+          test "$actual" = "$expected"
+
+      - name: Commit validated source-only repair
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name EffortlessSteven
+          git config user.email git@effortlesssteven.com
+          git add -A
+          git commit -m "fix(task-ledger): preserve required proof execution"
+          repaired_sha="$(git rev-parse HEAD)"
+          echo "repaired_sha=$repaired_sha" >> "$GITHUB_OUTPUT"
+          git push origin "HEAD:refs/heads/$SCRATCH_BRANCH"
+
+      - name: Write validation receipt
+        if: ${{ always() }}
+        shell: bash
+        env:
+          REPAIRED_SHA: ${{ steps.commit.outputs.repaired_sha }}
+        run: |
+          set -euo pipefail
+          receipt_dir="$RUNNER_TEMP/ub-review-1266-required-validation"
+          mkdir -p "$receipt_dir"
+          jq -n \
+            --arg schema "ub-review.scratch_validation.v1" \
+            --arg input_sha "$GITHUB_SHA" \
+            --arg repaired_sha "${REPAIRED_SHA:-}" \
+            --arg patch_sha256 "$PATCH_SHA256" \
+            '{
+              schema: $schema,
+              input_sha: $input_sha,
+              repaired_sha: $repaired_sha,
+              patch_sha256: $patch_sha256,
+              rust_toolchain: "1.95.0",
+              checks: [
+                "cargo fmt --all -- --check",
+                "requiredness_survives_request_grouping_and_candidate_merging",
+                "required_model_request_produces_required_gate_critical_command_task",
+                "cargo check --workspace --all-targets --locked",
+                "cargo clippy --workspace --all-targets --locked -- -D warnings",
+                "cargo run --locked --package xtask -- policy-check",
+                "python scripts/verify-bun-review-artifacts.py --self-test",
+                "cargo test --workspace --all-targets --locked",
+                "git diff --check"
+              ]
+            }' > "$receipt_dir/receipt.json"
+
+      - name: Upload validation receipt
+        if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: ub-review-1266-source-${{ github.sha }}
-          path: |
-            .
-            !.git/**
-            !target/**
-          include-hidden-files: true
+          name: ub-review-1266-required-validation-${{ github.sha }}
+          path: ${{ runner.temp }}/ub-review-1266-required-validation
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 7

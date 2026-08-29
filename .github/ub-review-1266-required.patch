@@ -1,0 +1,274 @@
+diff --git a/src/proof/broker.rs b/src/proof/broker.rs
+index fef4aaf..d40bb1a 100644
+--- a/src/proof/broker.rs
++++ b/src/proof/broker.rs
+@@ -1471,6 +1471,7 @@ mod tests {
+             mode: FocusedProofMode::RedGreen,
+             command_specs: None,
+             timeout_sec: Some(timeout_sec),
++            required: false,
+             requested_by: vec!["tests-oracle".to_owned()],
+             request_ids,
+         }
+@@ -1486,6 +1487,7 @@ mod tests {
+             command: "cargo check --package parser --locked".to_owned(),
+             argv: vec!["cargo".to_owned(), "check".to_owned()],
+             timeout_sec,
++            required: false,
+             requested_by: vec!["architecture".to_owned()],
+             request_ids,
+         }
+diff --git a/src/proof/command.rs b/src/proof/command.rs
+index f1fc1f4..c31d8bb 100644
+--- a/src/proof/command.rs
++++ b/src/proof/command.rs
+@@ -566,6 +566,7 @@ mod tests {
+             mode: FocusedProofMode::HeadOnly,
+             command_specs: None,
+             timeout_sec: Some(7),
++            required: false,
+             requested_by: vec!["tests-oracle".to_owned()],
+             request_ids: vec!["request-a".to_owned()],
+         }
+diff --git a/src/proof/red_green.rs b/src/proof/red_green.rs
+index c3769c0..5c34166 100644
+--- a/src/proof/red_green.rs
++++ b/src/proof/red_green.rs
+@@ -457,6 +457,7 @@ mod tests {
+                 base_plus_tests: spec,
+             }),
+             timeout_sec: Some(60),
++            required: false,
+             requested_by: vec!["tests".to_owned()],
+             request_ids: vec!["proof-rust-001".to_owned()],
+         }
+diff --git a/src/proof/tasks.rs b/src/proof/tasks.rs
+index 8a261b2..e0f9764 100644
+--- a/src/proof/tasks.rs
++++ b/src/proof/tasks.rs
+@@ -17,6 +17,7 @@ pub(crate) struct FocusedTestTask {
+     pub(crate) mode: FocusedProofMode,
+     pub(crate) command_specs: Option<FocusedTestCommandSpecs>,
+     pub(crate) timeout_sec: Option<u64>,
++    pub(crate) required: bool,
+     pub(crate) requested_by: Vec<String>,
+     pub(crate) request_ids: Vec<String>,
+ }
+@@ -33,6 +34,7 @@ pub(crate) struct FocusedBuildTask {
+     pub(crate) command: String,
+     pub(crate) argv: Vec<String>,
+     pub(crate) timeout_sec: u64,
++    pub(crate) required: bool,
+     pub(crate) requested_by: Vec<String>,
+     pub(crate) request_ids: Vec<String>,
+ }
+@@ -301,6 +303,7 @@ fn focused_cargo_test_task_from_impact_candidate(
+         mode: FocusedProofMode::HeadOnly,
+         command_specs: Some(command_specs),
+         timeout_sec: None,
++        required: false,
+         requested_by: vec!["impact-planner".to_owned()],
+         request_ids: Vec::new(),
+     })
+@@ -537,6 +540,7 @@ fn merge_focused_test_request_group_tasks(
+                 mode: FocusedProofMode::RedGreen,
+                 command_specs: target.command_specs,
+                 timeout_sec: Some(group.timeout_sec),
++                required: group.required,
+                 requested_by: group.requested_by.clone(),
+                 request_ids: group.request_ids.clone(),
+             },
+@@ -555,6 +559,7 @@ fn focused_build_task_from_request_group group: &ProofRequestGroup) -> Option<Fo
+         command,
+         argv: spec.argv,
+         timeout_sec: group.timeout_sec,
++        required: group.required,
+         requested_by: group.requested_by.clone(),
+         request_ids: group.request_ids.clone(),
+     })
+@@ -571,6 +576,7 @@ fn merge_focused_build_task(tasks: &mut Vec<FocusedBuildTask>, mut task: Focused
+         .find(|existing| existing.command == task.command)
+     {
+         existing.timeout_sec = existing.timeout_sec.max(task.timeout_sec);
++        existing.required |= task.required;
+         for lane in task.requested_by.drain(..) {
+             push_unique(&mut existing.requested_by, &lane);
+         }
+@@ -618,6 +624,7 @@ fn focused_test_task_with_mode(
+     let mut requested_by = Vec::new();
+     let mut request_ids = Vec::new();
+     let mut timeout_sec = None;
++    let mut required = false;
+     for group in request_groups {
+         if group.status == "requested"
+             && group.command.contains(file)
+@@ -626,6 +633,7 @@ fn focused_test_task_with_mode(
+                 .is_none_or(|name| group.command.contains(name))
+         {
+             merge_task_timeout(&mut timeout_sec, Some(group.timeout_sec));
++            required |= group.required;
+             for lane in &group.requested_by {
+                 push_unique(&mut requested_by, lane);
+             }
+@@ -644,6 +652,7 @@ fn focused_test_task_with_mode(
+         mode,
+         command_specs: None,
+         timeout_sec,
++        required,
+         requested_by,
+         request_ids,
+     }
+@@ -693,6 +702,7 @@ fn merge_focused_test_task(tasks: &mut Vec<FocusedTestTask>, mut task: Focused
+               );
+         }
+         merge_task_timeout(&mut existing.timeout_sec, task.timeout_sec);
++        existing.required |= task.required;
+         for lane in task.requested_by.drain(..) {
+             push_unique(&mut existing.requested_by, &lane);
+         }
+@@ -1446,6 +1456,50 @@ mod tests {
+         Ok(())
+     }
+ 
++    #[test]
++    fn requiredness_survives_request_grouping_and_candidate_merging() -> Result<()> {
++        let focused_test_command = "cargo test --locked --test config_tests";
++        let mut optional_test = focused_test_request("test-optional", focused_test_command, 30);
++        optional_test.required = false;
++        optional_test.lane = "opposition".to_owned();
++        optional_test.requested_by = vec!["opposition".to_owned()];
++        let mut required_test = optional_test.clone();
++        required_test.id = "test-required".to_owned();
++        required_test.required = true;
++
++        let tests = focused_test_candidates_from_requests(&[optional_test, required_test]);
++        anyhow::ensure!(tests.len() == 1, "equivalent test requests must merge");
++        anyhow::ensure!(
++            tests[0].required,
++            "one required source request must make the merged test candidate required"
++        );
++
++        let focused_build_command = "cargo check --workspace --all-targets --locked";
++        let optional_build = ProofRequest {
++            schema: "ub-review.proof_request.v1".to_owned(),
++            id: "build-optional".to_owned(),
++            lane: "opposition".to_owned(),
++            requested_by: vec!["opposition".to_owned()],
++            command: focused_build_command.to_owned(),
++            reason: "optional build evidence".to_owned(),
++            cost: "focused-build".to_owned(),
++            timeout_sec: 30,
++            required: false,
++            status: "requested".to_owned(),
++        };
++        let mut required_build = optional_build.clone();
++        required_build.id = "build-required".to_owned();
++        required_build.required = true;
++
++        let builds = focused_build_candidates_from_requests(&[optional_build, required_build]);
++        anyhow::ensure!(builds.len() == 1, "equivalent build requests must merge");
++        anyhow::ensure!(
++            builds[0].required,
++            "one required source request must make the merged build candidate required"
++        );
++        Ok(())
++    }
++
+     /// Native v2 flow (Order 4b): a v2 `FocusedTest` request yields the SAME
+     /// focused-test candidate the v1 extractor produces for the equivalent v1
+     /// command. This pins the v2→v1 normalization so the security boundary
+@@ -1517,6 +1571,7 @@ mod tests {
+             mode: FocusedProofMode::RedGreen,
+             command_specs: None,
+             timeout_sec: Some(30),
++            required: false,
+             requested_by: vec!["tests-oracle".to_owned()],
+             request_ids: vec!["request-1".to_owned()],
+         };
+@@ -1912,6 +1967,7 @@ mod tests {
+             mode: FocusedProofMode::RedGreen,
+             command_specs: None,
+             timeout_sec: None,
++            required: false,
+             requested_by: Vec::new(),
+             request_ids: Vec::new(),
+         };
+@@ -1950,6 +2006,7 @@ mod tests {
+                 },
+             }),
+             timeout_sec: None,
++            required: false,
+             requested_by: Vec::new(),
+             request_ids: Vec::new(),
+         };
+diff --git a/src/proof_task_ledger.rs b/src/proof_task_ledger.rs
+index 03c601e..eeee81e 100644
+--- a/src/proof_task_ledger.rs
++++ b/src/proof_task_ledger.rs
+@@ -98,7 +98,7 @@ impl ProofCommandTask {
+         timeout_sec: u64,
+         execution_phase: ProofExecutionPhase,
+     ) -> Self {
+-        let required = is_configured_proof(&task.requested_by);
++        let required = task.required || is_configured_proof(&task.requested_by);
+         Self {
+             receipt_id: task.id.clone(),
+             side: side.to_owned(),
+@@ -118,7 +118,7 @@ impl ProofCommandTask {
+         timeout_sec: u64,
+         execution_phase: ProofExecutionPhase,
+     ) -> Self {
+-        let required = is_configured_proof(&task.requested_by);
++        let required = task.required || is_configured_proof(&task.requested_by);
+         Self {
+             receipt_id: task.id.clone(),
+             side: "head".to_owned(),
+@@ -1009,6 +1009,48 @@ mod tests {
+         Ok(())
+     }
+ 
++    #[test]
++    fn required_model_request_produces_required_gate_critical_command_task() -> Result<()> {
++        let request = ProofRequest {
++            schema: crate::PROOF_REQUEST_SCHEMA.to_owned(),
++            id: "required-model-proof".to_owned(),
++            lane: "opposition".to_owned(),
++            requested_by: vec!["opposition".to_owned()],
++            command: "cargo test --locked --test config_tests".to_owned(),
++            reason: "required evidence for a load-bearing objection".to_owned(),
++            cost: "focused-test".to_owned(),
++            timeout_sec: 30,
++            required: true,
++            status: "requested".to_owned(),
++        };
++        let candidate = crate::focused_test_candidates_from_requests(&[request])
++            .into_iter()
++            .next()
++            .context("required request must produce a focused test candidate")?;
++        ensure!(candidate.required);
++
++        let command_task = ProofCommandTask::focused_test(
++            &candidate,
++            "head",
++            30,
++            ProofExecutionPhase::ModelRequest,
++        );
++        ensure!(command_task.required);
++        ensure!(command_task.source() == TaskSource::Required);
++        let consumers = command_task.consumers()?;
++        ensure!(consumers.contains(&crate::task_ledger::TaskConsumer::parse(
++            "proof-request:required-model-proof",
++            crate::task_ledger::TaskRequirement::Required,
++            crate::task_ledger::TaskValueClass::GateCritical,
++        )?));
++        ensure!(consumers.contains(&crate::task_ledger::TaskConsumer::parse(
++            "proof-phase:model-request",
++            crate::task_ledger::TaskRequirement::Required,
++            crate::task_ledger::TaskValueClass::GateCritical,
++        )?));
++        Ok(())
++    }
++
+     #[test]
+     fn worker_tasks_are_optional_and_source_bound() -> Result<()> {
+         let request = ProofRequestV2 {
