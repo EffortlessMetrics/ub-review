@@ -1,0 +1,162 @@
+             side: side.to_owned(),
+@@ -630,6 +877,9 @@ mod tests {
+                 .map(|value| (*value).to_owned())
+                 .collect(),
+             timeout_sec: 7,
++            source: proof_command_source(required, execution_phase),
++            required,
++            execution_phase,
+         }
+     }
+ 
+@@ -690,6 +940,23 @@ mod tests {
+         }
+     }
+ 
++    fn worker_request(id: &str) -> ProofRequestV2 {
++        ProofRequestV2 {
++            schema: crate::artifacts::PROOF_REQUEST_V2_SCHEMA.to_owned(),
++            id: id.to_owned(),
++            kind: crate::ProofKind::FocusedTest,
++            target: "cargo test --locked focused_case".to_owned(),
++            claim_ids: vec!["claim-a".to_owned()],
++            requested_by: vec!["controller".to_owned()],
++            expected_interpretation: "same receipt contract".to_owned(),
++            priority: "high".to_owned(),
++            timeout_sec: 7,
++            status: "approved".to_owned(),
++            base: "a".repeat(40),
++            head: "b".repeat(40),
++        }
++    }
++
+     fn execute_side(
+         ledger: &ProofTaskLedger,
+         task: &ProofCommandTask,
+@@ -717,16 +984,76 @@ mod tests {
+     }
+ 
+     #[test]
+-    fn command_sources_preserve_impact_required_and_model_provenance() -> Result<()> {
+-        ensure!(task("impact", "head", &["impact-planner"], &[]).source() == TaskSource::Impact);
++    fn command_sources_preserve_impact_required_model_follow_up_and_worker_provenance()
++    -> Result<()> {
+         ensure!(
+-            task("required", "head", &["proof-policy:smoke"], &["request-a"]).source()
++            task(
++                "impact",
++                "head",
++                &["impact-planner"],
++                &[],
++                ProofExecutionPhase::InitialImpact,
++            )
++            .source()
++                == TaskSource::Impact
++        );
++        ensure!(
++            task(
++                "required",
++                "head",
++                &["proof-policy:smoke"],
++                &["request-a"],
++                ProofExecutionPhase::ModelRequest,
++            )
++            .source()
+                 == TaskSource::Required
+         );
+         ensure!(
+-            task("model", "head", &["opposition"], &["request-b"]).source()
++            task(
++                "model",
++                "head",
++                &["opposition"],
++                &["request-b"],
++                ProofExecutionPhase::ModelRequest,
++            )
++            .source()
+                 == TaskSource::ReviewerTurn { model_on: true }
+         );
++        let follow_up = task(
++            "follow-up",
++            "head",
++            &["opposition"],
++            &["request-c"],
++            ProofExecutionPhase::FollowUp,
++        );
++        ensure!(follow_up.source() == TaskSource::ReviewerTurn { model_on: true });
++        ensure!(
++            follow_up
++                .consumers()?
++                .iter()
++                .any(|consumer| consumer.id() == "proof-phase:follow-up")
++        );
++        let worker = ProofCommandTask::worker(&worker_request("worker-request"), 7);
++        ensure!(worker.source() == TaskSource::Worker);
++        ensure!(!worker.required);
++        Ok(())
++    }
++
++    #[test]
++    fn standalone_worker_revision_is_stable_and_rejects_symbolic_or_null_heads() -> Result<()> {
++        let request = worker_request("worker-request");
++        let first = standalone_worker_revision(&request)?;
++        let second = standalone_worker_revision(&request)?;
++        ensure!(first == second);
++        ensure!(first.digest.len() == 64);
++        ensure!(first.reviewed_commit == request.head);
++
++        let mut symbolic = request.clone();
++        symbolic.head = "HEAD".to_owned();
++        ensure!(standalone_worker_revision(&symbolic).is_err());
++        let mut null = request;
++        null.head = "0".repeat(40);
++        ensure!(standalone_worker_revision(&null).is_err());
+         Ok(())
+     }
+ 
+@@ -735,7 +1062,13 @@ mod tests {
+         let temp = tempfile::tempdir()?;
+         let recorder = recorder()?;
+         let ledger = ProofTaskLedger::new(recorder.clone());
+-        let command_task = task("receipt-a", "head", &["tests-oracle"], &["request-a"]);
++        let command_task = task(
++            "receipt-a",
++            "head",
++            &["tests-oracle"],
++            &["request-a"],
++            ProofExecutionPhase::ModelRequest,
++        );
+         execute_side(&ledger, &command_task, &granted_lease("receipt-a"))?;
+ 
+         let before = state_for(&recorder, &command_task.task_id()?)?;
+@@ -762,7 +1095,13 @@ mod tests {
+         let temp = tempfile::tempdir()?;
+         let recorder = recorder()?;
+         let ledger = ProofTaskLedger::new(recorder.clone());
+-        let command_task = task("receipt-a", "head", &["tests-oracle"], &["request-a"]);
++        let command_task = task(
++            "receipt-a",
++            "head",
++            &["tests-oracle"],
++            &["request-a"],
++            ProofExecutionPhase::ModelRequest,
++        );
+         execute_side(&ledger, &command_task, &granted_lease("receipt-a"))?;
+ 
+         let review = temp.path().join("review");
+@@ -784,18 +1123,70 @@ mod tests {
+         Ok(())
+     }
+ 
++    #[test]
++    fn worker_receipt_reconciliation_binds_standalone_artifact_and_all_sides() -> Result<()> {
++        let temp = tempfile::tempdir()?;
++        let request = worker_request("worker-request");
++        let revision = standalone_worker_revision(&request)?;
++        let recorder = TaskLedgerRecorder::new(&revision, &Instant::now())?;
++        let ledger = ProofTaskLedger::new(recorder.clone());
++        let preflight = ProofCommandTask::worker_nightly_preflight(&request, 7);
++        let command_task = ProofCommandTask::worker(&request, 7);
++        let lease = granted_lease("worker-request");
++        execute_side(&ledger, &preflight, &lease)?;
++        execute_side(&ledger, &command_task, &lease)?;
