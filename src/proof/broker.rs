@@ -1471,6 +1471,7 @@ mod tests {
             mode: FocusedProofMode::RedGreen,
             command_specs: None,
             timeout_sec: Some(timeout_sec),
+            required: false,
             requested_by: vec!["tests-oracle".to_owned()],
             request_ids,
         }
@@ -1486,6 +1487,7 @@ mod tests {
             command: "cargo check --package parser --locked".to_owned(),
             argv: vec!["cargo".to_owned(), "check".to_owned()],
             timeout_sec,
+            required: false,
             requested_by: vec!["architecture".to_owned()],
             request_ids,
         }
