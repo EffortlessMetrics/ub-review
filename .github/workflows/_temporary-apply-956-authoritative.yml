@@ -12,9 +12,6 @@ concurrency:
   group: ub-review-956-authoritative-apply
   cancel-in-progress: false
 
-env:
-  VALIDATION_DIR: ${{ runner.temp }}/ub-review-956-validation
-
 jobs:
   apply-validate-publish:
     runs-on: ubuntu-latest
@@ -38,6 +35,8 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
+          VALIDATION_DIR="$RUNNER_TEMP/ub-review-956-validation"
+          printf 'VALIDATION_DIR=%s\n' "$VALIDATION_DIR" >> "$GITHUB_ENV"
           chunks=(.github/ub-review-956-authoritative.patch.*)
           if [[ ${#chunks[@]} -ne 7 || ! -f .github/ub-review-956-authoritative.patch.06 ]]; then
             printf 'Authoritative source transfer incomplete: %s/7 chunks present.\n' "${#chunks[@]}"
@@ -84,6 +83,7 @@ jobs:
           git rm -f .github/ub-review-956-authoritative.patch.*
           git rm -f .github/ub-review-956-repair.patch.*
           git rm -f .github/ub-review-authority-repair.patch.*
+          git rm -f .github/ub-review-956-compile-fix.patch
           git rm -f .github/validation-trigger-*.txt
           git rm -f .github/workflows/_temporary-authority-apply.yml
           git rm -f .github/workflows/_temporary-finalize-956.yml
@@ -101,6 +101,6 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: proof-task-ledger-validation-${{ github.sha }}
-          path: ${{ env.VALIDATION_DIR }}
+          path: ${{ runner.temp }}/ub-review-956-validation
           if-no-files-found: warn
           retention-days: 1
