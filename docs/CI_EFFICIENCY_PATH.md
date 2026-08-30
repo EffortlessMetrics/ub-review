@@ -49,6 +49,9 @@ At the source commit named above:
 - `gate_outcome.conclusion` remains the compatibility enforcement field;
 - additive truth can report `not_proven`, but the normal required check can
   still pass over that disagreement;
+- `build_gate_truth` still lets publication failure force the compatibility
+  `gate_result` to `not_proven`; result-plane non-interference is therefore a
+  required future contract, not current behavior;
 - candidate self-dogfood remains candidate code, not a released stable judge;
 - existing downstream CI remains authoritative.
 
@@ -59,14 +62,8 @@ an existing check because UB Review can run a command with a similar string.
 
 ### A. Make one run coherent
 
-```text
-#1266 / #956
-  -> #957
-  -> #958
-  -> #959
-  -> #960
-  -> #962
-```
+The authority merge front is [#1266]/[#956] -> [#957] -> [#958] -> [#959] ->
+[#960] -> [#962].
 
 This sequence must establish one coherent account of the exact revision, every
 proposed and executed task, terminal receipts or failures, resource release,
@@ -75,9 +72,16 @@ not claim scheduling or cost optimization.
 
 ### B. Bound evidence and retain the before-state
 
-- [#1269] bounds primary and nested subprocess streams, preserves structured
-  evidence independently of raw logs, and enforces the expanded whole-packet
-  budget before upload.
+- [#1269] owns the output-containment programme.
+- [#1279] defines the shared streaming bounded-capture primitive.
+- [#1280] routes primary and nested/detail sensor processes through it.
+- [#1281] routes proof and worker processes through it.
+- [#1282] enforces expanded per-file, file-count, manifest, and total packet
+  budgets before upload.
+- [#1283] retains hostile-output and real RIPR integration proof, then closes
+  [#1269].
+- [#1284] separates small validated cross-job handoffs from the complete audit
+  packet.
 - [#1270] retains source-linked runner, process, duplicate-candidate, artifact,
   and outcome measurements without counting unproven command similarity as
   avoided work.
@@ -88,18 +92,25 @@ with the active authority work.
 
 ### C. Give equivalent work one identity and one receipt
 
-```text
-#896 / #899 / #900 / #902
-  -> #964
-  -> #965
-  -> #966
-```
+The current identity train is [#902] -> [#896] -> [#900] -> [#899] -> [#964]
+-> [#965] -> [#966].
+
+[#902] is the bounded RIPR discriminator acceptance strategy. It is not proof
+policy or an execution identity. [#896] then lands the pure identity value,
+[#900] defines typed relation/subsumption semantics, and [#899] attaches those
+contracts to planner/task artifacts before source-wide shadow adoption and
+consumer reuse.
+
+The earlier [#898] / PR [#901] attempt did not merge, and
+`src/proof/identity.rs` is absent from current `main`. Those artifacts are
+historical implementation and review evidence, not landed authority.
 
 Equivalent approved requests from the gate, a sensor, deterministic proof, or
-review may attach to one queued, running, or completed current-revision task.
-Distinct revisions, proof modes, red/green sides, packages, targets, filters,
-features, working roots, environments, and tool contracts remain distinct
-unless an explicit typed subsumption rule proves otherwise.
+review may eventually attach to one queued, running, or completed
+current-revision task. Distinct revisions, proof modes, red/green sides,
+packages, targets, filters, features, working roots, environments, and tool
+contracts remain distinct unless an explicit typed subsumption rule proves
+otherwise.
 
 The first economic receipt is one hosted model-off packet in which several
 consumers request the same work, one process executes, and each consumer traces
@@ -107,17 +118,18 @@ to the same terminal receipt.
 
 ### D. Compile the deterministic SharedRunPlan core
 
-The model-off portfolio uses the shared contracts rather than a fork:
+The shared model-off portfolio and plan path is:
 
-```text
-#970 local Required spine
-+ #973 / #974 mechanical package, target, test, and consumer impact
-+ #976 / #977 / #978 shared consumer, catalog, and ranking contracts
-  -> #1271 model-off Required-first portfolio receipt
-  -> #1272 deterministic core of SharedRunPlan
-  -> #1273 immediate Required readiness and deterministic completion reserves
-  -> #1274 model-off plan integration receipt
-```
+- [#970] defines the local Required spine.
+- [#973] and [#974] provide mechanical package, target, test, consumer, and
+  bounded reverse-dependency impact.
+- [#976], [#977], and [#978] provide shared consumer semantics, catalog, and
+  Required-first ranking.
+- [#1271] retains the model-off Required-first portfolio receipt.
+- [#1272] compiles the deterministic core of `SharedRunPlan`.
+- [#1273] makes Required work immediately ready and protects deterministic
+  receipt, outcome, verification, packet, and cleanup reserves.
+- [#1274] proves the frozen model-off plan before scheduler migration.
 
 Remote-platform, repository-contract, and model inputs have explicit source
 states. Their absence may be `not_applicable`, an evidence gap, or a reason for
@@ -130,14 +142,8 @@ model tasks enter live scheduler authority.
 
 ### E. Move deterministic execution under one scheduler
 
-```text
-#986 pure scheduler
-  -> #987 Required spine and configured proof
-  -> #988 changed-seam and Detective proof
-  -> #989 fast and late sensors
-  -> #990 local and distributed workers
-  -> #991 remove superseded live pools and derive projections from TaskLedger
-```
+Scheduler migration proceeds through [#986], [#987], [#988], [#989], [#990],
+and [#991].
 
 The migration is staged so each authority move has a shadow comparison and an
 explicit rollback. The complete state is not earned until every executable
@@ -147,15 +153,9 @@ starve Required work.
 
 ### F. Fix actual-time and Cargo economics
 
-```text
-#992 actual terminal duration and reservation release
-  -> #993 conservative compatible p50/p95 estimates
-  -> #994 explicit deadline phases
-  -> #995 zero-pending wind-down
-
-#996 CacheDomainIdentity and one Cargo-heavy resource class
-  -> #997 same-run Cargo target-domain reuse
-```
+Actual-time and deadline work proceeds through [#992], [#993], [#994], and
+[#995]. Cache-domain and same-run Cargo reuse proceed through [#996] and
+[#997].
 
 A timeout is a safety ceiling. A task that completes quickly returns unused
 reservation immediately. Proof equivalence remains separate from cache
@@ -167,6 +167,8 @@ compilation state without becoming interchangeable evidence.
 [#1275] compares the model-off runner with existing CI over a preselected corpus
 of at least twenty exact PR revisions across UB Review and one materially
 different Rust repository. Existing CI remains authoritative during the pilot.
+At least ten valid paired exact revisions are required per repository, selected
+before candidate results are known.
 
 The hard authority bar is zero unexplained instances of:
 
@@ -182,23 +184,47 @@ incorrect cross-mode or red/green satisfaction
 silent packet-budget loss
 ```
 
-The economic bar is at least 25% median reduction in Linux-equivalent runner
-minutes over the selected replaceable workload, with no material p95 regression
-in time to the deterministic decision. The report must preserve repository-level
-results, sample sizes, runner rounding, unknowns, cold/warm Cargo state, exact
-executions avoided, and compressed versus expanded artifact sizes.
+The runner-work bar is at least 25% median reduction in Linux-equivalent runner
+minutes over the selected replaceable workload. Report each repository
+separately and the combined corpus; a combined improvement cannot conceal a
+repository regression.
 
-A mixed or no-go result remains mixed or no-go. It opens only the concrete
-failed invariant or economic seams exposed by the corpus.
+The deterministic-decision latency bar is also evaluated separately for each
+repository:
 
-### H. Enforce truth, then retire work transactionally
+- baseline: existing-CI time from the comparable run start/admission boundary to
+  its deterministic decision timestamp;
+- candidate: UB Review time over the same exact revision and boundary;
+- estimator: nearest-rank p95 over the valid paired revisions;
+- minimum sample: ten valid pairs with known start and deterministic-decision
+  timestamps per repository;
+- maximum candidate p95:
+  `baseline p95 + min(120 seconds, max(30 seconds, 10% of baseline p95))`.
 
-- [#1015] changes `gate-check` and Action exit authority to
-  `FinalizedOutcome.ci_evidence_result`: `pass` succeeds, deterministic `fail`
-  is a code/policy failure, and `not_proven` is non-green evidence
-  unavailability.
-- [#1276] retires only jobs proven receipt-equivalent through a reversible
-  shadow-decommission transaction, one independent obligation at a time.
+Fewer than ten valid pairs, an unknown decision timestamp, or incomparable
+timing boundaries yields `mixed_requires_more_evidence`, not pass. Repository
+results may not be pooled to conceal a failure.
+
+The report must preserve sample sizes, runner rounding, unknowns, cold/warm
+Cargo state, exact executions avoided, and compressed versus expanded artifact
+sizes. A mixed or no-go result remains mixed or no-go and opens only the
+concrete failed invariant or economic seams exposed by the corpus.
+
+### H. Freeze result-plane non-interference, enforce truth, then retire work
+
+[#1277] is a predecessor, not a post-hoc audit. After [#960], it must freeze the
+`ci_evidence_result` inputs and digest before review or delivery are joined,
+then prove that model judgment, provider state, publication, delivery, and run
+classification cannot rewrite deterministic CI truth. Live model proof,
+reconsideration, stage budgets, final lead, and public-review authority remain
+blocked until this contract is terminal.
+
+[#1015] then changes `gate-check` and Action exit authority to the frozen
+`FinalizedOutcome.ci_evidence_result`: `pass` succeeds, deterministic `fail` is
+a code/policy failure, and `not_proven` is non-green evidence unavailability.
+
+[#1276] retires only jobs proven receipt-equivalent through a reversible
+shadow-decommission transaction, one independent obligation at a time.
 
 Workflow changes and branch-protection changes are separate authority steps.
 Remote platform, special-hardware, security, or service-integration checks are
@@ -211,17 +237,20 @@ stable coordinator judges candidate code.
 The model-off cut does not remove the work needed for a senior reviewer with a
 controlled lab:
 
-```text
-#967-#969 repository contract and bounded architecture packet
-#971-#972 remote/existing CI mapping where applicable
-#975 complete material architecture/trust/support edges
-#979 complete enriched portfolio comparison
-#980-#982 programme catalog and selection
-#983-#985 SharedRunPlan augmentation and shared prefix
-#1120 complete reviewer-and-gate plan acceptance
-C4/C5 live model proof, reconsideration, final lead, and public authority
-#1277 model-review/delivery consistency with deterministic CI truth
-```
+- [#967], [#968], and [#969] build repository contract and bounded
+  architecture knowledge from cycle-free mechanical scope.
+- [#971] and [#972] add remote/existing-CI mapping where applicable.
+- [#975] completes material architecture, trust, mirror, and support edges.
+- [#979] proves the complete enriched portfolio.
+- [#980], [#981], and [#982] define and select registered review
+  programmes.
+- [#983], [#984], and [#985] augment the same `SharedRunPlan` with model
+  work, reserves, and one shared prompt-prefix plan.
+- [#1120] proves the complete enriched reviewer-and-gate plan.
+- [#1277] must then be terminal before any live C4/C5 model authority.
+- C4/C5 may start approved proof during analysis, reconsider exact claims, and
+  run one final lead only through the existing plan, scheduler, TaskLedger, and
+  non-interference guard.
 
 Review and CI share evidence without sharing verdict authority. A clean model
 judgment cannot turn missing Required evidence into PASS. A model finding cannot
@@ -256,12 +285,15 @@ This path earns a useful, truthful model-off CI runner. It does not by itself
 earn the sole required check. Hostile-head isolation, released stable versus
 candidate authority, terminal GitHub check publication, rollback, break-glass,
 external calibration, and explicit branch-protection authorization remain under
-[#658] and its stable-coordinator programme.
+[#658] and its stable-coordinator programme. The current temporary decision to
+require the independent baseline is separately owned by [#1285].
 
 [#658]: https://github.com/EffortlessMetrics/ub-review/issues/658
 [#896]: https://github.com/EffortlessMetrics/ub-review/issues/896
+[#898]: https://github.com/EffortlessMetrics/ub-review/issues/898
 [#899]: https://github.com/EffortlessMetrics/ub-review/issues/899
 [#900]: https://github.com/EffortlessMetrics/ub-review/issues/900
+[#901]: https://github.com/EffortlessMetrics/ub-review/pull/901
 [#902]: https://github.com/EffortlessMetrics/ub-review/issues/902
 [#945]: https://github.com/EffortlessMetrics/ub-review/issues/945
 [#956]: https://github.com/EffortlessMetrics/ub-review/issues/956
@@ -306,6 +338,7 @@ external calibration, and explicit branch-protection authorization remain under
 [#997]: https://github.com/EffortlessMetrics/ub-review/issues/997
 [#1015]: https://github.com/EffortlessMetrics/ub-review/issues/1015
 [#1120]: https://github.com/EffortlessMetrics/ub-review/issues/1120
+[#1266]: https://github.com/EffortlessMetrics/ub-review/pull/1266
 [#1268]: https://github.com/EffortlessMetrics/ub-review/issues/1268
 [#1269]: https://github.com/EffortlessMetrics/ub-review/issues/1269
 [#1270]: https://github.com/EffortlessMetrics/ub-review/issues/1270
@@ -316,3 +349,10 @@ external calibration, and explicit branch-protection authorization remain under
 [#1275]: https://github.com/EffortlessMetrics/ub-review/issues/1275
 [#1276]: https://github.com/EffortlessMetrics/ub-review/issues/1276
 [#1277]: https://github.com/EffortlessMetrics/ub-review/issues/1277
+[#1279]: https://github.com/EffortlessMetrics/ub-review/issues/1279
+[#1280]: https://github.com/EffortlessMetrics/ub-review/issues/1280
+[#1281]: https://github.com/EffortlessMetrics/ub-review/issues/1281
+[#1282]: https://github.com/EffortlessMetrics/ub-review/issues/1282
+[#1283]: https://github.com/EffortlessMetrics/ub-review/issues/1283
+[#1284]: https://github.com/EffortlessMetrics/ub-review/issues/1284
+[#1285]: https://github.com/EffortlessMetrics/ub-review/issues/1285
