@@ -107,26 +107,32 @@ where
     let paths = match proof_command_paths(out, receipt_id, side) {
         Ok(paths) => paths,
         Err(path_error) => {
-            let setup_result = match ledger_task {
-                Some((ledger, task)) => ledger.setup_failed(task),
-                None => Ok(()),
+            let mut diagnostics = Vec::new();
+            let cleanup_succeeded = match cleanup {
+                Some(cleanup) => match cleanup() {
+                    Ok(()) => true,
+                    Err(cleanup_error) => {
+                        diagnostics.push(format!(
+                            "cleanup proof command after receipt path error: {cleanup_error:#}"
+                        ));
+                        false
+                    }
+                },
+                None => true,
             };
-            let cleanup_result = match cleanup {
-                Some(cleanup) => cleanup(),
-                None => Ok(()),
-            };
-            return match (setup_result, cleanup_result) {
-                (Ok(()), Ok(())) => Err(path_error),
-                (Err(setup_error), Ok(())) => Err(setup_error).context(format!(
-                    "record proof setup failure after receipt path error: {path_error:#}"
-                )),
-                (Ok(()), Err(cleanup_error)) => Err(cleanup_error).context(format!(
-                    "cleanup proof command after receipt path error: {path_error:#}"
-                )),
-                (Err(setup_error), Err(cleanup_error)) => Err(cleanup_error).context(format!(
-                    "cleanup proof command after receipt path error: {path_error:#}; proof setup reconciliation also failed: {setup_error:#}"
-                )),
-            };
+            if cleanup_succeeded
+                && let Some((ledger, task)) = ledger_task
+                && let Err(setup_error) = ledger.setup_failed(task)
+            {
+                diagnostics.push(format!(
+                    "record proof setup failure after receipt path error: {setup_error:#}"
+                ));
+            }
+            return Err(proof_command_error_with_diagnostics(
+                path_error,
+                "prepare proof command receipt paths",
+                &diagnostics,
+            ));
         }
     };
     let command = command_display_with_env(&spec.env, &spec.argv);
@@ -184,16 +190,22 @@ where
         ));
     }
 
+    let missing_spawn_error = if ledger_task.is_some() && !process_spawned && status.is_ok() {
+        Some(anyhow::anyhow!(
+            "proof runner returned success without a spawn observation"
+        ))
+    } else {
+        None
+    };
     let disposition = match &status {
         Ok(status) if status.timed_out => TaskTerminalDisposition::TimedOut,
         Ok(status) if status.success => TaskTerminalDisposition::Succeeded,
         Ok(_) => TaskTerminalDisposition::DeterministicFailure,
         Err(_) => TaskTerminalDisposition::Cancelled,
     };
-    let terminal_result = match ledger_task {
+    let process_terminal_result = match ledger_task {
         Some((ledger, task)) if process_spawned => ledger.process_finished(task, disposition),
-        Some((ledger, task)) => ledger.setup_failed(task),
-        None => Ok(()),
+        _ => Ok(()),
     };
 
     // Physical cleanup follows confirmed process completion and is independent
@@ -203,6 +215,19 @@ where
     let cleanup_result = match cleanup {
         Some(cleanup) => cleanup(),
         None => Ok(()),
+    };
+    let setup_result = if !process_spawned && cleanup_result.is_ok() {
+        match ledger_task {
+            Some((ledger, task)) => ledger.setup_failed(task),
+            None => Ok(()),
+        }
+    } else {
+        Ok(())
+    };
+    let terminal_result = if process_spawned {
+        process_terminal_result
+    } else {
+        setup_result
     };
     let cleanup_event_result =
         if process_spawned && terminal_result.is_ok() && cleanup_result.is_ok() {
@@ -215,8 +240,9 @@ where
         };
     let stream_result = bound_proof_command_streams(&paths);
 
-    let mut primary_error =
-        observation_error.map(|error| ("record proof process observation", error));
+    let mut primary_error = observation_error
+        .or(missing_spawn_error)
+        .map(|error| ("record proof process observation", error));
     let mut additional_errors = Vec::new();
     for (stage, result) in [
         ("record proof process terminal state", terminal_result),
@@ -1445,6 +1471,202 @@ mod tests {
                 | TaskEvent::ReceiptCreated { .. }
                 | TaskEvent::ReceiptCreationFailed { .. }
                 | TaskEvent::ResourcesReleased { .. }
+        )));
+        Ok(())
+    }
+
+    #[test]
+    fn receipt_path_cleanup_failure_does_not_release_worktree() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        fs::create_dir_all(&out)?;
+        fs::write(out.join("proof"), b"blocks proof directory")?;
+        let recorder = TaskLedgerRecorder::new(&revision(), &Instant::now())?;
+        let ledger = ProofTaskLedger::new(recorder.clone());
+        let focused = focused_task("proof-command-path-cleanup-failure");
+        let spec = ProofCommandSpec {
+            argv: vec!["proof-command".to_owned()],
+            env: BTreeMap::new(),
+        };
+        let lease = granted_lease("lease-proof-command-path-cleanup-failure");
+        let mut cleanup_called = false;
+        let mut cleanup = || {
+            cleanup_called = true;
+            anyhow::bail!("injected receipt-path cleanup failure")
+        };
+
+        let error = run_proof_command_receipt_for_task_with_cleanup(
+            temp.path(),
+            &out,
+            &focused,
+            "head",
+            &spec,
+            7,
+            &lease,
+            Some(&ledger),
+            ProofExecutionPhase::ModelRequest,
+            Some(&mut cleanup),
+            &mut |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
+                anyhow::bail!("runner must not start when receipt paths cannot be prepared")
+            },
+        )
+        .err()
+        .context("receipt-path cleanup failure must propagate")?;
+        let message = format!("{error:#}");
+        ensure!(message.contains("prepare proof command receipt paths"));
+        ensure!(message.contains("injected receipt-path cleanup failure"));
+        ensure!(cleanup_called);
+
+        let task_id = proof_command_task_id(&focused.id, "head")?;
+        let events = recorder
+            .inputs()?
+            .into_iter()
+            .filter(|input| input.task_id == task_id)
+            .map(|input| input.event)
+            .collect::<Vec<_>>();
+        ensure!(!events.iter().any(|event| matches!(
+            event,
+            TaskEvent::SetupFailed { .. }
+                | TaskEvent::ReceiptCreated { .. }
+                | TaskEvent::ReceiptCreationFailed { .. }
+                | TaskEvent::ResourcesReleased { .. }
+        )));
+        Ok(())
+    }
+
+    #[test]
+    fn prespawn_cleanup_failure_does_not_release_worktree() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let recorder = TaskLedgerRecorder::new(&revision(), &Instant::now())?;
+        let ledger = ProofTaskLedger::new(recorder.clone());
+        let focused = focused_task("proof-command-prespawn-cleanup-failure");
+        let spec = ProofCommandSpec {
+            argv: vec!["proof-command".to_owned()],
+            env: BTreeMap::new(),
+        };
+        let lease = granted_lease("lease-proof-command-prespawn-cleanup-failure");
+        let mut cleanup_called = false;
+        let mut cleanup = || {
+            cleanup_called = true;
+            anyhow::bail!("injected pre-spawn cleanup failure")
+        };
+
+        let error = run_proof_command_receipt_for_task_with_cleanup(
+            temp.path(),
+            &out,
+            &focused,
+            "head",
+            &spec,
+            7,
+            &lease,
+            Some(&ledger),
+            ProofExecutionPhase::ModelRequest,
+            Some(&mut cleanup),
+            &mut |_root, _argv, _env, _timeout, stdout, stderr, _observe_process| {
+                fs::write(stdout, b"not spawned\n")?;
+                fs::write(stderr, b"setup failed\n")?;
+                Err(anyhow::anyhow!("injected pre-spawn runner failure"))
+            },
+        )
+        .err()
+        .context("pre-spawn cleanup failure must propagate")?;
+        let message = format!("{error:#}");
+        ensure!(message.contains("cleanup proof command after confirmed completion"));
+        ensure!(message.contains("injected pre-spawn cleanup failure"));
+        ensure!(cleanup_called);
+
+        let task_id = proof_command_task_id(&focused.id, "head")?;
+        let events = recorder
+            .inputs()?
+            .into_iter()
+            .filter(|input| input.task_id == task_id)
+            .map(|input| input.event)
+            .collect::<Vec<_>>();
+        ensure!(!events.iter().any(|event| matches!(
+            event,
+            TaskEvent::SetupFailed { .. }
+                | TaskEvent::ReceiptCreated { .. }
+                | TaskEvent::ReceiptCreationFailed { .. }
+                | TaskEvent::ResourcesReleased { .. }
+        )));
+        Ok(())
+    }
+
+    #[test]
+    fn successful_status_without_spawn_is_failed_and_reconciled() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let recorder = TaskLedgerRecorder::new(&revision(), &Instant::now())?;
+        let ledger = ProofTaskLedger::new(recorder.clone());
+        let focused = focused_task("proof-command-missing-spawn");
+        let spec = ProofCommandSpec {
+            argv: vec!["proof-command".to_owned()],
+            env: BTreeMap::new(),
+        };
+        let lease = granted_lease("lease-proof-command-missing-spawn");
+        let mut cleanup_called = false;
+        let mut cleanup = || {
+            cleanup_called = true;
+            Ok(())
+        };
+
+        let error = run_proof_command_receipt_for_task_with_cleanup(
+            temp.path(),
+            &out,
+            &focused,
+            "head",
+            &spec,
+            7,
+            &lease,
+            Some(&ledger),
+            ProofExecutionPhase::ModelRequest,
+            Some(&mut cleanup),
+            &mut |_root, _argv, _env, _timeout, stdout, stderr, _observe_process| {
+                fs::write(stdout, b"claimed success\n")?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    exit_code: Some(0),
+                    timed_out: false,
+                    success: true,
+                    reason: "completed".to_owned(),
+                    duration_ms: 1,
+                })
+            },
+        )
+        .err()
+        .context("missing spawn observation must reject a successful status")?;
+        ensure!(
+            format!("{error:#}")
+                .contains("proof runner returned success without a spawn observation")
+        );
+        ensure!(cleanup_called);
+
+        let task_id = proof_command_task_id(&focused.id, "head")?;
+        let events = recorder
+            .inputs()?
+            .into_iter()
+            .filter(|input| input.task_id == task_id)
+            .map(|input| input.event)
+            .collect::<Vec<_>>();
+        ensure!(
+            events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::SetupFailed { .. }))
+        );
+        ensure!(
+            events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::ReceiptCreationFailed { .. }))
+        );
+        ensure!(
+            events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::ResourcesReleased { .. }))
+        );
+        ensure!(!events.iter().any(|event| matches!(
+            event,
+            TaskEvent::RunStarted { .. } | TaskEvent::ProcessFinished { .. }
         )));
         Ok(())
     }
