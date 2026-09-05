@@ -9,7 +9,7 @@ permissions: {}
 
 jobs:
   export:
-    name: export exact proof lifecycle sources
+    name: export exact tracked source tree
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -17,12 +17,13 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
+      - name: Archive exact tracked tree
+        run: git archive --format=tar.gz --output=/tmp/ub-review-source.tar.gz HEAD
       - uses: actions/upload-artifact@v7
         with:
-          name: proof-lifecycle-source
-          path: |
-            src/proof/command.rs
-            src/proof/build.rs
+          name: ub-review-source-tree
+          path: /tmp/ub-review-source.tar.gz
           if-no-files-found: error
           retention-days: 1
