@@ -67,7 +67,7 @@ prepared GitHub review transaction
   -> post/reconciliation receipts (do not recompute gate_outcome)
 
 TaskLedger observes fast/late sensor execution in shadow through #1263/#955
-proof and worker execution remain outside the ledger until #956
+proof and worker execution remain outside the ledger until #1266/#956
 cross-projection reconciliation remains #957
 FinalizedOutcome remains a shadow-first train
 legacy gate_outcome.conclusion remains the enforced field
@@ -78,8 +78,8 @@ current-run artifacts. The pure TaskLedger, execution accounting, ledger
 artifact verifier, retained contradiction corpus, and sensor lifecycle adapter
 also exist. The ledger now observes fast/late sensor execution, but it does not
 yet observe proof/worker paths, reconcile all legacy projections, schedule
-work, or deduplicate cross-source tasks. Until #956 -> #957 closes, the existing
-pools, brokers, leases, and budgets remain execution authority.
+work, or deduplicate cross-source tasks. Until #1266/#956 -> #957 closes, the
+existing pools, brokers, leases, and budgets remain execution authority.
 
 The same distinction applies to gate truth. Additive `analysis_result`,
 `publication_result`, and `gate_result` fields can state that a run is limited
@@ -96,7 +96,13 @@ The current adapter compares those different objects. Candidate-head delivery
 is retained; merge-result delivery authority remains a target contract.
 
 [PRODUCT_STATE.md](PRODUCT_STATE.md) is the canonical earned-state matrix.
-[Issue #945] owns implementation order.
+[Issue #945] owns implementation order. [The model-off CI-efficiency path]
+records the bounded deterministic path through the same architecture: output
+containment through #1269/#1283; a frozen model-off `SharedRunPlan` core in
+#1274 before the pure #986 and deterministic #987 scheduler path; the complete
+#1120 model-programme/final-lead augmentation before live model authority; and
+measured #1275 plus result-plane #1277 before #1015 changes enforcement.
+Legacy `gate_outcome.conclusion` remains authority until that switch lands.
 
 ## Authority map
 
@@ -202,9 +208,10 @@ GitHub PR head, so that path cannot claim confirmed exact-head delivery.
 
 The current `gate_outcome` is also compiled before `post`: a prepared payload is
 reported as `publication_result = posted`, and `post-error.json` does not cause
-it to be recomputed. **Prepared output is not delivered output**, and a finding
-trapped only in artifacts cannot support a clean public-review result, are
-therefore FinalizedOutcome rules owned by #959/#960—not current guarantees.
+it to be recomputed. Prepared output is not delivered output. A finding trapped
+only in artifacts cannot support a clean public-review result. FinalizedOutcome
+must apply those finalization rules under #959/#960; they are not current
+guarantees.
 
 The public surface normally contains only:
 
@@ -296,3 +303,4 @@ one revision-bound evidence transaction and earning every public and machine
 claim from retained receipts.
 
 [Issue #945]: https://github.com/EffortlessMetrics/ub-review/issues/945
+[The model-off CI-efficiency path]: CI_EFFICIENCY_PATH.md
