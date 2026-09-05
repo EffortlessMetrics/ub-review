@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result, ensure};
 
+use crate::plan_build::git_text;
 use crate::task_ledger::{
     ResourceReservation, TaskConsumer, TaskEvent, TaskExecutionLimits, TaskId,
     TaskNonExecutionDisposition, TaskRequirement, TaskResourceClass, TaskSource,
@@ -663,6 +664,15 @@ pub(crate) fn standalone_worker_revision(
 ) -> Result<RevisionRef> {
     validate_worker_oid("base", &request.base)?;
     validate_worker_oid("head", &request.head)?;
+    let checked_out_head = git_text(root, &["rev-parse", "--verify", "HEAD^{commit}"])
+        .context("resolve standalone worker checkout HEAD")?
+        .trim()
+        .to_owned();
+    ensure!(
+        checked_out_head == request.head,
+        "standalone worker checkout HEAD {checked_out_head} does not match request head {}",
+        request.head
+    );
     let diff = DiffContext::from_git(root, &request.base, &request.head)
         .context("compute standalone worker diff")?;
     let admission = admit_revision(
@@ -674,6 +684,11 @@ pub(crate) fn standalone_worker_revision(
         &diff.patch,
     )
     .context("admit standalone worker revision")?;
+    ensure!(
+        !admission.worktree_dirty,
+        "standalone worker requires a clean checkout at request head {}",
+        request.head
+    );
     let revision = RevisionRef::from_admission(&admission);
     revision.validate().context("standalone worker revision")?;
     ensure!(

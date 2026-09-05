@@ -327,7 +327,7 @@ where
     let revision = standalone_worker_revision(root, &request)?;
     let recorder = TaskLedgerRecorder::new(&revision, &Instant::now())?;
     let task_ledger = ProofTaskLedger::new(recorder);
-    let timeout_sec = args.timeout_sec.max(request.timeout_sec).max(1);
+    let timeout_sec = effective_worker_timeout_sec(args.timeout_sec, request.timeout_sec);
 
     let preflight_task = ProofCommandTask::worker_preflight(&request, timeout_sec);
     let preflight_spec = ProofCommandSpec {
@@ -349,15 +349,27 @@ where
     );
 
     if let Err(error) = (boundaries.prepare)(out, &request.id) {
-        task_ledger.begin_command(&preflight_task, &preflight_lease)?;
-        task_ledger.setup_failed(&preflight_task)?;
-        let failure = format!("standalone worker attempt preparation failed: {error:#}");
-        task_ledger.receipt_creation_failed_and_resources_released(&preflight_task, &failure)?;
-        task_ledger.write_artifacts(out)?;
-        return Err(error).context("prepare standalone worker attempt");
+        let mut diagnostics = Vec::new();
+        if let Err(begin_error) = task_ledger.begin_command(&preflight_task, &preflight_lease) {
+            diagnostics.push(format!(
+                "begin standalone worker preflight after preparation failure: {begin_error:#}"
+            ));
+        } else if let Err(setup_error) = task_ledger.setup_failed(&preflight_task) {
+            diagnostics.push(format!(
+                "record standalone worker setup failure: {setup_error:#}"
+            ));
+        }
+        return Err(finalize_worker_failure(
+            &task_ledger,
+            [&preflight_task],
+            out,
+            error,
+            "prepare standalone worker attempt",
+            diagnostics,
+        ));
     }
 
-    let preflight_receipt = run_worker_command_receipt(
+    let preflight_receipt = match run_worker_command_receipt(
         root,
         out,
         &request.id,
@@ -368,7 +380,19 @@ where
         &task_ledger,
         &preflight_task,
         runner,
-    )?;
+    ) {
+        Ok(receipt) => receipt,
+        Err(error) => {
+            return Err(finalize_worker_failure(
+                &task_ledger,
+                [&preflight_task],
+                out,
+                error,
+                "execute standalone worker nightly preflight",
+                Vec::new(),
+            ));
+        }
+    };
     let nightly_available = preflight_receipt.status == "passed";
 
     let command_task = ProofCommandTask::worker(&request, timeout_sec);
@@ -411,7 +435,7 @@ where
             }
         };
 
-    let command_receipt = run_worker_command_receipt(
+    let command_receipt = match run_worker_command_receipt(
         root,
         out,
         &request.id,
@@ -422,7 +446,19 @@ where
         &task_ledger,
         &command_task,
         runner,
-    )?;
+    ) {
+        Ok(receipt) => receipt,
+        Err(error) => {
+            return Err(finalize_worker_failure(
+                &task_ledger,
+                [&preflight_task, &command_task],
+                out,
+                error,
+                "execute standalone worker proof command",
+                Vec::new(),
+            ));
+        }
+    };
 
     let result = if lease.status == "granted" {
         classify_worker_proof_result(&request.kind, &command_receipt)
@@ -454,13 +490,23 @@ where
         task_ledger.reconcile_worker_receipt(out, &request.id)
     })();
     if let Err(error) = publish_result {
-        let failure = format!("standalone worker result publication failed: {error:#}");
-        fail_pending_worker_receipts(&task_ledger, [&preflight_task, &command_task], &failure)?;
-        task_ledger.write_artifacts(out)?;
-        return Err(error).context("publish standalone worker proof result");
+        return Err(finalize_worker_failure(
+            &task_ledger,
+            [&preflight_task, &command_task],
+            out,
+            error,
+            "publish standalone worker proof result",
+            invalidate_worker_artifacts(out),
+        ));
     }
 
-    task_ledger.write_artifacts(out)?;
+    if let Err(error) = task_ledger.write_artifacts(out) {
+        return Err(worker_error_with_diagnostics(
+            error,
+            "write standalone worker TaskLedger artifacts after publication",
+            &invalidate_worker_artifacts(out),
+        ));
+    }
     println!(
         "worker: proof request {} ({kind_str}) result '{}'; receipt written to {}",
         request.id,
@@ -497,7 +543,7 @@ where
         &mut dyn FnMut(CommandProcessObservation),
     ) -> Result<CommandStatus>,
 {
-    let result = run_proof_command_receipt(
+    run_proof_command_receipt(
         ProofCommandInvocation {
             command_root: root,
             out,
@@ -511,18 +557,11 @@ where
             cleanup: None,
         },
         runner,
-    );
-    match result {
-        Ok(receipt) => Ok(receipt),
-        Err(error) => {
-            if task_ledger.receipt_pending(task)? {
-                let failure = format!("standalone worker command receipt unavailable: {error:#}");
-                task_ledger.receipt_creation_failed_and_resources_released(task, &failure)?;
-                task_ledger.write_artifacts(out)?;
-            }
-            Err(error)
-        }
-    }
+    )
+}
+
+fn effective_worker_timeout_sec(operator_timeout_sec: u64, request_timeout_sec: u64) -> u64 {
+    request_timeout_sec.max(1).min(operator_timeout_sec.max(1))
 }
 
 enum WorkerLeaseAdmission {
@@ -569,7 +608,7 @@ fn prepare_worker_attempt(out: &Path, request_id: &str) -> Result<()> {
     remove_optional_worker_file(&out.join("resource_lease.json"))?;
     remove_optional_worker_file(&out.join("proof_receipt.json.tmp"))?;
     remove_optional_worker_file(&out.join("resource_lease.json.tmp"))?;
-    let proof_dir = out.join("proof").join(request_id);
+    let proof_dir = out.join("proof").join(sanitize_artifact_name(request_id));
     match fs::remove_dir_all(&proof_dir) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -645,17 +684,81 @@ fn validate_published_worker_lease(
     Ok(())
 }
 
+fn invalidate_worker_artifacts(out: &Path) -> Vec<String> {
+    let mut diagnostics = Vec::new();
+    for name in ["proof_receipt.json", "resource_lease.json"] {
+        let path = out.join(name);
+        if let Err(error) = remove_optional_worker_file(&path) {
+            diagnostics.push(format!("invalidate {}: {error:#}", path.display()));
+        }
+    }
+    diagnostics
+}
+
+fn finalize_worker_failure<'a>(
+    task_ledger: &ProofTaskLedger,
+    tasks: impl IntoIterator<Item = &'a ProofCommandTask>,
+    out: &Path,
+    error: anyhow::Error,
+    stage: &str,
+    mut diagnostics: Vec<String>,
+) -> anyhow::Error {
+    let failure = format!("{stage}: {error:#}");
+    if let Err(reconcile_error) = fail_pending_worker_receipts(task_ledger, tasks, &failure) {
+        diagnostics.push(format!(
+            "reconcile pending standalone worker receipts: {reconcile_error:#}"
+        ));
+    }
+    if let Err(write_error) = task_ledger.write_artifacts(out) {
+        diagnostics.push(format!(
+            "write standalone worker TaskLedger diagnostics: {write_error:#}"
+        ));
+    }
+    worker_error_with_diagnostics(error, stage, &diagnostics)
+}
+
+fn worker_error_with_diagnostics(
+    error: anyhow::Error,
+    stage: &str,
+    diagnostics: &[String],
+) -> anyhow::Error {
+    if diagnostics.is_empty() {
+        error.context(stage.to_owned())
+    } else {
+        error.context(format!(
+            "{stage}; additional failure diagnostics: {}",
+            diagnostics.join("; ")
+        ))
+    }
+}
+
 fn fail_pending_worker_receipts<'a>(
     task_ledger: &ProofTaskLedger,
     tasks: impl IntoIterator<Item = &'a ProofCommandTask>,
     reason: &str,
 ) -> Result<()> {
-    for task in tasks {
-        if task_ledger.receipt_pending(task)? {
-            task_ledger.receipt_creation_failed_and_resources_released(task, reason)?;
+    let mut failures = Vec::new();
+    for (index, task) in tasks.into_iter().enumerate() {
+        match task_ledger.receipt_pending(task) {
+            Ok(false) => {}
+            Ok(true) => {
+                if let Err(error) =
+                    task_ledger.receipt_creation_failed_and_resources_released(task, reason)
+                {
+                    failures.push(format!("task {index} receipt failure: {error:#}"));
+                }
+            }
+            Err(error) => failures.push(format!("task {index} pending-state read: {error:#}")),
         }
     }
-    Ok(())
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        anyhow::bail!(
+            "one or more pending standalone worker receipts could not be failed: {}",
+            failures.join("; ")
+        )
+    }
 }
 
 /// Classify a worker proof result from the ProofKind and the executed command
@@ -773,6 +876,140 @@ mod worker_proof_tests {
             .find(|task| task["id"] == task_id.as_str())
             .cloned()
             .with_context(|| format!("worker task {} missing", task_id.as_str()))
+    }
+
+    #[test]
+    fn worker_requires_the_checked_out_clean_request_head() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let (root, base, head) = worker_repo(&temp)?;
+        let reject = |case: &str, root: &Path| -> Result<String> {
+            let out = temp.path().join(format!("out-{case}"));
+            let mut calls = 0_usize;
+            let error = run_worker_request_with_runner(
+                &args(root, &out),
+                request(
+                    &format!("proof-request-{case}"),
+                    &base,
+                    &head,
+                    ProofKind::FocusedTest,
+                    "cargo test --locked worker_test",
+                ),
+                &mut |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
+                    calls += 1;
+                    Ok(successful_status())
+                },
+            )
+            .err()
+            .context("worker admission should fail before spawn")?;
+            ensure!(calls == 0);
+            Ok(format!("{error:#}"))
+        };
+
+        crate::tests::run_test_command(&root, "git", &["checkout", "--detach", &base])?;
+        ensure!(reject("wrong-head", &root)?.contains("does not match request head"));
+        crate::tests::run_test_command(&root, "git", &["checkout", "--detach", &head])?;
+
+        for case in ["unstaged", "staged", "untracked"] {
+            crate::tests::run_test_command(&root, "git", &["reset", "--hard", &head])?;
+            crate::tests::run_test_command(&root, "git", &["clean", "-fd"])?;
+            match case {
+                "unstaged" => fs::write(root.join("fixture.txt"), "unstaged\n")?,
+                "staged" => {
+                    fs::write(root.join("fixture.txt"), "staged\n")?;
+                    crate::tests::run_test_command(&root, "git", &["add", "fixture.txt"])?;
+                }
+                "untracked" => fs::write(root.join("untracked.txt"), "untracked\n")?,
+                _ => anyhow::bail!("unexpected worker dirt case {case}"),
+            }
+            ensure!(reject(case, &root)?.contains("requires a clean checkout"));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn worker_attempt_paths_encode_logical_ids_before_cleanup() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let traversal_victim = out.join("escape");
+        fs::create_dir_all(&traversal_victim)?;
+        fs::write(traversal_victim.join("sentinel"), b"keep")?;
+        let encoded_traversal = out.join("proof").join(sanitize_artifact_name("../escape"));
+        fs::create_dir_all(&encoded_traversal)?;
+        fs::write(encoded_traversal.join("stale"), b"remove")?;
+
+        let absolute_victim = temp.path().join("absolute-victim");
+        fs::create_dir_all(&absolute_victim)?;
+        fs::write(absolute_victim.join("sentinel"), b"keep")?;
+        let absolute_id = absolute_victim.display().to_string();
+        let encoded_absolute = out.join("proof").join(sanitize_artifact_name(&absolute_id));
+        fs::create_dir_all(&encoded_absolute)?;
+
+        prepare_worker_attempt(&out, "../escape")?;
+        ensure!(traversal_victim.join("sentinel").exists());
+        ensure!(!encoded_traversal.exists());
+        prepare_worker_attempt(&out, &absolute_id)?;
+        ensure!(absolute_victim.join("sentinel").exists());
+        ensure!(!encoded_absolute.exists());
+
+        let safe = out.join("proof/safe-id");
+        fs::create_dir_all(&safe)?;
+        prepare_worker_attempt(&out, "safe-id")?;
+        ensure!(!safe.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn worker_request_timeout_can_reduce_but_never_raise_operator_ceiling() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let (root, base, head) = worker_repo(&temp)?;
+        for (index, (operator, requested, expected)) in [
+            (0, 0, 1),
+            (30, 0, 1),
+            (30, 10, 10),
+            (30, 30, 30),
+            (30, 60, 30),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let out = temp.path().join(format!("out-timeout-{index}"));
+            let mut worker_args = args(&root, &out);
+            worker_args.timeout_sec = operator;
+            let mut worker_request = request(
+                &format!("proof-request-timeout-{index}"),
+                &base,
+                &head,
+                ProofKind::FocusedTest,
+                "cargo test --locked worker_test",
+            );
+            worker_request.timeout_sec = requested;
+            let mut observed = Vec::new();
+            run_worker_request_with_runner(
+                &worker_args,
+                worker_request,
+                &mut |_root, _argv, _env, timeout, stdout, stderr, observe_process| {
+                    observed.push(timeout);
+                    observe_process(CommandProcessObservation::Spawned);
+                    fs::write(stdout, b"ok\n")?;
+                    fs::write(stderr, b"")?;
+                    Ok(successful_status())
+                },
+            )?;
+
+            ensure!(observed == [expected, expected]);
+            let receipt: ProofReceipt =
+                serde_json::from_slice(&fs::read(out.join("proof_receipt.json"))?)?;
+            let lease: ResourceLease =
+                serde_json::from_slice(&fs::read(out.join("resource_lease.json"))?)?;
+            ensure!(
+                receipt
+                    .commands
+                    .iter()
+                    .all(|command| command.timeout_sec == expected)
+            );
+            ensure!(lease.timeout_sec == expected);
+        }
+        Ok(())
     }
 
     #[test]
@@ -934,6 +1171,93 @@ mod worker_proof_tests {
     }
 
     #[test]
+    fn worker_stream_failure_reconciles_every_receipt_pending_command() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let (root, base, head) = worker_repo(&temp)?;
+        let out = temp.path().join("out");
+        let worker_request = request(
+            "proof-request-stream-failure",
+            &base,
+            &head,
+            ProofKind::FocusedTest,
+            "cargo test --locked worker_test",
+        );
+        let mut calls = 0_usize;
+        let error = run_worker_request_with_runner(
+            &args(&root, &out),
+            worker_request,
+            &mut |_root, _argv, _env, _timeout, stdout, stderr, observe_process| {
+                calls += 1;
+                observe_process(CommandProcessObservation::Spawned);
+                if calls == 2 {
+                    fs::remove_file(stdout)?;
+                    fs::create_dir_all(stdout)?;
+                } else {
+                    fs::write(stdout, b"ok\n")?;
+                }
+                fs::write(stderr, b"")?;
+                Ok(successful_status())
+            },
+        )
+        .err()
+        .context("proof stream failure must propagate")?;
+        ensure!(calls == 2);
+        ensure!(format!("{error:#}").contains("execute standalone worker proof command"));
+        for side in ["nightly-preflight", "head"] {
+            let task = snapshot_task(
+                &out,
+                &proof_command_task_id("proof-request-stream-failure", side)?,
+            )?;
+            ensure!(task["state"] == serde_json::json!({"ResourcesReleased": "Succeeded"}));
+            ensure!(task["receipt"].get("CreationFailed").is_some());
+        }
+        ensure!(!out.join("proof_receipt.json").exists());
+        ensure!(out.join("task_ledger_events.ndjson").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn unconfirmed_worker_command_withholds_nonterminal_canonical_ledger() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let (root, base, head) = worker_repo(&temp)?;
+        let out = temp.path().join("out");
+        let worker_request = request(
+            "proof-request-unconfirmed",
+            &base,
+            &head,
+            ProofKind::FocusedTest,
+            "cargo test --locked worker_test",
+        );
+        let mut calls = 0_usize;
+        let error = run_worker_request_with_runner(
+            &args(&root, &out),
+            worker_request,
+            &mut |_root, _argv, _env, _timeout, stdout, stderr, observe_process| {
+                calls += 1;
+                observe_process(CommandProcessObservation::Spawned);
+                if calls == 2 {
+                    observe_process(CommandProcessObservation::CompletionUnconfirmed);
+                    anyhow::bail!("injected unconfirmed child")
+                }
+                fs::write(stdout, b"ok\n")?;
+                fs::write(stderr, b"")?;
+                Ok(successful_status())
+            },
+        )
+        .err()
+        .context("unconfirmed proof child must fail closed")?;
+        ensure!(calls == 2);
+        let rendered = format!("{error:#}");
+        ensure!(rendered.contains("completion remains unconfirmed"));
+        ensure!(rendered.contains("write standalone worker TaskLedger diagnostics"));
+        ensure!(rendered.contains("is not terminal"));
+        ensure!(!out.join("proof_receipt.json").exists());
+        ensure!(!out.join("task_ledger_events.ndjson").exists());
+        ensure!(!out.join("review/task_ledger_snapshot.json").exists());
+        Ok(())
+    }
+
+    #[test]
     fn symbolic_worker_revision_is_rejected_before_any_spawn() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
@@ -1036,8 +1360,10 @@ mod worker_proof_tests {
             "cargo test --locked worker_test",
         );
         let mut prepare = prepare_worker_attempt;
-        let mut publish = |_out: &Path, _lease: &ResourceLease, _receipt: &ProofReceipt| {
-            anyhow::bail!("injected worker publication failure")
+        let mut publish = |out: &Path, lease: &ResourceLease, receipt: &ProofReceipt| {
+            publish_worker_artifacts(out, lease, receipt)?;
+            fs::write(out.join("resource_lease.json"), b"{}")?;
+            Ok(())
         };
         let mut calls = 0_usize;
         let error = run_worker_request_with_runner_and_boundaries(
@@ -1061,6 +1387,7 @@ mod worker_proof_tests {
         ensure!(calls == 2);
         ensure!(format!("{error:#}").contains("publish standalone worker proof result"));
         ensure!(!out.join("proof_receipt.json").exists());
+        ensure!(!out.join("resource_lease.json").exists());
         for side in ["nightly-preflight", "head"] {
             let task = snapshot_task(
                 &out,
@@ -1070,9 +1397,24 @@ mod worker_proof_tests {
             ensure!(
                 task["receipt"]["CreationFailed"]["reason"]
                     .as_str()
-                    .is_some_and(|reason| reason.contains("injected worker publication failure"))
+                    .is_some_and(|reason| reason.contains("publish standalone worker proof result"))
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    fn worker_invalidation_attempts_both_canonical_files_after_one_failure() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        fs::create_dir(out.join("proof_receipt.json"))?;
+        fs::write(out.join("resource_lease.json"), b"lease")?;
+
+        let diagnostics = invalidate_worker_artifacts(out);
+        ensure!(diagnostics.len() == 1);
+        ensure!(diagnostics[0].contains("proof_receipt.json"));
+        ensure!(out.join("proof_receipt.json").is_dir());
+        ensure!(!out.join("resource_lease.json").exists());
         Ok(())
     }
 }
@@ -4294,7 +4636,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         args.review.out.join("running-summary.md"),
         &preliminary_summary,
     )?;
-    let gate_outcome = write_review_artifacts(
+    let gate_outcome = match write_review_artifacts(
         &args.review.root,
         &args.review.out,
         &config,
@@ -4311,7 +4653,17 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         run_started.elapsed(),
         late_phase,
         Some(&proof_task_ledger),
-    )?;
+    ) {
+        Ok(gate_outcome) => gate_outcome,
+        Err(error) => {
+            if let Err(write_error) = sensor_task_ledger.write_artifacts(&args.review.out) {
+                return Err(error).context(format!(
+                    "review artifact construction failed; writing TaskLedger diagnostics also failed: {write_error:#}"
+                ));
+            }
+            return Err(error);
+        }
+    };
     sensor_task_ledger.write_artifacts(&args.review.out)?;
     let summary = render_summary(&args.review.out, &plan, &diff)?;
     fs::write(args.review.out.join("running-summary.md"), &summary)?;

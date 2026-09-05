@@ -135,6 +135,14 @@ where
     let mut observation_error = None;
     let mut observe_process = |observation| match observation {
         CommandProcessObservation::Spawned => {
+            if process_spawned {
+                if observation_error.is_none() {
+                    observation_error = Some(anyhow::anyhow!(
+                        "proof process emitted more than one spawn observation"
+                    ));
+                }
+                return;
+            }
             process_spawned = true;
             if let Some((ledger, task)) = ledger_task
                 && observation_error.is_none()
@@ -156,50 +164,100 @@ where
         &paths.stderr_path,
         &mut observe_process,
     );
-    if let Some(error) = observation_error {
-        return Err(error).context("record proof process observation");
-    }
     if completion_unconfirmed {
-        return match status {
-            Err(error) => Err(error).context("proof child completion remains unconfirmed"),
-            Ok(_) => bail!("proof child completion remains unconfirmed"),
+        let error = match status {
+            Err(error) => error,
+            Ok(_) => anyhow::anyhow!("runner returned without a confirmed child completion"),
         };
+        let mut diagnostics = Vec::new();
+        if let Some(cleanup) = cleanup
+            && let Err(cleanup_error) = cleanup()
+        {
+            diagnostics.push(format!(
+                "cleanup proof command after unconfirmed completion: {cleanup_error:#}"
+            ));
+        }
+        return Err(proof_command_error_with_diagnostics(
+            error,
+            "proof child completion remains unconfirmed",
+            &diagnostics,
+        ));
     }
+
     let disposition = match &status {
         Ok(status) if status.timed_out => TaskTerminalDisposition::TimedOut,
         Ok(status) if status.success => TaskTerminalDisposition::Succeeded,
         Ok(_) => TaskTerminalDisposition::DeterministicFailure,
         Err(_) => TaskTerminalDisposition::Cancelled,
     };
-    if let Some((ledger, task)) = ledger_task {
-        if process_spawned {
-            ledger.process_finished(task, disposition)?;
-        } else {
-            ledger.setup_failed(task)?;
-        }
-    }
-    let stream_result = bound_proof_command_streams(&paths);
+    let terminal_result = match ledger_task {
+        Some((ledger, task)) if process_spawned => ledger.process_finished(task, disposition),
+        Some((ledger, task)) => ledger.setup_failed(task),
+        None => Ok(()),
+    };
+
+    // Physical cleanup follows confirmed process completion and is independent
+    // of receipt-stream processing. A stream error cannot leave a completed
+    // worktree behind, and successful cleanup must be represented truthfully
+    // even when receipt construction later fails.
     let cleanup_result = match cleanup {
         Some(cleanup) => cleanup(),
         None => Ok(()),
     };
-    if process_spawned
-        && stream_result.is_ok()
-        && cleanup_result.is_ok()
-        && let Some((ledger, task)) = ledger_task
-    {
-        ledger.cleanup_finished(task)?;
-    }
-    match (stream_result, cleanup_result) {
-        (Ok(()), Ok(())) => {}
-        (Err(stream_error), Ok(())) => return Err(stream_error),
-        (Ok(()), Err(cleanup_error)) => return Err(cleanup_error),
-        (Err(stream_error), Err(cleanup_error)) => {
-            return Err(cleanup_error).context(format!(
-                "proof command stream cleanup also failed: {stream_error:#}"
-            ));
+    let cleanup_event_result =
+        if process_spawned && terminal_result.is_ok() && cleanup_result.is_ok() {
+            match ledger_task {
+                Some((ledger, task)) => ledger.cleanup_finished(task),
+                None => Ok(()),
+            }
+        } else {
+            Ok(())
+        };
+    let stream_result = bound_proof_command_streams(&paths);
+
+    let mut primary_error =
+        observation_error.map(|error| ("record proof process observation", error));
+    let mut additional_errors = Vec::new();
+    for (stage, result) in [
+        ("record proof process terminal state", terminal_result),
+        ("record proof cleanup completion", cleanup_event_result),
+    ] {
+        if let Err(error) = result {
+            if primary_error.is_none() {
+                primary_error = Some((stage, error));
+            } else {
+                additional_errors.push(format!("{stage}: {error:#}"));
+            }
         }
     }
+    let stream_error = stream_result.err();
+    if let Err(cleanup_error) = cleanup_result {
+        if let Some((stage, error)) = primary_error {
+            additional_errors.push(format!("{stage}: {error:#}"));
+        }
+        if let Some(error) = stream_error {
+            additional_errors.push(format!("bound proof command streams: {error:#}"));
+        }
+        return Err(proof_command_error_with_diagnostics(
+            cleanup_error,
+            "cleanup proof command after confirmed completion",
+            &additional_errors,
+        ));
+    }
+    if let Some((stage, error)) = primary_error {
+        if let Some(error) = stream_error {
+            additional_errors.push(format!("bound proof command streams: {error:#}"));
+        }
+        return Err(proof_command_error_with_diagnostics(
+            error,
+            stage,
+            &additional_errors,
+        ));
+    }
+    if let Some(error) = stream_error {
+        return Err(error);
+    }
+
     let (command_status, reason, exit_code, timed_out, duration_ms) = match status {
         Ok(status) if status.timed_out => (
             "timed_out".to_owned(),
@@ -243,6 +301,21 @@ where
         stderr: paths.stderr_rel,
         reason,
     })
+}
+
+fn proof_command_error_with_diagnostics(
+    error: anyhow::Error,
+    stage: &str,
+    diagnostics: &[String],
+) -> anyhow::Error {
+    if diagnostics.is_empty() {
+        error.context(stage.to_owned())
+    } else {
+        error.context(format!(
+            "{stage}; additional failures: {}",
+            diagnostics.join("; ")
+        ))
+    }
 }
 
 #[expect(
@@ -316,7 +389,7 @@ where
     ) -> Result<CommandStatus>,
 {
     let command_task = ProofCommandTask::focused_test(task, side, timeout_sec, execution_phase);
-    run_proof_command_receipt(
+    let result = run_proof_command_receipt(
         ProofCommandInvocation {
             command_root,
             out,
@@ -330,7 +403,29 @@ where
             cleanup,
         },
         runner,
-    )
+    );
+    let Err(error) = result else {
+        return result;
+    };
+    let Some(task_ledger) = task_ledger else {
+        return Err(error);
+    };
+    let reason = format!("proof command receipt unavailable: {error:#}");
+    let reconciliation = match task_ledger.receipt_pending(&command_task) {
+        Ok(true) => {
+            task_ledger.receipt_creation_failed_and_resources_released(&command_task, &reason)
+        }
+        Ok(false) => Ok(()),
+        Err(pending_error) => {
+            Err(pending_error).context("read proof command pending-receipt state")
+        }
+    };
+    match reconciliation {
+        Ok(()) => Err(error),
+        Err(reconciliation_error) => Err(error).context(format!(
+            "proof command failed and ledger reconciliation also failed: {reconciliation_error:#}"
+        )),
+    }
 }
 
 fn bound_proof_command_streams(paths: &ProofCommandPaths) -> Result<()> {
@@ -522,7 +617,9 @@ pub(crate) fn focused_red_green_receipt(
 }
 
 fn proof_command_paths(out: &Path, receipt_id: &str, side: &str) -> Result<ProofCommandPaths> {
-    let rel_dir = format!("proof/{receipt_id}/{side}");
+    let receipt_component = sanitize_artifact_name(receipt_id);
+    let side_component = sanitize_artifact_name(side);
+    let rel_dir = format!("proof/{receipt_component}/{side_component}");
     let dir = out.join(&rel_dir);
     fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
     let stdout_path = dir.join("stdout.txt");
@@ -590,6 +687,41 @@ mod tests {
             worktree: None,
             command: Some("head: cargo test focused_case --locked".to_owned()),
         }
+    }
+
+    #[test]
+    fn proof_command_paths_encode_logical_identity_without_escape_or_collision() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let safe = proof_command_paths(&out, "proof-command-001", "head")?;
+        ensure!(safe.stdout_rel == "proof/proof-command-001/head/stdout.txt");
+
+        let mut directories = std::collections::BTreeSet::new();
+        for logical_id in [
+            "../escape",
+            "/absolute",
+            r"a\\b",
+            "a b",
+            "é",
+            "a/b",
+            "a~2Fb",
+        ] {
+            let paths = proof_command_paths(&out, logical_id, "head/side")?;
+            ensure!(paths.stdout_path.starts_with(out.join("proof")));
+            ensure!(paths.stderr_path.starts_with(out.join("proof")));
+            ensure!(!paths.stdout_rel.contains("../"));
+            ensure!(!paths.stdout_rel.contains(r"\\"));
+            directories.insert(
+                paths
+                    .stdout_path
+                    .parent()
+                    .context("proof stdout parent missing")?
+                    .to_path_buf(),
+            );
+        }
+        ensure!(directories.len() == 7);
+        ensure!(!temp.path().join("escape").exists());
+        Ok(())
     }
 
     #[test]
@@ -904,6 +1036,11 @@ mod tests {
             env: BTreeMap::new(),
         };
         let lease = granted_lease("lease-proof-command-unconfirmed");
+        let mut physical_cleanup_called = false;
+        let mut cleanup = || {
+            physical_cleanup_called = true;
+            Ok(())
+        };
 
         let error = run_proof_command_receipt(
             ProofCommandInvocation {
@@ -916,7 +1053,7 @@ mod tests {
                 lease: &lease,
                 task_ledger: Some(&ledger),
                 task: Some(&command_task),
-                cleanup: None,
+                cleanup: Some(&mut cleanup),
             },
             &mut |_root, _argv, _env, _timeout, _stdout, _stderr, observe_process| {
                 observe_process(CommandProcessObservation::Spawned);
@@ -927,6 +1064,7 @@ mod tests {
         .err()
         .context("unconfirmed child must fail closed")?;
         ensure!(format!("{error:#}").contains("completion remains unconfirmed"));
+        ensure!(physical_cleanup_called);
 
         let task_id = proof_command_task_id(&focused.id, "head")?;
         let events = recorder
@@ -1013,7 +1151,7 @@ mod tests {
     }
 
     #[test]
-    fn stream_bounding_failure_does_not_claim_cleanup_completion() -> Result<()> {
+    fn stream_bounding_failure_records_physical_cleanup_before_receipt_failure() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
         let recorder = TaskLedgerRecorder::new(&revision(), &Instant::now())?;
@@ -1063,6 +1201,231 @@ mod tests {
         .context("directory-backed stream must fail bounding")?;
         ensure!(format!("{error:#}").contains("read"));
         ensure!(physical_cleanup_called);
+
+        let task_id = proof_command_task_id(&focused.id, "head")?;
+        let events = recorder
+            .inputs()?
+            .into_iter()
+            .filter(|input| input.task_id == task_id)
+            .map(|input| input.event)
+            .collect::<Vec<_>>();
+        ensure!(
+            events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::ProcessFinished { .. }))
+        );
+        ensure!(
+            events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::CleanupFinished { .. }))
+        );
+        ensure!(!events.iter().any(|event| matches!(
+            event,
+            TaskEvent::ReceiptCreated { .. }
+                | TaskEvent::ReceiptCreationFailed { .. }
+                | TaskEvent::ResourcesReleased { .. }
+        )));
+        Ok(())
+    }
+
+    #[test]
+    fn focused_command_wrapper_reconciles_stream_failure() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let recorder = TaskLedgerRecorder::new(&revision(), &Instant::now())?;
+        let ledger = ProofTaskLedger::new(recorder.clone());
+        let focused = focused_task("proof-command-wrapper-stream-failure");
+        let spec = ProofCommandSpec {
+            argv: vec!["proof-command".to_owned()],
+            env: BTreeMap::new(),
+        };
+        let lease = granted_lease("lease-proof-command-wrapper-stream-failure");
+
+        let error = run_proof_command_receipt_for_task(
+            temp.path(),
+            &out,
+            &focused,
+            "head",
+            &spec,
+            7,
+            &lease,
+            Some(&ledger),
+            ProofExecutionPhase::ModelRequest,
+            &mut |_root, _argv, _env, _timeout, stdout, stderr, observe_process| {
+                observe_process(CommandProcessObservation::Spawned);
+                fs::remove_file(stdout)?;
+                fs::create_dir_all(stdout)?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    exit_code: Some(0),
+                    timed_out: false,
+                    success: true,
+                    reason: "completed".to_owned(),
+                    duration_ms: 1,
+                })
+            },
+        )
+        .err()
+        .context("stream failure must propagate through the focused-command wrapper")?;
+        ensure!(format!("{error:#}").contains("read"));
+
+        let task_id = proof_command_task_id(&focused.id, "head")?;
+        let events = recorder
+            .inputs()?
+            .into_iter()
+            .filter(|input| input.task_id == task_id)
+            .map(|input| input.event)
+            .collect::<Vec<_>>();
+        ensure!(
+            events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::ProcessFinished { .. }))
+        );
+        ensure!(
+            events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::CleanupFinished { .. }))
+        );
+        ensure!(
+            events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::ReceiptCreationFailed { .. }))
+        );
+        ensure!(
+            events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::ResourcesReleased { .. }))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn observation_failure_still_performs_confirmed_physical_cleanup() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let recorder = TaskLedgerRecorder::new(&revision(), &Instant::now())?;
+        let ledger = ProofTaskLedger::new(recorder.clone());
+        let focused = focused_task("proof-command-observation-failure");
+        let command_task =
+            ProofCommandTask::focused_test(&focused, "head", 7, ProofExecutionPhase::ModelRequest);
+        let spec = ProofCommandSpec {
+            argv: vec!["proof-command".to_owned()],
+            env: BTreeMap::new(),
+        };
+        let lease = granted_lease("lease-proof-command-observation-failure");
+        let mut physical_cleanup_called = false;
+        let mut cleanup = || {
+            physical_cleanup_called = true;
+            Ok(())
+        };
+
+        let error = run_proof_command_receipt(
+            ProofCommandInvocation {
+                command_root: temp.path(),
+                out: &out,
+                receipt_id: &focused.id,
+                side: "head",
+                spec: &spec,
+                timeout_sec: 7,
+                lease: &lease,
+                task_ledger: Some(&ledger),
+                task: Some(&command_task),
+                cleanup: Some(&mut cleanup),
+            },
+            &mut |_root, _argv, _env, _timeout, stdout, stderr, observe_process| {
+                observe_process(CommandProcessObservation::Spawned);
+                observe_process(CommandProcessObservation::Spawned);
+                fs::write(stdout, b"ok\n")?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    exit_code: Some(0),
+                    timed_out: false,
+                    success: true,
+                    reason: "completed".to_owned(),
+                    duration_ms: 1,
+                })
+            },
+        )
+        .err()
+        .context("duplicate process observation must remain an error")?;
+        ensure!(format!("{error:#}").contains("record proof process observation"));
+        ensure!(physical_cleanup_called);
+
+        let task_id = proof_command_task_id(&focused.id, "head")?;
+        let events = recorder
+            .inputs()?
+            .into_iter()
+            .filter(|input| input.task_id == task_id)
+            .map(|input| input.event)
+            .collect::<Vec<_>>();
+        ensure!(
+            events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::ProcessFinished { .. }))
+        );
+        ensure!(
+            events
+                .iter()
+                .any(|event| matches!(event, TaskEvent::CleanupFinished { .. }))
+        );
+        ensure!(!events.iter().any(|event| matches!(
+            event,
+            TaskEvent::ReceiptCreated { .. }
+                | TaskEvent::ReceiptCreationFailed { .. }
+                | TaskEvent::ResourcesReleased { .. }
+        )));
+        Ok(())
+    }
+
+    #[test]
+    fn cleanup_failure_remains_primary_when_stream_bounding_also_fails() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let recorder = TaskLedgerRecorder::new(&revision(), &Instant::now())?;
+        let ledger = ProofTaskLedger::new(recorder.clone());
+        let focused = focused_task("proof-command-combined-failure");
+        let command_task =
+            ProofCommandTask::focused_test(&focused, "head", 7, ProofExecutionPhase::ModelRequest);
+        let spec = ProofCommandSpec {
+            argv: vec!["proof-command".to_owned()],
+            env: BTreeMap::new(),
+        };
+        let lease = granted_lease("lease-proof-command-combined-failure");
+        let mut cleanup = || anyhow::bail!("injected physical cleanup failure");
+
+        let error = run_proof_command_receipt(
+            ProofCommandInvocation {
+                command_root: temp.path(),
+                out: &out,
+                receipt_id: &focused.id,
+                side: "head",
+                spec: &spec,
+                timeout_sec: 7,
+                lease: &lease,
+                task_ledger: Some(&ledger),
+                task: Some(&command_task),
+                cleanup: Some(&mut cleanup),
+            },
+            &mut |_root, _argv, _env, _timeout, stdout, stderr, observe_process| {
+                observe_process(CommandProcessObservation::Spawned);
+                fs::remove_file(stdout)?;
+                fs::create_dir_all(stdout)?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    exit_code: Some(0),
+                    timed_out: false,
+                    success: true,
+                    reason: "completed".to_owned(),
+                    duration_ms: 1,
+                })
+            },
+        )
+        .err()
+        .context("combined cleanup and stream failure must propagate")?;
+        let message = format!("{error:#}");
+        ensure!(message.contains("cleanup proof command after confirmed completion"));
+        ensure!(message.contains("injected physical cleanup failure"));
+        ensure!(message.contains("bound proof command streams"));
 
         let task_id = proof_command_task_id(&focused.id, "head")?;
         let events = recorder
