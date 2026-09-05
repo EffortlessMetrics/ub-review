@@ -1,0 +1,370 @@
+name: Temporary #957 exact-head finalizer
+
+on:
+  push:
+    branches:
+      - codex/957-cross-projection-reconciliation
+
+permissions:
+  actions: read
+  checks: read
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: ub-review-957-exact-head-finalizer
+  cancel-in-progress: false
+
+jobs:
+  validate-review-merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Detect substantive source movement
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --no-tags
+          excludes=(
+            ':(exclude).github/workflows/_temporary-957-controller.yml'
+            ':(exclude).github/workflows/_temporary-957-finalizer.yml'
+            ':(exclude).github/ub-review-957-blocked.json'
+          )
+          if git diff --quiet origin/main...HEAD -- . "${excludes[@]}"; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ -f .github/ub-review-957-blocked.json ]]; then
+            blocked_sha="$(python -c 'import json; print(json.load(open(".github/ub-review-957-blocked.json"))["blocked_sha"])')"
+            if git cat-file -e "${blocked_sha}^{commit}" 2>/dev/null \
+              && git diff --quiet "${blocked_sha}...HEAD" -- . "${excludes[@]}"; then
+              echo "#957 remains blocked on exact candidate ${blocked_sha}; waiting for substantive source movement."
+              echo 'ready=false' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
+
+      - name: Install pinned Rust toolchain
+        if: steps.source.outputs.ready == 'true'
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: 1.95.0
+          components: rustfmt,clippy
+
+      - name: Validate exact source and policy
+        if: steps.source.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          git diff --check
+          cargo fmt --all -- --check
+          cargo check --locked --all-targets --all-features
+          cargo test --locked --workspace --all-targets
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo xtask policy-check
+          python scripts/verify-bun-review-artifacts.py --self-test
+
+      - name: Publish exact clean candidate
+        if: steps.source.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch='codex/957-cross-projection-reconciliation'
+          cp .github/workflows/_temporary-957-finalizer.yml "$RUNNER_TEMP/ub-review-957-finalizer.yml"
+          remote_head="$(git ls-remote origin "refs/heads/${branch}" | awk '{print $1}')"
+          test "$remote_head" = "$GITHUB_SHA"
+
+          git rm -f .github/workflows/_temporary-957-controller.yml 2>/dev/null || true
+          git rm -f .github/workflows/_temporary-957-finalizer.yml
+          git rm -f .github/ub-review-957-blocked.json 2>/dev/null || true
+          while IFS= read -r path; do
+            git rm -f -- "$path"
+          done < <(git ls-files '.github/ub-review-957-*' '.github/validation-trigger-957*' | sort -u)
+
+          git add -A
+          git diff --cached --check
+          git config user.name 'EffortlessSteven'
+          git config user.email 'git@effortlesssteven.com'
+          if ! git diff --cached --quiet; then
+            git commit -m 'ci: publish exact #957 candidate'
+          fi
+          clean_sha="$(git rev-parse HEAD)"
+          git push origin "HEAD:${branch}"
+          printf 'CLEAN_SHA=%s\n' "$clean_sha" >> "$GITHUB_ENV"
+
+      - name: Open or update the single draft PR
+        if: steps.source.outputs.ready == 'true'
+        id: pr
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          branch='codex/957-cross-projection-reconciliation'
+          body_file="$RUNNER_TEMP/pr-body.md"
+          cat > "$body_file" <<EOF
+          ## What this does
+
+          Reconciles the durable TaskLedger event stream and replayed snapshot against the leases and command/proof receipts production already emits. A projection that claims the same task but disagrees on immutable revision, task identity, command side or phase, terminal disposition, cleanup, receipt target, or resource release is an explicit reconciliation failure rather than degraded success or silence.
+
+          Existing scheduling, proof selection, sensor/proof classification, gate decisions, artifact filenames, and public review output remain unchanged.
+
+          ## Exact validation
+
+          The clean candidate \`${CLEAN_SHA}\` passed rustfmt, locked all-target/all-feature check, the full locked workspace suite, strict Clippy, policy-check, and the artifact-verifier self-test before publication. Normal hosted gates and a fresh exact-head review remain required before merge.
+
+          ## Review boundary
+
+          Review the durable source and tests. Verify event/snapshot replay authority, immutable revision and task joins, lease admission, command side/phase/order, terminal disposition, stale-output rejection, durable receipt references, cleanup-before-release, and sensor/proof/worker/optional/model-off/model-on behavior.
+
+          Closes #957
+          EOF
+          number="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --state open --json number --jq '.[0].number // empty')"
+          if [[ -z "$number" ]]; then
+            url="$(gh pr create --repo "$GITHUB_REPOSITORY" --draft --base main --head "$branch" \
+              --title 'runtime: reconcile TaskLedger projections' --body-file "$body_file")"
+            number="${url##*/}"
+          else
+            gh pr edit "$number" --repo "$GITHUB_REPOSITORY" \
+              --title 'runtime: reconcile TaskLedger projections' --body-file "$body_file"
+          fi
+          printf 'number=%s\n' "$number" >> "$GITHUB_OUTPUT"
+          printf 'PR_NUMBER=%s\n' "$number" >> "$GITHUB_ENV"
+
+      - name: Request fresh exact-head review
+        if: steps.source.outputs.ready == 'true'
+        id: review_request
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          marker="<!-- ub-review-957-exact-review:${CLEAN_SHA} -->"
+          existing="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
+            --jq ".[] | select(.body | contains(\"${marker}\")) | .id" | tail -n1)"
+          if [[ -n "$existing" ]]; then
+            created="$(gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${existing}" --jq .created_at)"
+          else
+            payload="$RUNNER_TEMP/review-comment.json"
+            python - <<PY > "$payload"
+          import json
+          print(json.dumps({"body": "${marker}\n@codex review exact head `${CLEAN_SHA}`. Review only the durable source/policy tree. Verify cross-projection authority, negative fixtures, unchanged scheduling/gate/public-output behavior, and leave actionable inline findings only; otherwise record the audit trail and residual risk."}))
+          PY
+            response="$(gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --input "$payload")"
+            existing="$(jq -r .id <<<"$response")"
+            created="$(jq -r .created_at <<<"$response")"
+          fi
+          printf 'comment_id=%s\ncreated_at=%s\n' "$existing" "$created" >> "$GITHUB_OUTPUT"
+          printf 'REVIEW_REQUESTED_AT=%s\n' "$created" >> "$GITHUB_ENV"
+
+      - name: Wait for hosted gates and review authority
+        if: steps.source.outputs.ready == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from __future__ import annotations
+
+          import datetime as dt
+          import json
+          import os
+          import subprocess
+          import time
+
+          repo = os.environ['GITHUB_REPOSITORY']
+          pr = int(os.environ['PR_NUMBER'])
+          sha = os.environ['CLEAN_SHA']
+          requested_at = dt.datetime.fromisoformat(
+              os.environ['REVIEW_REQUESTED_AT'].replace('Z', '+00:00')
+          )
+          required_runs = {'ub-review/gate', 'ub-review/independent-baseline'}
+          deadline = time.time() + 75 * 60
+
+          def gh(path: str):
+              return json.loads(subprocess.check_output(
+                  ['gh', 'api', '--paginate', path], text=True
+              ))
+
+          def single(path: str):
+              return json.loads(subprocess.check_output(['gh', 'api', path], text=True))
+
+          def page_array(path: str):
+              raw = subprocess.check_output(['gh', 'api', '--paginate', path], text=True)
+              decoder = json.JSONDecoder()
+              values = []
+              offset = 0
+              while offset < len(raw):
+                  while offset < len(raw) and raw[offset].isspace():
+                      offset += 1
+                  if offset >= len(raw):
+                      break
+                  value, offset = decoder.raw_decode(raw, offset)
+                  if isinstance(value, list):
+                      values.extend(value)
+                  else:
+                      values.append(value)
+              return values
+
+          while time.time() < deadline:
+              branch = single(f'repos/{repo}/branches/codex/957-cross-projection-reconciliation')
+              current = branch['commit']['sha']
+              pr_state = single(f'repos/{repo}/pulls/{pr}')
+              if current != sha or pr_state['head']['sha'] != sha:
+                  raise SystemExit(
+                      f'exact-head authority moved: branch={current}, pr={pr_state["head"]["sha"]}, expected={sha}'
+                  )
+
+              runs_payload = single(f'repos/{repo}/actions/runs?head_sha={sha}&per_page=100')
+              latest = {}
+              for run in runs_payload.get('workflow_runs', []):
+                  name = run.get('name')
+                  if name in required_runs and name not in latest:
+                      latest[name] = run
+              failed = {
+                  name: run.get('conclusion')
+                  for name, run in latest.items()
+                  if run.get('status') == 'completed' and run.get('conclusion') != 'success'
+              }
+              if failed:
+                  raise SystemExit(f'hosted exact-head gate failed: {failed}')
+              gates_green = all(
+                  name in latest
+                  and latest[name].get('status') == 'completed'
+                  and latest[name].get('conclusion') == 'success'
+                  for name in required_runs
+              )
+
+              issue_comments = page_array(f'repos/{repo}/issues/{pr}/comments?per_page=100')
+              completion = False
+              for comment in issue_comments:
+                  login = comment.get('user', {}).get('login', '')
+                  created = dt.datetime.fromisoformat(
+                      comment['created_at'].replace('Z', '+00:00')
+                  )
+                  body = comment.get('body') or ''
+                  if (
+                      login.startswith('chatgpt-codex-connector')
+                      and created > requested_at
+                      and ('View task' in body or '### Summary' in body)
+                  ):
+                      completion = True
+
+              reviews = page_array(f'repos/{repo}/pulls/{pr}/reviews?per_page=100')
+              latest_review_by_user = {}
+              for review in reviews:
+                  login = review.get('user', {}).get('login', '')
+                  submitted = review.get('submitted_at') or ''
+                  previous = latest_review_by_user.get(login)
+                  if previous is None or submitted > (previous.get('submitted_at') or ''):
+                      latest_review_by_user[login] = review
+              changes_requested = [
+                  login for login, review in latest_review_by_user.items()
+                  if review.get('state') == 'CHANGES_REQUESTED'
+              ]
+              if changes_requested:
+                  raise SystemExit(
+                      f'latest review still requests changes: {changes_requested}'
+                  )
+
+              inline = page_array(f'repos/{repo}/pulls/{pr}/comments?per_page=100')
+              fresh_top_level = []
+              for comment in inline:
+                  created = dt.datetime.fromisoformat(
+                      comment['created_at'].replace('Z', '+00:00')
+                  )
+                  if created > requested_at and comment.get('in_reply_to_id') is None:
+                      fresh_top_level.append(comment)
+
+              query = '''query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved isOutdated comments(first:1){nodes{body author{login}}}}}}}}'''
+              owner, name = repo.split('/', 1)
+              graphql = json.loads(subprocess.check_output([
+                  'gh', 'api', 'graphql', '-f', f'query={query}',
+                  '-F', f'owner={owner}', '-F', f'name={name}', '-F', f'number={pr}'
+              ], text=True))
+              threads = graphql['data']['repository']['pullRequest']['reviewThreads']['nodes']
+              unresolved = [thread for thread in threads if not thread['isResolved']]
+
+              if completion and (fresh_top_level or unresolved):
+                  raise SystemExit(
+                      f'fresh review completed with findings: fresh_inline={len(fresh_top_level)}, unresolved={len(unresolved)}'
+                  )
+
+              if gates_green and completion and not fresh_top_level and not unresolved:
+                  print(json.dumps({
+                      'sha': sha,
+                      'gates': {name: latest[name]['id'] for name in sorted(required_runs)},
+                      'fresh_review_completed': True,
+                      'unresolved_threads': 0,
+                      'fresh_inline_findings': 0,
+                  }, indent=2, sort_keys=True))
+                  break
+              time.sleep(20)
+          else:
+              raise SystemExit('timed out waiting for exact-head gates and fresh review')
+          PY
+
+      - name: Mark ready and squash-merge the exact reviewed head
+        if: steps.source.outputs.ready == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq .head.sha)"
+          test "$current" = "$CLEAN_SHA"
+          gh pr ready "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" || true
+          payload="$RUNNER_TEMP/merge.json"
+          python - <<PY > "$payload"
+          import json
+          print(json.dumps({
+              "merge_method": "squash",
+              "sha": "${CLEAN_SHA}",
+              "commit_title": "runtime: reconcile TaskLedger projections (#${PR_NUMBER})",
+              "commit_message": "Reconcile durable TaskLedger events and snapshots against production leases and command/proof receipts without changing scheduling, gate decisions, or public review output.\n\nCloses #957."
+          }))
+          PY
+          response="$(gh api -X PUT "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/merge" --input "$payload")"
+          test "$(jq -r .merged <<<"$response")" = true
+          jq . <<<"$response"
+
+      - name: Restore stopped finalizer on exact-head blocker
+        if: failure() && steps.source.outputs.ready == 'true' && env.CLEAN_SHA != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          branch='codex/957-cross-projection-reconciliation'
+          git fetch origin "$branch" --no-tags
+          git checkout -B "$branch" "origin/$branch"
+          cp "$RUNNER_TEMP/ub-review-957-finalizer.yml" .github/workflows/_temporary-957-finalizer.yml
+          python - <<PY > .github/ub-review-957-blocked.json
+          import json
+          print(json.dumps({
+              "schema": "ub-review.temporary_blocked_candidate.v1",
+              "blocked_sha": "${CLEAN_SHA}",
+              "reason": "exact-head gate or review authority did not pass; substantive source movement required"
+          }, indent=2, sort_keys=True))
+          PY
+          git add .github/workflows/_temporary-957-finalizer.yml .github/ub-review-957-blocked.json
+          git config user.name 'EffortlessSteven'
+          git config user.email 'git@effortlesssteven.com'
+          git commit -m 'ci: retain #957 exact-head blocker'
+          git push origin "HEAD:${branch}"
+          if [[ -n "${PR_NUMBER:-}" ]]; then
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body \
+              "Exact-head finalization for `${CLEAN_SHA}` stopped on a hosted gate, review finding, unresolved thread, timeout, or head movement. @codex inspect the exact run/review evidence, make a substantive source or policy correction on `${branch}`, and let the restored finalizer re-run. Do not resolve this with a transport-only touch."
+          fi
