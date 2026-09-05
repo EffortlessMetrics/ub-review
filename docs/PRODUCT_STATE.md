@@ -85,11 +85,16 @@ keeps those states separate.
 The target CI authority is `FinalizedOutcome.ci_evidence_result`. Its semantic
 and serialized contract is:
 
+Finalization evaluates the terminal inputs in precedence order: deterministic
+`FAIL`, complete `PASS`, then `NOT_PROVEN`. A current-revision deterministic
+policy violation remains failure even when another Required obligation is
+unavailable.
+
 | Semantic result | Serialized value | Earned only when |
 | --- | --- | --- |
-| **PASS** | `pass` | Every applicable Required obligation has a current-revision satisfying terminal receipt, and no deterministic receipt establishes a policy-blocking violation. |
 | **FAIL** | `fail` | A current-revision deterministic receipt establishes a policy-blocking violation. A model or Advisory finding never suffices. |
-| **NOT_PROVEN** | `not_proven` | Any applicable Required obligation is missing, unavailable, stale, malformed, or the terminal inputs cannot establish PASS or FAIL. |
+| **PASS** | `pass` | No deterministic receipt establishes a policy-blocking violation, and every applicable Required obligation has a current-revision satisfying terminal receipt. |
+| **NOT_PROVEN** | `not_proven` | No deterministic receipt establishes a policy-blocking violation, and at least one applicable Required obligation is missing, unavailable, stale, malformed, or otherwise insufficient to establish PASS. |
 
 Current compatibility surfaces do not yet serialize that authority directly:
 
