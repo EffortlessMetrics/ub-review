@@ -127,21 +127,15 @@ where
             "focused build proof lease granted by runtime profile",
         );
         let spec = focused_build_command_spec_for_task(&task);
-        let command_task =
-            ProofCommandTask::focused_build(&task, task_timeout_sec, execution_phase);
-        let head = run_proof_command_receipt(
-            ProofCommandInvocation {
-                command_root: root,
-                out,
-                receipt_id: &task.id,
-                side: "head",
-                spec: &spec,
-                timeout_sec: task_timeout_sec,
-                lease: &lease,
-                task_ledger,
-                task: task_ledger.map(|_| &command_task),
-                cleanup: None,
-            },
+        let head = run_proof_command_receipt_for_build_task(
+            root,
+            out,
+            &task,
+            &spec,
+            task_timeout_sec,
+            &lease,
+            task_ledger,
+            execution_phase,
             &mut runner,
         )?;
         let result = match head.status.as_str() {
@@ -181,9 +175,11 @@ fn focused_build_budget_allows_next(
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::time::Instant;
 
-    use anyhow::Result;
+    use anyhow::{Context, Result, ensure};
 
+    use crate::task_ledger::TaskEvent;
     use crate::test_parse::command_display_with_env;
     use crate::tests::{test_diff, test_run_args};
     use crate::*;
@@ -274,6 +270,102 @@ mod tests {
             lease.command.as_deref(),
             Some("head: cargo check --workspace --all-targets --locked")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn focused_build_stream_failure_reconciles_receipt_and_releases_resources() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let diff = test_diff();
+        let proof_requests = vec![ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "proof-build-stream-failure".to_owned(),
+            lane: "architecture".to_owned(),
+            requested_by: vec!["architecture".to_owned()],
+            command: "cargo check --workspace --all-targets --locked".to_owned(),
+            reason: "Exercise focused-build receipt reconciliation.".to_owned(),
+            cost: "focused-build".to_owned(),
+            timeout_sec: 90,
+            required: false,
+            status: "requested".to_owned(),
+        }];
+        let tasks = focused_build_candidates_from_requests(&proof_requests);
+        let task_id = proof_command_task_id(&tasks[0].id, "head")?;
+        let args = test_run_args(out.clone());
+        let profile = Profile {
+            limits: Limits {
+                builds: 1,
+                ..Limits::default()
+            },
+            ..Profile::default()
+        };
+        let revision = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+        let recorder = TaskLedgerRecorder::new(&revision, &Instant::now())?;
+        let ledger = ProofTaskLedger::new(recorder.clone());
+
+        let error = super::run_focused_build_proof_tasks_with_runner(
+            temp.path(),
+            &out,
+            &diff,
+            &profile,
+            &args,
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 1,
+                per_command_timeout_sec: 120,
+                max_total_seconds: 120,
+            },
+            tasks,
+            Some(&ledger),
+            ProofExecutionPhase::ModelRequest,
+            |_root, _argv, _env, _timeout, stdout, stderr, observe_process| {
+                observe_process(CommandProcessObservation::Spawned);
+                fs::remove_file(stdout)?;
+                fs::create_dir_all(stdout)?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    exit_code: Some(0),
+                    timed_out: false,
+                    success: true,
+                    reason: "completed".to_owned(),
+                    duration_ms: 1,
+                })
+            },
+        )
+        .err()
+        .context("focused-build stream failure must propagate")?;
+        ensure!(format!("{error:#}").contains("read"));
+
+        let events = recorder
+            .inputs()?
+            .into_iter()
+            .filter(|input| input.task_id == task_id)
+            .map(|input| input.event)
+            .collect::<Vec<_>>();
+        let process = events
+            .iter()
+            .position(|event| matches!(event, TaskEvent::ProcessFinished { .. }))
+            .context("focused build process did not terminalize")?;
+        let cleanup = events
+            .iter()
+            .position(|event| matches!(event, TaskEvent::CleanupFinished { .. }))
+            .context("focused build cleanup did not finish")?;
+        let receipt_failure = events
+            .iter()
+            .position(|event| matches!(event, TaskEvent::ReceiptCreationFailed { .. }))
+            .context("focused build receipt failure was not recorded")?;
+        let release = events
+            .iter()
+            .position(|event| matches!(event, TaskEvent::ResourcesReleased { .. }))
+            .context("focused build resources were not released")?;
+        ensure!(process < cleanup);
+        ensure!(cleanup < receipt_failure);
+        ensure!(receipt_failure < release);
         Ok(())
     }
 

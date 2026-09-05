@@ -175,19 +175,10 @@ where
             Err(error) => error,
             Ok(_) => anyhow::anyhow!("runner returned without a confirmed child completion"),
         };
-        let mut diagnostics = Vec::new();
-        if let Some(cleanup) = cleanup
-            && let Err(cleanup_error) = cleanup()
-        {
-            diagnostics.push(format!(
-                "cleanup proof command after unconfirmed completion: {cleanup_error:#}"
-            ));
-        }
-        return Err(proof_command_error_with_diagnostics(
-            error,
-            "proof child completion remains unconfirmed",
-            &diagnostics,
-        ));
+        return Err(error.context(format!(
+            "proof child completion remains unconfirmed; preserving command root {} and admitted resources for recovery",
+            command_root.display()
+        )));
     }
 
     let missing_spawn_error = if ledger_task.is_some() && !process_spawned && status.is_ok() {
@@ -430,6 +421,59 @@ where
         },
         runner,
     );
+    reconcile_proof_command_result(result, task_ledger, &command_task)
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "focused-build execution keeps task, timeout, lease, phase, and runner boundaries explicit"
+)]
+pub(crate) fn run_proof_command_receipt_for_build_task<F>(
+    command_root: &Path,
+    out: &Path,
+    task: &FocusedBuildTask,
+    spec: &ProofCommandSpec,
+    timeout_sec: u64,
+    lease: &ResourceLease,
+    task_ledger: Option<&ProofTaskLedger>,
+    execution_phase: ProofExecutionPhase,
+    runner: &mut F,
+) -> Result<ProofCommandReceipt>
+where
+    F: FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+        &mut dyn FnMut(CommandProcessObservation),
+    ) -> Result<CommandStatus>,
+{
+    let command_task = ProofCommandTask::focused_build(task, timeout_sec, execution_phase);
+    let result = run_proof_command_receipt(
+        ProofCommandInvocation {
+            command_root,
+            out,
+            receipt_id: &task.id,
+            side: "head",
+            spec,
+            timeout_sec,
+            lease,
+            task_ledger,
+            task: task_ledger.map(|_| &command_task),
+            cleanup: None,
+        },
+        runner,
+    );
+    reconcile_proof_command_result(result, task_ledger, &command_task)
+}
+
+fn reconcile_proof_command_result(
+    result: Result<ProofCommandReceipt>,
+    task_ledger: Option<&ProofTaskLedger>,
+    command_task: &ProofCommandTask,
+) -> Result<ProofCommandReceipt> {
     let Err(error) = result else {
         return result;
     };
@@ -437,9 +481,9 @@ where
         return Err(error);
     };
     let reason = format!("proof command receipt unavailable: {error:#}");
-    let reconciliation = match task_ledger.receipt_pending(&command_task) {
+    let reconciliation = match task_ledger.receipt_pending(command_task) {
         Ok(true) => {
-            task_ledger.receipt_creation_failed_and_resources_released(&command_task, &reason)
+            task_ledger.receipt_creation_failed_and_resources_released(command_task, &reason)
         }
         Ok(false) => Ok(()),
         Err(pending_error) => {
@@ -1089,8 +1133,10 @@ mod tests {
         )
         .err()
         .context("unconfirmed child must fail closed")?;
-        ensure!(format!("{error:#}").contains("completion remains unconfirmed"));
-        ensure!(physical_cleanup_called);
+        let message = format!("{error:#}");
+        ensure!(message.contains("completion remains unconfirmed"));
+        ensure!(message.contains(&temp.path().display().to_string()));
+        ensure!(!physical_cleanup_called);
 
         let task_id = proof_command_task_id(&focused.id, "head")?;
         let events = recorder

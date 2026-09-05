@@ -20,24 +20,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  source-export:
-    name: exact proof lifecycle source export
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-      - uses: actions/upload-artifact@v7
-        with:
-          name: proof-lifecycle-source
-          path: |
-            src/proof/command.rs
-            src/proof/build.rs
-          if-no-files-found: error
-          retention-days: 1
-
   gate:
     name: ub-review/gate
     runs-on: ubuntu-latest
