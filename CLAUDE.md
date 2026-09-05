@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`ub-review` is a Rust CLI (and GitHub Action, see `action.yml`) that builds deterministic evidence packets for UB-focused PR review: it plans evidence from a PR diff, runs cheap static sensors (`tokmd`, `cargo-allow`, `ripr`, `unsafe-review`, `ast-grep`, `actionlint`), fans out bounded BYOK model lanes (MiniMax M3 by default), validates inline comment candidates, and submits one grouped GitHub PR review. First production preset: `bun-ub` (the Bun UB hunt).
+`ub-review` is a Rust CLI and GitHub Action (`action.yml`) for one revision-bound evidence transaction across PR review and targeted CI. It coordinates deterministic sensors, bounded model investigation, approved proof, claim reconciliation, one grouped GitHub Pull Request Review, and a separate CI evidence result over the same admitted code state. The `bun-ub` preset remains the first production profile and UB/native review remains an important evidence specialty; neither is the product boundary.
 
 ## Commands
 
