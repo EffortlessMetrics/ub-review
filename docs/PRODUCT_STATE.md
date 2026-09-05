@@ -1,23 +1,27 @@
 # Product state
 
-_Last reconciled against `main` at `55e4fba` on 2026-08-28._
+_Last reconciled against `main` at `55e4fba` on 2026-08-28; roadmap
+dependencies reconciled through the 2026-08-30 model-off CI-efficiency
+amendment._
 
 This is the canonical capability-state document. [Issue #945] owns execution
 order; parent issues own capability contracts; retained receipts and runtime
-verification outrank this file. Update this document after an authority-bearing
-merge, not after a type, schema, fixture, or issue plan lands.
+verification outrank this file. [The model-off CI-efficiency path] records the
+bounded deterministic path within that same architecture. Update earned state
+after authority-bearing implementation and evidence, not after a type, schema,
+fixture, issue plan, or roadmap document lands.
 
 ## Current position
 
 Transactional review delivery, current-head reconciliation, substantial
 sensor/proof/review compilation, and additive result separation exist.
-Immutable revision identity is admitted and verifier-joined across the core
+Immutable revision identity is admitted and verifier-joined across core
 current-run artifacts on `main`. The pure TaskLedger, execution-accounting
 lifecycle, ledger artifact verifier, retained contradiction corpus, and the
 first production shadow adapter also exist. Fast and late sensor execution now
-emits revision-bound TaskLedger lifecycles through #1263/#955. TaskLedger still
-does not schedule that work, observe proof/worker execution, or reconcile every
-legacy projection.
+emits revision-bound TaskLedger lifecycles through #1263/#955. Proof and worker
+observation remains the live [#1266]/[#956] front; TaskLedger still does not
+schedule that work or reconcile every legacy projection.
 
 One live scheduler/resource authority, a repository-native architecture
 contract, a Required-first CI spine, one shared run plan, authoritative final
@@ -28,7 +32,8 @@ incomplete. The shortest accurate statement is:
 > Transactional delivery and substantial review/proof substrate exist.
 > Revision authority is materially advanced; task authority is in shadow.
 > Scheduler, final-judgment, finalized-outcome, learning, and stable-gate
-> authority remain incomplete in the precise ways tracked by #923–#945.
+> authority remain incomplete in the precise ways tracked by #923–#945 and the
+> current amendments to [Issue #945].
 
 ## What makes UB Review different
 
@@ -91,12 +96,12 @@ Current compatibility surfaces do not yet serialize that authority directly:
 | Current surface | Values | Current authority |
 | --- | --- | --- |
 | `gate-result` | `pass`, `finding`, `not_proven` | Truthful additive report. `finding` is not an automatic alias for target `fail`. |
-| `gate-conclusion` / `gate_outcome.conclusion` | `pass`, `fail`, `inconclusive` | Legacy enforced compatibility result until #1015. |
+| `gate-conclusion` / `gate_outcome.conclusion` | `pass`, `fail`, `inconclusive` | Legacy enforced compatibility result until [#1015]. |
 
 Do not mechanically translate `finding` to `fail` or `inconclusive` to
 `not_proven`. FinalizedOutcome recomputes the target result from typed
-current-revision terminal inputs. #1015 changes enforcement authority only
-after Required-first execution and live scheduler proof.
+current-revision terminal inputs. [#1015] changes enforcement authority only
+after its measurement and non-interference prerequisites.
 
 ## Capability-state vocabulary
 
@@ -111,24 +116,32 @@ after Required-first execution and live scheduler proof.
 A later state is never inferred from an earlier one. Issue closure, schema
 presence, and a green self-test are not substitutes for production authority.
 
+The final matrix column keeps three evidence objects distinct:
+
+- **Retained evidence** is a committed replay/receipt corpus or a durably linked
+  exact-head packet.
+- **Source evidence** identifies merged implementation.
+- **Roadmap/dependency** identifies work that remains; it never proves current
+  capability.
+
 ## Capability matrix
 
-| Surface | Highest earned state | What exists now | Missing authority / next contract | Evidence and roadmap |
+| Surface | Highest earned state | What exists now | Missing authority / next contract | Evidence classification |
 | --- | --- | --- | --- | --- |
-| Reviewer-facing compilation | **Proven by a retained run** | Evidence-backed item admission, value-ordered degradation, concise line notes, summary preservation, click-to-apply suggestion guards, and exact GitHub payload goldens are merged and retained. | Sustained maintainer value is not externally calibrated; one authoritative architecture-aware final lead remains future work. | [#829 commit], [#834], [#846], [#849], [#850], [#851], [#853], [#840], [#865] |
-| Candidate-head delivery and fixed-head silence | **Proven by a retained run** | Candidate-head pending-review transactions, exact comment reconciliation, current-head revalidation, idempotent replies/fallbacks, integrated Perl replay, and replay deduplication are retained. | Synthetic merge-result delivery is not proven: the current adapter reads `revision.reviewed_commit` (the synthetic merge object) as the expected delivery head, while GitHub exposes the pull-request head SHA. Carry both identities or select the PR-head delivery subject before claiming merge-result delivery. Cross-push memory/reanchoring and stable-coordinator ownership also remain open. | [delivery transaction], [reply delivery], [#835], [#880], [#867], [#923], [#814] |
-| Proof requests and execution adapters | **Proven by a retained run** | Semantic model intents resolve to approved focused tasks; current-head receipt replanning, Rust impact tests, base-plus-tests red/green selection, candidate cataloguing, budgets, leases, and focused proof receipts exist. | Executable paths still enter through multiple legacy adapters. They must all be observed and reconciled in TaskLedger before canonical identity, deduplication, or live scheduling. | [#836], [#837], [#852], [#854], [#916], [#956], [#957], [#860] |
-| Immutable revision identity | **Wired in production** | Pure identity, ordinary Git admission, exact candidate-head/merge-result semantics, propagation through core proof/claim/cost/gate artifacts, verifier joins, and trusted-base diff admission are merged. Symbolic refs remain compatibility labels. | Authority is not complete across delivery: merge-result `reviewed_commit` is a synthetic merge object, not the GitHub PR-head object used for posting revalidation. Keep #923 open until delivery and every future reuse/stable surface preserve both identities and reject the wrong subject. | [#1245], [#1246], [#1248], [#1250], [#1251], [#1252], [#1255], [#923] |
-| Task and resource authority | **Wired in production** | Pure task lifecycle/accounting, deterministic ledger artifacts/verifier, the sanitized #915/#916/#921 contradiction corpus, and normal-run fast/late sensor lifecycle shadowing are merged. | TaskLedger is observation/replay authority only. Existing pools, brokers, workers, leases, and budgets still control execution; #956 must observe proof/workers and #957 must reconcile every projection before #861 later owns live scheduling. | [#1253], [#1256], [#1259], [#1262], [#1263], [#955], [#956], [#957], [#861] |
-| Required CI spine and evidence portfolio | **Wired in production** | Configured proof, impact proof, portfolio selection, receipt catalogues, required-tool semantics, and additive coverage accounting run in production. | Required/Detective/Advisory semantics, one repository-owned minimal spine, one authority-ordered portfolio, and one shared frozen run plan are not yet the live source of truth. | [#855], [#852], [#916], [#941], [#928], [#942] |
-| Model routing, reconsideration, and final lead | **Wired in production** | Bounded specialist lanes, semantic proof intents, artifact-only private audits, and receipt-linked reconsideration substrate run in production. | Material-change-driven programme selection, proof intake while other lanes are still running, one ModelStageLedger, protected final-call reserve, and typed final-lead authority remain open. | [#836], [#912], [#914], [#864], [#859], [#930], [#865], [#929] |
-| Gate result and enforcement | **Wired in production** | Analysis, run-stage publication projection, sensor/model coverage, and current `gate-result` values are reported separately from the legacy conclusion; insufficient evidence can be represented as `not_proven`. A prepared payload currently serializes `publication_result = posted` before GitHub delivery runs. | Post success/failure receipts remain separate and do not recompute `gate_outcome`; #959/#960 must finalize prepared versus confirmed/failed delivery before #1015 can switch enforcement to target `ci_evidence_result`. `gate-check` still enforces the legacy conclusion. | [#855], [#926], [#958], [#959], [#960], [#1015] |
-| Learning and calibration | **Implemented** | Cost, token, timing, finding, delivery, and calibration-v0 telemetry can retain observations. | Those observations are not trusted learning authority, adaptive omission evidence, or proof that later runs improve. Canonical learning, economics, counterfactuals, and external calibration remain post-useful-product work. | [#840], [#868], [#932], [#933], [#939] |
-| Candidate-head containment | **Proven by a retained run** | Candidate-head dogfood is model-off/artifact-only; a base-owned deterministic baseline, committed source lockfile, and trusted-base diff admission are retained. | Full hostile-head environment/tool isolation and the untrusted-evidence to trusted-review/posting handoff remain open. | [#1240], [#1241], [#1249], [#1255], [#876] |
-| Release and install distribution | **Wired in production** | Archive/binary identity validation and the v0.1.2 release path exist. | Clean no-host-Cargo portability, stable analyzer bundle authority, upgrade/rollback acceptance, and external install proof remain open. | [#903], [#906], [#1242], [#815] |
-| Stable coordinator and terminal check | **Implemented** | Pure watchdog classification and stable/candidate authority contracts exist; candidate self-gate authority is separately contained. | A released stable coordinator, identical-input candidate shadow, exact-head terminal publication, rollback, and break-glass are not wired as required authority. | [#745], [#814], [#658] |
-| Onboarding commands | **Wired in production** | `init`, `enable --inspect`, `audit-ci`, and `setup-ci` inspect and generate adoption proposals without silently changing branch protection. | Fresh-repo release-installed adoption, upgrade/rollback, and architecture/CI-spine proposal acceptance remain open. | [#845], [#944] |
-| External pilot and promotion substrate | **Implemented** | Advisory pilot contracts, disposition/economics surfaces, and explicit promotion authority nodes exist. | Bun/Perl pilot execution, comparative calibration, measured advantage over the existing review process, and repository-owner sole-gate authorization remain open. | [#806], [#807], [#808], [#840], [#658] |
+| Reviewer-facing compilation | **Proven by a retained run** | Evidence-backed item admission, value-ordered degradation, concise line notes, summary preservation, guarded suggestions, and exact GitHub payload goldens are merged; a bounded external-PR replay retains the resulting review surface. | Sustained maintainer value is not externally calibrated; one authoritative architecture-aware final lead remains future work. | **Retained evidence:** [review-experience replay], [review-output goldens]. **Source evidence:** [#829 commit], [#834], [#846], [#849], [#850], [#851], [#853]. **Roadmap/dependency:** [#840], [#865]. |
+| Candidate-head delivery and fixed-head silence | **Proven by a retained run** | Candidate-head pending-review transactions, exact comment reconciliation, current-head revalidation, idempotent replies/fallbacks, and replay deduplication exist; the external-PR replay retains one posted reply receipt and fixed-head silence. | Synthetic merge-result delivery is not proven: the current adapter reads `revision.reviewed_commit` (the synthetic merge object) as the expected delivery head, while GitHub exposes the pull-request head SHA. Carry both identities or select the PR-head delivery subject before claiming merge-result delivery. Cross-push memory/reanchoring and stable-coordinator ownership also remain open. | **Retained evidence:** [review-experience replay]. **Source evidence:** [delivery transaction], [reply delivery], [#835], [#880], [#867]. **Roadmap/dependency:** [#923], [#814]. |
+| Proof requests and execution adapters | **Wired in production** | Semantic model intents resolve to approved focused tasks; current-head receipt replanning, Rust impact tests, base-plus-tests red/green selection, candidate cataloguing, budgets, leases, and focused proof receipts run in production. | Executable paths still enter through multiple legacy adapters. They must all be observed and reconciled in TaskLedger before canonical identity, deduplication, or live scheduling. | **Source evidence:** [#836], [#837], [#852], [#854], [#916]. **Roadmap/dependency:** [#956], [#957], [#860]. |
+| Immutable revision identity | **Wired in production** | Pure identity, ordinary Git admission, exact candidate-head/merge-result semantics, propagation through core proof/claim/cost/gate artifacts, verifier joins, and trusted-base diff admission are merged. Symbolic refs remain compatibility labels. | Authority is not complete across delivery: merge-result `reviewed_commit` is a synthetic merge object, not the GitHub PR-head object used for posting revalidation. Keep #923 open until delivery and every future reuse/stable surface preserve both identities and reject the wrong subject. | **Source evidence:** [#1245], [#1246], [#1248], [#1250], [#1251], [#1252], [#1255]. **Roadmap/dependency:** [#923]. |
+| Task and resource authority | **Wired in production** | Pure task lifecycle/accounting, deterministic ledger artifacts/verifier, the sanitized contradiction corpus, and normal-run fast/late sensor lifecycle shadowing are merged. | TaskLedger is observation/replay authority only. Existing pools, brokers, workers, leases, and budgets still control execution; [#1266]/[#956] must observe proof/workers and [#957] must reconcile every projection before live scheduling owns authority. | **Retained evidence:** [authority-incident corpus]. **Source evidence:** [#1253], [#1256], [#1259], [#1262], [#1263], [#955]. **Roadmap/dependency:** [#1266], [#956], [#957], [#861]. |
+| Required CI spine and evidence portfolio | **Wired in production** | Configured proof, impact proof, portfolio selection, receipt catalogues, required-tool semantics, and additive coverage accounting run in production. | Required/Detective/Advisory semantics, one repository-owned minimal spine, one authority-ordered portfolio, and one shared frozen run plan are not yet the live source of truth. | **Source evidence:** [#855], [#852], [#916], [#941], [#928], [#942]. **Roadmap/dependency:** [The model-off CI-efficiency path]. |
+| Model routing, reconsideration, and final lead | **Wired in production** | Bounded specialist lanes, semantic proof intents, artifact-only private audits, and receipt-linked reconsideration substrate run in production. | Material-change-driven programme selection, proof intake while other lanes are still running, one ModelStageLedger, protected final-call reserve, and typed final-lead authority remain open; [#1120] remains the complete enriched-plan proof. | **Source evidence:** [#836], [#912], [#914], [#864], [#859]. **Roadmap/dependency:** [#930], [#865], [#929], [#1120]. |
+| Gate result and enforcement | **Wired in production** | Analysis, run-stage publication projection, sensor/model coverage, and current `gate-result` values are reported separately from the legacy conclusion; insufficient evidence can be represented as `not_proven`. A prepared payload currently serializes `publication_result = posted` before GitHub delivery runs. | Post success/failure receipts remain separate and do not recompute `gate_outcome`; #959/#960 must finalize prepared versus confirmed/failed delivery. Measured [#1275] acceptance and [#1277] result-plane non-interference must precede [#1015], which switches enforcement to target `ci_evidence_result`. `gate-check` still enforces the legacy conclusion. | **Source evidence:** [#855], [#926]. **Roadmap/dependency:** [#958], [#959], [#960], [#1275], [#1277], [#1015]. |
+| Learning and calibration | **Implemented** | Cost, token, timing, finding, delivery, and calibration-v0 telemetry can retain observations. | Those observations are not trusted learning authority, adaptive omission evidence, or proof that later runs improve. Canonical learning, economics, counterfactuals, and external calibration remain post-useful-product work. | **Source evidence:** [#840]. **Roadmap/dependency:** [#868], [#932], [#933], [#939]. |
+| Candidate-head containment | **Wired in production** | Candidate-head dogfood runs model-off/artifact-only with a base-owned deterministic baseline, committed source lockfile, and trusted-base diff admission. | The committed contracts do not by themselves prove full hostile-head isolation. Bounded process/packet output through [#1269]–[#1283] and the untrusted-evidence to trusted-review/posting handoff remain open. | **Source evidence:** [#1240], [#1241], [#1249], [#1255]. **Roadmap/dependency:** [#876], [#1269], [#1283]. |
+| Release and install distribution | **Wired in production** | Archive/binary identity validation and the v0.1.2 release path exist. | Clean no-host-Cargo portability, stable analyzer bundle authority, upgrade/rollback acceptance, and external install proof remain open. | **Source evidence:** [#903], [#906], [#1242]. **Roadmap/dependency:** [#815]. |
+| Stable coordinator and terminal check | **Implemented** | Pure watchdog classification and stable/candidate authority contracts exist; candidate self-gate authority is separately contained. | A released stable coordinator, identical-input candidate shadow, exact-head terminal publication, rollback, and break-glass are not wired as required authority. | **Source evidence:** [#745]. **Roadmap/dependency:** [#814], [#658]. |
+| Onboarding commands | **Wired in production** | `init`, `enable --inspect`, `audit-ci`, and `setup-ci` inspect and generate adoption proposals without silently changing branch protection. | Fresh-repo release-installed adoption, upgrade/rollback, and architecture/CI-spine proposal acceptance remain open. | **Source evidence:** [#845]. **Roadmap/dependency:** [#944]. |
+| External pilot and promotion substrate | **Implemented** | Advisory pilot contracts, disposition/economics surfaces, and explicit promotion authority nodes exist. | Bun/Perl pilot execution, comparative calibration, measured advantage over the existing review process, and repository-owner sole-gate authorization remain open. | **Source evidence:** [#840]. **Roadmap/dependency:** [#806], [#807], [#808], [#658]. |
 
 ## Live authority map
 
@@ -170,28 +183,42 @@ policy. Those are destination claims, not current behavior.
 ## Active implementation front
 
 The containment, committed-lockfile, and RevisionIdentity front named in #963
-has landed and must not remain an agent instruction. The live serial front is:
+has landed and must not remain an agent instruction. The live serial authority
+front is:
 
 ```text
-#956      observe configured/impact/model/follow-up proof and workers
-  -> #957      reconcile queue/portfolio/lease/gate projections
-  -> #958      pure FinalizedOutcome reducer
-  -> #959      prepared-versus-confirmed delivery finalization
-  -> #960      shadow FinalizedOutcome integration and verification
-  -> #962      complete Horizon A revision/task/delivery/outcome packet proof
+#1266 / #956  observe configured/impact/model/follow-up proof and workers
+  -> #957     reconcile queue/portfolio/lease/gate projections
+  -> #958     pure FinalizedOutcome reducer
+  -> #959     prepared-versus-confirmed delivery finalization
+  -> #960     shadow FinalizedOutcome integration and verification
+  -> #962     complete Horizon A revision/task/delivery/outcome packet proof
 ```
 
-Fast/late sensor shadowing completed in [#1263]/[#955]. The complete
-Horizon A packet proof remains [#962]. Issue #945 remains the execution-order
-authority. File-disjoint documentation,
-read-only research, and frozen fixtures may proceed in parallel; implementation
-must not jump the serial authority front.
+Fast/late sensor shadowing completed in [#1263]/[#955]. The complete Horizon A
+packet proof remains [#962]. [Issue #945] remains execution-order authority.
+
+The CI-efficiency programme is a bounded path through the same architecture,
+not a competing plan. [#1269] through [#1283] bound process and packet output.
+[#1274] proves the frozen model-off `SharedRunPlan` core and unlocks the pure
+[#986] then deterministic [#987] scheduler path. [#1120] remains mandatory
+before model-programme and final-lead augmentation enter that plan. Measured
+[#1275] acceptance and [#1277] result-plane non-interference precede [#1015].
+[The model-off CI-efficiency path] owns the full dependency graph and promotion
+bar.
+
+File-disjoint documentation, read-only research, frozen fixtures, and baseline
+measurement may proceed in parallel. Authority-bearing implementation must not
+jump the legal front.
 
 ## Do not start yet
 
-While Horizon A remains incomplete, do not begin production implementation of:
+While Horizon A and the explicit model-off prerequisites remain incomplete, do
+not begin production implementation of:
 
-- the live scheduler/resource migration (#861);
+- live scheduler/resource authority outside the ordered [#1274] -> [#986] ->
+  [#987] migration;
+- model-programme or final-lead augmentation before [#1120];
 - trusted learning, adaptive omission, or counterfactual selection
   (#868/#932/#933);
 - production heavy-witness expansion unrelated to the active authority front;
@@ -218,6 +245,10 @@ When evidence conflicts, retain the contradiction and lower the claim. Do not
 rewrite a historical packet to make the current architecture look coherent.
 
 [Issue #945]: https://github.com/EffortlessMetrics/ub-review/issues/945
+[The model-off CI-efficiency path]: CI_EFFICIENCY_PATH.md
+[review-experience replay]: ../fixtures/review-experience/perl-lsp-3627.json
+[review-output goldens]: ../fixtures/review-golden/
+[authority-incident corpus]: ../fixtures/authority-incidents/manifest.json
 [#840]: https://github.com/EffortlessMetrics/ub-review/issues/840
 [#923]: https://github.com/EffortlessMetrics/ub-review/issues/923
 [#926]: https://github.com/EffortlessMetrics/ub-review/issues/926
@@ -240,7 +271,16 @@ rewrite a historical packet to make the current architecture look coherent.
 [#959]: https://github.com/EffortlessMetrics/ub-review/issues/959
 [#960]: https://github.com/EffortlessMetrics/ub-review/issues/960
 [#962]: https://github.com/EffortlessMetrics/ub-review/issues/962
+[#986]: https://github.com/EffortlessMetrics/ub-review/issues/986
+[#987]: https://github.com/EffortlessMetrics/ub-review/issues/987
 [#1015]: https://github.com/EffortlessMetrics/ub-review/issues/1015
+[#1120]: https://github.com/EffortlessMetrics/ub-review/issues/1120
+[#1266]: https://github.com/EffortlessMetrics/ub-review/pull/1266
+[#1269]: https://github.com/EffortlessMetrics/ub-review/issues/1269
+[#1274]: https://github.com/EffortlessMetrics/ub-review/issues/1274
+[#1275]: https://github.com/EffortlessMetrics/ub-review/issues/1275
+[#1277]: https://github.com/EffortlessMetrics/ub-review/issues/1277
+[#1283]: https://github.com/EffortlessMetrics/ub-review/issues/1283
 [#745]: https://github.com/EffortlessMetrics/ub-review/issues/745
 [#806]: https://github.com/EffortlessMetrics/ub-review/issues/806
 [#807]: https://github.com/EffortlessMetrics/ub-review/issues/807
