@@ -1,0 +1,28 @@
+name: Temporary exact source export for #1266
+
+on:
+  push:
+    branches:
+      - codex/956-proof-worker-task-ledger
+
+permissions: {}
+
+jobs:
+  export:
+    name: export exact proof lifecycle sources
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/upload-artifact@v7
+        with:
+          name: proof-lifecycle-source
+          path: |
+            src/proof/command.rs
+            src/proof/build.rs
+          if-no-files-found: error
+          retention-days: 1
