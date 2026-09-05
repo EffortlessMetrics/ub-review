@@ -99,8 +99,8 @@ is retained; merge-result delivery authority remains a target contract.
 [Issue #945] owns implementation order. [The model-off CI-efficiency path]
 records the bounded deterministic path through the same architecture: output
 containment through #1269/#1283; a frozen model-off `SharedRunPlan` core in
-#1274 before the pure #986 and deterministic #987 scheduler path; the complete
-#1120 model-programme/final-lead augmentation before live model authority; and
+`#1274` before the pure #986 and deterministic #987 scheduler path; the complete
+`#1120` model-programme/final-lead augmentation before live model authority; and
 measured #1275 plus result-plane #1277 before #1015 changes enforcement.
 Legacy `gate_outcome.conclusion` remains authority until that switch lands.
 
