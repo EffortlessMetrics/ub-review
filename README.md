@@ -98,11 +98,22 @@ ub-review setup-ci --print-pr
 
 `init` writes starter configuration and repository guidance. `enable --inspect`
 proposes a workflow/configuration for the detected repository. `audit-ci` is
-read-only. `setup-ci --print-pr` renders the four new files in the migration
-candidate without opening or applying it; `setup-ci --open-pr` opens that
-new-files-only PR but never mutates branch protection. Review the generated
-Required proof mapping and begin non-blocking; do not treat generated
-configuration as sole-gate proof.
+read-only. `setup-ci --print-pr` without accepted jobs is plan-only: it writes
+`migration-plan.md` and does not claim that preview files exist.
+
+To render the four new files in the preview, pass at least one exact audited job
+with its maintainer-supplied command and a reviewed 40-hex UB Review commit:
+
+```bash
+ub-review setup-ci --print-pr \
+  --accept "$AUDITED_JOB=$REPOSITORY_OWNED_COMMAND" \
+  --action-sha "$REVIEWED_UB_REVIEW_SHA"
+```
+
+`setup-ci --open-pr` requires the same accepted-job and action-SHA inputs plus
+GitHub authentication. It opens the new-files-only migration PR but never
+mutates branch protection. Review the generated Required proof mapping and
+begin non-blocking; do not treat generated configuration as sole-gate proof.
 
 What the system never claims: code correctness, UB-freedom, replacement of
 security tooling, model findings as proof, prepared output as delivered output,
@@ -242,6 +253,14 @@ names only; direct review mode records the provider/model separately in
 direct MiniMax M3 with `provider-policy: minimax-only`. OpenCode Go canary/deep
 lanes remain available later through `provider-policy: minimax-primary`,
 `opencode-go-canary`, or `opencode-go-wide` once the provider key is proven.
+
+Use a full commit SHA for the Bun gate. The current known-good Bun pin is
+`EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd`,
+validated by `EffortlessSteven/bun#49` with a successful UB evidence packet,
+terminal state `sufficient`, artifact-only PR body skip, uploaded artifact,
+`tokmd` receipts, and verifier pass. Do not float the Bun hunt on `main`; update
+the SHA only after this repository's verifier and the Bun consumer workflow
+succeed.
 
 ## Sensors
 
