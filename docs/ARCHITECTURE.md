@@ -60,8 +60,11 @@ RevisionIdentity
   -> bounded model lanes and receipt-linked reconsideration
   -> claim graph and editorial compiler
   -> prepared GitHub review transaction
-  -> post/reconciliation receipts
-  -> gate_outcome
+  -> run-stage gate_outcome
+
+prepared GitHub review transaction
+  -> separate post step
+  -> post/reconciliation receipts (do not recompute gate_outcome)
 
 TaskLedger observes fast/late sensor execution in shadow through #1263/#955
 proof and worker execution remain outside the ledger until #956

@@ -257,7 +257,7 @@ rewrite a historical packet to make the current architecture look coherent.
 [#859]: https://github.com/EffortlessMetrics/ub-review/issues/859
 [#860]: https://github.com/EffortlessMetrics/ub-review/issues/860
 [#829 commit]: https://github.com/EffortlessMetrics/ub-review/commit/469288586d6ef01e50a2968f8826c89f1c1009f0
-[#834]: https://github.com/EffortlessMetrics/ub-review/commit/7da3d68d82ff5d930a2968f8826c89f1c1009f0
+[#834]: https://github.com/EffortlessMetrics/ub-review/commit/7da3d68d82ff5d930a2968a4b109301ab274382e
 [#835]: https://github.com/EffortlessMetrics/ub-review/commit/87b7023b85bb2ab05b5b2ff2ee820d03fc442745
 [#836]: https://github.com/EffortlessMetrics/ub-review/commit/1510d29d5394fa9ca936e3c390a85ac93dec5b13
 [#837]: https://github.com/EffortlessMetrics/ub-review/commit/7b112d9cebe989e1e9d4b693dfe5c743dc4a22df
