@@ -220,16 +220,18 @@ pub(crate) fn append_existing_file(target: &Path, source: &Path) -> Result<()> {
     append_file(target, &text)
 }
 
-pub(crate) fn run_command_to_files(
+/// Run an approved proof/worker subprocess with its explicit environment while
+/// exposing the same spawn and completion authority used by sensors.
+pub(crate) fn run_command_to_files_with_spawn_observer(
     root: &Path,
     argv: &[String],
     env: &BTreeMap<String, String>,
     timeout_sec: u64,
     stdout_path: &Path,
     stderr_path: &Path,
+    observe_process: &mut dyn FnMut(CommandProcessObservation),
 ) -> Result<CommandStatus> {
     let ambient = BTreeMap::new();
-    let mut ignore_process = |_| {};
     run_command_to_files_inner(CommandRun {
         root,
         argv,
@@ -239,7 +241,7 @@ pub(crate) fn run_command_to_files(
         stdout_path,
         stderr_path,
         quarantine_environment: false,
-        observe_process: &mut ignore_process,
+        observe_process,
     })
 }
 

@@ -24,15 +24,91 @@ use crate::{Plan, RevisionRef, SensorPlan, work_queue_sensor_consumers};
 // timeout independently, so admission must reserve the aggregate ceiling.
 const TOKMD_MAX_SUBPROCESS_COUNT: u64 = 6;
 
+/// Run-owned recorder shared by source-specific TaskLedger adapters.
+///
+/// Adapters own proposal identity and lifecycle mapping. This type owns only
+/// the admitted revision, caller-relative monotonic epoch, ordered append-only
+/// inputs, and replay-verified artifact publication.
 #[derive(Clone)]
-pub(crate) struct SensorTaskLedger {
-    inner: Arc<SensorTaskLedgerInner>,
+pub(crate) struct TaskLedgerRecorder {
+    inner: Arc<TaskLedgerRecorderInner>,
 }
 
-struct SensorTaskLedgerInner {
+struct TaskLedgerRecorderInner {
     revision: RevisionRef,
     run_started: Instant,
     inputs: Mutex<Vec<TaskLedgerInput>>,
+}
+
+impl TaskLedgerRecorder {
+    pub(crate) fn new(revision: &RevisionRef, run_started: &Instant) -> Result<Self> {
+        revision
+            .validate()
+            .context("task-ledger recorder revision")?;
+        Ok(Self {
+            inner: Arc::new(TaskLedgerRecorderInner {
+                revision: revision.clone(),
+                run_started: *run_started,
+                inputs: Mutex::new(Vec::new()),
+            }),
+        })
+    }
+
+    /// Return the immutable revision admitted for every adapter sharing this recorder.
+    pub(crate) fn revision(&self) -> &RevisionRef {
+        &self.inner.revision
+    }
+
+    pub(crate) fn now(&self) -> Result<MonotonicInstant> {
+        let elapsed = u64::try_from(self.inner.run_started.elapsed().as_millis())
+            .context("task-ledger recorder monotonic time exceeds u64")?;
+        Ok(MonotonicInstant::from_millis(elapsed))
+    }
+
+    pub(crate) fn append(&self, events: impl IntoIterator<Item = TaskLedgerInput>) -> Result<()> {
+        self.inner
+            .inputs
+            .lock()
+            .map_err(|_| anyhow::anyhow!("task-ledger recorder mutex poisoned"))?
+            .extend(events);
+        Ok(())
+    }
+
+    /// Append one event without making adapters rebuild the input envelope.
+    pub(crate) fn append_event(&self, task_id: &TaskId, event: TaskEvent) -> Result<()> {
+        self.append([TaskLedgerInput {
+            task_id: task_id.clone(),
+            event,
+        }])
+    }
+
+    pub(crate) fn write_artifacts(&self, out: &std::path::Path) -> Result<()> {
+        let inputs = self
+            .inner
+            .inputs
+            .lock()
+            .map_err(|_| anyhow::anyhow!("task-ledger recorder mutex poisoned"))?
+            .clone();
+        if inputs.is_empty() {
+            return remove_task_ledger_artifacts(out);
+        }
+        write_task_ledger_artifacts(out, &self.inner.revision, &inputs)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn inputs(&self) -> Result<Vec<TaskLedgerInput>> {
+        Ok(self
+            .inner
+            .inputs
+            .lock()
+            .map_err(|_| anyhow::anyhow!("task-ledger recorder mutex poisoned"))?
+            .clone())
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct SensorTaskLedger {
+    recorder: TaskLedgerRecorder,
 }
 
 impl SensorTaskLedger {
@@ -47,11 +123,7 @@ impl SensorTaskLedger {
     ) -> Result<Self> {
         revision.validate().context("sensor task-ledger revision")?;
         let ledger = Self {
-            inner: Arc::new(SensorTaskLedgerInner {
-                revision: revision.clone(),
-                run_started: *run_started,
-                inputs: Mutex::new(Vec::new()),
-            }),
+            recorder: TaskLedgerRecorder::new(revision, run_started)?,
         };
         let queued_at = ledger.now()?;
         let mut initial = Vec::new();
@@ -99,6 +171,12 @@ impl SensorTaskLedger {
         }
         ledger.append(initial)?;
         Ok(ledger)
+    }
+
+    /// Return the run-owned recorder so another source adapter can append to
+    /// the exact same deterministic stream.
+    pub(crate) fn recorder(&self) -> TaskLedgerRecorder {
+        self.recorder.clone()
     }
 
     /// Observe the existing worker admitting a queued sensor and beginning
@@ -181,33 +259,17 @@ impl SensorTaskLedger {
     }
 
     /// Persist the complete sensor shadow stream only after every late sensor
-    /// has joined. The generic artifact writer replays before publishing.
+    /// has joined. The shared recorder replays before publishing.
     pub(crate) fn write_artifacts(&self, out: &std::path::Path) -> Result<()> {
-        let inputs = self
-            .inner
-            .inputs
-            .lock()
-            .map_err(|_| anyhow::anyhow!("sensor task-ledger mutex poisoned"))?
-            .clone();
-        if inputs.is_empty() {
-            return remove_task_ledger_artifacts(out);
-        }
-        write_task_ledger_artifacts(out, &self.inner.revision, &inputs)
+        self.recorder.write_artifacts(out)
     }
 
     fn now(&self) -> Result<MonotonicInstant> {
-        let elapsed = u64::try_from(self.inner.run_started.elapsed().as_millis())
-            .context("sensor task-ledger monotonic time exceeds u64")?;
-        Ok(MonotonicInstant::from_millis(elapsed))
+        self.recorder.now()
     }
 
     fn append(&self, events: impl IntoIterator<Item = TaskLedgerInput>) -> Result<()> {
-        self.inner
-            .inputs
-            .lock()
-            .map_err(|_| anyhow::anyhow!("sensor task-ledger mutex poisoned"))?
-            .extend(events);
-        Ok(())
+        self.recorder.append(events)
     }
 }
 
