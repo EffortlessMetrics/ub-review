@@ -1031,6 +1031,7 @@ fn merge_focused_test_candidates(
             .iter()
             .position(|candidate| candidate.id == task.id);
         if let Some(existing) = matching_index.and_then(|index| candidates.get_mut(index)) {
+            existing.required |= task.required;
             if existing.timeout_sec < task.timeout_sec {
                 existing.timeout_sec = task.timeout_sec;
             }
@@ -1845,6 +1846,65 @@ mod tests {
                 .collect::<BTreeSet<_>>(),
             BTreeSet::from([first.id, second.id])
         );
+        Ok(())
+    }
+
+    #[test]
+    fn broker_merge_preserves_required_obligations_in_either_order() -> Result<()> {
+        for (existing_required, incoming_required, expected_required) in [
+            (false, false, false),
+            (false, true, true),
+            (true, false, true),
+            (true, true, true),
+        ] {
+            let mut existing = focused_test_task("shared", vec!["first".to_owned()], 15);
+            existing.required = existing_required;
+            let mut incoming = focused_test_task("shared", vec!["second".to_owned()], 30);
+            incoming.required = incoming_required;
+            incoming.requested_by = vec!["architecture".to_owned()];
+            let mut candidates = vec![existing];
+
+            for _ in 0..2 {
+                merge_focused_test_candidates(&mut candidates, vec![incoming.clone()]);
+                ensure!(candidates.len() == 1);
+                let merged = candidates
+                    .first()
+                    .ok_or_else(|| anyhow::anyhow!("merged candidate missing"))?;
+                ensure!(merged.required == expected_required);
+                ensure!(merged.timeout_sec == Some(30));
+                ensure!(merged.request_ids == vec!["first".to_owned(), "second".to_owned()]);
+                ensure!(
+                    merged.requested_by
+                        == vec!["tests-oracle".to_owned(), "architecture".to_owned()]
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn broker_merge_keeps_required_state_local_to_distinct_tasks() -> Result<()> {
+        for (existing_required, incoming_required) in [(false, true), (true, false)] {
+            let mut existing = focused_test_task("existing", Vec::new(), 15);
+            existing.required = existing_required;
+            let mut incoming = focused_test_task("incoming", Vec::new(), 30);
+            incoming.required = incoming_required;
+            let mut candidates = vec![existing];
+
+            merge_focused_test_candidates(&mut candidates, vec![incoming]);
+
+            let states = candidates
+                .iter()
+                .map(|task| (task.id.as_str(), task.required))
+                .collect::<Vec<_>>();
+            ensure!(
+                states
+                    == vec![
+                        ("existing", existing_required),
+                        ("incoming", incoming_required),
+                    ]
+            );
+        }
         Ok(())
     }
 
