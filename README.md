@@ -61,7 +61,7 @@ review/proof substrate, immutable current-run revision joins, and the
 pure/replayable TaskLedger exist. Synthetic merge-result delivery binding and
 post-confirmed publication finalization remain open. Fast and late sensor
 execution is now shadow-observed in the ledger; proof/worker execution and
-cross-projection reconciliation remain open.
+cross-projection reconciliation remain open through #1266/#956 and #957.
 The repository does **not** yet have one live task/resource scheduler,
 Required-first shared run plan, authoritative final lead, finalized outcome
 enforcement, trusted learning, hostile-head-safe stable coordinator, or
@@ -461,18 +461,30 @@ packets and exact-head verification outrank both prose surfaces. Historical
 roadmap/spec documents remain useful for design intent, but they are not the
 current merge-front authority.
 
-Fast/late sensor shadowing completed in #1263/#955. The remaining authority
-migration is deliberately serial:
+Fast/late sensor shadowing completed in #1263/#955. The live authority migration
+is deliberately serial:
 
 ```text
-#956      proof and worker execution -> shadow TaskLedger
-  -> #957      projection reconciliation
-  -> #958-#960 shadow FinalizedOutcome
-  -> #962      complete Horizon A packet proof
+#1266 / #956  proof and worker execution -> shadow TaskLedger
+  -> #957     projection reconciliation
+  -> #958     pure FinalizedOutcome
+  -> #959     delivery finalization
+  -> #960     shadow integration and verification
+  -> #962     complete Horizon A packet proof
 ```
 
-Do not jump from the current substrate to live scheduling, trusted learning,
-provider-native orchestration, CI-advisor behavior, or sole-gate promotion.
+[The model-off CI-efficiency path](docs/CI_EFFICIENCY_PATH.md) is a bounded
+route through the same architecture, not a competing roadmap. Output
+containment through #1269/#1283 precedes measured use. #1274 proves the frozen
+model-off `SharedRunPlan` core and unlocks the pure #986 then deterministic #987
+scheduler path; #1120 remains required before model-programme and final-lead
+augmentation. Measured #1275 acceptance and #1277 result-plane
+non-interference precede #1015, which is the later enforcement switch. Until
+then, legacy `gate_outcome.conclusion` remains authority.
+
+Do not jump from the current substrate past those prerequisites into live
+scheduler authority, trusted learning, provider-native orchestration,
+CI-advisor behavior, or sole-gate promotion.
 
 ## Local development
 
