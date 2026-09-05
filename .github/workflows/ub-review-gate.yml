@@ -80,6 +80,8 @@ jobs:
           path: |
             target/ub-review
             src/main.rs
+            src/proof/command.rs
+            src/proof/build.rs
           if-no-files-found: error
 
   # Coverage publication remains telemetry, but its OIDC permission is isolated
