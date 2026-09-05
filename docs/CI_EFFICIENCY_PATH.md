@@ -237,10 +237,13 @@ stable coordinator judges candidate code.
 The model-off cut does not remove the work needed for a senior reviewer with a
 controlled lab:
 
-- [#967], [#968], and [#969] build repository contract and bounded
-  architecture knowledge from cycle-free mechanical scope.
+- [#967] -> [#968] establishes explicit repository-source ingestion.
+- [#973] -> [#974] establishes mechanical package, target, test, consumer, and
+  bounded reverse-dependency scope.
+- [#968] + [#974] -> [#969] combines repository contracts with that bounded
+  mechanical scope into cycle-free architecture knowledge.
+- [#969] -> [#975] adds material architecture, trust, mirror, and support edges.
 - [#971] and [#972] add remote/existing-CI mapping where applicable.
-- [#975] completes material architecture, trust, mirror, and support edges.
 - [#979] proves the complete enriched portfolio.
 - [#980], [#981], and [#982] define and select registered review
   programmes.
