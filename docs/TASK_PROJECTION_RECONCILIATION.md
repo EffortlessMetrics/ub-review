@@ -58,6 +58,10 @@ before artifact upload. The live comparison step is non-blocking because current
 production projections still disagree; it retains those disagreements rather
 than changing the existing decision or silently repairing historical evidence.
 A missing report or a timed-out checker is unavailable evidence, not coherence.
+Malformed or unreadable input sets `input_unavailable` and returns exit 2, even
+when the report retains useful diagnostics from other readable projections.
+`observations_truncated` is separate from `issues_truncated`; many non-blocking
+observations do not turn coherent accounting into a contradiction.
 
 ## Compared surfaces and limits
 
@@ -80,8 +84,9 @@ Some current fields have narrower meanings than their names suggest:
   records those limits instead of filling them with zero.
 
 Inputs are limited to 4 MiB per file, 32 MiB total, 256 files and 16,384 rows per
-array. Issues and observations are bounded; the serialized report has a 512 KiB
-hard limit. The reader rejects duplicate JSON keys, non-finite numbers, unsafe
+array. Reads may consume one extra probe byte to establish an exceeded limit;
+rejected bytes still consume the aggregate read budget. Issues and observations
+are bounded; the serialized report has a 512 KiB hard limit. The reader rejects duplicate JSON keys, non-finite numbers, unsafe
 relative paths and symlink components. The report omits raw commands, prompts,
 subprocess logs and free-form diagnostic reasons. These reader/report limits do
 **not** bound production subprocess output or the complete gate packet; #1269

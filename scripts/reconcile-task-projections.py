@@ -75,6 +75,37 @@ def integer(value: Any) -> bool:
     return type(value) is int and 0 <= value <= (1 << 64) - 1
 
 
+def proof_result_consistent(proof: dict, kind: str) -> bool:
+    """Check aggregate claims against the command sides that produced them."""
+    commands = proof.get("commands")
+    if not isinstance(commands, list) or not commands or any(not isinstance(c, dict) for c in commands):
+        return False
+    sides = {c.get("side"): c.get("status") for c in commands if isinstance(c.get("side"), str)}
+    if len(sides) != len(commands) or "head" not in sides:
+        return False
+    head, result = sides["head"], proof.get("result")
+    if (not isinstance(result, str) or not isinstance(proof.get("kind"), str)
+            or any(not isinstance(status, str) or status not in {"passed", "failed", "timed_out", "skipped"}
+                   for status in sides.values())):
+        return False
+    if kind == "worker":
+        expected = "sanitizer_ub_detected" if head == "failed" and proof.get("kind") == "sanitizer-witness" else head
+        return set(sides) <= {"head", "nightly-preflight"} and result == expected
+    if proof.get("kind") not in {"focused-head", "focused-build", "focused-red-green"}:
+        return False
+    if head != "passed":
+        expected = {"failed": {"head_failed"}, "timed_out": {"timed_out"},
+                    "skipped": {"skipped_profile", "skipped_budget"}}.get(head, set())
+        return set(sides) == {"head"} and result in expected
+    if proof.get("kind") in {"focused-head", "focused-build"}:
+        return proof.get("test_patch_mode") == "head-only" and set(sides) == {"head"} and result == "head_passed"
+    if proof.get("test_patch_mode") != "base-plus-tests" or set(sides) != {"head", "base-plus-tests"}:
+        return False
+    expected = {"failed": {"discriminating"}, "passed": {"non_discriminating"},
+                "timed_out": {"timed_out"}, "skipped": {"skipped_profile", "base_patch_failed"}}
+    return result in expected.get(sides["base-plus-tests"], set())
+
+
 class PacketError(ValueError):
     pass
 
@@ -89,6 +120,8 @@ class Packet:
         self.total = 0
         self.issues: set[tuple[str, str, str]] = set()
         self.overflow = False
+        self.observations_overflow = False
+        self.input_unavailable = False
         self.coverage: dict[str, str] = {}
         self.observations: set[tuple[str, str, str]] = set()
 
@@ -102,10 +135,13 @@ class Packet:
             self.overflow = True
 
     def observe(self, code: str, path: str, identity: str = "") -> None:
+        row = (code, label(path), label(identity))
+        if row in self.observations:
+            return
         if len(self.observations) < MAX_ISSUES:
-            self.observations.add((code, label(path), label(identity)))
+            self.observations.add(row)
         else:
-            self.overflow = True
+            self.observations_overflow = True
 
     def path(self, name: str) -> Path:
         rel = PurePosixPath(name)
@@ -127,6 +163,7 @@ class Packet:
             return data
         if len(self.raw) >= MAX_INPUT_FILES:
             raise PacketError("input file budget exceeded")
+        self.raw[name] = None
         path = self.path(name)
         if not path.exists():
             self.raw[name] = None
@@ -136,11 +173,14 @@ class Packet:
             return None
         if not path.is_file():
             raise PacketError("packet input is not a regular file")
-        with path.open("rb") as stream:
-            data = stream.read(MAX_FILE_BYTES + 1)
-        if len(data) > MAX_FILE_BYTES or self.total + len(data) > MAX_INPUT_BYTES:
+        remaining = MAX_INPUT_BYTES - self.total
+        if remaining <= 0:
             raise PacketError("input byte budget exceeded")
+        with path.open("rb") as stream:
+            data = stream.read(min(MAX_FILE_BYTES, remaining) + 1)
         self.total += len(data)
+        if len(data) > MAX_FILE_BYTES or self.total > MAX_INPUT_BYTES:
+            raise PacketError("input byte budget exceeded")
         self.raw[name] = data
         self.sources[name] = {"path": name, "bytes": len(data),
                               "sha256": hashlib.sha256(data).hexdigest()}
@@ -161,6 +201,7 @@ class Packet:
             return value
         except (OSError, ValueError, RecursionError):
             self.coverage[name] = "invalid"
+            self.input_unavailable = True
             self.issue("invalid_projection", name)
             return None
 
@@ -170,6 +211,7 @@ class Packet:
         value = document.get(key) if key is not None else document
         if (not isinstance(value, list) or len(value) > MAX_ROWS
                 or any(not isinstance(row, dict) for row in value)):
+            self.input_unavailable = True
             self.issue("invalid_projection_rows", path)
             return []
         return value
@@ -194,7 +236,7 @@ def capture_validation(packet: Packet, path: str, operation: Any) -> Any:
     try:
         with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
             return operation()
-    except (SystemExit, ValueError, OSError, KeyError, TypeError, RecursionError):
+    except (SystemExit, ValueError, OSError, KeyError, TypeError, AttributeError, RecursionError):
         found = re.search(r"\[([a-z_]+)\]", output.getvalue())
         packet.issue(found.group(1) if found else "ledger_integrity", path)
         return None
@@ -231,6 +273,7 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
             if (events is None) != (snapshot is None):
                 packet.issue("incomplete_ledger_pair", snapshot_path)
     except (OSError, ValueError):
+        packet.input_unavailable = True
         packet.issue("ledger_input_budget_or_path", snapshot_path)
 
     def joined(row: dict, path: str, required: bool = True) -> bool:
@@ -267,24 +310,46 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
     receipt_path = "proof_receipt.json" if kind == "worker" else "review/proof_receipts.json"
     proof_doc = packet.load(receipt_path, dict if kind == "worker" else list,
                             required=not legacy)
-    proofs = packet.rows([proof_doc] if kind == "worker" and proof_doc is not None else proof_doc, receipt_path)
-    receipt_index = packet.index(proofs, receipt_path)
+    raw_proofs = packet.rows([proof_doc] if kind == "worker" and proof_doc is not None else proof_doc, receipt_path)
+    proofs = []
     commands: dict[str, tuple[dict, dict]] = {}
-    for i, proof in enumerate(proofs):
+    for i, proof in enumerate(raw_proofs):
+        identity = proof.get("id")
+        if not isinstance(identity, str) or not identity.strip():
+            packet.input_unavailable = True
+            packet.issue("invalid_identity", receipt_path)
+            continue
+        if any(not isinstance(proof.get(key, []), list)
+               or any(not isinstance(value, str) for value in proof.get(key, []))
+               for key in ("request_ids", "requested_by")):
+            packet.input_unavailable = True
+            packet.issue("invalid_proof_attribution", receipt_path, identity)
+            continue
+        proofs.append(proof)
         if proof.get("schema") != "ub-review.proof_receipt.v1":
             packet.issue("unsupported_receipt_schema", receipt_path, proof.get("id", ""))
         joined(proof, receipt_path)
+        if not proof_result_consistent(proof, kind):
+            packet.issue("proof_result_command_mismatch", receipt_path, proof.get("id", ""))
         sides = set()
         if not proof.get("commands"):
             packet.issue("empty_proof_receipt", receipt_path, proof.get("id", ""))
         for j, command in enumerate(packet.rows(proof, receipt_path, "commands")):
             side = command.get("side")
-            if side in sides or not isinstance(side, str):
-                packet.issue("duplicate_or_invalid_side", receipt_path, proof.get("id", ""))
-            if isinstance(side, str):
-                sides.add(side)
+            if not isinstance(side, str) or not side:
+                packet.input_unavailable = True
+                packet.issue("invalid_identity", receipt_path, identity)
+                continue
+            if side in sides:
+                packet.issue("duplicate_or_invalid_side", receipt_path, identity)
+            sides.add(side)
+            if not isinstance(command.get("status"), str):
+                packet.input_unavailable = True
+                packet.issue("invalid_command_status", receipt_path, identity)
+                continue
             ref = f"{receipt_path}#/commands/{j}" if kind == "worker" else f"{receipt_path}#/{i}/commands/{j}"
             commands[ref] = (proof, command)
+    receipt_index = packet.index(proofs, receipt_path)
 
     sensor_rows = {}
     sensor_dir = packet.path("sensors")
@@ -302,6 +367,7 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
                 if row is not None:
                     sensor_rows[path] = row
     except (OSError, ValueError):
+        packet.input_unavailable = True
         packet.issue("invalid_sensor_inventory", "sensors")
 
     credited = {}
@@ -332,7 +398,7 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
                 mapping = {"passed": "Succeeded", "failed": "DeterministicFailure",
                            "timed_out": "TimedOut", "skipped": "Cancelled"}
                 expected_disposition = mapping.get(row.get("status"))
-                if row.get("status") == "skipped" and not executed:
+                if row.get("status") == "skipped" and not executed and task.get("execution_disposition") == "SetupFailed":
                     expected_disposition = "SetupFailed"
                 if task.get("execution_disposition") is not None and expected_disposition != task["execution_disposition"]:
                     packet.issue("conflicting_terminal", reference, task_id)
@@ -358,7 +424,7 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
                 packet.issue("successful_sensor_left_planned" if task.get("execution_disposition") == "Succeeded"
                              else "terminal_task_left_planned", queue_path, task_id)
         for consumer in task.get("consumers", []):
-            if consumer.get("requirement") == "Required" and task.get("execution_disposition") != "Succeeded":
+            if consumer.get("requirement") == "Required" and (task.get("execution_disposition") != "Succeeded" or not reference):
                 # Source proposals do not own execution credit. Required request
                 # satisfaction is checked below through exact request_ids.
                 if not task_id.startswith("proof-request-"):
@@ -424,7 +490,8 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
         if lease.get("status") == "granted" and lease.get("consumer") not in receipt_index:
             packet.issue("granted_lease_without_receipt", lease_path, lease.get("id", ""))
     for proof in proofs:
-        if any(c.get("status") in {"passed", "failed", "timed_out"} for c in proof.get("commands", [])):
+        if any(owner is proof and c.get("status") in {"passed", "failed", "timed_out"}
+               for owner, c in commands.values()):
             if not legacy and not any(l.get("consumer") == proof.get("id") and l.get("status") == "granted" for l in leases):
                 packet.issue("executed_proof_without_lease", lease_path, proof.get("id", ""))
 
@@ -520,6 +587,7 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
             classified[bucket] += 1
             successful = [p for p in matching if p.get("revision") == binding
                           and p.get("result") in {"head_passed", "discriminating"}
+                          and proof_result_consistent(p, kind)
                           and p.get("commands")
                           and all(ref in credited for ref, (owner, _) in commands.items() if owner is p)]
             if gate.get("conclusion") == "pass" and not successful:
@@ -612,18 +680,21 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
                 "equivalence": "unproven"} for key, refs in sorted(groups.items()) if len(refs) > 1]
     packet.coverage["canonical_execution_equivalence"] = "not_available_before_860"
     packet.coverage["model_execution"] = "outside_sensor_proof_worker_ledger"
-    complete = binding is not None and packet.coverage.get("task_ledger") == "replay_verified"
+    complete = not legacy and binding is not None and packet.coverage.get("task_ledger") == "replay_verified"
     status = "contradictory" if packet.issues or packet.overflow else ("coherent" if complete else "unverifiable")
     report = {"schema": SCHEMA, "packet_kind": kind, "mode": "legacy" if legacy else "current",
               "authority": "shadow-only", "status": status, "revision": binding,
               "issue_count_retained": len(packet.issues), "issues_truncated": packet.overflow,
+              "observations_truncated": packet.observations_overflow,
+              "input_unavailable": packet.input_unavailable,
               "issues": [{"code": c, "artifact": p, "identity": i} for c, p, i in sorted(packet.issues)],
               "observations": [{"code": c, "artifact": p, "identity": i} for c, p, i in sorted(packet.observations)],
               "counts": {"ledger_tasks": len(ledger) if complete else None,
                          "executed_sensor_tasks": executed_sensors if complete else None,
                          "executed_proof_command_tasks": executed_proofs if complete else None,
-                         "proof_receipts": len(proofs), "queue_tasks": len(queue),
-                         "portfolio_candidates": len(candidates)},
+                         "proof_receipts": len(proofs) if proof_doc is not None else None,
+                         "queue_tasks": len(queue) if queue_doc is not None else None,
+                         "portfolio_candidates": len(candidates) if portfolio is not None else None},
               "similar_command_candidates": similar[:MAX_ISSUES],
               "similar_groups_truncated": len(similar) > MAX_ISSUES,
               "coverage": dict(sorted(packet.coverage.items())),
@@ -668,8 +739,10 @@ def main(argv: list[str]) -> int:
         if args.write_report:
             publish_report(args.packet, report)
         sys.stdout.buffer.write(canonical(report))
+        if report["input_unavailable"]:
+            return 2
         return 0 if report["status"] == "coherent" else 1
-    except (OSError, ValueError, KeyError, TypeError, RuntimeError, RecursionError):
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, RuntimeError, RecursionError):
         print("task-projection verification failed: input, output, or budget unavailable", file=sys.stderr)
         return 2
 

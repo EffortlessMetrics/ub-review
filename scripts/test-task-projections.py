@@ -43,10 +43,10 @@ def coherent(root: Path, *, model_on: bool = False, worker: bool = False) -> tup
         "schema": "ub-review.revision_admission.v1", "identity_canonical": canonical,
         "identity_digest": digest, "semantics": "candidate_head",
         "reviewed_commit_oid": "d" * 40, "pr_head_commit": "d" * 40, "worktree_dirty": False})
-    proof = {"schema": "ub-review.proof_receipt.v1", "id": "proof-a", "kind": "focused-head",
+    proof = {"schema": "ub-review.proof_receipt.v1", "id": "proof-a", "kind": "focused-test" if worker else "focused-head",
              "base": "b" * 40, "head": "d" * 40, "revision": binding,
              "test_patch_mode": "head-only", "requested_by": ["model" if model_on else "impact-planner"],
-             "request_ids": [] if worker else ["request-a"], "result": "head_passed", "reason": "completed",
+             "request_ids": [] if worker else ["request-a"], "result": "passed" if worker else "head_passed", "reason": "completed",
              "commands": [{"side": "head", "command": "cargo test --locked --test selected", "env": {},
                            "status": "passed", "exit_code": 0, "timed_out": False,
                            "timeout_sec": 60, "duration_ms": 10,
@@ -276,7 +276,7 @@ class Projections(unittest.TestCase):
         self.assertFalse(list((self.root / "review").glob(".task-projections-*")))
         (self.root / "review/proof_receipts.json").write_text('null')
         completed = subprocess.run([sys.executable, str(HERE / "reconcile-task-projections.py"), str(self.root), "--write-report"], capture_output=True, timeout=10)
-        self.assertEqual(completed.returncode, 1)
+        self.assertEqual(completed.returncode, 2)
         self.assertNotEqual(read_json(self.root, subject.REPORT_PATH)["status"], "coherent")
 
     def test_model_requiredness_never_becomes_gate_policy(self):
@@ -392,6 +392,102 @@ class Projections(unittest.TestCase):
             self.assertEqual(report["status"], "coherent", report["issues"])
             self.assertEqual(report["counts"]["executed_proof_command_tasks"], 2)
             self.assertEqual(report["coverage"]["worker_preflight_lease"], "not_separately_published")
+
+    def test_legacy_mode_never_grants_current_coherence(self):
+        self.assertEqual(subject.reconcile(self.root, legacy=True)["status"], "unverifiable")
+
+    def test_discriminating_claim_requires_the_base_witness(self):
+        self.change("review/proof_receipts.json", lambda rows: rows[0].update(result="discriminating"))
+        self.change("review/receipt_routes.json", lambda row: row["routes"][0].update(result="discriminating"))
+        self.assertIn("proof_result_command_mismatch", self.codes())
+        self.assertIn("pass_without_required_receipt", self.codes())
+
+    def test_result_classification_side_matrix(self):
+        proof = read_json(self.root, "review/proof_receipts.json")[0]
+        proof.update(kind="focused-red-green", test_patch_mode="base-plus-tests")
+        base = copy.deepcopy(proof["commands"][0])
+        base["side"] = "base-plus-tests"
+        proof["commands"].append(base)
+        for status, results in [("failed", {"discriminating"}), ("passed", {"non_discriminating"}), ("timed_out", {"timed_out"}), ("skipped", {"base_patch_failed", "skipped_profile"})]:
+            base["status"] = status
+            for result in ["head_passed", "head_failed", "discriminating", "non_discriminating", "timed_out", "base_patch_failed", "skipped_profile"]:
+                with self.subTest(status=status, result=result):
+                    proof["result"] = result
+                    self.assertEqual(subject.proof_result_consistent(proof, "review"), result in results)
+
+    def test_missing_projection_count_is_unknown_not_zero(self):
+        (self.root / "review/proof_receipts.json").unlink()
+        (self.root / "work_queue.json").unlink()
+        (self.root / "review/proof_portfolio.json").unlink()
+        counts = self.report()["counts"]
+        for key in ["proof_receipts", "queue_tasks", "portfolio_candidates"]:
+            self.assertIsNone(counts[key])
+
+    def test_rejected_bytes_still_consume_the_aggregate_read_budget(self):
+        for name in ["a", "b", "c"]:
+            (self.root / name).write_bytes(b"x" * 32)
+        packet = subject.Packet(self.root)
+        with patch.object(subject, "MAX_FILE_BYTES", 8), patch.object(subject, "MAX_INPUT_BYTES", 16):
+            for name in ["a", "b", "c"]:
+                with self.assertRaises(subject.PacketError):
+                    packet.read(name)
+            # One extra byte is the probe that establishes an exceeded limit.
+            self.assertEqual(packet.total, 17)
+            self.assertEqual(len(packet.raw), 3)
+
+    def test_observation_overflow_is_not_a_contradiction(self):
+        class ManyObservations(subject.Packet):
+            def __init__(self, root):
+                super().__init__(root)
+                for i in range(subject.MAX_ISSUES + 1):
+                    self.observe("measured_duration_difference", "test", str(i))
+        with patch.object(subject, "Packet", ManyObservations):
+            report = self.report()
+        self.assertEqual(report["status"], "coherent", report["issues"])
+        self.assertTrue(report["observations_truncated"])
+        self.assertFalse(report["issues_truncated"])
+        self.assertEqual(report["issue_count_retained"], 0)
+
+    def test_cli_exit_codes_distinguish_invalid_input_and_contradictions(self):
+        path = self.root / "review/calibration.json"
+        original = path.read_bytes()
+        for data in [b"{", b"null", b'[]', b'{"schema":"unsupported"}']:
+            with self.subTest(data=data):
+                path.write_bytes(data)
+                run = subprocess.run([sys.executable, str(HERE / "reconcile-task-projections.py"), str(self.root)], capture_output=True, timeout=10)
+                self.assertEqual(run.returncode, 2)
+                self.assertTrue(json.loads(run.stdout)["input_unavailable"])
+        path.write_bytes(original)
+        self.change("work_queue.json", lambda row: row["tasks"][0].update(status="planned"))
+        run = subprocess.run([sys.executable, str(HERE / "reconcile-task-projections.py"), str(self.root)], capture_output=True, timeout=10)
+        self.assertEqual(run.returncode, 1)
+        self.assertFalse(json.loads(run.stdout)["input_unavailable"])
+
+    def test_malformed_proof_fields_do_not_suppress_other_findings(self):
+        name = "review/proof_receipts.json"
+        original = read_json(self.root, name)
+        self.change("work_queue.json", lambda row: row["tasks"][0].update(status="planned"))
+        cases = [("id", None), ("id", []), ("id", {}), ("id", 1),
+                 ("commands", None), ("commands", "bad"), ("commands", [None]),
+                 ("commands", [{"side": None, "status": "passed"}]),
+                 ("commands", [{"side": [], "status": "passed"}]),
+                 ("commands", [{"side": "head", "status": []}]),
+                 ("requested_by", None), ("request_ids", [None])]
+        for key, value in cases:
+            with self.subTest(key=key, value=value):
+                rows = copy.deepcopy(original)
+                rows[0][key] = value
+                write_json(self.root, name, rows)
+                report = self.report()
+                self.assertTrue(report["input_unavailable"])
+                self.assertNotEqual(report["status"], "coherent")
+                self.assertIn("successful_sensor_left_planned", {x["code"] for x in report["issues"]})
+                result = subprocess.run([sys.executable, str(HERE / "reconcile-task-projections.py"),
+                                         str(self.root)], capture_output=True, timeout=10)
+                self.assertEqual(result.returncode, 2)
+                self.assertNotIn(b"Traceback", result.stderr)
+                self.assertTrue(json.loads(result.stdout)["input_unavailable"])
+        write_json(self.root, name, original)
 
     def test_historical_incident_corpus_preserves_every_expected_violation(self):
         corpus = HERE.parent / "fixtures/authority-incidents"
