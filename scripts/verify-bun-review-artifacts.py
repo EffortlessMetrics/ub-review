@@ -2616,7 +2616,14 @@ def require_task_ledger_receipt_links(root: pathlib.Path, snapshot: dict, bindin
     # without a producing lifecycle. Non-execution rows require a proposed task
     # but do not invent a ReceiptCreated event for terminally declined work.
     seen = set()
-    for relative in sorted(proof_files):
+    # A normal review packet owns review/proof_receipts.json. A standalone
+    # proof_receipt.json belongs to this lifecycle only when a replayed ledger
+    # reference caused it to be loaded above; an unrelated stale worker file in
+    # a reused output directory must not poison the current review packet.
+    reverse_proof_files = {"review/proof_receipts.json"}
+    if "proof_receipt.json" in documents:
+        reverse_proof_files.add("proof_receipt.json")
+    for relative in sorted(reverse_proof_files):
         if relative not in documents and not (root / relative).exists():
             continue
         for row_index, receipt in enumerate(proof_rows(relative)):
@@ -16396,6 +16403,26 @@ def self_test_task_ledger_receipt_links() -> None:
             after = {str(path.relative_to(root)): path.read_bytes() for path in root.rglob("*") if path.is_file()}
             if before != after:
                 fail("task-ledger receipt verification rewrote a fixture")
+
+        # Reused review output may retain an unrelated standalone worker
+        # receipt. The current review lifecycle neither references nor owns it,
+        # so reverse scanning must ignore it while retaining review-receipt
+        # orphan detection.
+        root = base / "review-with-stale-standalone"
+        fixture(root, receipt_id="current-review")
+        write_self_test_json(root / "proof_receipt.json", {
+            "schema": "ub-review.proof_receipt.v1",
+            "id": "stale-worker",
+            "revision": dict(binding),
+            "commands": [{
+                "side": "head", "command": "cargo test --locked", "env": {},
+                "status": "passed", "timed_out": False, "exit_code": 0,
+                "timeout_sec": 60, "duration_ms": 1,
+                "stdout": "stdout.txt", "stderr": "stderr.txt",
+                "reason": "unrelated prior worker attempt",
+            }],
+        })
+        require_task_ledger_artifacts(root)
 
         mutations = [
             ("stale", "[stale_revision]", lambda rows: rows[0]["revision"].update(digest="f" * 64)),
