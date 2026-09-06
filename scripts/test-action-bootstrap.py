@@ -182,7 +182,24 @@ if os.environ.get("BOOTSTRAP_TEST_NO_BINARY") != "1":
     def test_success_without_binary_is_rejected(self) -> None:
         result = self.run_shell(BOOTSTRAP_TEST_NO_BINARY="1")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("binary was not produced", result.stdout)
+        self.assertIn("current source build did not produce", result.stdout)
+        self.assertEqual(self.output.read_text(), "")
+
+    def test_success_without_binary_cannot_reuse_cached_executable(self) -> None:
+        target = self.root / "bootstrap cache"
+        self.success(UB_REVIEW_SOURCE_TARGET_DIR=str(target))
+        stale = target / "release/ub-review"
+        self.assertTrue(stale.exists())
+        self.output.write_text("")
+
+        result = self.run_shell(
+            UB_REVIEW_SOURCE_TARGET_DIR=str(target),
+            BOOTSTRAP_TEST_NO_BINARY="1",
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("current source build did not produce", result.stdout)
+        self.assertFalse(stale.exists())
         self.assertEqual(self.output.read_text(), "")
 
     def test_explicit_source_mode_does_not_select_ambient_binary(self) -> None:

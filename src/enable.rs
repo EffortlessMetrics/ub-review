@@ -334,14 +334,16 @@ pub(crate) fn render_enable_workflow(strategy: &InstallStrategy, mode: ReviewMod
       # switch to the fast binary-download path. See #732.
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: ". -> target/ub-review-build"
-          key: ub-review-{sha}
+          # Cache only the action bootstrap. Sensor and proof Cargo commands
+          # keep the reviewed repository's ordinary target directory.
+          cache-directories: ${{{{ runner.temp }}}}/ub-review-bootstrap-target
+          key: ub-review-bootstrap-{sha}
 
       - name: ub-review
-        env:
-          CARGO_TARGET_DIR: target/ub-review-build
         uses: {UBM_REPOSITORY}@{sha}
         with:
+          install-mode: source
+          source-target-dir: ${{{{ runner.temp }}}}/ub-review-bootstrap-target
           review-mode: {mode_key}
           provider-policy: primary-with-fallback
           minimax-api-key: ${{{{ secrets.MINIMAX_API_KEY }}}}
@@ -695,12 +697,24 @@ mod tests {
             "source workflow must cache the source build"
         );
         assert!(
-            yaml.contains(&format!("key: ub-review-{sha}")),
+            yaml.contains(&format!("key: ub-review-bootstrap-{sha}")),
             "cache key must be keyed on the action SHA"
         );
         assert!(
-            yaml.contains("CARGO_TARGET_DIR"),
-            "source workflow must set CARGO_TARGET_DIR so the action reuses the cache"
+            yaml.contains("cache-directories: ${{ runner.temp }}/ub-review-bootstrap-target"),
+            "source workflow must cache the isolated bootstrap target"
+        );
+        assert!(
+            yaml.contains("install-mode: source"),
+            "source fallback must not select an ambient ub-review binary"
+        );
+        assert!(
+            yaml.contains("source-target-dir: ${{ runner.temp }}/ub-review-bootstrap-target"),
+            "source workflow must route the action build into the isolated cache"
+        );
+        assert!(
+            !yaml.contains("CARGO_TARGET_DIR"),
+            "source workflow must not redirect reviewed sensor/proof Cargo commands"
         );
     }
 

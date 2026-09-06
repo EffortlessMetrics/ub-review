@@ -388,13 +388,21 @@ runs:
             exit 1
           fi
 
+          bin="$cargo_target_dir/release/ub-review"
+          # Dependency artifacts remain reusable, but the executable itself is
+          # attempt-local evidence. Remove any cached predecessor before Cargo
+          # runs so a renamed or removed binary target cannot be mistaken for
+          # output from the current action source.
+          if [[ -e "$bin" || -L "$bin" ]]; then
+            rm -f -- "$bin"
+          fi
+
           echo "::group::Build ub-review from action source"
           cargo build --manifest-path "$workdir/Cargo.toml" --locked --release --target-dir "$cargo_target_dir"
           echo "::endgroup::"
 
-          bin="$cargo_target_dir/release/ub-review"
-          if [[ ! -x "$bin" ]]; then
-            echo "::error::ub-review binary was not produced at $bin"
+          if [[ ! -f "$bin" || -L "$bin" || ! -x "$bin" ]]; then
+            echo "::error::current source build did not produce a regular executable at $bin"
             exit 1
           fi
           echo "source-dir=$workdir" >> "$GITHUB_OUTPUT"
