@@ -39,21 +39,32 @@ def coherent(root: Path, *, model_on: bool = False, worker: bool = False) -> tup
                  f"changed_paths={'f' * 64}\ndiff={'a' * 64}\n")
     digest = hashlib.sha256(b"ub-review.revision-identity.digest.v1\x00" + canonical.encode()).hexdigest()
     binding = {"digest": digest, "semantics": "candidate_head", "reviewed_commit": "d" * 40}
-    write_json(root, "input/revision-admission.json", {
-        "schema": "ub-review.revision_admission.v1", "identity_canonical": canonical,
-        "identity_digest": digest, "semantics": "candidate_head",
-        "reviewed_commit_oid": "d" * 40, "pr_head_commit": "d" * 40, "worktree_dirty": False})
+    if not worker:
+        write_json(root, "input/revision-admission.json", {
+            "schema": "ub-review.revision_admission.v1", "identity_canonical": canonical,
+            "identity_digest": digest, "semantics": "candidate_head",
+            "reviewed_commit_oid": "d" * 40, "pr_head_commit": "d" * 40,
+            "worktree_dirty": False})
+    head_command = {"side": "head", "command": "cargo test --locked --test selected", "env": {},
+                    "status": "passed", "exit_code": 0, "timed_out": False,
+                    "timeout_sec": 60, "duration_ms": 10,
+                    "stdout": "proof/proof-a/head/stdout.txt",
+                    "stderr": "proof/proof-a/head/stderr.txt", "reason": "completed"}
+    commands = [head_command]
+    if worker:
+        commands.insert(0, {"side": "nightly-preflight", "command": "cargo +nightly --version",
+                            "env": {}, "status": "passed", "exit_code": 0,
+                            "timed_out": False, "timeout_sec": 60, "duration_ms": 2,
+                            "stdout": "proof/proof-a/nightly-preflight/stdout.txt",
+                            "stderr": "proof/proof-a/nightly-preflight/stderr.txt",
+                            "reason": "completed"})
     proof = {"schema": "ub-review.proof_receipt.v1", "id": "proof-a", "kind": "focused-test" if worker else "focused-head",
              "base": "b" * 40, "head": "d" * 40, "revision": binding,
              "test_patch_mode": "head-only", "requested_by": ["model" if model_on else "impact-planner"],
              "request_ids": [] if worker else ["request-a"], "result": "passed" if worker else "head_passed", "reason": "completed",
-             "commands": [{"side": "head", "command": "cargo test --locked --test selected", "env": {},
-                           "status": "passed", "exit_code": 0, "timed_out": False,
-                           "timeout_sec": 60, "duration_ms": 10,
-                           "stdout": "proof/proof-a/head/stdout.txt", "stderr": "proof/proof-a/head/stderr.txt",
-                           "reason": "completed"}]}
+             "commands": commands}
     proof_path = "proof_receipt.json" if worker else "review/proof_receipts.json"
-    proof_ref = proof_path + ("#/commands/0" if worker else "#/0/commands/0")
+    head_ref = proof_path + ("#/commands/1" if worker else "#/0/commands/0")
     write_json(root, proof_path, proof if worker else [proof])
     lease = {"schema": "ub-review.resource_lease.v1", "id": "lease-proof-a", "kind": "focused-test",
              "consumer": "proof-a", "status": "granted", "revision": binding,
@@ -80,10 +91,18 @@ def coherent(root: Path, *, model_on: bool = False, worker: bool = False) -> tup
         ]:
             events.append((task_id, event))
 
-    executed("proof-command-proof-a-head", source, proof_ref,
-             [{"class": "Cpu", "units": 1}, {"class": "Memory", "units": 8},
-              {"class": "Disk", "units": 8}, {"class": "Test", "units": 1}], not model_on and not worker, 1)
-    if not worker:
+    head_reservations = [{"class": "Cpu", "units": 1}, {"class": "Memory", "units": 8},
+                         {"class": "Disk", "units": 8}, {"class": "Test", "units": 1}]
+    if worker:
+        executed("proof-command-proof-a-nightly-preflight", source,
+                 "proof_receipt.json#/commands/0",
+                 [{"class": "Cpu", "units": 1}, {"class": "Test", "units": 1}],
+                 False, 1)
+        executed("proof-command-proof-a-head", source, head_ref, head_reservations,
+                 False, 20)
+    else:
+        executed("proof-command-proof-a-head", source, head_ref, head_reservations,
+                 not model_on, 1)
         events.extend([
             ("proof-request-request-a", {"Proposed": {"revision": binding, "source": source, "limits": {"timeout_ceiling_ms": 60000}}}),
             ("proof-request-request-a", {"ConsumerAttached": {"consumer": {"id": "gate", "requirement": "Required" if not model_on else "Optional", "value": "GateCritical" if not model_on else "Advisory"}}}),
@@ -147,7 +166,8 @@ class Projections(unittest.TestCase):
                 coherent(root, model_on=model_on, worker=worker)
                 report = subject.reconcile(root, kind="worker" if worker else "review")
                 self.assertEqual(report["status"], "coherent", report["issues"])
-                self.assertEqual(report["counts"]["executed_proof_command_tasks"], 1)
+                self.assertEqual(report["counts"]["executed_proof_command_tasks"],
+                                 2 if worker else 1)
                 self.assertEqual(report["authority"], "shadow-only")
 
     def test_deterministic_and_read_only(self):
@@ -372,26 +392,91 @@ class Projections(unittest.TestCase):
     def test_worker_preflight_has_separate_task_not_an_invented_lease(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            binding, events = coherent(root, worker=True)
-            proof = read_json(root, "proof_receipt.json")
-            preflight = copy.deepcopy(proof["commands"][0])
-            preflight.update(side="nightly-preflight", command="cargo +nightly --version")
-            proof["commands"].insert(0, preflight)
-            proof["result"] = "passed"
-            write_json(root, "proof_receipt.json", proof)
-            preflight_events = []
-            for _, event in copy.deepcopy(events):
-                if isinstance(event, dict) and "Admitted" in event:
-                    event["Admitted"]["reservations"] = [{"class": "Cpu", "units": 1}, {"class": "Test", "units": 1}]
-                preflight_events.append(("proof-command-proof-a-nightly-preflight", event))
-            for _, event in events:
-                if isinstance(event, dict) and "ReceiptCreated" in event:
-                    event["ReceiptCreated"]["reference"] = "proof_receipt.json#/commands/1"
-            seal(root, binding, preflight_events + events)
+            coherent(root, worker=True)
             report = subject.reconcile(root, kind="worker")
             self.assertEqual(report["status"], "coherent", report["issues"])
             self.assertEqual(report["counts"]["executed_proof_command_tasks"], 2)
             self.assertEqual(report["coverage"]["worker_preflight_lease"], "not_separately_published")
+            self.assertEqual(report["coverage"]["worker_revision_binding"],
+                             "proof_receipt_resource_lease_join")
+            self.assertEqual(report["coverage"]["input/revision-admission.json"],
+                             "not_published_by_worker")
+
+    def test_worker_binding_rejects_receipt_lease_or_head_disagreement(self):
+        for code in ["worker_revision_mismatch", "worker_revision_head_mismatch"]:
+            with self.subTest(code=code), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                coherent(root, worker=True)
+                path = "resource_lease.json" if code == "worker_revision_mismatch" else "proof_receipt.json"
+                value = read_json(root, path)
+                if code == "worker_revision_mismatch":
+                    value["revision"]["reviewed_commit"] = "c" * 40
+                else:
+                    value["head"] = "c" * 40
+                write_json(root, path, value)
+                report = subject.reconcile(root, kind="worker")
+                self.assertNotEqual(report["status"], "coherent")
+                self.assertIn(code, {row["code"] for row in report["issues"]})
+
+    def test_unresolved_worker_matches_production_result_and_refused_lease(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            binding, events = coherent(root, worker=True)
+            proof = read_json(root, "proof_receipt.json")
+            proof["result"] = "skipped_unresolved"
+            proof["commands"][1].update(status="skipped", exit_code=None,
+                                         duration_ms=0,
+                                         reason="typed proof intent unresolved")
+            write_json(root, "proof_receipt.json", proof)
+            lease = read_json(root, "resource_lease.json")
+            lease.update(status="refused", cpu=0, memory_mb=0, disk_mb=0,
+                         scratch=False,
+                         reason="executor adapter could not resolve the typed proof intent")
+            write_json(root, "resource_lease.json", lease)
+
+            head_task = "proof-command-proof-a-head"
+            unresolved_events = []
+            for task_id, event in events:
+                if task_id != head_task:
+                    unresolved_events.append((task_id, event))
+                elif isinstance(event, dict) and (
+                        "Proposed" in event or "ConsumerAttached" in event):
+                    unresolved_events.append((task_id, event))
+            unresolved_events.append((head_task, {
+                "TerminallyDeclined": {
+                    "at": 50,
+                    "disposition": "Refused",
+                    "reason": "executor adapter could not resolve the typed proof intent",
+                    "existing_receipt": None,
+                }
+            }))
+            seal(root, binding, unresolved_events)
+
+            report = subject.reconcile(root, kind="worker")
+            self.assertEqual(report["status"], "coherent", report["issues"])
+            self.assertEqual(report["counts"]["executed_proof_command_tasks"], 1)
+
+            missing_head_events = [row for row in unresolved_events
+                                   if row[0] != head_task]
+            seal(root, binding, missing_head_events)
+            report = subject.reconcile(root, kind="worker")
+            self.assertIn("worker_unresolved_head_task_mismatch",
+                          {row["code"] for row in report["issues"]})
+            seal(root, binding, unresolved_events)
+
+            lease["status"] = "granted"
+            write_json(root, "resource_lease.json", lease)
+            report = subject.reconcile(root, kind="worker")
+            self.assertIn("worker_unresolved_lease_mismatch",
+                          {row["code"] for row in report["issues"]})
+
+            lease["status"] = "refused"
+            write_json(root, "resource_lease.json", lease)
+            proof["commands"][1]["status"] = "passed"
+            write_json(root, "proof_receipt.json", proof)
+            report = subject.reconcile(root, kind="worker")
+            self.assertIn("proof_result_command_mismatch",
+                          {row["code"] for row in report["issues"]})
 
     def test_legacy_mode_never_grants_current_coherence(self):
         self.assertEqual(subject.reconcile(self.root, legacy=True)["status"], "unverifiable")
@@ -488,6 +573,46 @@ class Projections(unittest.TestCase):
                 self.assertNotIn(b"Traceback", result.stderr)
                 self.assertTrue(json.loads(result.stdout)["input_unavailable"])
         write_json(self.root, name, original)
+
+    def test_malformed_nested_collections_emit_bounded_json_and_replace_stale_report(self):
+        self.change("work_queue.json",
+                    lambda row: row["tasks"][0].update(status="planned"))
+        self.change("review/receipt_routes.json",
+                    lambda row: row["routes"][0].update(lease_ids=None))
+
+        command = [sys.executable, str(HERE / "reconcile-task-projections.py"),
+                   str(self.root)]
+        result = subprocess.run(command, capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 2)
+        self.assertNotIn(b"Traceback", result.stderr)
+        report = json.loads(result.stdout)
+        codes = {row["code"] for row in report["issues"]}
+        self.assertTrue(report["input_unavailable"])
+        self.assertIn("invalid_projection_rows", codes)
+        self.assertIn("successful_sensor_left_planned", codes)
+
+        stale = {"schema": subject.SCHEMA, "status": "coherent", "stale": True}
+        write_json(self.root, subject.REPORT_PATH, stale)
+        written = subprocess.run([*command, "--write-report"],
+                                 capture_output=True, timeout=10)
+        self.assertEqual(written.returncode, 2)
+        replacement = read_json(self.root, subject.REPORT_PATH)
+        self.assertNotEqual(replacement, stale)
+        self.assertTrue(replacement["input_unavailable"])
+        self.assertIn("successful_sensor_left_planned",
+                      {row["code"] for row in replacement["issues"]})
+
+    def test_nested_collection_helpers_fail_closed_without_raising(self):
+        packet = subject.Packet(self.root)
+        self.assertEqual(packet.rows({"consumers": None}, "snapshot", "consumers"), [])
+        self.assertEqual(packet.rows({"reservations": "bad"}, "snapshot", "reservations"), [])
+        self.assertEqual(packet.strings({"lease_ids": None}, "routes", "lease_ids"), [])
+        self.assertEqual(packet.mapping({"run": []}, "metrics", "run"), {})
+        self.assertTrue(packet.input_unavailable)
+        self.assertEqual(
+            {row[0] for row in packet.issues},
+            {"invalid_projection_rows", "invalid_projection_object"},
+        )
 
     def test_historical_incident_corpus_preserves_every_expected_violation(self):
         corpus = HERE.parent / "fixtures/authority-incidents"

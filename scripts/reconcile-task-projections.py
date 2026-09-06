@@ -89,8 +89,15 @@ def proof_result_consistent(proof: dict, kind: str) -> bool:
                    for status in sides.values())):
         return False
     if kind == "worker":
-        expected = "sanitizer_ub_detected" if head == "failed" and proof.get("kind") == "sanitizer-witness" else head
-        return set(sides) <= {"head", "nightly-preflight"} and result == expected
+        if (proof.get("test_patch_mode") != "head-only"
+                or set(sides) != {"head", "nightly-preflight"}):
+            return False
+        if result == "skipped_unresolved":
+            return head == "skipped"
+        expected = ("sanitizer_ub_detected"
+                    if head == "failed" and proof.get("kind") == "sanitizer-witness"
+                    else head)
+        return result == expected
     if proof.get("kind") not in {"focused-head", "focused-build", "focused-red-green"}:
         return False
     if head != "passed":
@@ -208,12 +215,44 @@ class Packet:
     def rows(self, document: Any, path: str, key: str | None = None) -> list[dict]:
         if document is None:
             return []
+        if key is not None and not isinstance(document, dict):
+            self.input_unavailable = True
+            self.issue("invalid_projection_rows", path, key)
+            return []
         value = document.get(key) if key is not None else document
         if (not isinstance(value, list) or len(value) > MAX_ROWS
                 or any(not isinstance(row, dict) for row in value)):
             self.input_unavailable = True
-            self.issue("invalid_projection_rows", path)
+            self.issue("invalid_projection_rows", path, key or "rows")
             return []
+        return value
+
+    def strings(self, document: Any, path: str, key: str) -> list[str]:
+        if not isinstance(document, dict):
+            self.input_unavailable = True
+            self.issue("invalid_projection_rows", path, key)
+            return []
+        value = document.get(key)
+        if (not isinstance(value, list) or len(value) > MAX_ROWS
+                or any(not isinstance(row, str) for row in value)):
+            self.input_unavailable = True
+            self.issue("invalid_projection_rows", path, key)
+            return []
+        return value
+
+    def mapping(self, document: Any, path: str, key: str,
+                identity: str = "") -> dict:
+        if not isinstance(document, dict):
+            self.input_unavailable = True
+            self.issue("invalid_projection_object", path, identity or key)
+            return {}
+        value = document.get(key)
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            self.input_unavailable = True
+            self.issue("invalid_projection_object", path, identity or key)
+            return {}
         return value
 
     def index(self, rows: list[dict], path: str, key: str = "id") -> dict[str, dict]:
@@ -242,20 +281,74 @@ def capture_validation(packet: Packet, path: str, operation: Any) -> Any:
         return None
 
 
+def worker_revision_binding(packet: Packet, verifier: Any,
+                            proof: Any, lease: Any) -> dict | None:
+    """Join worker output to its published revision evidence without inventing admission."""
+    if not isinstance(proof, dict) or not isinstance(lease, dict):
+        return None
+    proof_revision = proof.get("revision")
+    lease_revision = lease.get("revision")
+    proof_valid = capture_validation(
+        packet,
+        "proof_receipt.json",
+        lambda: (verifier._require_revision_ref(proof_revision, "worker proof"), True)[1],
+    )
+    lease_valid = capture_validation(
+        packet,
+        "resource_lease.json",
+        lambda: (verifier._require_revision_ref(lease_revision, "worker lease"), True)[1],
+    )
+    if proof_valid is None or lease_valid is None:
+        return None
+    if proof_revision != lease_revision:
+        packet.issue("worker_revision_mismatch", "resource_lease.json")
+        return None
+    reviewed_commit = proof_revision.get("reviewed_commit")
+    if (not isinstance(reviewed_commit, str)
+            or re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", reviewed_commit) is None
+            or proof.get("head") != reviewed_commit):
+        packet.issue("worker_revision_head_mismatch", "proof_receipt.json",
+                     proof.get("id", ""))
+        return None
+    proof_id = proof.get("id")
+    if not isinstance(proof_id, str) or not proof_id.strip() or lease.get("consumer") != proof_id:
+        packet.issue("worker_revision_lease_identity_mismatch", "resource_lease.json",
+                     proof_id or "")
+        return None
+    packet.coverage["worker_revision_binding"] = "proof_receipt_resource_lease_join"
+    packet.coverage["input/revision-admission.json"] = "not_published_by_worker"
+    # The canonical ledger serializer preserves RevisionRef field order.
+    return {
+        "digest": proof_revision["digest"],
+        "semantics": proof_revision["semantics"],
+        "reviewed_commit": proof_revision["reviewed_commit"],
+    }
+
+
 def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict:
     packet = Packet(root)
     verifier = verifier_module()
     binding = None
-    admission = packet.load("input/revision-admission.json", dict,
-                            "ub-review.revision_admission.v1", required=not legacy)
-    if admission is not None:
-        binding = capture_validation(packet, "input/revision-admission.json",
-                                     lambda: verifier.load_revision_binding(packet.root))
-        if binding is not None:
-            valid = capture_validation(packet, "input/revision-admission.json",
-                                       lambda: (verifier._require_revision_ref(binding, "admission"), True)[1])
-            if valid is None:
-                binding = None
+    worker_proof = None
+    worker_lease = None
+    if kind == "worker" and not legacy:
+        packet.coverage["input/revision-admission.json"] = "not_published_by_worker"
+        worker_proof = packet.load("proof_receipt.json", dict,
+                                   "ub-review.proof_receipt.v1", required=True)
+        worker_lease = packet.load("resource_lease.json", dict,
+                                   "ub-review.resource_lease.v1", required=True)
+        binding = worker_revision_binding(packet, verifier, worker_proof, worker_lease)
+    else:
+        admission = packet.load("input/revision-admission.json", dict,
+                                "ub-review.revision_admission.v1", required=not legacy)
+        if admission is not None:
+            binding = capture_validation(packet, "input/revision-admission.json",
+                                         lambda: verifier.load_revision_binding(packet.root))
+            if binding is not None:
+                valid = capture_validation(packet, "input/revision-admission.json",
+                                           lambda: (verifier._require_revision_ref(binding, "admission"), True)[1])
+                if valid is None:
+                    binding = None
     snapshot_path = "review/task_ledger_snapshot.json"
     snapshot = packet.load(snapshot_path, dict, "ub-review.task_ledger_snapshot.v1",
                            required=not legacy)
@@ -308,8 +401,9 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
             packet.issue("portfolio_decision_inventory", portfolio_path)
 
     receipt_path = "proof_receipt.json" if kind == "worker" else "review/proof_receipts.json"
-    proof_doc = packet.load(receipt_path, dict if kind == "worker" else list,
-                            required=not legacy)
+    proof_doc = (worker_proof if kind == "worker" and not legacy else
+                 packet.load(receipt_path, dict if kind == "worker" else list,
+                             required=not legacy))
     raw_proofs = packet.rows([proof_doc] if kind == "worker" and proof_doc is not None else proof_doc, receipt_path)
     proofs = []
     commands: dict[str, tuple[dict, dict]] = {}
@@ -375,7 +469,7 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
     executed_sensors = 0
     proof_ms = 0
     for task_id, task in ledger.items():
-        timing = task.get("timing", {})
+        timing = packet.mapping(task, snapshot_path, "timing", task_id)
         executed = timing.get("process_started_at") is not None
         source = task.get("source")
         if executed:
@@ -384,8 +478,9 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
             else:
                 executed_proofs += 1
                 proof_ms += timing.get("process_ms") or 0
-        receipt = task.get("receipt") or {}
-        reference = receipt.get("Created", {}).get("reference") if isinstance(receipt, dict) else None
+        receipt = packet.mapping(task, snapshot_path, "receipt", task_id)
+        created = packet.mapping(receipt, snapshot_path, "Created", task_id)
+        reference = created.get("reference")
         if reference is not None:
             if reference in credited:
                 packet.issue("duplicate_receipt_credit", snapshot_path, task_id)
@@ -423,7 +518,7 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
             elif queue.get(task_id, {}).get("status") == "planned":
                 packet.issue("successful_sensor_left_planned" if task.get("execution_disposition") == "Succeeded"
                              else "terminal_task_left_planned", queue_path, task_id)
-        for consumer in task.get("consumers", []):
+        for consumer in packet.rows(task, snapshot_path, "consumers"):
             if consumer.get("requirement") == "Required" and (task.get("execution_disposition") != "Succeeded" or not reference):
                 # Source proposals do not own execution credit. Required request
                 # satisfaction is checked below through exact request_ids.
@@ -467,7 +562,8 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
                 packet.issue("candidate_missing_from_queue", portfolio_path, identity)
             command_tasks = [task for ref, task in credited.items() if ref in commands and commands[ref][0].get("id") == identity]
             for task in command_tasks:
-                required = any(c.get("requirement") == "Required" for c in task.get("consumers", []))
+                required = any(c.get("requirement") == "Required"
+                               for c in packet.rows(task, snapshot_path, "consumers"))
                 if type(candidate.get("required")) is not bool or candidate["required"] != required:
                     packet.issue("candidate_requiredness_mismatch", portfolio_path, identity)
 
@@ -480,7 +576,9 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
                 packet.issue("successful_sensor_left_planned", queue_path, task_id)
 
     lease_path = "resource_lease.json" if kind == "worker" else "review/resource_leases.json"
-    lease_doc = packet.load(lease_path, dict if kind == "worker" else list, required=not legacy)
+    lease_doc = (worker_lease if kind == "worker" and not legacy else
+                 packet.load(lease_path, dict if kind == "worker" else list,
+                             required=not legacy))
     leases = packet.rows([lease_doc] if kind == "worker" and lease_doc is not None else lease_doc, lease_path)
     lease_index = packet.index(leases, lease_path)
     for lease in leases:
@@ -490,16 +588,40 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
         if lease.get("status") == "granted" and lease.get("consumer") not in receipt_index:
             packet.issue("granted_lease_without_receipt", lease_path, lease.get("id", ""))
     for proof in proofs:
-        if any(owner is proof and c.get("status") in {"passed", "failed", "timed_out"}
+        if any(owner is proof and c.get("side") == "head"
+               and c.get("status") in {"passed", "failed", "timed_out"}
                for owner, c in commands.values()):
             if not legacy and not any(l.get("consumer") == proof.get("id") and l.get("status") == "granted" for l in leases):
                 packet.issue("executed_proof_without_lease", lease_path, proof.get("id", ""))
+        if kind == "worker" and proof.get("result") == "skipped_unresolved":
+            matching = [lease for lease in leases if lease.get("consumer") == proof.get("id")]
+            valid_refusal = (len(matching) == 1
+                             and matching[0].get("status") == "refused"
+                             and all(matching[0].get(key) == 0
+                                     for key in ("cpu", "memory_mb", "disk_mb"))
+                             and matching[0].get("scratch") is False
+                             and matching[0].get("network") is False)
+            if not valid_refusal:
+                packet.issue("worker_unresolved_lease_mismatch", lease_path,
+                             proof.get("id", ""))
+            proof_id = proof.get("id")
+            head_task_id = ("proof-command-"
+                            + verifier.sanitize_artifact_name(proof_id)
+                            + "-head") if isinstance(proof_id, str) else ""
+            head_task = ledger.get(head_task_id)
+            if (head_task is None
+                    or head_task.get("source") != "Worker"
+                    or head_task.get("state") != {"TerminallyDeclined": "Refused"}
+                    or head_task.get("non_execution_disposition") != "Refused"
+                    or head_task.get("execution_disposition") is not None):
+                packet.issue("worker_unresolved_head_task_mismatch", snapshot_path,
+                             head_task_id or proof.get("id", ""))
 
     gate_path = "review/gate_outcome.json"
     gate = packet.load(gate_path, dict, "ub-review.gate_outcome.v1", required=kind == "review" and not legacy)
     if gate is not None:
         joined(gate, gate_path)
-        required = gate.get("required_proof", {})
+        required = packet.mapping(gate, gate_path, "required_proof")
         counts = [required.get(k) for k in ("matched", "passed", "failed", "skipped")]
         if not all(integer(n) for n in counts) or counts[0] != sum(counts[1:]):
             packet.issue("required_count_mismatch", gate_path)
@@ -530,7 +652,7 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
     if portfolio is not None:
         if portfolio.get("budget_seconds") == 0 and any(c.get("required") is True for c in candidates.values()) and not portfolio.get("selected_task_ids"):
             packet.issue("required_proof_starved_at_zero_remaining_budget", portfolio_path)
-        runtime = portfolio.get("runtime", {})
+        runtime = packet.mapping(portfolio, portfolio_path, "runtime")
         if (portfolio.get("budget_seconds") == 0 and integer(runtime.get("deadline_remaining_seconds"))
                 and runtime["deadline_remaining_seconds"] > 0
                 and any(integer(c.get("duration_ms")) and integer(c.get("timeout_sec"))
@@ -543,7 +665,18 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
 
     # Compare existing reservation quantities without inventing a scheduler.
     for ref, task in credited.items():
-        reservations = {r["class"]: r["units"] for r in task.get("reservations", [])}
+        reservations = {}
+        for reservation in packet.rows(task, snapshot_path, "reservations"):
+            resource_class = reservation.get("class")
+            units = reservation.get("units")
+            if not isinstance(resource_class, str) or not integer(units) or units == 0:
+                packet.input_unavailable = True
+                packet.issue("invalid_reservation", snapshot_path, task.get("id", ""))
+                continue
+            if resource_class in reservations:
+                packet.issue("duplicate_reservation", snapshot_path, task.get("id", ""))
+                continue
+            reservations[resource_class] = units
         if ref in commands:
             proof, command = commands[ref]
             matches = [l for l in leases if l.get("consumer") == proof.get("id") and l.get("status") == "granted"]
@@ -562,11 +695,12 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
                 if reservations != expected:
                     packet.issue("lease_reservation_mismatch", ref, task["id"])
         elif ref in sensor_rows and task["id"] in queue:
-            lease = queue[task["id"]].get("lease", {})
+            lease = packet.mapping(queue[task["id"]], queue_path, "lease", task["id"])
             expected = {"Cpu": lease.get("cpu", 0)}
             if lease.get("disk_mb", 0) > 0:
                 expected["Disk"] = lease["disk_mb"]
-            if reservations != expected and task.get("timing", {}).get("admitted_at") is not None:
+            timing = packet.mapping(task, snapshot_path, "timing", task["id"])
+            if reservations != expected and timing.get("admitted_at") is not None:
                 packet.issue("sensor_reservation_mismatch", queue_path, task["id"])
 
     # Required proof counts must trace to exact source requests and complete
@@ -575,7 +709,8 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
         required_requests = [r for r in requests if r.get("required") is True
                              and r.get("lane") == "intelligent-ci-policy"]
         classified = {"matched": len(required_requests), "passed": 0, "failed": 0, "skipped": 0}
-        if gate.get("required_proof", {}).get("matched") != len(required_requests):
+        required_projection = packet.mapping(gate, gate_path, "required_proof")
+        if required_projection.get("matched") != len(required_requests):
             packet.issue("required_request_count_mismatch", gate_path)
         for request in required_requests:
             matching = [p for p in proofs if request.get("id") in p.get("request_ids", [])]
@@ -593,7 +728,7 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
             if gate.get("conclusion") == "pass" and not successful:
                 packet.issue("pass_without_required_receipt", gate_path, request.get("id", ""))
 
-        if gate.get("required_proof") != classified:
+        if required_projection != classified:
             packet.issue("required_receipt_count_mismatch", gate_path)
 
     if kind == "worker":
@@ -610,7 +745,8 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
                 packet.issue("duplicate_fill_entry", fill_path, entry.get("check_id", ""))
             indexed[key] = entry
         for task_id, task in ledger.items():
-            if task.get("source") == "Sensor" and task.get("timing", {}).get("process_started_at") is not None:
+            timing = packet.mapping(task, snapshot_path, "timing", task_id)
+            if task.get("source") == "Sensor" and timing.get("process_started_at") is not None:
                 entry = indexed.get(("sensor", task_id.removeprefix("sensor-")))
                 if entry is None:
                     packet.issue("executed_sensor_missing_from_fill", fill_path, task_id)
@@ -635,7 +771,7 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
             proof = receipt_index.get(route.get("receipt_id"))
             if proof is None or route.get("result") != proof.get("result"):
                 packet.issue("route_receipt_mismatch", routes_path, route.get("id", ""))
-            for lease_id in route.get("lease_ids", []):
+            for lease_id in packet.strings(route, routes_path, "lease_ids"):
                 lease = lease_index.get(lease_id)
                 if lease is None or lease.get("consumer") != route.get("receipt_id"):
                     packet.issue("route_lease_mismatch", routes_path, route.get("id", ""))
@@ -643,7 +779,9 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
     calibration_path = "review/calibration.json"
     calibration = packet.load(calibration_path, dict, "ub-review.calibration.v0")
     if calibration is not None and ledger:
-        reported = calibration.get("counts", {}).get("proof_requests_executed")
+        reported = packet.mapping(calibration, calibration_path, "counts").get(
+            "proof_requests_executed"
+        )
         # This v0 field counts ALL proof receipts, including skipped receipts,
         # not executed requests or physical command sides.
         count = len(proofs)
@@ -652,14 +790,15 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
 
     metrics_path = "review/metrics.json"
     metrics = packet.load(metrics_path, dict)
+    metrics_run = packet.mapping(metrics, metrics_path, "run") if metrics is not None else {}
     if metrics is not None and ledger:
-        measured = metrics.get("run", {}).get("proof_command_duration_ms_sum")
+        measured = metrics_run.get("proof_command_duration_ms_sum")
         receipt_ms = sum(c.get("duration_ms", 0) for _, c in commands.values() if integer(c.get("duration_ms")))
         if measured is not None and (not integer(measured) or measured != receipt_ms):
             packet.issue("proof_duration_projection_mismatch", metrics_path)
     if scheduler is not None and metrics is not None:
         for key in ("elapsed_wall_ms", "scheduler_roles", "streams", "loops", "phases"):
-            if key in scheduler and key in metrics.get("run", {}) and scheduler[key] != metrics["run"][key]:
+            if key in scheduler and key in metrics_run and scheduler[key] != metrics_run[key]:
                 packet.issue("scheduler_metric_mismatch", scheduler_path, key)
     cost_path = "review/ub-review-cost.json"
     cost = packet.load(cost_path, dict, "ub-review.cost_receipt.v1")

@@ -26,6 +26,22 @@ For standalone worker output, select the different receipt layout explicitly:
 python scripts/reconcile-task-projections.py target/worker-proof --kind worker
 ```
 
+The standalone worker does not publish `input/revision-admission.json`. Worker
+reconciliation therefore derives a **shadow comparison binding**, not revision
+admission authority, by requiring exact agreement among the revision-stamped
+`proof_receipt.json`, the published head `resource_lease.json`, and the
+replay-verified TaskLedger event/snapshot pair. The receipt head must equal the
+binding's reviewed commit and the lease consumer must equal the proof ID. This
+is enough to detect disagreement inside one worker packet; it does not prove the
+producer or elevate worker output into merge authority.
+
+An unresolved typed worker proof is coherent only in its exact production
+shape: the nightly preflight is a separately executed ledger task, the head
+command is skipped, the aggregate result is `skipped_unresolved`, and the
+published head lease is `refused` with zero resources. A skipped head paired
+with a granted lease, or an unresolved result paired with an executed head, is
+a contradiction.
+
 For the retained #961 incidents, use `--legacy` with a case directory under
 `fixtures/authority-incidents`. Legacy packets do not gain current-revision
 or execution authority from this verifier. The regression suite consumes the
@@ -62,6 +78,10 @@ Malformed or unreadable input sets `input_unavailable` and returns exit 2, even
 when the report retains useful diagnostics from other readable projections.
 `observations_truncated` is separate from `issues_truncated`; many non-blocking
 observations do not turn coherent accounting into a contradiction.
+Nested collections and objects are validated before iteration. A malformed
+route lease list, task consumer/reservation list, queue lease, Required-proof
+map, runtime map, calibration count map, or metrics run map cannot suppress
+independent diagnostics or leave a stale coherent report in place.
 
 ## Compared surfaces and limits
 
@@ -101,3 +121,10 @@ publication boundary. The remaining #957 work must establish production-generate
 coherent packets, complete missing projection/source relationships and reuse
 this evidence before #958-#962 change authority. Until that work is proven,
 existing CI checks stay in place and this report cannot certify rollout readiness.
+
+The Python implementation is an explicitly temporary extension of the existing
+artifact-verifier boundary. Issue #1292 owns moving the projection reader,
+reducer joins, bounded report contract, and parity corpus into Rust before the
+current policy review date. Its exit condition includes a retained-packet
+parity window and deletion of `scripts/reconcile-task-projections.py` and
+`scripts/test-task-projections.py`; policy expiry is not an implicit migration.
