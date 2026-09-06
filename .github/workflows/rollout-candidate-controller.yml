@@ -1,0 +1,317 @@
+name: Publish validated UB Review rollout candidates
+
+on:
+  push:
+    branches:
+      - ops/rollout-candidate-controller-20260906
+
+permissions: {}
+
+concurrency:
+  group: ub-review-rollout-candidate-controller-20260906
+  cancel-in-progress: false
+
+jobs:
+  validate-efficiency:
+    name: validate bootstrap and LCOV source candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout controller inputs
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          path: controller
+          persist-credentials: false
+
+      - name: Checkout exact main base
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          repository: EffortlessMetrics/ub-review
+          ref: 274d62cf3362f3bfcb47034e6c7d6301efcc5912
+          fetch-depth: 0
+          path: work
+          persist-credentials: false
+
+      - name: Install fixed Rust toolchain
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772
+        with:
+          toolchain: 1.95.0
+          components: rustfmt,clippy
+
+      - name: Apply and verify bootstrap and coverage changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload="$GITHUB_WORKSPACE/controller/.github/controller/rollout-candidate-patches.tar.gz.b64"
+          test "$(base64 -d "$payload" | sha256sum | cut -d' ' -f1)" = \
+            "ac68d30945487d97a97cdd5f1a034917a7f0cc86fff115a62210891c84de2526"
+          mkdir -p "$RUNNER_TEMP/rollout-patches"
+          base64 -d "$payload" | tar -xzf - -C "$RUNNER_TEMP/rollout-patches"
+
+          cd "$GITHUB_WORKSPACE/work"
+          test "$(git rev-parse HEAD)" = \
+            "274d62cf3362f3bfcb47034e6c7d6301efcc5912"
+          git config user.name EffortlessSteven
+          git config user.email git@effortlesssteven.com
+          git am \
+            "$RUNNER_TEMP/rollout-patches/0001-fix-action-isolate-and-cache-the-source-bootstrap-bu.patch"
+          git am \
+            "$RUNNER_TEMP/rollout-patches/0003-fix-ci-hand-off-LCOV-without-re-downloading-the-revi.patch"
+
+          python scripts/test-action-bootstrap.py
+          python scripts/verify-bun-review-artifacts.py --self-test
+          cargo fmt --all -- --check
+          cargo check --workspace --all-targets --locked
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo test --workspace --all-targets --locked
+          cargo doc --workspace --no-deps --locked
+          cargo run --locked --package xtask -- policy-check
+          git diff 274d62cf3362f3bfcb47034e6c7d6301efcc5912 --check
+
+          expected=$'.github/workflows/ub-review-gate.yml\naction.yml\npolicy/allow.toml\nscripts/test-action-bootstrap.py'
+          actual="$(git diff --name-only 274d62cf3362f3bfcb47034e6c7d6301efcc5912 | sort)"
+          test "$actual" = "$expected"
+
+          mkdir -p "$GITHUB_WORKSPACE/bundle-efficiency"
+          tar -czf "$GITHUB_WORKSPACE/bundle-efficiency/efficiency-source.tar.gz" \
+            .github/workflows/ub-review-gate.yml \
+            action.yml \
+            policy/allow.toml \
+            scripts/test-action-bootstrap.py
+          cd "$GITHUB_WORKSPACE/bundle-efficiency"
+          sha256sum efficiency-source.tar.gz > efficiency-source.tar.gz.sha256
+          printf '%s\n' \
+            'base=274d62cf3362f3bfcb47034e6c7d6301efcc5912' \
+            'patches=0001,0003' \
+            'validation=python-bootstrap,verifier-self-test,fmt,check,clippy,test,doc,policy,diff-check' \
+            > validation.receipt
+
+      - name: Upload validated bootstrap and LCOV source
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: validated-rollout-efficiency-source
+          path: bundle-efficiency
+          if-no-files-found: error
+          retention-days: 7
+
+  validate-receipts:
+    name: validate TaskLedger receipt-content joins
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout controller inputs
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          path: controller
+          persist-credentials: false
+
+      - name: Checkout exact main base
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          repository: EffortlessMetrics/ub-review
+          ref: 274d62cf3362f3bfcb47034e6c7d6301efcc5912
+          fetch-depth: 0
+          path: work
+          persist-credentials: false
+
+      - name: Install fixed Rust toolchain
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772
+        with:
+          toolchain: 1.95.0
+          components: rustfmt,clippy
+
+      - name: Apply and verify receipt-content joins
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload="$GITHUB_WORKSPACE/controller/.github/controller/rollout-candidate-patches.tar.gz.b64"
+          test "$(base64 -d "$payload" | sha256sum | cut -d' ' -f1)" = \
+            "ac68d30945487d97a97cdd5f1a034917a7f0cc86fff115a62210891c84de2526"
+          mkdir -p "$RUNNER_TEMP/rollout-patches"
+          base64 -d "$payload" | tar -xzf - -C "$RUNNER_TEMP/rollout-patches"
+
+          cd "$GITHUB_WORKSPACE/work"
+          test "$(git rev-parse HEAD)" = \
+            "274d62cf3362f3bfcb47034e6c7d6301efcc5912"
+          git config user.name EffortlessSteven
+          git config user.email git@effortlesssteven.com
+          git am \
+            "$RUNNER_TEMP/rollout-patches/0002-fix-verifier-join-ledger-receipt-claims-to-current-a.patch"
+
+          python -m py_compile scripts/verify-bun-review-artifacts.py
+          python scripts/verify-bun-review-artifacts.py --self-test
+          cargo fmt --all -- --check
+          cargo check --workspace --all-targets --locked
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo test --workspace --all-targets --locked
+          cargo doc --workspace --no-deps --locked
+          cargo run --locked --package xtask -- policy-check
+          git diff 274d62cf3362f3bfcb47034e6c7d6301efcc5912 --check
+
+          expected=$'docs/REVIEW_LEDGER.md\ndocs/specs/UB-REVIEW-SPEC-0004-artifact-contract.md\nscripts/verify-bun-review-artifacts.py'
+          actual="$(git diff --name-only 274d62cf3362f3bfcb47034e6c7d6301efcc5912 | sort)"
+          test "$actual" = "$expected"
+
+          mkdir -p "$GITHUB_WORKSPACE/bundle-receipts"
+          tar -czf "$GITHUB_WORKSPACE/bundle-receipts/receipt-joins-source.tar.gz" \
+            docs/REVIEW_LEDGER.md \
+            docs/specs/UB-REVIEW-SPEC-0004-artifact-contract.md \
+            scripts/verify-bun-review-artifacts.py
+          cd "$GITHUB_WORKSPACE/bundle-receipts"
+          sha256sum receipt-joins-source.tar.gz > receipt-joins-source.tar.gz.sha256
+          printf '%s\n' \
+            'base=274d62cf3362f3bfcb47034e6c7d6301efcc5912' \
+            'patches=0002' \
+            'validation=py-compile,verifier-self-test,fmt,check,clippy,test,doc,policy,diff-check' \
+            > validation.receipt
+
+      - name: Upload validated receipt-join source
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: validated-rollout-receipt-source
+          path: bundle-receipts
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-efficiency:
+    name: publish validated bootstrap and LCOV source
+    needs: validate-efficiency
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout exact main base without persisted credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          repository: EffortlessMetrics/ub-review
+          ref: 274d62cf3362f3bfcb47034e6c7d6301efcc5912
+          fetch-depth: 0
+          path: work
+          persist-credentials: false
+
+      - name: Download validated source
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: validated-rollout-efficiency-source
+          path: bundle
+
+      - name: Commit and fast-forward source branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/bundle"
+          sha256sum --check efficiency-source.tar.gz.sha256
+          expected_archive=$'.github/workflows/ub-review-gate.yml\naction.yml\npolicy/allow.toml\nscripts/test-action-bootstrap.py'
+          actual_archive="$(tar -tzf efficiency-source.tar.gz | sort)"
+          test "$actual_archive" = "$expected_archive"
+
+          cd "$GITHUB_WORKSPACE/work"
+          test "$(git rev-parse HEAD)" = \
+            "274d62cf3362f3bfcb47034e6c7d6301efcc5912"
+          tar -xzf "$GITHUB_WORKSPACE/bundle/efficiency-source.tar.gz"
+
+          git config user.name EffortlessSteven
+          git config user.email git@effortlesssteven.com
+          git add \
+            .github/workflows/ub-review-gate.yml \
+            action.yml \
+            policy/allow.toml \
+            scripts/test-action-bootstrap.py
+          git diff --cached --check
+          actual="$(git diff --cached --name-only | sort)"
+          test "$actual" = "$expected_archive"
+          git commit -m 'fix(action): cache bootstrap and isolate LCOV handoff'
+
+          remote="https://x-access-token:${GH_TOKEN}@github.com/EffortlessMetrics/ub-review.git"
+          remote_head="$(git ls-remote "$remote" refs/heads/chatgpt/rollout-bootstrap-lcov | cut -f1)"
+          test "$remote_head" = \
+            "274d62cf3362f3bfcb47034e6c7d6301efcc5912"
+          git push "$remote" HEAD:refs/heads/chatgpt/rollout-bootstrap-lcov
+          echo "published_head=$(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+
+  publish-receipts:
+    name: publish validated receipt-content joins
+    needs: validate-receipts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout exact main base without persisted credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          repository: EffortlessMetrics/ub-review
+          ref: 274d62cf3362f3bfcb47034e6c7d6301efcc5912
+          fetch-depth: 0
+          path: work
+          persist-credentials: false
+
+      - name: Download validated source
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: validated-rollout-receipt-source
+          path: bundle
+
+      - name: Commit and fast-forward source branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/bundle"
+          sha256sum --check receipt-joins-source.tar.gz.sha256
+          expected_archive=$'docs/REVIEW_LEDGER.md\ndocs/specs/UB-REVIEW-SPEC-0004-artifact-contract.md\nscripts/verify-bun-review-artifacts.py'
+          actual_archive="$(tar -tzf receipt-joins-source.tar.gz | sort)"
+          test "$actual_archive" = "$expected_archive"
+
+          cd "$GITHUB_WORKSPACE/work"
+          test "$(git rev-parse HEAD)" = \
+            "274d62cf3362f3bfcb47034e6c7d6301efcc5912"
+          tar -xzf "$GITHUB_WORKSPACE/bundle/receipt-joins-source.tar.gz"
+
+          git config user.name EffortlessSteven
+          git config user.email git@effortlesssteven.com
+          git add \
+            docs/REVIEW_LEDGER.md \
+            docs/specs/UB-REVIEW-SPEC-0004-artifact-contract.md \
+            scripts/verify-bun-review-artifacts.py
+          git diff --cached --check
+          actual="$(git diff --cached --name-only | sort)"
+          test "$actual" = "$expected_archive"
+          git commit -m 'fix(verifier): join ledger claims to receipt content'
+
+          remote="https://x-access-token:${GH_TOKEN}@github.com/EffortlessMetrics/ub-review.git"
+          remote_head="$(git ls-remote "$remote" refs/heads/chatgpt/957-receipt-content-joins | cut -f1)"
+          test "$remote_head" = \
+            "274d62cf3362f3bfcb47034e6c7d6301efcc5912"
+          git push "$remote" HEAD:refs/heads/chatgpt/957-receipt-content-joins
+          echo "published_head=$(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+
+  cleanup-controller:
+    name: delete temporary controller branch
+    needs: [publish-efficiency, publish-receipts]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Delete controller ref after both source branches publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/controller-cleanup"
+          cd "$RUNNER_TEMP/controller-cleanup"
+          git init -q
+          remote="https://x-access-token:${GH_TOKEN}@github.com/EffortlessMetrics/ub-review.git"
+          git push "$remote" --delete ops/rollout-candidate-controller-20260906
