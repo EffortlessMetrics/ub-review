@@ -156,9 +156,19 @@ not a second lifecycle model. Event records use contiguous caller order, a
 SHA-256 source-digest chain, strict transition replay, canonical LF-delimited
 JSON bytes, and artifact-relative receipt references. The snapshot is only a
 derived cache: the verifier recomputes it from the event stream and requires
-byte equality. A structurally valid external receipt reference is a pointer,
-not proof; #957 owns joining it to every produced projection after #956 adds
-the remaining proof and worker sources. The verifier therefore still permits
+byte equality. The Python packet verifier also resolves current proof and sensor
+receipt references after replay. It requires regular, non-symlinked JSON files,
+canonical command pointers, matching proof revision and producer identity, and
+terminal outcomes consistent with the lifecycle. Duplicate command identities,
+executed proof rows without a producing task, and successful labels without a
+zero proof exit code are rejected. Receipt-file reads are capped at 8 MiB each
+and 64 MiB in aggregate; these limits do not bound process streams or the whole
+packet. The existing Rust replay format and its golden bytes are unchanged.
+
+This receipt-content join is only part of #957. It does not reconcile queue,
+portfolio, Required satisfaction, lease reuse, scheduler, cost, or calibration
+projections, and does not turn candidate-produced evidence into independent
+merge authority. The verifier therefore still permits
 the pair to be absent in legacy/non-run packets during the shadow rollout.
 
 `review/` (the compiled review surface):
