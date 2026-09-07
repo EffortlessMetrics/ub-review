@@ -336,6 +336,7 @@ pub(crate) fn render_enable_workflow(strategy: &InstallStrategy, mode: ReviewMod
         with:
           # Cache only the action bootstrap. Sensor and proof Cargo commands
           # keep the reviewed repository's ordinary target directory.
+          cache-targets: false
           cache-directories: ${{{{ runner.temp }}}}/ub-review-bootstrap-target
           key: ub-review-bootstrap-{sha}
 
@@ -685,37 +686,42 @@ mod tests {
     }
 
     #[test]
-    fn enable_workflow_caches_source_build() {
+    fn enable_workflow_caches_source_build() -> anyhow::Result<()> {
         let sha = "c".repeat(40);
         let yaml = render_enable_workflow(&InstallStrategy::source(&sha), ReviewModePreset::Gate);
         // The rust-cache step is critical for the source-build path: without it,
         // every run recompiles ~12 min of deps, making ub-review too slow to post
         // before human reviewers. The cache key must include the action SHA so a
         // new pin invalidates it.
-        assert!(
+        anyhow::ensure!(
             yaml.contains("Swatinem/rust-cache"),
             "source workflow must cache the source build"
         );
-        assert!(
+        anyhow::ensure!(
             yaml.contains(&format!("key: ub-review-bootstrap-{sha}")),
             "cache key must be keyed on the action SHA"
         );
-        assert!(
+        anyhow::ensure!(
+            yaml.contains("          cache-targets: false\n          cache-directories:"),
+            "source cache must exclude reviewed workspace targets while retaining the bootstrap directory"
+        );
+        anyhow::ensure!(
             yaml.contains("cache-directories: ${{ runner.temp }}/ub-review-bootstrap-target"),
             "source workflow must cache the isolated bootstrap target"
         );
-        assert!(
+        anyhow::ensure!(
             yaml.contains("install-mode: source"),
             "source fallback must not select an ambient ub-review binary"
         );
-        assert!(
+        anyhow::ensure!(
             yaml.contains("source-target-dir: ${{ runner.temp }}/ub-review-bootstrap-target"),
             "source workflow must route the action build into the isolated cache"
         );
-        assert!(
+        anyhow::ensure!(
             !yaml.contains("CARGO_TARGET_DIR"),
             "source workflow must not redirect reviewed sensor/proof Cargo commands"
         );
+        Ok(())
     }
 
     #[test]
