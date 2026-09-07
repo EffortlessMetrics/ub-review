@@ -157,7 +157,8 @@ SHA-256 source-digest chain, strict transition replay, canonical LF-delimited
 JSON bytes, and artifact-relative receipt references. The snapshot is only a
 derived cache: the verifier recomputes it from the event stream and requires
 byte equality. The Python packet verifier also resolves current proof and sensor
-receipt references after replay. It requires regular, non-symlinked JSON files,
+receipt references after replay. It requires regular JSON files with no symlink
+or Windows reparse point in their relative path, resolved within the packet root,
 canonical command pointers, matching proof revision and producer identity, and
 terminal outcomes consistent with the lifecycle. Duplicate command identities,
 executed proof rows without a producing task, and successful labels without a

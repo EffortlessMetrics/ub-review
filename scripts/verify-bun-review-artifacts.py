@@ -12,6 +12,7 @@ import json
 import math
 import pathlib
 import re
+import stat
 import sys
 import tempfile
 from typing import Any, NoReturn
@@ -2500,6 +2501,7 @@ def require_task_ledger_receipt_links(root: pathlib.Path, snapshot: dict, bindin
     These bounds limit this receipt reader, not the whole packet or capture.
     """
     documents = {}
+    packet_root = root.resolve(strict=True)
     remaining_bytes = 64 * 1024 * 1024
     maximum_file_bytes = 8 * 1024 * 1024
 
@@ -2515,20 +2517,26 @@ def require_task_ledger_receipt_links(root: pathlib.Path, snapshot: dict, bindin
         nonlocal remaining_bytes
         _task_ledger_receipt_reference(relative)
         if relative not in documents:
-            path = root
-            for component in relative.split("/"):
-                path = path / component
-                if path.is_symlink():
-                    fail(f"[unsafe_receipt_path] linked receipt path: {relative}")
-            if not path.is_file():
-                fail(f"[missing_receipt_artifact] missing regular receipt file: {relative}")
             try:
+                path = root
+                for component in relative.split("/"):
+                    path = path / component
+                    metadata = path.lstat()
+                    if (stat.S_ISLNK(metadata.st_mode)
+                            or getattr(metadata, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT):
+                        fail(f"[unsafe_receipt_path] linked receipt path: {relative}")
+                if not stat.S_ISREG(metadata.st_mode):
+                    fail(f"[missing_receipt_artifact] missing regular receipt file: {relative}")
+                if not path.resolve(strict=True).is_relative_to(packet_root):
+                    fail(f"[unsafe_receipt_path] receipt resolves outside packet: {relative}")
                 with path.open("rb") as handle:
                     data = handle.read(min(maximum_file_bytes, remaining_bytes) + 1)
                 if len(data) > maximum_file_bytes or len(data) > remaining_bytes:
                     fail(f"[receipt_artifact_budget] receipt read budget exceeded: {relative}")
                 remaining_bytes -= len(data)
                 documents[relative] = json.loads(data, object_pairs_hook=unique_fields)
+            except (FileNotFoundError, NotADirectoryError):
+                fail(f"[missing_receipt_artifact] missing regular receipt file: {relative}")
             except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError):
                 fail(f"[malformed_receipt_artifact] unreadable JSON receipt: {relative}")
         return documents[relative]
@@ -16471,6 +16479,40 @@ def self_test_task_ledger_receipt_links() -> None:
         path.unlink()
         path.symlink_to(other)
         expect_self_test_failure("linked receipt file", "[unsafe_receipt_path]", lambda: require_task_ledger_artifacts(root))
+
+        # A regular final file is insufficient: an ancestor can redirect the
+        # receipt outside the packet. Windows junctions are not symlinks.
+        root = base / "linked-parent"
+        path, _ = fixture(root, sensor=True)
+        external = base / "external-sensor"
+        path.parent.rename(external)
+        path.parent.symlink_to(external, target_is_directory=True)
+        expect_self_test_failure("linked receipt parent", "[unsafe_receipt_path]",
+                                 lambda: require_task_ledger_artifacts(root))
+
+        if sys.platform == "win32":
+            import _winapi
+
+            root = base / "junction-parent"
+            path, _ = fixture(root, sensor=True)
+            external = base / "external-junction-sensor"
+            path.parent.rename(external)
+            _winapi.CreateJunction(str(external), str(path.parent))
+            if (path.parent.is_symlink()
+                    or path.parent.lstat().st_reparse_tag != stat.IO_REPARSE_TAG_MOUNT_POINT):
+                fail("Windows receipt fixture is not a distinct junction")
+            if path.resolve().is_relative_to(root.resolve()):
+                fail("Windows receipt junction fixture does not escape the packet")
+            try:
+                expect_self_test_failure("junction receipt parent", "[unsafe_receipt_path]",
+                                         lambda: require_task_ledger_artifacts(root))
+            finally:
+                path.parent.rmdir()
+            if not (external / path.name).is_file():
+                fail("junction fixture cleanup removed the external receipt")
+        else:
+            print("SKIP: Windows receipt junction regression requires win32")
+
         root = base / "duplicate-keys"
         path, _ = fixture(root)
         path.write_text('[{"schema":"ub-review.proof_receipt.v1","id":"x","id":"y"}]', encoding="utf-8")
