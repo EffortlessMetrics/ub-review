@@ -44,6 +44,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          # Keep the Action build separate from sensor/proof Cargo targets.
+          cache-directories: ${{ runner.temp }}/ub-review-bootstrap-target
+          # Installer changes must not restore an exact old tool cache forever.
+          key: bootstrap-v1-${{ hashFiles('action.yml', 'scripts/install-gh-runner-tools.sh') }}
+
+      - name: Verify Action bootstrap contract
+        run: python scripts/test-action-bootstrap.py
 
       # The leased coverage sensor runs `cargo llvm-cov` inside the contained
       # candidate job. Its lcov receipt remains in the uploaded packet.
@@ -53,6 +60,10 @@ jobs:
       - name: Run contained candidate ub-review gate
         uses: ./
         with:
+          # Dogfood the checked-out candidate, never an ambient cached binary.
+          install-mode: source
+          source-target-dir: ${{ runner.temp }}/ub-review-bootstrap-target
+          setup-rust: 'false'
           config: .ub-review.toml
           profile: gh-runner-full
           runtime-profile: gh-runner-full
@@ -92,13 +103,22 @@ jobs:
         if: always()
         with:
           name: ub-review-gate
-          path: |
-            target/ub-review
-            src/main.rs
+          path: target/ub-review
           if-no-files-found: error
 
+      # Cross-job telemetry needs one LCOV file, not the complete review packet.
+      # Absence remains non-blocking; no provider or publishing authority is added.
+      - name: Export coverage telemetry
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ub-review-coverage
+          path: target/ub-review/sensors/coverage/lcov.info
+          if-no-files-found: ignore
+          retention-days: 7
+
   # Coverage publication remains telemetry, but its OIDC permission is isolated
-  # in a job that downloads the packet and never checks out or executes the
+  # in a job that downloads only LCOV and never checks out or executes the
   # pull-request head. Failure to download or upload remains non-blocking.
   coverage-upload:
     name: coverage telemetry
@@ -110,13 +130,13 @@ jobs:
       actions: read
       id-token: write
     steps:
-      - name: Download ub-review packet
+      - name: Download coverage telemetry
         id: packet
         continue-on-error: true
         uses: actions/download-artifact@v5
         with:
-          name: ub-review-gate
-          path: target/ub-review
+          name: ub-review-coverage
+          path: target/ub-review/sensors/coverage
 
       - name: Upload coverage
         if: steps.packet.outcome == 'success'

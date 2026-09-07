@@ -12,6 +12,7 @@ import json
 import math
 import pathlib
 import re
+import stat
 import sys
 import tempfile
 from typing import Any, NoReturn
@@ -2424,7 +2425,7 @@ def _task_ledger_apply(snapshot: dict | None, task_id: str, kind: str, payload: 
     return snapshot
 
 
-def _verify_task_ledger_bytes(events_bytes: bytes, snapshot_bytes: bytes, binding: dict) -> None:
+def _verify_task_ledger_bytes(events_bytes: bytes, snapshot_bytes: bytes, binding: dict) -> dict:
     if not events_bytes or not events_bytes.endswith(b"\n") or b"\r" in events_bytes:
         fail("[truncated_event_stream] NDJSON must end each record with one LF")
     try:
@@ -2490,6 +2491,163 @@ def _verify_task_ledger_bytes(events_bytes: bytes, snapshot_bytes: bytes, bindin
     require_joined_revision(committed["revision"], "task-ledger snapshot", binding)
     if committed != recomputed or snapshot_bytes != _task_ledger_json(recomputed) + b"\n":
         fail("[forged_snapshot] snapshot does not match deterministic event replay")
+    return recomputed
+
+
+def require_task_ledger_receipt_links(root: pathlib.Path, snapshot: dict, binding: dict) -> None:
+    """Join replayed lifecycle claims to current proof/sensor receipt content.
+
+    No scheduler, queue, portfolio, lease-reuse, or gate authority is inferred.
+    These bounds limit this receipt reader, not the whole packet or capture.
+    """
+    documents = {}
+    packet_root = root.resolve(strict=True)
+    remaining_bytes = 64 * 1024 * 1024
+    maximum_file_bytes = 8 * 1024 * 1024
+
+    def unique_fields(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                fail("[malformed_receipt_artifact] duplicate JSON field in receipt")
+            value[key] = item
+        return value
+
+    def document(relative):
+        nonlocal remaining_bytes
+        _task_ledger_receipt_reference(relative)
+        if relative not in documents:
+            try:
+                path = root
+                for component in relative.split("/"):
+                    path = path / component
+                    metadata = path.lstat()
+                    if (stat.S_ISLNK(metadata.st_mode)
+                            or getattr(metadata, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT):
+                        fail(f"[unsafe_receipt_path] linked receipt path: {relative}")
+                if not stat.S_ISREG(metadata.st_mode):
+                    fail(f"[missing_receipt_artifact] missing regular receipt file: {relative}")
+                if not path.resolve(strict=True).is_relative_to(packet_root):
+                    fail(f"[unsafe_receipt_path] receipt resolves outside packet: {relative}")
+                with path.open("rb") as handle:
+                    data = handle.read(min(maximum_file_bytes, remaining_bytes) + 1)
+                if len(data) > maximum_file_bytes or len(data) > remaining_bytes:
+                    fail(f"[receipt_artifact_budget] receipt read budget exceeded: {relative}")
+                remaining_bytes -= len(data)
+                documents[relative] = json.loads(data, object_pairs_hook=unique_fields)
+            except (FileNotFoundError, NotADirectoryError):
+                fail(f"[missing_receipt_artifact] missing regular receipt file: {relative}")
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+                fail(f"[malformed_receipt_artifact] unreadable JSON receipt: {relative}")
+        return documents[relative]
+
+    def proof_rows(relative):
+        value = document(relative)
+        rows = [value] if relative == "proof_receipt.json" else value
+        if not isinstance(rows, list):
+            fail(f"[malformed_receipt_artifact] proof receipt collection is not an array: {relative}")
+        for row in rows:
+            if (not isinstance(row, dict) or row.get("schema") != "ub-review.proof_receipt.v1"
+                    or not isinstance(row.get("id"), str) or not row["id"]
+                    or not isinstance(row.get("commands"), list)):
+                fail(f"[malformed_receipt_artifact] invalid proof receipt row: {relative}")
+            require_joined_revision(row.get("revision"), relative, binding)
+            if any(not isinstance(command, dict) or not isinstance(command.get("side"), str)
+                   or not command["side"] for command in row["commands"]):
+                fail(f"[malformed_receipt_artifact] invalid proof command row: {relative}")
+        return rows
+
+    def proof_task_id(receipt, command):
+        return f"proof-command-{sanitize_artifact_name(receipt['id'])}-{sanitize_artifact_name(command['side'])}"
+
+    tasks = {task["id"]: task for task in snapshot["tasks"]}
+    producers = {}
+    proof_files = {"review/proof_receipts.json", "proof_receipt.json"}
+    for task in snapshot["tasks"]:
+        created = (task.get("receipt") or {}).get("Created")
+        references = []
+        if created is not None:
+            references.append((created["reference"], True))
+        if task.get("existing_receipt") is not None:
+            references.append((task["existing_receipt"], False))
+        for reference, is_producer in references:
+            _task_ledger_receipt_reference(reference)
+            relative, _, fragment = reference.partition("#")
+            if is_producer:
+                if reference in producers:
+                    fail(f"[duplicate_receipt_identity] multiple producers claim {reference}")
+                producers[reference] = task["id"]
+            if relative in proof_files:
+                rows = proof_rows(relative)
+                pattern = (r"/commands/(0|[1-9][0-9]*)" if relative == "proof_receipt.json"
+                           else r"/(0|[1-9][0-9]*)/commands/(0|[1-9][0-9]*)")
+                match = re.fullmatch(pattern, fragment)
+                if match is None or any(len(value) > 20 for value in match.groups()):
+                    fail(f"[invalid_receipt_pointer] unsupported proof command pointer: {reference}")
+                indices = tuple(map(int, match.groups()))
+                row_index, command_index = (0, indices[0]) if len(indices) == 1 else indices
+                if row_index >= len(rows) or command_index >= len(rows[row_index]["commands"]):
+                    fail(f"[invalid_receipt_pointer] proof command pointer does not resolve: {reference}")
+                receipt = rows[row_index]
+                command = receipt["commands"][command_index]
+                if is_producer and (task["source"] == "Sensor" or proof_task_id(receipt, command) != task["id"]):
+                    fail(f"[receipt_identity_mismatch] proof receipt does not identify task {task['id']}")
+                allowed = {"passed": {"Succeeded"}, "failed": {"DeterministicFailure"},
+                           "timed_out": {"TimedOut"}, "skipped": {"Cancelled", "SetupFailed"}}
+                status = command.get("status")
+                disposition = task.get("execution_disposition")
+                if (not isinstance(status, str) or status not in allowed
+                        or (is_producer and disposition not in allowed[status])
+                        or command.get("timed_out") is not (status == "timed_out")):
+                    fail(f"[receipt_outcome_mismatch] proof receipt contradicts task {task['id']}")
+                # A successful proof is not established by its status label alone.
+                if status == "passed" and (type(command.get("exit_code")) is not int or command["exit_code"] != 0):
+                    fail(f"[receipt_outcome_mismatch] passing proof has no zero exit: {reference}")
+            else:
+                match = re.fullmatch(r"sensors/([A-Za-z0-9._-]+)/ub-review-sensor-status\.json", relative)
+                if match is None or fragment:
+                    fail(f"[invalid_receipt_pointer] unsupported lifecycle receipt: {reference}")
+                sensor = document(relative)
+                if (not isinstance(sensor, dict) or sensor.get("sensor") != match[1]
+                        or (is_producer and (task["id"] != f"sensor-{match[1]}" or task["source"] != "Sensor"))):
+                    fail(f"[receipt_identity_mismatch] sensor receipt does not identify task {task['id']}")
+                status = sensor.get("status")
+                if not isinstance(status, str):
+                    fail(f"[receipt_outcome_mismatch] malformed sensor status: {reference}")
+                expected = {"ok": "Succeeded", "failed": "DeterministicFailure",
+                            "timed_out": "TimedOut", "missing": "SetupFailed"}.get(status)
+                if (expected is None or (is_producer and expected != task.get("execution_disposition"))
+                        or sensor.get("timed_out") is not (expected == "TimedOut")):
+                    fail(f"[receipt_outcome_mismatch] sensor receipt contradicts task {task['id']}")
+
+    # Check the reverse direction too: an executed command row cannot appear
+    # without a producing lifecycle. Non-execution rows require a proposed task
+    # but do not invent a ReceiptCreated event for terminally declined work.
+    seen = set()
+    # A normal review packet owns review/proof_receipts.json. A standalone
+    # proof_receipt.json belongs to this lifecycle only when a replayed ledger
+    # reference caused it to be loaded above; an unrelated stale worker file in
+    # a reused output directory must not poison the current review packet.
+    reverse_proof_files = {"review/proof_receipts.json"}
+    if "proof_receipt.json" in documents:
+        reverse_proof_files.add("proof_receipt.json")
+    for relative in sorted(reverse_proof_files):
+        if relative not in documents and not (root / relative).exists():
+            continue
+        for row_index, receipt in enumerate(proof_rows(relative)):
+            for command_index, command in enumerate(receipt["commands"]):
+                task_id = proof_task_id(receipt, command)
+                if task_id in seen:
+                    fail(f"[duplicate_receipt_identity] repeated proof command {task_id}")
+                seen.add(task_id)
+                reference = (f"{relative}#/commands/{command_index}" if relative == "proof_receipt.json"
+                             else f"{relative}#/{row_index}/commands/{command_index}")
+                if task_id not in tasks:
+                    fail(f"[receipt_without_task] proof command has no lifecycle: {reference}")
+                if producers.get(reference) != task_id:
+                    if (command.get("status") != "skipped" or tasks[task_id].get("execution_disposition") is not None
+                            or tasks[task_id].get("non_execution_disposition") is None):
+                        fail(f"[receipt_without_task] admitted proof has no producing receipt event: {reference}")
 
 
 def require_task_ledger_artifacts(root: pathlib.Path) -> None:
@@ -2502,7 +2660,8 @@ def require_task_ledger_artifacts(root: pathlib.Path) -> None:
     binding = load_revision_binding(root)
     if binding is None:
         fail("[missing_strong_binding] task-ledger artifacts require revision admission")
-    _verify_task_ledger_bytes(events_path.read_bytes(), snapshot_path.read_bytes(), binding)
+    snapshot = _verify_task_ledger_bytes(events_path.read_bytes(), snapshot_path.read_bytes(), binding)
+    require_task_ledger_receipt_links(root, snapshot, binding)
 
 
 def require_revision_coherence(root: pathlib.Path) -> None:
@@ -15082,6 +15241,7 @@ def run_self_tests() -> None:
     self_test_claim_graph_contract()
     self_test_revision_binding_enforcement()
     self_test_task_ledger_contract()
+    self_test_task_ledger_receipt_links()
     self_test_artifact_only_post_receipt_contract()
     self_test_reviewer_value_heading_parity_with_rust()
     self_test_delivery_transaction_contract()
@@ -16166,6 +16326,202 @@ def self_test_task_ledger_contract() -> None:
                 lambda: require_no_secret_markers(root),
             )
             path.unlink()
+
+
+def self_test_task_ledger_receipt_links() -> None:
+    """Exercise file/content joins through the public packet-ledger boundary."""
+    canonical = (
+        "ub-review.revision-identity.v1\nsemantics=candidate_head\n"
+        f"base={'1' * 40} {'2' * 40}\nhead={'3' * 40} {'4' * 40}\n"
+        f"reviewed={'3' * 40} {'4' * 40}\nmerge=-\n"
+        f"changed_paths={'a' * 64}\ndiff={'b' * 64}\n"
+    )
+    binding = {"digest": _recompute_identity_digest(canonical),
+               "semantics": "candidate_head", "reviewed_commit": "3" * 40}
+
+    def fixture(root, *, sensor=False, standalone=False, disposition="Succeeded", status=None,
+                side="head", receipt_id="receipt-a", reference=None, model_on=None):
+        proof_file = "proof_receipt.json" if standalone else "review/proof_receipts.json"
+        target = "sensors/cargo-test/ub-review-sensor-status.json" if sensor else proof_file
+        ref = reference or (target if sensor else target + ("#/commands/0" if standalone else "#/0/commands/0"))
+        task_id = "sensor-cargo-test" if sensor else f"proof-command-{sanitize_artifact_name(receipt_id)}-{sanitize_artifact_name(side)}"
+        if status is None:
+            status = ({"Succeeded": "ok", "DeterministicFailure": "failed", "TimedOut": "timed_out", "SetupFailed": "missing"}
+                      if sensor else {"Succeeded": "passed", "DeterministicFailure": "failed", "TimedOut": "timed_out", "Cancelled": "skipped", "SetupFailed": "skipped"})[disposition]
+        events = [
+            (task_id, {"Proposed": {"revision": dict(binding), "source": "Sensor" if sensor else ({"ReviewerTurn": {"model_on": model_on}} if model_on is not None else ("Worker" if standalone else "Impact")), "limits": {"timeout_ceiling_ms": 60000}}}),
+            (task_id, "Selected"),
+            (task_id, {"Queued": {"at": 10}}),
+            (task_id, {"Admitted": {"at": 20, "reservations": [{"class": "Cargo", "units": 1}]}}),
+            (task_id, {"SetupStarted": {"at": 21}}),
+        ]
+        if disposition == "SetupFailed":
+            events += [(task_id, {"SetupFailed": {"at": 22}})]
+        else:
+            events += [(task_id, {"RunStarted": {"at": 25}}),
+                       (task_id, {"ProcessFinished": {"at": 40, "disposition": disposition}}),
+                       (task_id, {"CleanupFinished": {"at": 42}})]
+        events += [(task_id, {"ReceiptCreated": {"at": 43, "reference": ref}}),
+                   (task_id, {"ResourcesReleased": {"at": 44}})]
+        eb, sb = _task_ledger_self_test_artifacts(events, binding)
+        root.mkdir(parents=True, exist_ok=True)
+        (root / "review").mkdir(exist_ok=True)
+        (root / "task_ledger_events.ndjson").write_bytes(eb)
+        (root / "review/task_ledger_snapshot.json").write_bytes(sb)
+        write_self_test_json(root / "input/revision-admission.json", {
+            "schema": REVISION_ADMISSION_SCHEMA, "identity_canonical": canonical,
+            "identity_digest": binding["digest"], "semantics": "candidate_head",
+            "reviewed_commit_oid": binding["reviewed_commit"], "worktree_dirty": False,
+        })
+        command = {"side": side, "command": "cargo test --locked", "env": {},
+                   "status": status, "timed_out": disposition == "TimedOut",
+                   "exit_code": 0 if disposition == "Succeeded" else (1 if disposition == "DeterministicFailure" else None),
+                   "timeout_sec": 60, "duration_ms": 15, "stdout": "stdout.txt", "stderr": "stderr.txt", "reason": "fixture"}
+        receipt = {"schema": "ub-review.proof_receipt.v1", "id": receipt_id, "revision": dict(binding), "commands": [command]}
+        value = ({"sensor": "cargo-test", "status": status, "timed_out": disposition == "TimedOut"}
+                 if sensor else (receipt if standalone else [receipt]))
+        write_self_test_json(root / target, value)
+        return root / target, value
+
+    with tempfile.TemporaryDirectory() as directory:
+        base = pathlib.Path(directory)
+        # Counterexample: all event/snapshot digests remain valid without the referenced file.
+        root = base / "missing"
+        path, _ = fixture(root)
+        path.unlink()
+        expect_self_test_failure("missing ledger receipt bytes", "[missing_receipt_artifact]",
+                                 lambda: require_task_ledger_artifacts(root))
+
+        for sensor, standalone, disposition in [
+            (False, False, "Succeeded"), (False, True, "Succeeded"),
+            (False, False, "DeterministicFailure"), (False, False, "TimedOut"),
+            (False, False, "Cancelled"), (False, False, "SetupFailed"),
+            (True, False, "Succeeded"), (True, False, "DeterministicFailure"),
+            (True, False, "TimedOut"), (True, False, "SetupFailed"),
+        ]:
+            root = base / f"valid-{sensor}-{standalone}-{disposition}"
+            fixture(root, sensor=sensor, standalone=standalone, disposition=disposition)
+            require_task_ledger_artifacts(root)
+
+        for model_on in (False, True):
+            root = base / f"model-{model_on}"
+            fixture(root, model_on=model_on, side="base-plus-tests", receipt_id="unicode-✓")
+            before = {str(path.relative_to(root)): path.read_bytes() for path in root.rglob("*") if path.is_file()}
+            require_task_ledger_artifacts(root)
+            after = {str(path.relative_to(root)): path.read_bytes() for path in root.rglob("*") if path.is_file()}
+            if before != after:
+                fail("task-ledger receipt verification rewrote a fixture")
+
+        # Reused review output may retain an unrelated standalone worker
+        # receipt. The current review lifecycle neither references nor owns it,
+        # so reverse scanning must ignore it while retaining review-receipt
+        # orphan detection.
+        root = base / "review-with-stale-standalone"
+        fixture(root, receipt_id="current-review")
+        write_self_test_json(root / "proof_receipt.json", {
+            "schema": "ub-review.proof_receipt.v1",
+            "id": "stale-worker",
+            "revision": dict(binding),
+            "commands": [{
+                "side": "head", "command": "cargo test --locked", "env": {},
+                "status": "passed", "timed_out": False, "exit_code": 0,
+                "timeout_sec": 60, "duration_ms": 1,
+                "stdout": "stdout.txt", "stderr": "stderr.txt",
+                "reason": "unrelated prior worker attempt",
+            }],
+        })
+        require_task_ledger_artifacts(root)
+
+        mutations = [
+            ("stale", "[stale_revision]", lambda rows: rows[0]["revision"].update(digest="f" * 64)),
+            ("wrong-semantics", "[semantics_mismatch]", lambda rows: rows[0]["revision"].update(semantics="merge_result")),
+            ("wrong-exit", "[receipt_outcome_mismatch]", lambda rows: rows[0]["commands"][0].update(exit_code=1)),
+            ("bool-exit", "[receipt_outcome_mismatch]", lambda rows: rows[0]["commands"][0].update(exit_code=False)),
+            ("wrong-id", "[receipt_identity_mismatch]", lambda rows: rows[0].update(id="different")),
+            ("wrong-side", "[receipt_identity_mismatch]", lambda rows: rows[0]["commands"][0].update(side="base-plus-tests")),
+            ("wrong-status", "[receipt_outcome_mismatch]", lambda rows: rows[0]["commands"][0].update(status="failed")),
+            ("malformed-status", "[receipt_outcome_mismatch]", lambda rows: rows[0]["commands"][0].update(status=[])),
+            ("wrong-timeout", "[receipt_outcome_mismatch]", lambda rows: rows[0]["commands"][0].update(timed_out=True)),
+            ("orphan-command", "[receipt_without_task]", lambda rows: rows.append({**rows[0], "id": "orphan"})),
+            ("duplicate-command", "[duplicate_receipt_identity]", lambda rows: rows.append(rows[0])),
+        ]
+        for name, token, mutate in mutations:
+            root = base / name
+            path, value = fixture(root)
+            mutate(value)
+            write_self_test_json(path, value)
+            expect_self_test_failure(name, token, lambda current=root: require_task_ledger_artifacts(current))
+
+        root = base / "wrong-sensor"
+        path, value = fixture(root, sensor=True)
+        value["sensor"] = "another-sensor"
+        write_self_test_json(path, value)
+        expect_self_test_failure("wrong sensor", "[receipt_identity_mismatch]", lambda: require_task_ledger_artifacts(root))
+        root = base / "wrong-sensor-outcome"
+        fixture(root, sensor=True, status="failed")
+        expect_self_test_failure("wrong sensor outcome", "[receipt_outcome_mismatch]", lambda: require_task_ledger_artifacts(root))
+
+        root = base / "malformed-sensor-status"
+        fixture(root, sensor=True, status=[])
+        expect_self_test_failure("malformed sensor status", "[receipt_outcome_mismatch]", lambda: require_task_ledger_artifacts(root))
+
+        for reference in ["review/proof_receipts.json#/0/commands/7", "review/proof_receipts.json#name",
+                          "review/proof_receipts.json#/00/commands/0",
+                          "review/proof_receipts.json#/" + "9" * 5000 + "/commands/0"]:
+            root = base / ("pointer-" + hashlib.sha256(reference.encode()).hexdigest()[:8])
+            fixture(root, reference=reference)
+            expect_self_test_failure(reference, "[invalid_receipt_pointer]", lambda current=root: require_task_ledger_artifacts(current))
+
+        root = base / "linked-file"
+        path, _ = fixture(root)
+        other = base / "outside.json"
+        other.write_bytes(path.read_bytes())
+        path.unlink()
+        path.symlink_to(other)
+        expect_self_test_failure("linked receipt file", "[unsafe_receipt_path]", lambda: require_task_ledger_artifacts(root))
+
+        # A regular final file is insufficient: an ancestor can redirect the
+        # receipt outside the packet. Windows junctions are not symlinks.
+        root = base / "linked-parent"
+        path, _ = fixture(root, sensor=True)
+        external = base / "external-sensor"
+        path.parent.rename(external)
+        path.parent.symlink_to(external, target_is_directory=True)
+        expect_self_test_failure("linked receipt parent", "[unsafe_receipt_path]",
+                                 lambda: require_task_ledger_artifacts(root))
+
+        if sys.platform == "win32":
+            import _winapi
+
+            root = base / "junction-parent"
+            path, _ = fixture(root, sensor=True)
+            external = base / "external-junction-sensor"
+            path.parent.rename(external)
+            _winapi.CreateJunction(str(external), str(path.parent))
+            if (path.parent.is_symlink()
+                    or path.parent.lstat().st_reparse_tag != stat.IO_REPARSE_TAG_MOUNT_POINT):
+                fail("Windows receipt fixture is not a distinct junction")
+            if path.resolve().is_relative_to(root.resolve()):
+                fail("Windows receipt junction fixture does not escape the packet")
+            try:
+                expect_self_test_failure("junction receipt parent", "[unsafe_receipt_path]",
+                                         lambda: require_task_ledger_artifacts(root))
+            finally:
+                path.parent.rmdir()
+            if not (external / path.name).is_file():
+                fail("junction fixture cleanup removed the external receipt")
+        else:
+            print("SKIP: Windows receipt junction regression requires win32")
+
+        root = base / "duplicate-keys"
+        path, _ = fixture(root)
+        path.write_text('[{"schema":"ub-review.proof_receipt.v1","id":"x","id":"y"}]', encoding="utf-8")
+        expect_self_test_failure("duplicate receipt keys", "[malformed_receipt_artifact]", lambda: require_task_ledger_artifacts(root))
+        root = base / "oversize"
+        path, _ = fixture(root)
+        with path.open("wb") as handle:
+            handle.truncate(8 * 1024 * 1024 + 1)
+        expect_self_test_failure("oversize receipt", "[receipt_artifact_budget]", lambda: require_task_ledger_artifacts(root))
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
