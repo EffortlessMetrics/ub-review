@@ -255,6 +255,19 @@ class Packet:
             return {}
         return value
 
+    def lease_quantities(self, lease: dict, path: str,
+                         identity: str = "") -> dict[str, int] | None:
+        quantities = {}
+        for key in ("cpu", "memory_mb", "disk_mb", "timeout_sec"):
+            value = lease.get(key)
+            # ResourceLease and ProofTaskLease use u32 CPU and u64 quantities.
+            if not integer(value) or (key == "cpu" and value > (1 << 32) - 1):
+                self.input_unavailable = True
+                self.issue("invalid_lease_quantity", path, f"{label(identity)}:{key}")
+            else:
+                quantities[key] = value
+        return quantities if len(quantities) == 4 else None
+
     def index(self, rows: list[dict], path: str, key: str = "id") -> dict[str, dict]:
         result = {}
         for row in rows:
@@ -384,6 +397,11 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
     queue_doc = packet.load(queue_path, dict, "ub-review.work_queue.v1",
                             required=kind == "review" and not legacy)
     queue = packet.index(packet.rows(queue_doc, queue_path, "tasks"), queue_path)
+    queue_quantities = {}
+    for identity, row in queue.items():
+        if row.get("kind") == "sensor" or "lease" in row:
+            lease = packet.mapping(row, queue_path, "lease", identity)
+            queue_quantities[identity] = packet.lease_quantities(lease, queue_path, identity)
     portfolio_path = "review/proof_portfolio.json"
     portfolio = packet.load(portfolio_path, dict, "ub-review.proof_portfolio.v1",
                             required=kind == "review" and not legacy)
@@ -581,7 +599,9 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
                              required=not legacy))
     leases = packet.rows([lease_doc] if kind == "worker" and lease_doc is not None else lease_doc, lease_path)
     lease_index = packet.index(leases, lease_path)
+    lease_quantities = {}
     for lease in leases:
+        lease_quantities[id(lease)] = packet.lease_quantities(lease, lease_path, lease.get("id", ""))
         joined(lease, lease_path)
         if lease.get("schema") != "ub-review.resource_lease.v1":
             packet.issue("unsupported_lease_schema", lease_path, lease.get("id", ""))
@@ -684,7 +704,10 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
                 packet.issue("ambiguous_command_lease", lease_path, proof.get("id", ""))
             if len(matches) == 1 and not (kind == "worker" and command.get("side") != "head"):
                 lease = matches[0]
-                expected = {cls: lease.get(key, 0) for cls, key in
+                quantities = lease_quantities[id(lease)]
+                if quantities is None:
+                    continue
+                expected = {cls: quantities[key] for cls, key in
                             [("Cpu", "cpu"), ("Memory", "memory_mb"), ("Disk", "disk_mb")]}
                 expected = {cls: value for cls, value in expected.items() if value > 0}
                 expected["Build" if proof.get("kind") == "focused-build" else "Test"] = 1
@@ -695,10 +718,12 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
                 if reservations != expected:
                     packet.issue("lease_reservation_mismatch", ref, task["id"])
         elif ref in sensor_rows and task["id"] in queue:
-            lease = packet.mapping(queue[task["id"]], queue_path, "lease", task["id"])
-            expected = {"Cpu": lease.get("cpu", 0)}
-            if lease.get("disk_mb", 0) > 0:
-                expected["Disk"] = lease["disk_mb"]
+            quantities = queue_quantities.get(task["id"])
+            if quantities is None:
+                continue
+            expected = {"Cpu": quantities["cpu"]}
+            if quantities["disk_mb"] > 0:
+                expected["Disk"] = quantities["disk_mb"]
             timing = packet.mapping(task, snapshot_path, "timing", task["id"])
             if reservations != expected and timing.get("admitted_at") is not None:
                 packet.issue("sensor_reservation_mismatch", queue_path, task["id"])
@@ -762,19 +787,36 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
         packet.coverage["scheduler_task_counts"] = "not_exposed_by_v1"
 
     routes_path = "review/receipt_routes.json"
-    routes_doc = packet.load(routes_path, dict, "ub-review.receipt_routes.v1")
+    routes_doc = packet.load(routes_path, dict, "ub-review.receipt_routes.v1",
+                             required=kind == "review" and not legacy)
     if routes_doc is not None:
         joined(routes_doc, routes_path)
         routes = packet.rows(routes_doc, routes_path, "routes")
         packet.index(routes, routes_path)
+        routed_receipts = set()
         for route in routes:
-            proof = receipt_index.get(route.get("receipt_id"))
+            receipt_id = route.get("receipt_id")
+            if not isinstance(receipt_id, str) or not receipt_id.strip():
+                packet.input_unavailable = True
+                packet.issue("invalid_identity", routes_path, route.get("id", ""))
+                continue
+            if receipt_id in routed_receipts:
+                packet.issue("duplicate_receipt_route", routes_path, receipt_id)
+            routed_receipts.add(receipt_id)
+            proof = receipt_index.get(receipt_id)
             if proof is None or route.get("result") != proof.get("result"):
                 packet.issue("route_receipt_mismatch", routes_path, route.get("id", ""))
-            for lease_id in packet.strings(route, routes_path, "lease_ids"):
+            lease_ids = packet.strings(route, routes_path, "lease_ids")
+            expected_ids = {identity for identity, lease in lease_index.items()
+                            if lease.get("consumer") == receipt_id}
+            if len(lease_ids) != len(set(lease_ids)) or set(lease_ids) != expected_ids:
+                packet.issue("route_lease_inventory_mismatch", routes_path, receipt_id)
+            for lease_id in lease_ids:
                 lease = lease_index.get(lease_id)
-                if lease is None or lease.get("consumer") != route.get("receipt_id"):
+                if lease is None or lease.get("consumer") != receipt_id:
                     packet.issue("route_lease_mismatch", routes_path, route.get("id", ""))
+        for receipt_id in receipt_index.keys() - routed_receipts:
+            packet.issue("receipt_without_route", routes_path, receipt_id)
 
     calibration_path = "review/calibration.json"
     calibration = packet.load(calibration_path, dict, "ub-review.calibration.v0")

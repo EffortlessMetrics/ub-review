@@ -82,6 +82,15 @@ Nested collections and objects are validated before iteration. A malformed
 route lease list, task consumer/reservation list, queue lease, Required-proof
 map, runtime map, calibration count map, or metrics run map cannot suppress
 independent diagnostics or leave a stale coherent report in place.
+Review, worker and queue lease quantities are checked against their Rust
+unsigned domains (32-bit CPU, 64-bit memory, disk and timeout) before reservation
+comparison. Missing, negative, fractional, boolean or out-of-range quantities
+are unavailable input and retain the exit-2 JSON report.
+
+Current review packets require the receipt-route artifact. Every proof receipt
+must have exactly one route, and its lease IDs must name every owned lease once,
+including refused leases. Ordering is not authority. Standalone worker and
+legacy packets may omit this artifact; any published route inventory is checked.
 
 ## Compared surfaces and limits
 

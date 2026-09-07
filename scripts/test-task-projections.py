@@ -114,7 +114,7 @@ def coherent(root: Path, *, model_on: bool = False, worker: bool = False) -> tup
                                       "duration_ms": 10, "timeout_sec": 60, "exit_code": 0})
         write_json(root, "work_queue.json", {"schema": "ub-review.work_queue.v1", "tasks": [
             {"id": "sensor-check", "kind": "sensor", "status": "completed", "receipt_path": sensor_path,
-             "lease": {"cpu": 1, "disk_mb": 8}},
+             "lease": {"cpu": 1, "memory_mb": 0, "disk_mb": 8, "timeout_sec": 60}},
             {"id": "proof-a", "kind": "focused-head", "status": "completed", "receipt_path": proof_path}]})
         write_json(root, "review/proof_portfolio.json", {"schema": "ub-review.proof_portfolio.v1", "head": "d" * 40,
                    "budget_seconds": 60, "candidate_count": 1,
@@ -183,7 +183,8 @@ class Projections(unittest.TestCase):
     def test_current_missing_planes_never_pass(self):
         for name in ["input/revision-admission.json", "task_ledger_events.ndjson", "review/task_ledger_snapshot.json",
                      "work_queue.json", "review/proof_portfolio.json", "review/proof_receipts.json",
-                     "review/resource_leases.json", "review/gate_outcome.json", "review/proof_requests.json"]:
+                     "review/resource_leases.json", "review/gate_outcome.json", "review/proof_requests.json",
+                     "review/receipt_routes.json"]:
             with self.subTest(name=name):
                 path = self.root / name
                 old = path.read_bytes()
@@ -246,6 +247,106 @@ class Projections(unittest.TestCase):
         self.assertIn("scheduler_metric_mismatch", self.codes())
         self.change("review/metrics.json", lambda x: x["run"].update(proof_command_duration_ms_sum=0))
         self.assertIn("proof_duration_projection_mismatch", self.codes())
+
+    def test_receipt_routes_require_complete_unique_inventories(self):
+        path = "review/receipt_routes.json"
+        original = read_json(self.root, path)
+        cases = [
+            ("missing route", "receipt_without_route",
+             lambda rows: rows.clear()),
+            ("missing lease", "route_lease_inventory_mismatch",
+             lambda rows: rows[0].update(lease_ids=[])),
+            ("duplicate lease", "route_lease_inventory_mismatch",
+             lambda rows: rows[0].update(lease_ids=["lease-proof-a", "lease-proof-a"])),
+            ("extra route", "route_receipt_mismatch",
+             lambda rows: rows.append(dict(rows[0], id="extra", receipt_id="absent"))),
+            ("duplicate receipt route", "duplicate_receipt_route",
+             lambda rows: rows.append(dict(rows[0], id="duplicate"))),
+        ]
+        for name, code, mutate in cases:
+            with self.subTest(name=name):
+                document = copy.deepcopy(original)
+                mutate(document["routes"])
+                write_json(self.root, path, document)
+                report = self.report()
+                self.assertEqual(report["status"], "contradictory")
+                self.assertFalse(report["input_unavailable"])
+                self.assertIn(code, {row["code"] for row in report["issues"]})
+        write_json(self.root, path, original)
+
+    def test_receipt_routes_include_refused_leases_without_order_authority(self):
+        leases = read_json(self.root, "review/resource_leases.json")
+        leases.append(dict(leases[0], id="lease-refused", status="refused",
+                           cpu=0, memory_mb=0, disk_mb=0))
+        write_json(self.root, "review/resource_leases.json", leases)
+        self.assertIn("route_lease_inventory_mismatch", self.codes())
+        self.change("review/receipt_routes.json", lambda row: row["routes"][0].update(
+            lease_ids=["lease-refused", "lease-proof-a"]))
+        report = self.report()
+        self.assertEqual(report["status"], "coherent", report["issues"])
+
+    def test_lease_quantities_match_unsigned_rust_domains(self):
+        original = {"cpu": 1, "memory_mb": 8, "disk_mb": 8, "timeout_sec": 60}
+        for key in original:
+            maximum = (1 << (32 if key == "cpu" else 64)) - 1
+            for value in [None, "1", True, -1, 1.5, [], {}, maximum + 1]:
+                with self.subTest(key=key, value=value):
+                    packet = subject.Packet(self.root)
+                    lease = dict(original, **{key: value})
+                    self.assertIsNone(packet.lease_quantities(lease, "lease", "test"))
+                    self.assertTrue(packet.input_unavailable)
+                    self.assertIn(("invalid_lease_quantity", "lease", f"test:{key}"), packet.issues)
+            missing = dict(original)
+            missing.pop(key)
+            packet = subject.Packet(self.root)
+            self.assertIsNone(packet.lease_quantities(missing, "lease", "test"))
+            for value in [0, maximum]:
+                with self.subTest(key=key, valid_value=value):
+                    packet = subject.Packet(self.root)
+                    lease = dict(original, **{key: value})
+                    self.assertEqual(packet.lease_quantities(lease, "lease", "test"), lease)
+                    self.assertFalse(packet.input_unavailable)
+
+    def test_malformed_lease_cli_retains_json_and_replaces_stale_report(self):
+        for surface in ["review", "worker", "sensor"]:
+            with self.subTest(surface=surface), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                coherent(root, worker=surface == "worker")
+                if surface == "worker":
+                    path = "resource_lease.json"
+                    document = read_json(root, path)
+                    document["memory_mb"] = []
+                    proof = read_json(root, "proof_receipt.json")
+                    proof["head"] = "c" * 40
+                    write_json(root, "proof_receipt.json", proof)
+                    independent = "worker_revision_head_mismatch"
+                else:
+                    queue = read_json(root, "work_queue.json")
+                    queue["tasks"][0]["status"] = "planned"
+                    write_json(root, "work_queue.json", queue)
+                    independent = "successful_sensor_left_planned"
+                    path = "work_queue.json" if surface == "sensor" else "review/resource_leases.json"
+                    document = read_json(root, path)
+                    lease = document["tasks"][0]["lease"] if surface == "sensor" else document[0]
+                    lease["disk_mb"] = "invalid"
+                write_json(root, path, document)
+                command = [sys.executable, str(HERE / "reconcile-task-projections.py"), str(root)]
+                if surface == "worker":
+                    command.extend(["--kind", "worker"])
+                for publish in [False, True]:
+                    with self.subTest(publish=publish):
+                        stale = {"schema": subject.SCHEMA, "status": "coherent", "stale": True}
+                        write_json(root, subject.REPORT_PATH, stale)
+                        result = subprocess.run([*command, *(["--write-report"] if publish else [])],
+                                                capture_output=True, timeout=10)
+                        self.assertEqual(result.returncode, 2, result.stderr)
+                        report = json.loads(result.stdout)
+                        self.assertTrue(report["input_unavailable"])
+                        codes = {row["code"] for row in report["issues"]}
+                        self.assertIn("invalid_lease_quantity", codes)
+                        self.assertIn(independent, codes)
+                        self.assertLessEqual(len(result.stdout), subject.MAX_REPORT_BYTES)
+                        self.assertEqual(read_json(root, subject.REPORT_PATH), report if publish else stale)
 
     def test_required_missing_link_under_pass(self):
         self.change("review/proof_receipts.json", lambda x: x[0].update(request_ids=[]))
