@@ -71,8 +71,8 @@ def label(value: Any) -> str:
     return safe[:96] + "~" + hashlib.sha256(value.encode()).hexdigest()[:16]
 
 
-def integer(value: Any) -> bool:
-    return type(value) is int and 0 <= value <= (1 << 64) - 1
+def integer(value: Any, bits: int = 64) -> bool:
+    return type(value) is int and 0 <= value <= (1 << bits) - 1
 
 
 def proof_result_consistent(proof: dict, kind: str) -> bool:
@@ -447,6 +447,9 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
         if not proof.get("commands"):
             packet.issue("empty_proof_receipt", receipt_path, proof.get("id", ""))
         for j, command in enumerate(packet.rows(proof, receipt_path, "commands")):
+            if not integer(command.get("duration_ms"), 128):
+                packet.input_unavailable = True
+                packet.issue("invalid_command_duration", receipt_path, f"{identity}:{j}")
             side = command.get("side")
             if not isinstance(side, str) or not side:
                 packet.input_unavailable = True
@@ -462,6 +465,14 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
             ref = f"{receipt_path}#/commands/{j}" if kind == "worker" else f"{receipt_path}#/{i}/commands/{j}"
             commands[ref] = (proof, command)
     receipt_index = packet.index(proofs, receipt_path)
+    receipt_ms = None
+    durations = [command.get("duration_ms") for _, command in commands.values()]
+    if all(integer(duration, 128) for duration in durations):
+        receipt_ms = sum(durations)
+        if not integer(receipt_ms, 128):
+            packet.input_unavailable = True
+            packet.issue("command_duration_sum_overflow", receipt_path)
+            receipt_ms = None
 
     sensor_rows = {}
     sensor_dir = packet.path("sensors")
@@ -613,6 +624,31 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
                for owner, c in commands.values()):
             if not legacy and not any(l.get("consumer") == proof.get("id") and l.get("status") == "granted" for l in leases):
                 packet.issue("executed_proof_without_lease", lease_path, proof.get("id", ""))
+        if kind == "worker":
+            preflight_id = "proof-command-" + verifier.sanitize_artifact_name(proof["id"]) + "-nightly-preflight"
+            preflight_task = ledger.get(preflight_id)
+            preflight_commands = [(ref, command) for ref, (owner, command) in commands.items()
+                                  if owner is proof and command.get("side") == "nightly-preflight"]
+            valid_preflight = False
+            if preflight_task is not None and len(preflight_commands) == 1:
+                preflight_ref, preflight_command = preflight_commands[0]
+                timing = packet.mapping(preflight_task, snapshot_path, "timing", preflight_id)
+                started = timing.get("process_started_at") is not None
+                # A runner failure may publish skipped after setup failure or
+                # cancellation. It still requires the real receipted task.
+                disposition = {"passed": "Succeeded", "failed": "DeterministicFailure",
+                               "timed_out": "TimedOut",
+                               "skipped": "Cancelled" if started else "SetupFailed"}.get(preflight_command.get("status"))
+                valid_preflight = (
+                    preflight_task.get("source") == "Worker"
+                    and credited.get(preflight_ref) is preflight_task
+                    and disposition is not None
+                    and (started or disposition == "SetupFailed")
+                    and preflight_task.get("state") == {"ResourcesReleased": disposition}
+                    and preflight_task.get("execution_disposition") == disposition
+                )
+            if not valid_preflight:
+                packet.issue("worker_preflight_task_mismatch", snapshot_path, preflight_id)
         if kind == "worker" and proof.get("result") == "skipped_unresolved":
             matching = [lease for lease in leases if lease.get("consumer") == proof.get("id")]
             valid_refusal = (len(matching) == 1
@@ -835,8 +871,10 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
     metrics_run = packet.mapping(metrics, metrics_path, "run") if metrics is not None else {}
     if metrics is not None and ledger:
         measured = metrics_run.get("proof_command_duration_ms_sum")
-        receipt_ms = sum(c.get("duration_ms", 0) for _, c in commands.values() if integer(c.get("duration_ms")))
-        if measured is not None and (not integer(measured) or measured != receipt_ms):
+        if measured is not None and not integer(measured, 128):
+            packet.input_unavailable = True
+            packet.issue("invalid_metric_duration", metrics_path)
+        elif measured is not None and receipt_ms is not None and measured != receipt_ms:
             packet.issue("proof_duration_projection_mismatch", metrics_path)
     if scheduler is not None and metrics is not None:
         for key in ("elapsed_wall_ms", "scheduler_roles", "streams", "loops", "phases"):

@@ -36,11 +36,15 @@ is enough to detect disagreement inside one worker packet; it does not prove the
 producer or elevate worker output into merge authority.
 
 An unresolved typed worker proof is coherent only in its exact production
-shape: the nightly preflight is a separately executed ledger task, the head
+shape: the nightly preflight is a separately receipted ledger task, the head
 command is skipped, the aggregate result is `skipped_unresolved`, and the
 published head lease is `refused` with zero resources. A skipped head paired
 with a granted lease, or an unresolved result paired with an executed head, is
-a contradiction.
+a contradiction. The preflight may fail during setup or be cancelled: its
+skipped receipt must join the matching released `SetupFailed` or `Cancelled`
+task. A missing preflight task or a claimed execution without that ledger state
+is contradictory; unavailable setup is not invented physical execution. This
+preflight ownership check applies to every worker result, including passed heads.
 
 For the retained #961 incidents, use `--legacy` with a case directory under
 `fixtures/authority-incidents`. Legacy packets do not gain current-revision
@@ -86,6 +90,9 @@ Review, worker and queue lease quantities are checked against their Rust
 unsigned domains (32-bit CPU, 64-bit memory, disk and timeout) before reservation
 comparison. Missing, negative, fractional, boolean or out-of-range quantities
 are unavailable input and retain the exit-2 JSON report.
+Command durations and their sum use the Rust 128-bit unsigned domain. Every
+duration is validated even when metrics are absent; malformed values and sum
+overflow remain unavailable instead of being silently omitted from accounting.
 
 Current review packets require the receipt-route artifact. Every proof receipt
 must have exactly one route, and its lease IDs must name every owned lease once,

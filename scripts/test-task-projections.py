@@ -423,6 +423,55 @@ class Projections(unittest.TestCase):
         self.assertEqual(self.report()["status"], "coherent", self.report()["issues"])
         self.assertIn("receipt_ledger_duration_domains_differ", {x["code"] for x in self.report()["observations"]})
 
+    def test_malformed_command_duration_cannot_match_zero_metrics(self):
+        path = "review/proof_receipts.json"
+        original = read_json(self.root, path)
+        self.change("review/metrics.json", lambda row: row["run"].update(proof_command_duration_ms_sum=0))
+        for value in [None, True, -1, 1.5, "0", [], {}, 1 << 128, "missing"]:
+            with self.subTest(value=value):
+                proof = copy.deepcopy(original)
+                command = proof[0]["commands"][0]
+                if value == "missing":
+                    command.pop("duration_ms")
+                else:
+                    command["duration_ms"] = value
+                write_json(self.root, path, proof)
+                stale = {"schema": subject.SCHEMA, "status": "coherent", "stale": True}
+                write_json(self.root, subject.REPORT_PATH, stale)
+                result = subprocess.run([sys.executable, str(HERE / "reconcile-task-projections.py"),
+                                         str(self.root), "--write-report"], capture_output=True, timeout=10)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                report = json.loads(result.stdout)
+                self.assertTrue(report["input_unavailable"])
+                self.assertIn("invalid_command_duration", {row["code"] for row in report["issues"]})
+                self.assertEqual(read_json(self.root, subject.REPORT_PATH), report)
+
+    def test_command_duration_uses_full_u128_domain(self):
+        for duration in [0, 1 << 64, (1 << 128) - 1]:
+            with self.subTest(duration=duration):
+                self.change("review/proof_receipts.json", lambda rows: rows[0]["commands"][0].update(duration_ms=duration))
+                self.change("review/metrics.json", lambda row: row["run"].update(proof_command_duration_ms_sum=duration))
+                report = self.report()
+                self.assertFalse(report["input_unavailable"])
+                self.assertEqual(report["status"], "coherent", report["issues"])
+
+    def test_duration_validation_does_not_require_metrics(self):
+        (self.root / "review/metrics.json").unlink()
+        self.change("review/proof_receipts.json", lambda rows: rows[0]["commands"][0].update(duration_ms=None))
+        report = self.report()
+        self.assertTrue(report["input_unavailable"])
+        self.assertIn("invalid_command_duration", {row["code"] for row in report["issues"]})
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            coherent(root, worker=True)
+            proof = read_json(root, "proof_receipt.json")
+            for command in proof["commands"]:
+                command["duration_ms"] = (1 << 128) - 1
+            write_json(root, "proof_receipt.json", proof)
+            report = subject.reconcile(root, kind="worker")
+            self.assertTrue(report["input_unavailable"])
+            self.assertIn("command_duration_sum_overflow", {row["code"] for row in report["issues"]})
+
     def test_atomic_publish_failure_removes_temporary_file(self):
         with patch.object(subject.os, "replace", side_effect=OSError("injected rename failure")):
             with self.assertRaises(OSError):
@@ -493,7 +542,7 @@ class Projections(unittest.TestCase):
     def test_worker_preflight_has_separate_task_not_an_invented_lease(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            coherent(root, worker=True)
+            binding, events = coherent(root, worker=True)
             report = subject.reconcile(root, kind="worker")
             self.assertEqual(report["status"], "coherent", report["issues"])
             self.assertEqual(report["counts"]["executed_proof_command_tasks"], 2)
@@ -502,6 +551,12 @@ class Projections(unittest.TestCase):
                              "proof_receipt_resource_lease_join")
             self.assertEqual(report["coverage"]["input/revision-admission.json"],
                              "not_published_by_worker")
+            proof = read_json(root, "proof_receipt.json")
+            proof["commands"][0].update(status="skipped", exit_code=None, duration_ms=0)
+            write_json(root, "proof_receipt.json", proof)
+            seal(root, binding, [event for event in events if event[0] != "proof-command-proof-a-nightly-preflight"])
+            report = subject.reconcile(root, kind="worker")
+            self.assertIn("worker_preflight_task_mismatch", {row["code"] for row in report["issues"]})
 
     def test_worker_binding_rejects_receipt_lease_or_head_disagreement(self):
         for code in ["worker_revision_mismatch", "worker_revision_head_mismatch"]:
@@ -556,6 +611,45 @@ class Projections(unittest.TestCase):
             report = subject.reconcile(root, kind="worker")
             self.assertEqual(report["status"], "coherent", report["issues"])
             self.assertEqual(report["counts"]["executed_proof_command_tasks"], 1)
+
+            # Unavailable preflight is still a real task: the producer can
+            # publish a skipped receipt after setup failure or cancellation.
+            preflight_task = "proof-command-proof-a-nightly-preflight"
+            for status, disposition in [("failed", "DeterministicFailure"),
+                                        ("timed_out", "TimedOut"),
+                                        ("skipped", "SetupFailed"),
+                                        ("skipped", "Cancelled")]:
+                with self.subTest(preflight=status, disposition=disposition):
+                    preflight_events = []
+                    for task_id, event in copy.deepcopy(unresolved_events):
+                        if task_id == preflight_task and isinstance(event, dict):
+                            if disposition == "SetupFailed" and ("RunStarted" in event or "CleanupFinished" in event):
+                                continue
+                            if "ProcessFinished" in event:
+                                event = ({"SetupFailed": {"at": 14}} if disposition == "SetupFailed"
+                                         else {"ProcessFinished": {"at": 14, "disposition": disposition}})
+                        preflight_events.append((task_id, event))
+                    seal(root, binding, preflight_events)
+                    proof["commands"][0].update(status=status, exit_code=1 if status == "failed" else None,
+                                                 timed_out=status == "timed_out", duration_ms=0)
+                    write_json(root, "proof_receipt.json", proof)
+                    report = subject.reconcile(root, kind="worker")
+                    self.assertEqual(report["status"], "coherent", report["issues"])
+                    if status == "skipped":
+                        proof["commands"][0]["status"] = "passed"
+                        write_json(root, "proof_receipt.json", proof)
+                        forged = subject.reconcile(root, kind="worker")
+                        self.assertIn("worker_preflight_task_mismatch", {row["code"] for row in forged["issues"]})
+                        proof["commands"][0]["status"] = status
+                        write_json(root, "proof_receipt.json", proof)
+
+            no_preflight = [row for row in unresolved_events if row[0] != preflight_task]
+            seal(root, binding, no_preflight)
+            report = subject.reconcile(root, kind="worker")
+            self.assertIn("worker_preflight_task_mismatch", {row["code"] for row in report["issues"]})
+            proof["commands"][0].update(status="passed", exit_code=0, timed_out=False, duration_ms=2)
+            write_json(root, "proof_receipt.json", proof)
+            seal(root, binding, unresolved_events)
 
             missing_head_events = [row for row in unresolved_events
                                    if row[0] != head_task]
