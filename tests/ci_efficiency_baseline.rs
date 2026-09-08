@@ -12,6 +12,11 @@ use sha2::{Digest, Sha256};
 
 const MAX_BYTES: u64 = 1_048_576;
 const MAX_FILE: u64 = 262_144;
+// Immutable #961 manifest named by the September 5 source contract. This
+// verified SHA-1/SHA-256 pair lets offline tests bind the Git blob without
+// introducing a Git subprocess or a second hash implementation.
+const INCIDENT_BLOB: &str = "e56878bb595dc7339bf1524d16808860f2f5911c";
+const INCIDENT_SHA256: &str = "82e8238150c3618fe49f23f730a659025af7b63cc2c048e6b0cd24a338537052";
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -240,6 +245,7 @@ fn load(directory: &Path) -> Result<Corpus> {
             && manifest.max_total_bytes == MAX_BYTES,
         "unsupported fixture contract"
     );
+    validate_incident_reference(&manifest.incident_reference, &incident_bytes()?)?;
     let mut expected = BTreeSet::from(["README.md".to_owned(), "manifest.json".to_owned()]);
     let mut documents = BTreeMap::new();
     for case in &manifest.cases {
@@ -736,25 +742,28 @@ fn semantic_digest(manifest: &Manifest) -> Result<String> {
     Ok(digest(&serde_json::to_vec(&canonical)?))
 }
 
-#[test]
-fn baseline_sources_are_bound_bounded_and_honestly_measured() -> Result<()> {
-    let corpus = load(&root())?;
-    println!(
-        "semantic corpus digest: {}",
-        semantic_digest(&corpus.manifest)?
-    );
-    let reference = &corpus.manifest.incident_reference;
+fn incident_bytes() -> Result<Vec<u8>> {
+    Ok(fs::read(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/authority-incidents/manifest.json"),
+    )?)
+}
+
+fn validate_incident_reference(reference: &IncidentReference, bytes: &[u8]) -> Result<()> {
     ensure!(
         reference.path == "fixtures/authority-incidents/manifest.json"
-            && hex(&reference.git_blob, 40),
+            && reference.git_blob == INCIDENT_BLOB
+            && reference.sha256 == INCIDENT_SHA256,
         "invalid incident reference"
     );
-    let bytes = fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join(&reference.path))?;
     ensure!(
-        digest(&bytes) == reference.sha256,
+        digest(bytes) == reference.sha256,
         "retained incident source changed"
     );
-    let incident: Value = serde_json::from_slice(&bytes)?;
+    let incident: Value = serde_json::from_slice(bytes)?;
+    ensure!(
+        string(&incident, "/schema")? == "ub-review.authority_incident_corpus.v1",
+        "unexpected incident source schema"
+    );
     for reference in &reference.cases {
         let source = rows(&incident, "/cases")?
             .iter()
@@ -773,14 +782,47 @@ fn baseline_sources_are_bound_bounded_and_honestly_measured() -> Result<()> {
         );
     }
     ensure!(
-        reference
-            .cases
-            .iter()
-            .map(|row| row.pull_request)
-            .collect::<BTreeSet<_>>()
-            == BTreeSet::from([915, 916, 921]),
+        reference.cases.len() == 3
+            && reference
+                .cases
+                .iter()
+                .map(|row| row.pull_request)
+                .collect::<BTreeSet<_>>()
+                == BTreeSet::from([915, 916, 921]),
         "incident coverage incomplete"
     );
+    Ok(())
+}
+
+#[test]
+fn baseline_sources_are_bound_bounded_and_honestly_measured() -> Result<()> {
+    let corpus = load(&root())?;
+    println!(
+        "semantic corpus digest: {}",
+        semantic_digest(&corpus.manifest)?
+    );
+    Ok(())
+}
+
+#[test]
+fn baseline_rejects_incident_blob_and_schema_drift() -> Result<()> {
+    let corpus = load(&root())?;
+    let original = &corpus.manifest.incident_reference;
+    let bytes = incident_bytes()?;
+    let mut wrong_blob = original.clone();
+    wrong_blob.git_blob = "0".repeat(40);
+    ensure!(validate_incident_reference(&wrong_blob, &bytes).is_err());
+    let mut wrong_schema: Value = serde_json::from_slice(&bytes)?;
+    *wrong_schema.get_mut("schema").context("incident schema")? = Value::from("unexpected.schema");
+    let changed_bytes = serde_json::to_vec(&wrong_schema)?;
+    let mut repinned = original.clone();
+    repinned.sha256 = digest(&changed_bytes);
+    ensure!(validate_incident_reference(&repinned, &changed_bytes).is_err());
+    let mut duplicate = original.clone();
+    duplicate
+        .cases
+        .push(original.cases.first().context("incident case")?.clone());
+    ensure!(validate_incident_reference(&duplicate, &bytes).is_err());
     Ok(())
 }
 
@@ -997,5 +1039,16 @@ fn baseline_file_inventory_rejects_mutation_omission_and_extra_payloads() -> Res
     );
     fs::write(&extra, vec![b'x'; usize::try_from(MAX_FILE + 1)?])?;
     ensure!(load(temporary.path()).is_err(), "oversized file accepted");
+    #[cfg(unix)]
+    {
+        fs::remove_file(&extra)?;
+        load(temporary.path())?;
+        fs::remove_file(&target)?;
+        std::os::unix::fs::symlink(root().join(&file.path), &target)?;
+        ensure!(
+            load(temporary.path()).is_err(),
+            "linked source bytes accepted"
+        );
+    }
     Ok(())
 }
