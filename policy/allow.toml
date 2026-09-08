@@ -44,9 +44,9 @@ glob = "{README.md,docs/**/*.md,templates/**/*.md,REPO_READY.md,RELEASE_NOTES*.m
 category = "documentation"
 language = "markdown"
 owner = "ub-review/docs"
-reason = "Human and agent operating documentation is intentionally Markdown so GitHub renders it and reviewers can audit it directly."
+reason = "Human and agent operating documentation is intentionally Markdown so GitHub renders it and reviewers can audit it directly. Category permission for Markdown operating documentation reviewed on 2026-09-08; this does not certify all factual content."
 created = "2026-06-03"
-review_after = "2026-09-03"
+review_after = "2026-12-08"
 
 [[exception]]
 id = "non-rust-config-toml"

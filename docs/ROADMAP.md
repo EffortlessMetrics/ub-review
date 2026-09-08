@@ -1,9 +1,15 @@
 # Roadmap
 
-`ub-review` is the Bun UB review gate first. General review-engine work should
-come after the Bun profile is proven and should preserve the Bun invariants.
+This document preserves the historical Bun v0 roadmap and its receipts.
+Current execution order belongs to
+[issue #945](https://github.com/EffortlessMetrics/ub-review/issues/945);
+[Product state](PRODUCT_STATE.md) records earned capability. The build order,
+provider choices, and proposed PRs below do not select today's work.
 
-## Current locked baseline
+The original v0 direction was the Bun UB review gate first, with general
+review-engine work following Bun profile proof while preserving its invariants.
+
+## Historical v0 baseline
 
 The v0 gate is:
 
@@ -267,7 +273,7 @@ This layer is how `ub-review` should eventually answer questions like:
 - a test was skipped because the runtime profile had no budget;
 - missing proof was recorded as missing evidence, not safety.
 
-## Next PRs
+## Historical proposed PR sequence
 
 ### 1. Smoke cleanup
 

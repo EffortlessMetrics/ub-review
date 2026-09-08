@@ -2,6 +2,12 @@
 
 _Status at source commit `55e4fbab879b3a83c31f35cdc9f7e5cd99f0a6c8`._
 
+_Execution-front update at `33f4271`, 2026-09-08 UTC: [#1266]/[#956], the
+narrow [#1290] receipt-content join, and [#1289] bounded shadow comparisons
+have landed. Full production acceptance under [#957] remains unproven.
+The source-commit boundary below remains historical;
+[Product state](PRODUCT_STATE.md) records current earned capability._
+
 Issue [#1268] owns this programme. Issue [#945] remains the complete product
 roadmap and merge-front authority. Current source, exact-head receipts, and
 newer issue amendments outrank this document when they disagree.
@@ -62,8 +68,12 @@ an existing check because UB Review can run a command with a similar string.
 
 ### A. Make one run coherent
 
-The authority merge front is [#1266]/[#956] -> [#957] -> [#958] -> [#959] ->
-[#960] -> [#962].
+The original authority path began with [#1266]/[#956], now merged. The
+remaining front is [#957] -> [#958] -> [#959] -> [#960] -> [#962]. [#1290]
+provides receipt-content joins within #957, and merged [#1289] compares
+persisted projections in shadow. Neither establishes coherent production
+packets and integration at every publication boundary. Issue closure alone
+does not satisfy those prerequisites or authorize the next authority change.
 
 This sequence must establish one coherent account of the exact revision, every
 proposed and executed task, terminal receipts or failures, resource release,
@@ -342,6 +352,8 @@ require the independent baseline is separately owned by [#1285].
 [#1015]: https://github.com/EffortlessMetrics/ub-review/issues/1015
 [#1120]: https://github.com/EffortlessMetrics/ub-review/issues/1120
 [#1266]: https://github.com/EffortlessMetrics/ub-review/pull/1266
+[#1289]: https://github.com/EffortlessMetrics/ub-review/pull/1289
+[#1290]: https://github.com/EffortlessMetrics/ub-review/pull/1290
 [#1268]: https://github.com/EffortlessMetrics/ub-review/issues/1268
 [#1269]: https://github.com/EffortlessMetrics/ub-review/issues/1269
 [#1270]: https://github.com/EffortlessMetrics/ub-review/issues/1270
