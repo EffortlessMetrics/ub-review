@@ -52,6 +52,8 @@ release board; this table is a dated observation.
   next exact candidate packet after its product and stable-tool prerequisites.
 - [#817](https://github.com/EffortlessMetrics/ub-review/issues/817) owns
   authorization, publication, and independent post-cut verification.
+- [#1300](https://github.com/EffortlessMetrics/ub-review/issues/1300) owns
+  the missing publication-byte boundary and blocks a new cut.
 
 The occupied `v0.1.1` name in historical issue plans is not a new-cut target.
 Keep unmet acceptance criteria open while selecting a fresh version; an
@@ -80,11 +82,30 @@ gh api repos/EffortlessMetrics/ub-review/releases --paginate
 
 Record the selected SHA, package version, intended tag, and results in #816.
 Require both local and remote tag absence and no GitHub release with that
-tag, including drafts. For `show-ref --verify --quiet`, status 1 with no matching ref
-means absent; for `ls-remote --exit-code`, status 2 means no matching ref.
+tag, including drafts. For `show-ref --verify --quiet`, status 1 with no
+matching ref means absent; for `ls-remote --exit-code`, status 2 means no
+matching ref.
 Authentication, transport, API, and other command failures do not establish
 absence. Stop on any collision, even if the existing tag targets the same
 commit. Do not move or delete a historical tag to free a name.
+
+## Publication prerequisite: preserve the authorized bytes
+
+The current workflow cannot yet establish #817's required identity between
+the pre-authorization archive and the bytes it publishes. Dispatch and tag
+push build separate archives, and packaging retains fresh filesystem
+timestamps. Matching source SHAs therefore do not imply matching archive
+digests. The tag job checks only its own new receipt before exposing assets.
+
+Do not proceed to tag creation or publication until a reviewed production
+path either promotes the exact authorized archive/checksum or proves
+reproducible packaging and compares the rebuilt bytes to the authorized
+digest **before** creating or uploading a GitHub Release. #816/#817 must
+retain this prerequisite and its tamper/mismatch rejection proof. Checking
+the digest after exposure is a verification backstop, not a substitute for
+this missing publication boundary. [#1300](https://github.com/EffortlessMetrics/ub-review/issues/1300)
+owns its implementation and proof. The remaining preparation steps below
+can assemble evidence while this prerequisite remains open.
 
 ## Build the pre-authorization packet
 
@@ -128,8 +149,8 @@ asset, checksum_asset, archive_sha256
 Verify the actual binary's `--version` against the proposed tag, the single
 root-level executable archive layout, checksum, and supported platform.
 Attach exact no-host-Cargo installation, failure-path, model-off, and supported
-provider/Action receipts required by #815/#816. Record
-`source_build_used=false` for release-only paths. Retain the package/action
+provider/Action receipts required by #815/#816. Record the install-proof
+assertion described below for release-only paths. Retain the package/action
 version mirror proof, asset names/digests, supported claims, explicit gaps,
 and the previously verified consumer rollback target.
 
@@ -140,10 +161,28 @@ Do not edit or relabel a receipt to make it describe a different commit or tag.
 After any candidate movement, regenerate the exact candidate packet before
 seeking authorization.
 
+### Install-proof assertion and producer
+
+`source_build_used=false` is the explicit assertion required in #815/#816's
+harness-owned install-proof packet. It is not a current Action output or a
+field emitted by `ub-review.release_candidate.v1`; current main has no
+installer-receipt schema that emits this named field. The installation proof
+owner must name the actual harness source revision, schema, field mapping,
+and retained evidence used to establish the assertion.
+
+That evidence must bind the selected Action ref and release artifact to the
+observed resolver path, installed binary identity, environment/tool-absence
+probes, and negative controls that detect forbidden source fallback. Merely
+requesting `install-mode: release` cannot populate a successful receipt.
+Missing observations remain not proven. PR #1265's proposed Rust harness
+uses its own versioned environment/resolver receipts; its pending source and
+historical runs must not be represented as a producer already on main.
+
 ## Authorization and tag push
 
-Complete the reviewable packet in #816 before requesting authorization in
-#817. The maintainer's authorization must name the exact SHA, unused tag,
+Close the publication-byte prerequisite and complete the reviewable packet
+in #816 before requesting authorization in #817. The maintainer's
+authorization must name the exact SHA, unused tag,
 intended external actions, claims, rollback target, and any separately allowed
 destructive recovery. Do not substitute a newer SHA after authorization.
 
@@ -160,9 +199,11 @@ The tag-push workflow builds a new archive; it does not promote the earlier
 dispatch artifact. Before publishing, it verifies that its receipt matches
 `GITHUB_SHA`, the tag ref/name, Rust 1.95.0, asset names, and archive digest.
 That is an identity check within the tag run, not a comparison to #816's
-earlier archive. Preserve both receipts and independently compare the
-published assets with the authorized packet as #817 requires. A mismatch is
-unmet release acceptance, not permission to replace the recorded digest.
+earlier archive. This current path must be repaired under the prerequisite
+above before an authorized cut. Preserve both receipts and independently
+compare the published assets with the authorized packet as #817 requires.
+A mismatch is unmet release acceptance, not permission to replace the
+recorded digest.
 
 The current workflow creates a release using `.github/release-notes.md`, or
 uploads with `--clobber` if the release already exists. Its tag validator

@@ -385,8 +385,15 @@ published Release asset, or authorization to publish.
 The [runbook](../RELEASE_RUNBOOK.md) owns exact candidate checks, unused-tag
 admission, #817 authorization, and independent published-asset verification.
 A tag push rebuilds the archive; it does not promote the dispatch artifact.
-Preserve and compare actual identities and digests rather than relabeling
-older proof. Run fresh consumer proof for the selected published artifact;
+Fresh archive timestamps prevent assuming reproducible bytes. Before any
+new tag/publication, #816/#817 require
+[#1300](https://github.com/EffortlessMetrics/ub-review/issues/1300)'s reviewed
+path that promotes the
+authorized bytes or verifies reproducible rebuilt bytes against the
+authorized digest before exposure. This remains an open prerequisite;
+post-publication comparison does not repair it. Preserve actual identities
+and digests rather than relabeling older proof. Run fresh consumer proof for
+the selected published artifact;
 historical publication or a source-build smoke does not supply it.
 
 ## Implementation PR slices
@@ -427,6 +434,10 @@ image without printing a single secret value.
 
 Published Linux x64 archives exist. A claim that a particular installation
 skipped the source build must cite that exact artifact, platform, Action ref,
-and `source_build_used=false` receipt. Do not promote publication metadata,
+and the harness-owned `source_build_used=false` assertion required by
+#815/#816. This is not a current Action output or existing installer-receipt
+field: the proof owner must identify the actual schema/field mapping and
+retained resolver, binary, environment, and negative-control observations.
+Missing evidence stays not proven. Do not promote publication metadata,
 `auto` success, or the source package version into proof of no-host-Cargo,
 provider, portability, stable-coordinator, or next-candidate readiness.
