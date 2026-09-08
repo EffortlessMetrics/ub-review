@@ -34,8 +34,11 @@ pub(super) fn verify_checksum(bytes: &[u8], archive: &Asset) -> Result<()> {
         .strip_prefix("sha256:")
         .context("archive digest algorithm")?;
     let fields = text.split_whitespace().collect::<Vec<_>>();
+    // The immutable published checksum names its build-time dist/ path.
+    // Match that exact label; never interpret it as an extraction destination.
+    let published_name = format!("dist/{ARCHIVE}");
     ensure!(
-        fields.as_slice() == [expected, ARCHIVE],
+        fields.as_slice() == [expected, published_name.as_str()],
         "published checksum does not identify the resolved archive"
     );
     Ok(())
@@ -184,8 +187,10 @@ mod tests {
         ensure!(verify_download(&asset, b"abd").is_err());
         asset.size = 4;
         ensure!(verify_download(&asset, b"abc").is_err());
-        let checksum = format!("{}  {ARCHIVE}\n", sha256(b"abc"));
+        let checksum = format!("{}  dist/{ARCHIVE}\n", sha256(b"abc"));
         verify_checksum(checksum.as_bytes(), &asset)?;
+        ensure!(verify_checksum(checksum.replace("dist/", "").as_bytes(), &asset).is_err());
+        ensure!(verify_checksum(checksum.replace("dist/", "../").as_bytes(), &asset).is_err());
         ensure!(verify_checksum(checksum.replace(ARCHIVE, "other").as_bytes(), &asset).is_err());
         verify_version(true, b"ub-review 0.1.0\n", b"")?;
         ensure!(verify_version(true, b"true (GNU coreutils) 9.4\n", b"").is_err());
