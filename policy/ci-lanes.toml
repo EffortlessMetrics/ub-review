@@ -42,3 +42,10 @@ when = "release/label"
 target_required = false
 implemented = false
 reason = "Release archive build + checksum verification without publishing; referenced by the release risk pack (#603)."
+
+[[lane]]
+id = "release-portability-proof"
+when = "workflow_dispatch"
+target_required = false
+implemented = true
+reason = "Explicitly dispatched immutable v0.1.0 execution and strict-resolver controls; two disposable runtime containers, no publishing or product source build, and authorization-bound receipts. Ordinary PRs use the existing Rust checks."

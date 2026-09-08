@@ -1,38 +1,44 @@
 name: Release Portability Proof
 
+# Docker proof is explicitly dispatched; ordinary PRs run the existing Rust gates.
 on:
-  pull_request:
-    paths:
-      - action.yml
-      - .github/workflows/release-binary.yml
-      - .github/workflows/release-portability-proof.yml
-      - scripts/prove-release-portability.sh
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: read
 
 concurrency:
-  group: release-portability-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: release-portability-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   immutable-release-runtime:
     name: v0.1.0 runtime matrix
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-
-      - name: Prove exact release portability
-        run: bash scripts/prove-release-portability.sh
-
-      - name: Upload release portability receipts
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: 1.95.0
+      - name: Build the Rust proof controller
+        run: cargo build --locked --package xtask
+      - name: Retain the same-source resolver controller
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-portability-controller-${{ github.sha }}
+          path: target/debug/xtask
+          if-no-files-found: error
+          retention-days: 7
+      - name: Prove immutable release portability
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: target/debug/xtask release-portability run --out target/release-portability
+      - name: Retain runtime proof and failures
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ub-review-v0.1.0-release-portability
           path: target/release-portability
@@ -41,35 +47,30 @@ jobs:
 
   strict-release-no-fallback:
     name: strict release rejects missing asset
-    runs-on: ubuntu-latest
+    needs: immutable-release-runtime
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     container: ubuntu:24.04
-    permissions:
-      contents: read
     defaults:
       run:
         shell: bash
     steps:
-      - name: Prepare clean container
+      - name: Prepare the resolver container
         run: |
-          set -euo pipefail
-          export DEBIAN_FRONTEND=noninteractive
           apt-get update -qq
-          apt-get install -y -qq --no-install-recommends ca-certificates curl git >/tmp/apt.log
-          if command -v cargo >/dev/null 2>&1; then
-            echo "::error::cargo unexpectedly present: $(command -v cargo)"
-            exit 1
-          fi
-          if command -v rustc >/dev/null 2>&1; then
-            echo "::error::rustc unexpectedly present: $(command -v rustc)"
-            exit 1
-          fi
-
-      - uses: actions/checkout@v5
+          apt-get install -y -qq --no-install-recommends ca-certificates curl git
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-
-      - name: Reject missing release asset without source fallback
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: release-portability-controller-${{ github.sha }}
+          path: ${{ runner.temp }}/portability-controller
+      - name: Prove the clean resolver baseline
+        run: |
+          chmod +x "$RUNNER_TEMP/portability-controller/xtask"
+          "$RUNNER_TEMP/portability-controller/xtask" release-portability resolver-before --out target/release-portability-resolver
+      - name: Reject missing release asset without fallback
         id: missing_release
         continue-on-error: true
         uses: ./
@@ -81,51 +82,18 @@ jobs:
           release-asset: ub-review-missing-x86_64-unknown-linux-gnu.tar.gz
           posting: artifact-only
           model-mode: off
-
-      - name: Verify fail-closed resolver receipt
-        if: always()
+      - name: Validate the resolver result
+        if: always() && steps.missing_release.outcome != 'skipped'
         env:
           STEP_OUTCOME: ${{ steps.missing_release.outcome }}
-          ACTION_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          WORKFLOW_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          if [[ "$STEP_OUTCOME" != "failure" ]]; then
-            echo "::error::missing strict-release asset did not fail: $STEP_OUTCOME"
-            exit 1
-          fi
-          if [[ -e "$RUNNER_TEMP/ub-review-action-src" ]]; then
-            echo "::error::strict release attempted to materialize a source fallback"
-            find "$RUNNER_TEMP/ub-review-action-src" -maxdepth 2 -print || true
-            exit 1
-          fi
-          if command -v cargo >/dev/null 2>&1 || command -v rustc >/dev/null 2>&1; then
-            echo "::error::Rust tooling appeared during strict release resolution"
-            exit 1
-          fi
-
-          mkdir -p target/release-portability
-          cat > target/release-portability/resolver-no-fallback.json <<JSON
-          {
-            "schema": "ub-review.release_resolver_no_fallback.v1",
-            "action_head_sha": "${ACTION_HEAD_SHA}",
-            "workflow_sha": "${WORKFLOW_SHA}",
-            "release_tag": "v0.1.0",
-            "requested_asset": "ub-review-missing-x86_64-unknown-linux-gnu.tar.gz",
-            "step_outcome": "${STEP_OUTCOME}",
-            "cargo_present": false,
-            "rustc_present": false,
-            "source_workdir_present": false,
-            "source_build_used": false,
-            "outcome": "rejected_without_fallback"
-          }
-          JSON
-
-      - name: Upload strict-release receipt
+        run: >
+          "$RUNNER_TEMP/portability-controller/xtask" release-portability resolver-after
+          --out target/release-portability-resolver --step-outcome "$STEP_OUTCOME"
+      - name: Retain resolver proof and failures
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ub-review-v0.1.0-resolver-no-fallback
-          path: target/release-portability/resolver-no-fallback.json
+          path: target/release-portability-resolver
           if-no-files-found: error
           retention-days: 30

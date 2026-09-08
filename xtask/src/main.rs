@@ -10,6 +10,8 @@ use serde_json::{Value as JsonValue, json};
 use toml::Value;
 use toml::map::Map;
 
+mod release_portability;
+
 fn main() {
     if let Err(error) = run() {
         eprintln!("error: {error:#}");
@@ -32,6 +34,7 @@ fn run() -> Result<()> {
     let root = env::current_dir().context("resolve current directory")?;
 
     match command.as_str() {
+        "release-portability" => release_portability::run(&root, args)?,
         "policy-check" => {
             reject_extra_args(args)?;
             let report = check_policy(&root)?;
@@ -78,7 +81,7 @@ fn run() -> Result<()> {
         }
         other => {
             bail!(
-                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, ripr, smoke-base, calibration-report, or help"
+                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, ripr, smoke-base, calibration-report, release-portability, or help"
             )
         }
     }
@@ -105,6 +108,8 @@ cargo xtask commands
   cargo xtask ripr              reproduce hosted ripr ready-mode feedback locally
   cargo xtask smoke-base        select a non-empty local smoke diff base
   cargo xtask calibration-report <dir>  aggregate review/calibration.json files
+  cargo xtask release-portability run --out <new-dir>  prove immutable v0.1.0 in an explicit dispatch
+  cargo xtask release-portability run --local-explicit --out <new-dir>  opt into local Docker proof
 
 precommit options
 
