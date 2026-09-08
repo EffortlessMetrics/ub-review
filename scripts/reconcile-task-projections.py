@@ -407,7 +407,7 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
                             required=kind == "review" and not legacy)
     if portfolio is not None and binding is not None:
         portfolio_head = portfolio.get("head")
-        if not isinstance(portfolio_head, str) or not re.fullmatch(r"[0-9a-f]{40}", portfolio_head):
+        if not isinstance(portfolio_head, str) or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", portfolio_head):
             # The v1 producer can retain symbolic DiffContext labels such as
             # HEAD. Those labels cannot establish immutable packet identity.
             packet.input_unavailable = True

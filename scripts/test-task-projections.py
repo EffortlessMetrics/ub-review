@@ -32,18 +32,19 @@ def read_json(root: Path, path: str) -> object:
     return json.loads((root / path).read_bytes())
 
 
-def coherent(root: Path, *, model_on: bool = False, worker: bool = False) -> tuple[dict, list]:
+def coherent(root: Path, *, model_on: bool = False, worker: bool = False,
+             oid_width: int = 40) -> tuple[dict, list]:
     canonical = ("ub-review.revision-identity.v1\nsemantics=candidate_head\n"
-                 f"base={'b' * 40} {'c' * 40}\nhead={'d' * 40} {'e' * 40}\n"
-                 f"reviewed={'d' * 40} {'e' * 40}\nmerge=-\n"
+                 f"base={'b' * oid_width} {'c' * oid_width}\nhead={'d' * oid_width} {'e' * oid_width}\n"
+                 f"reviewed={'d' * oid_width} {'e' * oid_width}\nmerge=-\n"
                  f"changed_paths={'f' * 64}\ndiff={'a' * 64}\n")
     digest = hashlib.sha256(b"ub-review.revision-identity.digest.v1\x00" + canonical.encode()).hexdigest()
-    binding = {"digest": digest, "semantics": "candidate_head", "reviewed_commit": "d" * 40}
+    binding = {"digest": digest, "semantics": "candidate_head", "reviewed_commit": "d" * oid_width}
     if not worker:
         write_json(root, "input/revision-admission.json", {
             "schema": "ub-review.revision_admission.v1", "identity_canonical": canonical,
             "identity_digest": digest, "semantics": "candidate_head",
-            "reviewed_commit_oid": "d" * 40, "pr_head_commit": "d" * 40,
+            "reviewed_commit_oid": "d" * oid_width, "pr_head_commit": "d" * oid_width,
             "worktree_dirty": False})
     head_command = {"side": "head", "command": "cargo test --locked --test selected", "env": {},
                     "status": "passed", "exit_code": 0, "timed_out": False,
@@ -59,7 +60,7 @@ def coherent(root: Path, *, model_on: bool = False, worker: bool = False) -> tup
                             "stderr": "proof/proof-a/nightly-preflight/stderr.txt",
                             "reason": "completed"})
     proof = {"schema": "ub-review.proof_receipt.v1", "id": "proof-a", "kind": "focused-test" if worker else "focused-head",
-             "base": "b" * 40, "head": "d" * 40, "revision": binding,
+             "base": "b" * oid_width, "head": "d" * oid_width, "revision": binding,
              "test_patch_mode": "head-only", "requested_by": ["model" if model_on else "impact-planner"],
              "request_ids": [] if worker else ["request-a"], "result": "passed" if worker else "head_passed", "reason": "completed",
              "commands": commands}
@@ -116,7 +117,7 @@ def coherent(root: Path, *, model_on: bool = False, worker: bool = False) -> tup
             {"id": "sensor-check", "kind": "sensor", "status": "completed", "receipt_path": sensor_path,
              "lease": {"cpu": 1, "memory_mb": 0, "disk_mb": 8, "timeout_sec": 60}},
             {"id": "proof-a", "kind": "focused-head", "status": "completed", "receipt_path": proof_path}]})
-        write_json(root, "review/proof_portfolio.json", {"schema": "ub-review.proof_portfolio.v1", "head": "d" * 40,
+        write_json(root, "review/proof_portfolio.json", {"schema": "ub-review.proof_portfolio.v1", "head": "d" * oid_width,
                    "budget_seconds": 60, "candidate_count": 1,
                    "candidate_tasks": [{"id": "proof-a", "kind": "focused-head", "required": not model_on}],
                    "decisions": [{"task_id": "proof-a", "status": "selected"}], "selected_task_ids": ["proof-a"]})
@@ -198,6 +199,15 @@ class Projections(unittest.TestCase):
                 self.assertIn("portfolio_revision_unavailable", {row["code"] for row in report["issues"]})
         self.change(path, lambda row: row.update(head=self.binding["reviewed_commit"]))
         self.assertEqual(self.report()["status"], "coherent")
+
+    def test_sha256_portfolio_preserves_admitted_identity(self):
+        coherent(self.root, oid_width=64)
+        self.assertEqual(self.report()["status"], "coherent")
+        self.change("review/proof_portfolio.json", lambda row: row.update(head="a" * 64))
+        report = self.report()
+        self.assertEqual(report["status"], "contradictory")
+        self.assertFalse(report["input_unavailable"])
+        self.assertIn("portfolio_revision_mismatch", {row["code"] for row in report["issues"]})
 
     def test_current_missing_planes_never_pass(self):
         for name in ["input/revision-admission.json", "task_ledger_events.ndjson", "review/task_ledger_snapshot.json",
