@@ -423,6 +423,34 @@ fn validate_zip(zip: &Value, artifact: &Value, case: &Case) -> Result<()> {
 }
 
 fn validate_measurements(corpus: &Corpus, case: &Case) -> Result<()> {
+    let reported = |pointer| {
+        (
+            "reported",
+            "json_pointer",
+            "packet/review/metrics.json",
+            pointer,
+        )
+    };
+    let inventory = |pointer| ("derived", "zip_inventory", "zip-inventory.json", pointer);
+    let sources = BTreeMap::from([
+        ("packet_elapsed_wall", reported("/run/elapsed_wall_ms")),
+        (
+            "proof_process_sum_reported",
+            reported("/run/proof_command_duration_ms_sum"),
+        ),
+        (
+            "model_call_sum_reported",
+            reported("/run/model_call_duration_ms_sum"),
+        ),
+        ("legacy_phase_wall", reported("/wall_clock_ms")),
+        ("artifact_zip", inventory("/archive_bytes")),
+        ("artifact_expanded", inventory("/expanded_bytes")),
+        ("packet_expanded", inventory("/packet_expanded_bytes")),
+        (
+            "artifact_entry_compressed",
+            inventory("/entry_compressed_bytes"),
+        ),
+    ]);
     let required = BTreeMap::from([
         ("packet_elapsed_wall", "ms"),
         ("proof_process_sum_reported", "ms"),
@@ -450,43 +478,37 @@ fn validate_measurements(corpus: &Corpus, case: &Case) -> Result<()> {
             required.get(measurement.name.as_str()).copied() == Some(measurement.unit.as_str()),
             "unknown measurement or unit mismatch"
         );
-        if measurement.status == "not_measured" {
+        if let Some((status, basis, suffix, pointer)) = sources.get(measurement.name.as_str()) {
+            let file = format!("{}/{suffix}", case.id);
             ensure!(
-                measurement.value.is_none()
+                measurement.status == *status
+                    && measurement.basis == *basis
+                    && measurement.file.as_deref() == Some(file.as_str())
+                    && measurement.pointer.as_deref() == Some(*pointer)
+                    && measurement.reason.is_empty(),
+                "measurement name is not bound to its source and unit"
+            );
+            ensure!(
+                case.files.iter().any(|row| row.path == file),
+                "measurement crosses source ownership"
+            );
+            let source = corpus
+                .documents
+                .get(&file)
+                .context("measurement source missing")?;
+            ensure!(
+                measurement.value == Some(number(source, pointer)?),
+                "measurement differs from its source"
+            );
+        } else {
+            ensure!(
+                measurement.status == "not_measured"
+                    && measurement.value.is_none()
                     && measurement.file.is_none()
                     && measurement.pointer.is_none()
                     && measurement.basis == "unavailable"
                     && !measurement.reason.trim().is_empty(),
                 "unknown measurement is not explicit"
-            );
-        } else {
-            ensure!(
-                measurement.reason.is_empty()
-                    && matches!(
-                        (measurement.status.as_str(), measurement.basis.as_str()),
-                        ("reported", "json_pointer") | ("derived", "zip_inventory")
-                    ),
-                "invalid measurement basis"
-            );
-            let file = measurement
-                .file
-                .as_ref()
-                .context("missing measurement source")?;
-            ensure!(
-                case.files.iter().any(|row| &row.path == file),
-                "measurement crosses source ownership"
-            );
-            let source = corpus
-                .documents
-                .get(file)
-                .context("measurement source missing")?;
-            let pointer = measurement
-                .pointer
-                .as_deref()
-                .context("measurement pointer missing")?;
-            ensure!(
-                measurement.value == Some(number(source, pointer)?),
-                "measurement differs from its source"
             );
         }
     }
@@ -498,22 +520,6 @@ fn validate_measurements(corpus: &Corpus, case: &Case) -> Result<()> {
         case.duplicate_relationship_status == "unproven_equivalence",
         "candidate equivalence promoted into authority"
     );
-    for name in [
-        "billable_estimate",
-        "linux_equivalent",
-        "critical_path",
-        "queue_split",
-        "cache_hits",
-        "avoided_executions",
-        "full_process_sum",
-    ] {
-        ensure!(
-            case.measurements
-                .iter()
-                .any(|row| row.name == name && row.status == "not_measured"),
-            "unmeasured economics promoted to measured value"
-        );
-    }
     Ok(())
 }
 
@@ -847,6 +853,51 @@ fn baseline_rejects_forged_missing_duplicate_or_mislabelled_measurements() -> Re
     ensure!(
         serde_json::from_str::<Manifest>(r#"{"schema":"wrong","anonymous_extra":true}"#).is_err()
     );
+    Ok(())
+}
+
+#[test]
+fn baseline_measurement_names_bind_units_to_exact_sources() -> Result<()> {
+    let corpus = load(&root())?;
+    let original = corpus.manifest.cases.first().context("fixture case")?;
+    let wall = original
+        .measurements
+        .iter()
+        .find(|row| row.name == "packet_elapsed_wall")
+        .context("wall measurement")?;
+    let mut rebound = original.clone();
+    let bytes = rebound
+        .measurements
+        .iter_mut()
+        .find(|row| row.name == "artifact_zip")
+        .context("ZIP measurement")?;
+    bytes.status.clone_from(&wall.status);
+    bytes.basis.clone_from(&wall.basis);
+    bytes.file.clone_from(&wall.file);
+    bytes.pointer.clone_from(&wall.pointer);
+    bytes.value = wall.value;
+    ensure!(
+        validate_measurements(&corpus, &rebound).is_err(),
+        "accepted milliseconds as archive bytes"
+    );
+    for name in ["artifact_zip", "packet_elapsed_wall"] {
+        let mut hidden = original.clone();
+        let measurement = hidden
+            .measurements
+            .iter_mut()
+            .find(|row| row.name == name)
+            .context("retained measurement")?;
+        measurement.status = "not_measured".to_owned();
+        measurement.basis = "unavailable".to_owned();
+        measurement.file = None;
+        measurement.pointer = None;
+        measurement.value = None;
+        measurement.reason = "synthetic missing source".to_owned();
+        ensure!(
+            validate_measurements(&corpus, &hidden).is_err(),
+            "accepted hidden retained measurement {name}"
+        );
+    }
     Ok(())
 }
 
