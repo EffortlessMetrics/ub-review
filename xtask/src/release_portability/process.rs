@@ -11,6 +11,7 @@ use wait_timeout::ChildExt;
 const STREAM_LIMIT: u64 = 8 * 1024 * 1024;
 
 pub(super) struct Capture {
+    receipt: PathBuf,
     pub success: bool,
     pub code: Option<i32>,
     pub stdout: Vec<u8>,
@@ -21,8 +22,9 @@ impl Capture {
     pub fn require_success(self, label: &str) -> Result<Self> {
         ensure!(
             self.success,
-            "{label} failed with {:?}; inspect command logs",
-            self.code
+            "{label} failed with {:?}; inspect {}",
+            self.code,
+            self.receipt.display()
         );
         Ok(self)
     }
@@ -121,6 +123,7 @@ impl Runner {
             "{program} exceeded the captured-stream budget"
         );
         Ok(Capture {
+            receipt: prefix.with_extension("json"),
             success: status.success(),
             code: status.code(),
             stdout,

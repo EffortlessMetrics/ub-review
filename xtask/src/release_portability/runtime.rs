@@ -284,6 +284,11 @@ fn supported_packet(container: &Container, runner: &mut Runner, out: &Path) -> R
     fs::write(fixture.join("src/lib.rs"), BASE_SOURCE)?;
     fs::write(fixture.join(".ub-review.toml"), VALID_CONFIG)?;
     container.copy_to(runner, &fixture, "/work/fixture")?;
+    // Docker's archive copy can preserve the host directory owner. Git must
+    // discover a repository owned by its container user; scope ownership to
+    // this fresh synthetic fixture rather than relaxing safe.directory.
+    container.checked(runner, &["stat", "-c", "%u:%g %n", "/work/fixture"])?;
+    container.checked(runner, &["chown", "-R", "0:0", "/work/fixture"])?;
     for args in [
         vec!["git", "-C", "/work/fixture", "init", "-q", "-b", "main"],
         vec![
@@ -427,7 +432,7 @@ pub(super) fn run_row(
     out: &Path,
     image: &str,
     verified: VerifiedRelease<'_>,
-    authorization: &Authorization,
+    execution: &Authorization,
 ) -> Result<Row> {
     let VerifiedRelease {
         release,
@@ -501,7 +506,7 @@ pub(super) fn run_row(
         let row = Row {
             schema: "ub-review.release_portability_receipt.v2".to_owned(),
             release: release.clone(),
-            authorization: authorization.clone(),
+            execution: execution.clone(),
             archive: layout.clone(),
             platform,
             environment,

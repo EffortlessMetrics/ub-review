@@ -81,16 +81,16 @@ fn git_text(root: &Path, args: &[&str]) -> Result<String> {
     Ok(String::from_utf8(output.stdout)?.trim().to_owned())
 }
 
-fn authorization(root: &Path, local: bool) -> Result<Authorization> {
+fn execution(root: &Path, local: bool) -> Result<Authorization> {
     let source = git_text(root, &["rev-parse", "HEAD"])?;
     ensure!(
         git_text(root, &["status", "--porcelain"])?.is_empty(),
         "portability proof requires a clean exact source checkout"
     );
-    let authorization = if local {
+    let execution = if local {
         ensure!(
             env::var("GITHUB_ACTIONS").ok().as_deref() != Some("true"),
-            "workflow proof cannot substitute local authorization"
+            "workflow proof cannot substitute local execution"
         );
         Authorization {
             event: "local_explicit".to_owned(),
@@ -124,8 +124,8 @@ fn authorization(root: &Path, local: bool) -> Result<Authorization> {
             source_sha: source,
         }
     };
-    authorization.validate()?;
-    Ok(authorization)
+    execution.validate()?;
+    Ok(execution)
 }
 
 fn api<T: DeserializeOwned>(runner: &mut Runner, endpoint: &str) -> Result<T> {
@@ -200,9 +200,9 @@ fn download(runner: &mut Runner, out: &Path, asset: &metadata::Asset) -> Result<
     Ok(bytes)
 }
 
-fn prove(out: &Path, authorization: &Authorization) -> Result<()> {
+fn prove(out: &Path, execution: &Authorization) -> Result<()> {
     let mut runner = Runner::new(out)?;
-    write_json(&out.join("authorization.json"), authorization)?;
+    write_json(&out.join("authorization.json"), execution)?;
     let release = resolve_release(&mut runner, out)?;
     let archive = download(&mut runner, out, &release.archive)?;
     let checksum = download(&mut runner, out, &release.checksum)?;
@@ -226,21 +226,21 @@ fn prove(out: &Path, authorization: &Authorization) -> Result<()> {
                 archive_bytes: &archive,
                 executable: &executable_path,
             },
-            authorization,
+            execution,
         )?);
     }
-    let matrix = receipts::reconcile(rows, &release, authorization)?;
+    let matrix = receipts::reconcile(rows, &release, execution)?;
     write_json(&out.join("matrix.json"), &matrix)?;
     fs::write(
         out.join("decision.md"),
-        "# Immutable v0.1.0 portability execution\n\nThe exact asset in resolved-release.json ran on Ubuntu 24.04 x86_64/glibc 2.39. Ubuntu 22.04 x86_64/glibc 2.35 rejected it at the GLIBC_2.39 loader boundary. Other distributions and architectures remain unproven. The historical initializer policy defect remains separate from the explicit-config passing model-off packet. See matrix.json and command logs for this run's source and authorization.\n",
+        "# Immutable v0.1.0 portability execution\n\nThe exact asset in resolved-release.json ran on Ubuntu 24.04 x86_64/glibc 2.39. Ubuntu 22.04 x86_64/glibc 2.35 rejected it at the GLIBC_2.39 loader boundary. Other distributions and architectures remain unproven. The historical initializer policy defect remains separate from the explicit-config passing model-off packet. See matrix.json and command logs for this run's source and execution.\n",
     )?;
     Ok(())
 }
 
 pub(crate) fn run(root: &Path, args: impl Iterator<Item = String>) -> Result<()> {
     let options = Options::parse(args)?;
-    let authorization = authorization(root, options.local)?;
+    let execution = execution(root, options.local)?;
     let out = if options.out.is_absolute() {
         options.out
     } else {
@@ -262,11 +262,11 @@ pub(crate) fn run(root: &Path, args: impl Iterator<Item = String>) -> Result<()>
         fs::create_dir(&out)?;
     }
     match options.mode.as_str() {
-        "run" => prove(&out, &authorization),
-        "resolver-before" => resolver::before(&out, authorization),
+        "run" => prove(&out, &execution),
+        "resolver-before" => resolver::before(&out, execution),
         "resolver-after" => resolver::after(
             &out,
-            authorization,
+            execution,
             options
                 .step_outcome
                 .as_deref()

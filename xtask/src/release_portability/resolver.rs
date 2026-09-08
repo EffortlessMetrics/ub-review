@@ -19,14 +19,16 @@ pub(super) struct ResolverEnvironment {
 #[derive(Deserialize, Serialize)]
 struct Before {
     schema: String,
-    authorization: Authorization,
+    #[serde(rename = "authorization")]
+    execution: Authorization,
     environment: ResolverEnvironment,
 }
 
 #[derive(Serialize)]
 struct Receipt {
     schema: &'static str,
-    authorization: Authorization,
+    #[serde(rename = "authorization")]
+    execution: Authorization,
     release_tag: &'static str,
     requested_asset: &'static str,
     step_outcome: String,
@@ -68,24 +70,23 @@ fn require_clean(environment: &ResolverEnvironment) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn before(out: &Path, authorization: Authorization) -> Result<()> {
+pub(super) fn before(out: &Path, execution: Authorization) -> Result<()> {
     let environment = observe()?;
     require_clean(&environment)?;
     write_json(
         &out.join("resolver-before.json"),
         &Before {
             schema: "ub-review.release_resolver_before.v2".to_owned(),
-            authorization,
+            execution,
             environment,
         },
     )
 }
 
-pub(super) fn after(out: &Path, authorization: Authorization, outcome: &str) -> Result<()> {
+pub(super) fn after(out: &Path, execution: Authorization, outcome: &str) -> Result<()> {
     let before: Before = serde_json::from_slice(&fs::read(out.join("resolver-before.json"))?)?;
     ensure!(
-        before.schema == "ub-review.release_resolver_before.v2"
-            && before.authorization == authorization,
+        before.schema == "ub-review.release_resolver_before.v2" && before.execution == execution,
         "resolver baseline does not bind this source and dispatch"
     );
     require_clean(&before.environment)?;
@@ -99,7 +100,7 @@ pub(super) fn after(out: &Path, authorization: Authorization, outcome: &str) -> 
         &out.join("resolver-no-fallback.json"),
         &Receipt {
             schema: "ub-review.release_resolver_no_fallback.v2",
-            authorization,
+            execution,
             release_tag: super::metadata::TAG,
             requested_asset: MISSING_ASSET,
             step_outcome: outcome.to_owned(),

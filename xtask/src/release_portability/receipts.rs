@@ -25,7 +25,7 @@ impl Authorization {
         );
         ensure!(
             !self.actor.trim().is_empty() && !self.run_id.trim().is_empty(),
-            "authorization has no actor/run identity"
+            "execution has no actor/run identity"
         );
         super::metadata::require_oid(&self.source_sha)?;
         super::metadata::require_oid(&self.workflow_sha)?;
@@ -76,7 +76,8 @@ pub(super) enum Outcome {
 pub(super) struct Row {
     pub schema: String,
     pub release: ReleaseIdentity,
-    pub authorization: Authorization,
+    #[serde(rename = "authorization")]
+    pub execution: Authorization,
     pub archive: ArchiveLayout,
     pub platform: Platform,
     pub environment: Environment,
@@ -88,7 +89,8 @@ pub(super) struct Row {
 pub(super) struct Matrix {
     schema: &'static str,
     release: ReleaseIdentity,
-    authorization: Authorization,
+    #[serde(rename = "authorization")]
+    execution: Authorization,
     rows: Vec<Row>,
     decision: BTreeMap<&'static str, &'static str>,
 }
@@ -103,9 +105,9 @@ pub(super) fn reconcile(
     rows.sort_by(|left, right| left.platform.image.cmp(&right.platform.image));
     let first = rows.first().context("matrix first row")?;
     let release = first.release.clone();
-    let authorization = first.authorization.clone();
+    let execution = first.execution.clone();
     ensure!(
-        &release == expected_release && &authorization == expected_authorization,
+        &release == expected_release && &execution == expected_authorization,
         "runtime rows do not bind the independently resolved release and execution authorization"
     );
     let layout = first.archive.clone();
@@ -116,7 +118,7 @@ pub(super) fn reconcile(
             "wrong row schema"
         );
         ensure!(
-            row.release == release && row.authorization == authorization && row.archive == layout,
+            row.release == release && row.execution == execution && row.archive == layout,
             "matrix rows disagree about the release, source, or archive"
         );
         row.environment.validate()?;
@@ -176,7 +178,7 @@ pub(super) fn reconcile(
     Ok(Matrix {
         schema: "ub-review.release_portability_matrix.v2",
         release,
-        authorization,
+        execution,
         rows,
         decision: BTreeMap::from([
             (
@@ -220,7 +222,7 @@ mod tests {
         Ok(Row {
             schema: "ub-review.release_portability_receipt.v2".to_owned(),
             release,
-            authorization: Authorization {
+            execution: Authorization {
                 event: "workflow_dispatch".to_owned(),
                 actor: "fixture".to_owned(),
                 run_id: "123".to_owned(),
@@ -281,8 +283,13 @@ mod tests {
     fn matrix_requires_both_exact_platforms_and_consistent_identity() -> Result<()> {
         let positive = row("ubuntu:24.04")?;
         let negative = row("ubuntu:22.04")?;
-        let check = |rows| reconcile(rows, &positive.release, &positive.authorization);
+        let check = |rows| reconcile(rows, &positive.release, &positive.execution);
         let bytes = json_bytes(&check(vec![positive.clone(), negative.clone()])?)?;
+        let serialized: serde_json::Value = serde_json::from_slice(&bytes)?;
+        ensure!(
+            serialized.get("authorization") == Some(&serde_json::to_value(&positive.execution)?)
+        );
+        ensure!(serialized.get("execution").is_none());
         ensure!(bytes == json_bytes(&check(vec![negative.clone(), positive.clone()])?)?);
         ensure!(check(vec![positive.clone()]).is_err());
         ensure!(check(vec![positive.clone(), positive.clone()]).is_err());
