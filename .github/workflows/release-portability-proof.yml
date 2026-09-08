@@ -1,0 +1,99 @@
+name: Release Portability Proof
+
+# Docker proof is explicitly dispatched; ordinary PRs run the existing Rust gates.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-portability-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  immutable-release-runtime:
+    name: v0.1.0 runtime matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: 1.95.0
+      - name: Build the Rust proof controller
+        run: cargo build --locked --package xtask
+      - name: Retain the same-source resolver controller
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-portability-controller-${{ github.sha }}
+          path: target/debug/xtask
+          if-no-files-found: error
+          retention-days: 7
+      - name: Prove immutable release portability
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: target/debug/xtask release-portability run --out target/release-portability
+      - name: Retain runtime proof and failures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ub-review-v0.1.0-release-portability
+          path: target/release-portability
+          if-no-files-found: error
+          retention-days: 30
+
+  strict-release-no-fallback:
+    name: strict release rejects missing asset
+    needs: immutable-release-runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    container: ubuntu:24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Prepare the resolver container
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends ca-certificates curl git
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: release-portability-controller-${{ github.sha }}
+          path: ${{ runner.temp }}/portability-controller
+      - name: Prove the clean resolver baseline
+        run: |
+          chmod +x "$RUNNER_TEMP/portability-controller/xtask"
+          "$RUNNER_TEMP/portability-controller/xtask" release-portability resolver-before --out target/release-portability-resolver
+      - name: Reject missing release asset without fallback
+        id: missing_release
+        continue-on-error: true
+        uses: ./
+        with:
+          setup-rust: 'false'
+          install-tools: 'false'
+          install-mode: release
+          release-version: v0.1.0
+          release-asset: ub-review-missing-x86_64-unknown-linux-gnu.tar.gz
+          posting: artifact-only
+          model-mode: off
+      - name: Validate the resolver result
+        if: always() && steps.missing_release.outcome != 'skipped'
+        env:
+          STEP_OUTCOME: ${{ steps.missing_release.outcome }}
+        run: >
+          "$RUNNER_TEMP/portability-controller/xtask" release-portability resolver-after
+          --out target/release-portability-resolver --step-outcome "$STEP_OUTCOME"
+      - name: Retain resolver proof and failures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ub-review-v0.1.0-resolver-no-fallback
+          path: target/release-portability-resolver
+          if-no-files-found: error
+          retention-days: 30
