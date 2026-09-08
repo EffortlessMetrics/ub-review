@@ -1,18 +1,31 @@
-# ub-review v0 readiness notes
+# Release state and preparation notes
 
-`ub-review` has moved past the initial artifact-only scaffold. The current
-`main` branch is the Bun UB `review-byok` line. The `v0` and `v0.1` tags
-exist for early commit-SHA pinning (the Bun consumer workflow pins by full
-SHA). The first GitHub Release archive (`v0.1.0`, Linux x64 + checksums)
-shipped 2026-07-18; its tag-push publish job failed on a missing release
-notes file and the assets were completed manually, outside the validated
-candidate-receipt contract. `v0.1.1` is the first cut published end to end
-by the autonomous tag machinery — see issue #343 and SPEC-0010. `v0.1.2`
-is the first patch cut on that machinery, carrying the candidate-suggestion
-fingerprint parity fix (#922) and the fail-closed ripr suppression-ledger
-validator (#921).
+As checked on 2026-09-08, GitHub has published
+[`v0.1.0`](https://github.com/EffortlessMetrics/ub-review/releases/tag/v0.1.0)
+(2026-07-18) and
+[`v0.1.1`](https://github.com/EffortlessMetrics/ub-review/releases/tag/v0.1.1)
+(2026-08-22), each with a Linux x64 archive and checksum sibling. The earlier
+`v0` and `v0.1` refs are historical tags without release archives.
 
-Current supported shape:
+The current source package version is `0.1.2`; `v0.1.2` has no published
+release or remote tag in that snapshot. Source changes, including the
+candidate-suggestion fingerprint parity fix (#922) and suppression-ledger
+validator (#921), do not prove a release was cut. Refresh tag and release
+metadata before selecting the next unused version.
+
+The `v0.1.0` tag-push run failed and its assets were completed manually;
+the `v0.1.1` tag-push run succeeded. The
+[runbook](docs/RELEASE_RUNBOOK.md#current-state-and-ownership) retains those
+historical run links and their limits.
+
+Publication history does not complete the broader product, stable-tool,
+provider, portability, or release-only-install acceptance in
+[#805](https://github.com/EffortlessMetrics/ub-review/issues/805),
+[#816](https://github.com/EffortlessMetrics/ub-review/issues/816), and
+[#817](https://github.com/EffortlessMetrics/ub-review/issues/817). The current
+readiness frontier is recorded in [PRODUCT_STATE](docs/PRODUCT_STATE.md).
+
+Source surface overview:
 
 - root `action.yml` composite action
 - Rust 2024 / Rust 1.95 CLI
@@ -28,15 +41,12 @@ Current supported shape:
 - Bun consumer workflow example using
   `EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd`
 
-Before cutting a release archive (`v0.1.1` was the first cut proven this way),
-prove the same commit on:
+The [release runbook](docs/RELEASE_RUNBOOK.md) owns the next-cut procedure:
+select an unoccupied tag and immutable candidate SHA, retain exact proof and
+asset identities, obtain explicit authorization, then verify the published
+result. Documentation maintenance and a passing packaging dry run authorize
+no tag, release, or other external publication.
 
-1. the locked CI gate;
-2. the local action smoke workflow;
-3. a live MiniMax model smoke run with repository secrets;
-4. a real Bun fork draft PR that posts one grouped review, or records an
-   artifact-only skip, and uploads a complete packet.
-
-After those checks pass, move the Bun workflow to the verified commit SHA. Tags
-are release rollouts; the daily Bun hunt should stay on the latest known-good
-SHA pin.
+Advancing the Bun consumer SHA requires its own verifier and consumer-run
+evidence. It is a separate adoption change; a release cut does not move the
+known-good Bun pin above.
