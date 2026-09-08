@@ -155,6 +155,9 @@ mod tests {
         let valid = archive(&["ub-review"], tar::EntryType::Regular)?;
         let (layout, executable) = inspect_archive(&valid)?;
         ensure!(layout.member_size == 3 && executable == b"bin");
+        let (relative, relative_bytes) =
+            inspect_archive(&archive(&["./ub-review"], tar::EntryType::Regular)?)?;
+        ensure!(relative.member_name == "./ub-review" && relative_bytes == executable);
         for names in [
             vec!["../ub-review"],
             vec!["/ub-review"],
@@ -171,6 +174,30 @@ mod tests {
         ] {
             ensure!(inspect_archive(&archive(&["ub-review"], kind)?).is_err());
         }
+        Ok(())
+    }
+
+    #[test]
+    fn archive_rejects_invalid_gzip_and_expansion_over_budget() -> Result<()> {
+        ensure!(inspect_archive(b"not gzip").is_err());
+        let valid = archive(&["ub-review"], tar::EntryType::Regular)?;
+        ensure!(
+            inspect_archive(valid.get(..valid.len() / 2).context("truncated fixture")?).is_err()
+        );
+        let mut gzip = GzEncoder::new(Vec::new(), Compression::fast());
+        std::io::copy(
+            &mut std::io::repeat(0).take(MAX_EXPANDED_BYTES + 1),
+            &mut gzip,
+        )?;
+        let oversized = gzip.finish()?;
+        let error = inspect_archive(&oversized)
+            .err()
+            .context("accepted oversized expansion")?;
+        ensure!(
+            error
+                .to_string()
+                .contains("expanded archive exceeds byte budget")
+        );
         Ok(())
     }
 
@@ -195,6 +222,19 @@ mod tests {
         verify_version(true, b"ub-review 0.1.0\n", b"")?;
         ensure!(verify_version(true, b"true (GNU coreutils) 9.4\n", b"").is_err());
         ensure!(verify_version(false, b"ub-review 0.1.0\n", b"").is_err());
+        ensure!(verify_version(true, b"ub-review 0.1.0\n", b"unexpected diagnostic").is_err());
+        ensure!(verify_version(true, b"ub-review 0.1.1\n", b"").is_err());
+        ensure!(verify_checksum(b"\xff", &asset).is_err());
+        ensure!(verify_checksum(format!("{checksum}extra").as_bytes(), &asset).is_err());
+        ensure!(
+            verify_checksum(
+                checksum
+                    .replace(&sha256(b"abc"), &sha256(b"abd"))
+                    .as_bytes(),
+                &asset
+            )
+            .is_err()
+        );
         Ok(())
     }
 }

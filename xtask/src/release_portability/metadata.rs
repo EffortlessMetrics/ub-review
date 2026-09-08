@@ -209,26 +209,45 @@ pub(super) mod tests {
         let identity = validate_release(&metadata, &reference(), &BTreeMap::new())?;
         ensure!(identity.archive.id == 481332264 && identity.checksum.size == 113);
         ensure!(serde_json::from_str::<Release>(r#"{"id":"wrong"}"#).is_err());
-        for mutation in 0..8 {
+        for mutation in 0..4 {
             let mut changed = release();
-            let asset = changed.assets.first_mut().context("fixture asset")?;
             match mutation {
-                0 => asset.id += 1,
-                1 => asset.size += 1,
-                2 => asset.digest = format!("sha256:{}", "0".repeat(64)),
-                3 => asset.browser_download_url = "https://example.invalid/asset".to_owned(),
-                4 => asset.name = "wrong.tar.gz".to_owned(),
-                5 => {
-                    let duplicate = asset.clone();
-                    changed.assets.push(duplicate);
-                }
-                6 => changed.draft = true,
-                _ => changed.assets.clear(),
+                0 => changed.id += 1,
+                1 => changed.tag_name = "v0.1.1".to_owned(),
+                2 => changed.draft = true,
+                _ => changed.prerelease = true,
             }
             ensure!(
                 validate_release(&changed, &reference(), &BTreeMap::new()).is_err(),
                 "accepted metadata mutation {mutation}"
             );
+        }
+        for asset_index in 0..2 {
+            for mutation in 0..7 {
+                let mut changed = release();
+                let asset = changed
+                    .assets
+                    .get_mut(asset_index)
+                    .context("fixture asset")?;
+                match mutation {
+                    0 => asset.id += 1,
+                    1 => asset.size += 1,
+                    2 => asset.digest = format!("sha256:{}", "0".repeat(64)),
+                    3 => asset.browser_download_url = "https://example.invalid/asset".to_owned(),
+                    4 => asset.name = "wrong.tar.gz".to_owned(),
+                    5 => {
+                        let duplicate = asset.clone();
+                        changed.assets.push(duplicate);
+                    }
+                    _ => {
+                        changed.assets.remove(asset_index);
+                    }
+                }
+                ensure!(
+                    validate_release(&changed, &reference(), &BTreeMap::new()).is_err(),
+                    "accepted asset {asset_index} mutation {mutation}"
+                );
+            }
         }
         Ok(())
     }
@@ -258,6 +277,44 @@ pub(super) mod tests {
         ensure!(resolve_tag(&reference, &annotations).is_err());
         annotations.get_mut(&sha).context("annotation")?.object = reference.object.clone();
         ensure!(resolve_tag(&reference, &annotations).is_err());
+        annotations.get_mut(&sha).context("annotation")?.object = GitObject {
+            sha: COMMIT.to_owned(),
+            kind: ObjectKind::Commit,
+        };
+        annotations.get_mut(&sha).context("annotation")?.sha = "b".repeat(40);
+        ensure!(resolve_tag(&reference, &annotations).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn tag_resolution_rejects_noncanonical_identity_and_excessive_depth() -> Result<()> {
+        for oid in ["", "abcdef", &"A".repeat(40), &"g".repeat(40)] {
+            ensure!(require_oid(oid).is_err(), "accepted malformed Git identity");
+        }
+        let mut wrong_reference = reference();
+        wrong_reference.reference = "refs/tags/v0.1.1".to_owned();
+        ensure!(resolve_tag(&wrong_reference, &BTreeMap::new()).is_err());
+        let mut current = reference();
+        let mut annotations = BTreeMap::new();
+        for depth in 1..=8 {
+            let sha = format!("{depth:040x}");
+            annotations.insert(
+                sha.clone(),
+                AnnotatedTag {
+                    sha: sha.clone(),
+                    object: current.object.clone(),
+                },
+            );
+            current.object = GitObject {
+                sha,
+                kind: ObjectKind::Tag,
+            };
+            if depth < 8 {
+                ensure!(resolve_tag(&current, &annotations)?.len() == depth + 1);
+            } else {
+                ensure!(resolve_tag(&current, &annotations).is_err());
+            }
+        }
         Ok(())
     }
 }

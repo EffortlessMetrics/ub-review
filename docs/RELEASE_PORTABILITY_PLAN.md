@@ -1,8 +1,8 @@
 # PR #1265: immutable v0.1.0 portability proof
 
-Status: design for the Rust replacement. Exact-head validation and dispatched
-execution receipts are recorded in PR #1265; the prior runs below retain their
-historical source identity.
+Status: Rust replacement implemented. Exact-head validation, dispatched runtime
+and resolver receipts, and remaining gate/review blockers are recorded in
+PR #1265; the prior runs below retain their historical source identity.
 
 ## Authority and retained evidence
 
