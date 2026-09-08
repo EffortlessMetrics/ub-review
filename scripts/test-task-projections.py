@@ -180,6 +180,25 @@ class Projections(unittest.TestCase):
             self.assertEqual(source["bytes"], len(data))
             self.assertEqual(source["sha256"], hashlib.sha256(data).hexdigest())
 
+    def test_portfolio_head_must_bind_to_admitted_commit(self):
+        path = "review/proof_portfolio.json"
+        self.change(path, lambda row: row.update(head="a" * 40))
+        result = subprocess.run([sys.executable, str(HERE / "reconcile-task-projections.py"),
+                                 str(self.root)], capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["status"], "contradictory")
+        self.assertFalse(report["input_unavailable"])
+        self.assertIn("portfolio_revision_mismatch", {row["code"] for row in report["issues"]})
+        for head in [None, "HEAD", "d" * 39, 7]:
+            with self.subTest(head=head):
+                self.change(path, lambda row: row.update(head=head))
+                report = self.report()
+                self.assertTrue(report["input_unavailable"])
+                self.assertIn("portfolio_revision_unavailable", {row["code"] for row in report["issues"]})
+        self.change(path, lambda row: row.update(head=self.binding["reviewed_commit"]))
+        self.assertEqual(self.report()["status"], "coherent")
+
     def test_current_missing_planes_never_pass(self):
         for name in ["input/revision-admission.json", "task_ledger_events.ndjson", "review/task_ledger_snapshot.json",
                      "work_queue.json", "review/proof_portfolio.json", "review/proof_receipts.json",

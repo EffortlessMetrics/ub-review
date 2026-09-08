@@ -94,6 +94,12 @@ Command durations and their sum use the Rust 128-bit unsigned domain. Every
 duration is validated even when metrics are absent; malformed values and sum
 overflow remain unavailable instead of being silently omitted from accounting.
 
+The portfolio's top-level head must name the admitted reviewed commit. A
+different object ID is contradictory. The current v1 producer can retain a
+symbolic `DiffContext` label such as `HEAD`; that label is unavailable immutable
+identity, so it cannot establish a coherent current packet. Legacy packets
+without admitted identity retain their explicitly unbound verification tier.
+
 Current review packets require the receipt-route artifact. Every proof receipt
 must have exactly one route, and its lease IDs must name every owned lease once,
 including refused leases. Ordering is not authority. Standalone worker and
