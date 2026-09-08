@@ -1,163 +1,267 @@
-# Release cut runbook
+# Release preparation and cut runbook
 
-This runbook covers cutting a `ub-review` GitHub Release. The release
-machinery (`release-binary.yml`) is tag-triggered and verified-ready; this
-document makes the cut procedure explicit and repeatable.
+This runbook separates candidate preparation, explicit release authorization,
+publication, and consumer rollback. It describes the current
+[release workflow](../.github/workflows/release-binary.yml); its existence
+does not establish that a proposed candidate is ready. Repo maintenance or a
+documentation change does not authorize tagging, publishing, overwriting
+assets, or deleting a release.
 
-The first production release is `v0.1.0` (issue #343, SPEC-0010). The `v0`
-and `v0.1` tags already exist for early commit-SHA pinning but are not
-release archives.
+## Current state and ownership
 
-## Pre-tag checklist (prove the same commit on)
+Read-only GitHub release and tag metadata checked on 2026-09-08 showed:
 
-Run all five before pushing the tag. Each is a gate the release rests on.
+| Surface | Observed state | Claim boundary |
+| --- | --- | --- |
+| `v0`, `v0.1` | Historical tags, no GitHub release archives | Source references, not prebuilt distribution receipts. |
+| [`v0.1.0`](https://github.com/EffortlessMetrics/ub-review/releases/tag/v0.1.0) | Published 2026-07-18 with Linux x64 archive and checksum | Historical distribution; later source and installer proof do not alter this artifact. |
+| [`v0.1.1`](https://github.com/EffortlessMetrics/ub-review/releases/tag/v0.1.1) | Published 2026-08-22 with Linux x64 archive and checksum | Publication exists; broader product and portability acceptance remains separate. |
+| `Cargo.toml` version `0.1.2` | Development source; no `v0.1.2` remote tag or GitHub release in this snapshot | Version metadata does not reserve a tag or prove a cut. |
 
-1. **The locked CI gate is green on the target commit.** On the PR or the
-   `main` HEAD you're about to tag, `ub-review/gate` must be SUCCESS.
-   ```bash
-   gh pr checks <PR>   # or, for a main HEAD:
-   gh run list --workflow=ub-review-gate.yml --branch main --limit 1
-   ```
+The historical `v0.1.0`
+[tag-push run](https://github.com/EffortlessMetrics/ub-review/actions/runs/29638670606)
+failed; the release assets were completed manually, as recorded in the earlier
+release notes. Do not treat that release as successful end-to-end automation.
+The `v0.1.1`
+[tag-push run](https://github.com/EffortlessMetrics/ub-review/actions/runs/32559138506)
+succeeded at `4e7e9f0a7205b561d84f295e5a5628b44aba61a2`. These are historical
+run and publication observations, not newly executed install or provider proof.
 
-2. **Local full gate passes on a clean checkout.**
-   ```bash
-   cargo fmt --all -- --check
-   cargo check --workspace --all-targets --locked
-   cargo clippy --workspace --all-targets --locked -- -D warnings
-   cargo test --workspace --all-targets --locked
-   cargo doc --workspace --no-deps --locked
-   cargo xtask policy-check
-   ```
+The metadata audit used source commit
+`5e3a043f70f33505f62672405e2fae36b196081b`. The observed `v0.1.1` release
+ID was `374860443`, annotated tag object
+`1c0f2337c38edf59fea90212c639e3f8b730090c`, and peeled commit
+`4e7e9f0a7205b561d84f295e5a5628b44aba61a2`. Archive asset `524783777`
+was 3,177,807 bytes with GitHub-reported digest
+`sha256:580bf632b479d435b6c12ae6abd53d5b80e2cbaead24fb95042ccd9e6a65790a`;
+checksum sibling asset `524783778` was 113 bytes. These values came from
+read-only release/tag APIs; this documentation audit did not download or
+execute the archive.
 
-3. **The packet-contract verifier self-test passes.**
-   ```bash
-   python scripts/verify-bun-review-artifacts.py --self-test
-   ```
+Refresh this information before selecting a candidate. GitHub is the live
+release board; this table is a dated observation.
 
-4. **The action smoke workflow passes on the target commit** (manual
-   `workflow_dispatch` of `.github/workflows/action-smoke.yml`). This
-   exercises the composite action end-to-end (`uses: ./`) without a live
-   model key.
+- [#805](https://github.com/EffortlessMetrics/ub-review/issues/805) owns
+  distribution integration and the completion criteria for its children.
+- [#815](https://github.com/EffortlessMetrics/ub-review/issues/815) owns
+  release-only installation and negative asset cases. Active
+  [PR #1265](https://github.com/EffortlessMetrics/ub-review/pull/1265) contains
+  a bounded `v0.1.0` portability proof; neither its existence nor a green
+  result proves general Linux support or the next candidate.
+- [#816](https://github.com/EffortlessMetrics/ub-review/issues/816) owns the
+  next exact candidate packet after its product and stable-tool prerequisites.
+- [#817](https://github.com/EffortlessMetrics/ub-review/issues/817) owns
+  authorization, publication, and independent post-cut verification.
+- [#1300](https://github.com/EffortlessMetrics/ub-review/issues/1300) owns
+  the missing publication-byte boundary and blocks a new cut.
 
-5. **(Strongly recommended) A live MiniMax model smoke run** with repository
-   secrets (`action-smoke.yml` with `run_model_smoke: true`), confirming the
-   BYOK provider path works against the real API.
+The occupied `v0.1.1` name in historical issue plans is not a new-cut target.
+Keep unmet acceptance criteria open while selecting a fresh version; an
+existing release does not retroactively supply their receipts.
 
-## Cut the release
+## Select the candidate and prove the tag is unused
 
-Once the checklist passes, the tag push triggers `release-binary.yml`
-automatically. There is no manual build step.
+Work in an isolated clean checkout. Choose the full candidate commit SHA and
+a proposed version only after inspecting current source, issues, open PRs,
+and release metadata. The proposed tag must be `v` followed by the package
+version reported by that candidate's binary, not a copied example below.
 
-The packaging job emits `release-candidate.json` with schema
-`ub-review.release_candidate.v1`. It binds the archive and checksum to the
-exact checked-out commit SHA, ref, tag, toolchain, asset names, and archive
-digest. The tag-only publish job validates that receipt against `GITHUB_SHA`
-before creating or uploading a release. Treat that manifest as the immutable
-candidate boundary: documentation-only changes after the candidate run do not
-invalidate it; changes to the shipped binary, action, packaging, or release
-contract require a new candidate run.
+Read-only checks (replace placeholders with the selected values):
 
-```bash
-# 1. Confirm you're on the verified commit.
-git checkout main
-git pull --ff-only
-git rev-parse HEAD          # record this; it's what the release archives
-
-# 2. Create and push the annotated tag.
-git tag -a v0.1.0 -m "ub-review v0.1.0 — first release archive (Linux x64)"
-git push origin v0.1.0
+```text
+git status --short --branch
+git diff --stat
+git diff
+git rev-parse HEAD
+git show <candidate-sha>:Cargo.toml
+git show <candidate-sha>:Cargo.lock
+git show-ref --verify --quiet refs/tags/<proposed-tag>
+git ls-remote --exit-code --tags origin refs/tags/<proposed-tag>
+gh api repos/EffortlessMetrics/ub-review/releases --paginate
 ```
 
-## What the workflow does (autonomously, ~20 min)
+Record the selected SHA, package version, intended tag, and results in #816.
+Require both local and remote tag absence and no GitHub release with that
+tag, including drafts. For `show-ref --verify --quiet`, status 1 with no
+matching ref means absent; for `ls-remote --exit-code`, status 2 means no
+matching ref.
+Authentication, transport, API, and other command failures do not establish
+absence. Stop on any collision, even if the existing tag targets the same
+commit. Do not move or delete a historical tag to free a name.
 
-`release-binary.yml` runs two jobs on the tag push:
+## Publication prerequisite: preserve the authorized bytes
 
-1. **`package`** — builds `cargo build --locked --release --bin ub-review`
-   on `ubuntu-latest` with Rust 1.95.0, packages the binary as
-   `ub-review-x86_64-unknown-linux-gnu.tar.gz`, emits a `.sha256` sibling,
-   uploads both as a workflow artifact.
+The current workflow cannot yet establish #817's required identity between
+the pre-authorization archive and the bytes it publishes. Dispatch and tag
+push build separate archives, and packaging retains fresh filesystem
+timestamps. Matching source SHAs therefore do not imply matching archive
+digests. The tag job checks only its own new receipt before exposing assets.
 
-2. **`publish`** (tag-push only) — validates the tag matches
-   `^v[0-9][A-Za-z0-9._-]*$`, downloads the packaged artifact, and runs
-   `gh release create v0.1.0 <archive> <archive>.sha256 --verify-tag
-   --title v0.1.0 --notes "ub-review v0.1.0"` (or `gh release upload
-   --clobber` if the release already exists).
+Do not proceed to tag creation or publication until a reviewed production
+path either promotes the exact authorized archive/checksum or proves
+reproducible packaging and compares the rebuilt bytes to the authorized
+digest **before** creating or uploading a GitHub Release. #816/#817 must
+retain this prerequisite and its tamper/mismatch rejection proof. Checking
+the digest after exposure is a verification backstop, not a substitute for
+this missing publication boundary. [#1300](https://github.com/EffortlessMetrics/ub-review/issues/1300)
+owns its implementation and proof. The remaining preparation steps below
+can assemble evidence while this prerequisite remains open.
 
-Monitor:
-```bash
-gh run list --workflow=release-binary.yml --limit 1
-gh run watch <run-id>
+## Build the pre-authorization packet
+
+Every receipt must identify the exact candidate SHA, inputs, command, result,
+and artifact. Re-query hosted `headSha` and event/ref metadata; the most recent
+green run on a branch is insufficient. The current `ub-review/gate` workflow
+runs on PR events and manual dispatch, so do not assume a main push produced
+a new gate run.
+
+Run the local deterministic checks on the clean candidate:
+
+```text
+cargo fmt --all -- --check
+cargo check --workspace --all-targets --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --all-targets --locked
+cargo doc --workspace --no-deps --locked
+cargo run --locked --package xtask -- policy-check
+python scripts/verify-bun-review-artifacts.py --self-test
 ```
 
-## Post-cut verification
+Retain hosted gate and Action-smoke run IDs with their exact source identity.
+For each claimed supported provider and platform, attach the corresponding
+smoke/install proof; a model-off run is not provider proof. A source build is
+not release-only-install proof. Follow #816's remaining product, delivery,
+replay, stable-tool, and model criteria rather than closing them from this
+deterministic checklist alone.
 
-Once the workflow completes, verify the release archive before announcing it.
+A manually dispatched `release-binary.yml` run packages a candidate without
+publishing. Dispatch against a ref resolving to the selected SHA, then verify
+the resulting run's `headSha`; reject a moved ref. Retain the
+`ub-review-linux-x64-release` artifact before its 14-day retention expires.
+It contains the archive, checksum, and `release-candidate.json`:
 
-```bash
-# 1. The GitHub Release exists with both assets.
-gh release view v0.1.0
-# Expect: ub-review-x86_64-unknown-linux-gnu.tar.gz + .sha256
-
-# 2. Download and verify the checksum.
-gh release download v0.1.0 --dir /tmp/v0.1.0 --pattern '*.tar.gz*' --clobber
-cd /tmp/v0.1.0
-sha256sum -c ub-review-x86_64-unknown-linux-gnu.tar.gz.sha256
-
-# 3. Extract and run the binary.
-tar -xzf ub-review-x86_64-unknown-linux-gnu.tar.gz
-./ub-review --version
-./ub-review --help | head
-
-# 4. Confirm install-mode=release resolves the archive from a consumer.
-#    (In a scratch consumer repo, or via the action-smoke workflow with
-#    install-mode=release and release-version=v0.1.0.)
+```text
+schema = ub-review.release_candidate.v1
+head_sha, ref, tag, toolchain
+asset, checksum_asset, archive_sha256
 ```
 
-If any step fails, **do not announce the release**. Delete the tag and
-GitHub Release, fix, and re-cut:
-```bash
-gh release delete v0.1.0 --yes --cleanup-tag   # removes tag + release
-# fix, then re-run the Cut the release steps.
+Verify the actual binary's `--version` against the proposed tag, the single
+root-level executable archive layout, checksum, and supported platform.
+Attach exact no-host-Cargo installation, failure-path, model-off, and supported
+provider/Action receipts required by #815/#816. Record the install-proof
+assertion described below for release-only paths. Retain the package/action
+version mirror proof, asset names/digests, supported claims, explicit gaps,
+and the previously verified consumer rollback target.
+
+The workflow receipt binds its actual run SHA/ref/tag. A branch-dispatch
+receipt's `tag` field contains that ref name; it is not evidence that a tag
+exists. A documentation commit changes the SHA just as any other commit does.
+Do not edit or relabel a receipt to make it describe a different commit or tag.
+After any candidate movement, regenerate the exact candidate packet before
+seeking authorization.
+
+### Install-proof assertion and producer
+
+`source_build_used=false` is the explicit assertion required in #815/#816's
+harness-owned install-proof packet. It is not a current Action output or a
+field emitted by `ub-review.release_candidate.v1`; current main has no
+installer-receipt schema that emits this named field. The installation proof
+owner must name the actual harness source revision, schema, field mapping,
+and retained evidence used to establish the assertion.
+
+That evidence must bind the selected Action ref and release artifact to the
+observed resolver path, installed binary identity, environment/tool-absence
+probes, and negative controls that detect forbidden source fallback. Merely
+requesting `install-mode: release` cannot populate a successful receipt.
+Missing observations remain not proven. PR #1265's proposed Rust harness
+uses its own versioned environment/resolver receipts; its pending source and
+historical runs must not be represented as a producer already on main.
+
+## Authorization and tag push
+
+Close the publication-byte prerequisite and complete the reviewable packet
+in #816 before requesting authorization in #817. The maintainer's
+authorization must name the exact SHA, unused tag,
+intended external actions, claims, rollback target, and any separately allowed
+destructive recovery. Do not substitute a newer SHA after authorization.
+
+Immediately before tagging, repeat the local/remote tag and release collision
+checks and verify the clean checkout is still the authorized SHA. Only then
+perform the explicitly authorized commands:
+
+```text
+git tag -a <authorized-tag> <authorized-candidate-sha> -m "ub-review <authorized-tag>"
+git push origin refs/tags/<authorized-tag>
 ```
 
-## When to advance the Bun consumer pin (separate, later)
+The tag-push workflow builds a new archive; it does not promote the earlier
+dispatch artifact. Before publishing, it verifies that its receipt matches
+`GITHUB_SHA`, the tag ref/name, Rust 1.95.0, asset names, and archive digest.
+That is an identity check within the tag run, not a comparison to #816's
+earlier archive. This current path must be repaired under the prerequisite
+above before an authorized cut. Preserve both receipts and independently
+compare the published assets with the authorized packet as #817 requires.
+A mismatch is unmet release acceptance, not permission to replace the
+recorded digest.
 
-The Bun consumer workflow (`EffortlessSteven/bun`) pins `ub-review` by full
-commit SHA, currently `804d198b...`. **Do not advance it as part of the
-release cut.** Per the README and `docs/calibration/bun-ub-review-ledger.md`:
+The current workflow creates a release using `.github/release-notes.md`, or
+uploads with `--clobber` if the release already exists. Its tag validator
+checks name syntax, not whether the name is unused or matches Cargo metadata.
+The collision and version checks above are required operating safeguards;
+never rerun an occupied historical tag as a routine release attempt.
 
-> Update the SHA only after this repo's verifier passes and the Bun consumer
-> workflow succeeds.
+The workflow publishes the archive and checksum. The candidate manifest is a
+workflow artifact, not a GitHub Release asset. Neither the manifest nor the
+checksum establishes signing, SBOM, provenance attestations, portability,
+provider correctness, or stable-coordinator readiness.
 
-The SHA pin and a release tag are different adoption paths:
-- The **SHA pin** tracks the latest known-good commit for the active Bun UB
-  hunt. It moves with validation, not with releases.
-- The **release tag** (`v0.1.0`) is for consumers who want the fast install
-  path (`install-mode=release`).
+## Independently verify the published result
 
-The xtask `validate_bun_gate_pin` enforces that README / REPO_READY /
-example workflow / calibration ledger all reference the *same* SHA; advancing
-it is a separate PR that links the validating Bun fork PR.
+Record the exact tag-push run and inspect it by ID:
 
-## Rollback
-
-A miscut release is recoverable but visible:
-
-```bash
-gh release delete v0.1.0 --yes --cleanup-tag   # deletes release + tag
-git push origin :refs/tags/v0.1.0              # if --cleanup-tag didn't
+```text
+gh run view <tag-run-id> --json headSha,headBranch,event,status,conclusion,url
+gh release view <authorized-tag> --json tagName,isDraft,isPrerelease,publishedAt,assets,url
+git ls-remote --tags origin refs/tags/<authorized-tag> refs/tags/<authorized-tag>^{}
 ```
 
-GitHub may cache or index the release briefly even after deletion. Prefer
-getting the pre-tag checklist right over relying on rollback.
+Verify the annotated tag's peeled commit equals the authorized SHA. Download
+the actual release assets into a new scratch directory, recompute the archive
+checksum, compare names/digests to the packet, inspect layout, and execute the
+extracted binary on each supported platform. Record the actual binary version,
+`--help`, model-off smoke, supported provider/Action smoke, and negative asset
+results. Strict `install-mode: release` must use the published asset and must
+never silently compile from source.
 
-## References
+Capture exact release/asset IDs, platform and tool versions, run IDs, and
+retained receipts in #817. Complete #805 only when its children and remaining
+integration acceptance are proven. Do not announce or use a failed or
+unverified candidate for pilots or stable-coordinator adoption.
 
-- Issue #343 — the live "cut v0.1.0" tracker.
-- SPEC-0010 — the release/install contract (asset name, checksum format,
-  `install-mode=release` semantics).
-- `.github/workflows/release-binary.yml` — the tag-triggered workflow.
-- `action.yml` — the consumer-side install path (`download_release_binary`
-  with sha256 verification).
-- `RELEASE_NOTES.md` — the pre-tag proof checklist (mirrored in §Pre-tag
-  checklist above).
+## Consumer rollback and exceptional release removal
+
+For a failed candidate, preserve evidence and stop rollout. Consumer rollback
+means returning the affected consumer to the previously verified immutable
+release or source pin recorded in the packet, with its required validation.
+The Bun pin has its own verifier and consumer-run requirements in the
+[calibration ledger](calibration/bun-ub-review-ledger.md); a release does not
+advance or roll it back automatically.
+
+Deleting a GitHub Release, deleting or moving a tag, or overwriting published
+assets is a separate destructive action. It requires explicit authorization
+for the identified objects; ordinary release-prep work and a failed smoke do
+not supply it. Preserve history and prefer a fresh version for a corrected
+candidate. If removal is separately authorized, record the exact removed
+objects and retained failure evidence, then regenerate #816's packet and
+obtain fresh #817 authorization for the next candidate.
+
+## Related source truth
+
+- [SPEC-0010](specs/UB-REVIEW-SPEC-0010-release-install.md): install contract.
+- [Release notes](../RELEASE_NOTES.md): published versus development state.
+- [Product state](PRODUCT_STATE.md): current runtime and acceptance boundaries.
+- [Branch protection](ci/branch-protection.md): required gate and independent
+  containment limits.
+- [#1293](https://github.com/EffortlessMetrics/ub-review/issues/1293): this
+  release-state reconciliation; it does not authorize a cut.
