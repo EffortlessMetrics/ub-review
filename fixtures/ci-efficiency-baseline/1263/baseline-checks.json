@@ -1,0 +1,69 @@
+{
+  "checks": [
+    {
+      "conclusion": "success",
+      "details_url": "https://github.com/EffortlessMetrics/ub-review/actions/runs/33140109246/job/98748986395",
+      "head_sha": "b6713a597bce54c388578b4aadd5ec9b1174ab87",
+      "id": 98748986395,
+      "name": "ub-review/independent-baseline",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "details_url": "https://github.com/EffortlessMetrics/ub-review/actions/runs/33140109246/job/98748836244",
+      "head_sha": "b6713a597bce54c388578b4aadd5ec9b1174ab87",
+      "id": 98748836244,
+      "name": "independent evidence / test",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "details_url": "https://github.com/EffortlessMetrics/ub-review/actions/runs/33140109246/job/98748836185",
+      "head_sha": "b6713a597bce54c388578b4aadd5ec9b1174ab87",
+      "id": 98748836185,
+      "name": "independent evidence / clippy",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "details_url": "https://github.com/EffortlessMetrics/ub-review/actions/runs/33140109246/job/98748836168",
+      "head_sha": "b6713a597bce54c388578b4aadd5ec9b1174ab87",
+      "id": 98748836168,
+      "name": "independent evidence / fmt",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "details_url": "https://github.com/EffortlessMetrics/ub-review/actions/runs/33140109246/job/98748836142",
+      "head_sha": "b6713a597bce54c388578b4aadd5ec9b1174ab87",
+      "id": 98748836142,
+      "name": "independent evidence / verifier",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "details_url": "https://github.com/EffortlessMetrics/ub-review/actions/runs/33140109246/job/98748836119",
+      "head_sha": "b6713a597bce54c388578b4aadd5ec9b1174ab87",
+      "id": 98748836119,
+      "name": "independent evidence / policy",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "details_url": "https://github.com/EffortlessMetrics/ub-review/actions/runs/33140109246/job/98748836094",
+      "head_sha": "b6713a597bce54c388578b4aadd5ec9b1174ab87",
+      "id": 98748836094,
+      "name": "independent evidence / check",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "details_url": "https://github.com/EffortlessMetrics/ub-review/actions/runs/33140109246/job/98748836084",
+      "head_sha": "b6713a597bce54c388578b4aadd5ec9b1174ab87",
+      "id": 98748836084,
+      "name": "independent evidence / doc",
+      "status": "completed"
+    }
+  ],
+  "source_json_sha256": "d9b90a9363400c33e23728a1032aa1d75219bdf8f3c53403e83eaed93dd6c55e"
+}

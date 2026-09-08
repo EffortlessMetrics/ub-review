@@ -1,0 +1,62 @@
+[
+  {
+    "schema": "ub-review.resource_lease.v1",
+    "id": "lease-proof-head-1e1c35087a81",
+    "kind": "focused-test",
+    "consumer": "proof-head-1e1c35087a81",
+    "status": "granted",
+    "reason": "focused red/green proof lease granted by runtime profile",
+    "cpu": 4,
+    "memory_mb": 4096,
+    "disk_mb": 2048,
+    "timeout_sec": 600,
+    "network": false,
+    "scratch": true,
+    "command": "head: cwd=target/ub-review/proof-worktrees/head cargo test --locked --package ub-review --test cli_contract",
+    "revision": {
+      "digest": "7e4f24baa62f0c6b4a9c407fa61ff2bb9c79dc67c70152b2f5283b9a2ed1e66e",
+      "semantics": "merge_result",
+      "reviewed_commit": "8537f725f46a18e894e3f90250402ad87777b4aa"
+    }
+  },
+  {
+    "schema": "ub-review.resource_lease.v1",
+    "id": "lease-proof-head-28cd63224f5b",
+    "kind": "focused-test",
+    "consumer": "proof-head-28cd63224f5b",
+    "status": "granted",
+    "reason": "focused red/green proof lease granted by runtime profile",
+    "cpu": 4,
+    "memory_mb": 4096,
+    "disk_mb": 2048,
+    "timeout_sec": 600,
+    "network": false,
+    "scratch": true,
+    "command": "head: cwd=target/ub-review/proof-worktrees/head cargo test --locked --package ub-review --test authority_incidents",
+    "revision": {
+      "digest": "7e4f24baa62f0c6b4a9c407fa61ff2bb9c79dc67c70152b2f5283b9a2ed1e66e",
+      "semantics": "merge_result",
+      "reviewed_commit": "8537f725f46a18e894e3f90250402ad87777b4aa"
+    }
+  },
+  {
+    "schema": "ub-review.resource_lease.v1",
+    "id": "lease-proof-head-46be498ef577",
+    "kind": "focused-test",
+    "consumer": "proof-head-46be498ef577",
+    "status": "granted",
+    "reason": "focused red/green proof lease granted by runtime profile",
+    "cpu": 4,
+    "memory_mb": 4096,
+    "disk_mb": 2048,
+    "timeout_sec": 600,
+    "network": false,
+    "scratch": true,
+    "command": "head: cwd=target/ub-review/proof-worktrees/head cargo test --locked --package ub-review --test cli",
+    "revision": {
+      "digest": "7e4f24baa62f0c6b4a9c407fa61ff2bb9c79dc67c70152b2f5283b9a2ed1e66e",
+      "semantics": "merge_result",
+      "reviewed_commit": "8537f725f46a18e894e3f90250402ad87777b4aa"
+    }
+  }
+]

@@ -1,0 +1,26 @@
+{
+  "class": "packet",
+  "command": "tokmd bundle analyze cockpit context --base origin/main --head HEAD --out target/ub-review/sensors/tokmd",
+  "duration_ms": 1997,
+  "exit_code": 0,
+  "outputs": [
+    "stdout.txt",
+    "stderr.txt",
+    "commands.json",
+    "version.stdout.txt",
+    "version.stderr.txt",
+    "analyze.md",
+    "analyze.json",
+    "cockpit.md",
+    "cockpit.json",
+    "context.md"
+  ],
+  "phase": "fast",
+  "reason": "6 tokmd receipts completed",
+  "required": false,
+  "requires_lease": false,
+  "sensor": "tokmd",
+  "status": "ok",
+  "timed_out": false,
+  "timeout_sec": 300
+}

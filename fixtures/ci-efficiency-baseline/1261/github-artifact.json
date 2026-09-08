@@ -1,0 +1,13 @@
+{
+  "digest": "sha256:15ac5247d324790c89a73fe5e8eeb4b73691e19bd5d4eb10fe61c1631b03bc20",
+  "id": 9664360106,
+  "name": "ub-review-gate",
+  "size_in_bytes": 811167,
+  "workflow_run": {
+    "head_branch": "fix/1260-overlap-oracle",
+    "head_repository_id": 1256687314,
+    "head_sha": "19f20eb2f8253fb4c06f8e429e1eb81cc4b9ed4e",
+    "id": 33114795957,
+    "repository_id": 1256687314
+  }
+}

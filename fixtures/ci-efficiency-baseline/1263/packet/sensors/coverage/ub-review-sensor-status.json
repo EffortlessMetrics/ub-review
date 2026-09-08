@@ -1,0 +1,23 @@
+{
+  "class": "coverage",
+  "command": "cargo llvm-cov --workspace --all-features --locked --lcov --output-path target/ub-review/sensors/coverage/lcov.info",
+  "duration_ms": 54651,
+  "exit_code": 101,
+  "outputs": [
+    "stdout.txt",
+    "stderr.txt",
+    "status.json",
+    "coverage-summary.json",
+    "changed-lines.json",
+    "upload.json",
+    "lcov.info"
+  ],
+  "phase": "late",
+  "reason": "exit code Some(101)",
+  "required": false,
+  "requires_lease": true,
+  "sensor": "coverage",
+  "status": "failed",
+  "timed_out": false,
+  "timeout_sec": 1800
+}

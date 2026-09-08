@@ -1,0 +1,18 @@
+{
+  "class": "workflow",
+  "command": "zizmor .github/workflows --format json",
+  "duration_ms": 0,
+  "exit_code": null,
+  "outputs": [
+    "stdout.txt",
+    "stderr.txt"
+  ],
+  "phase": "fast",
+  "reason": "disabled by config",
+  "required": false,
+  "requires_lease": false,
+  "sensor": "zizmor",
+  "status": "skipped",
+  "timed_out": false,
+  "timeout_sec": 120
+}

@@ -1,0 +1,13 @@
+{
+  "digest": "sha256:ec4f72bb5edf22e781f49ed1b340d8bc7040b473e2908cceccdd4e468dbb06bc",
+  "id": 9711388499,
+  "name": "ub-review-gate",
+  "size_in_bytes": 148138955,
+  "workflow_run": {
+    "head_branch": "codex/956-proof-worker-task-ledger",
+    "head_repository_id": 1256687314,
+    "head_sha": "c1e6872eee908f6f46134a3e0a148b31fd9df555",
+    "id": 33240853970,
+    "repository_id": 1256687314
+  }
+}

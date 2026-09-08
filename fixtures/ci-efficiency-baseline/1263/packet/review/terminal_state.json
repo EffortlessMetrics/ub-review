@@ -1,0 +1,17 @@
+{
+  "schema": "ub-review.terminal_state.v1",
+  "status": "needs-reviewer-attention",
+  "reason": "Reviewer-value content survived compilation, but summary_only_body = `post_substantive` withheld the PR-facing payload as no-value boilerplate: 0 summary-only findings, 0 substantive; diagnostics remain in artifacts.",
+  "review_payload_status": "skipped_empty_smoke",
+  "reviewer_value_present": true,
+  "diff_class": "source-ub",
+  "model_mode": "off",
+  "usable_model_lanes": 0,
+  "model_lanes": 13,
+  "evidence_gaps": 14,
+  "proof_receipts": 3,
+  "final_follow_up_tasks": 14,
+  "inline_comments": 0,
+  "summary_only_findings": 0,
+  "substantive_summary_only_findings": 0
+}

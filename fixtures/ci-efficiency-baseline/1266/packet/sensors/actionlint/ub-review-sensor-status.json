@@ -1,0 +1,18 @@
+{
+  "class": "workflow",
+  "command": "actionlint -format \"{{json .}}\"",
+  "duration_ms": 0,
+  "exit_code": null,
+  "outputs": [
+    "stdout.txt",
+    "stderr.txt"
+  ],
+  "phase": "fast",
+  "reason": "trigger did not match this diff",
+  "required": false,
+  "requires_lease": false,
+  "sensor": "actionlint",
+  "status": "skipped",
+  "timed_out": false,
+  "timeout_sec": 60
+}

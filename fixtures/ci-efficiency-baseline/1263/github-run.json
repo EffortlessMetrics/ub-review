@@ -1,0 +1,16 @@
+{
+  "conclusion": "success",
+  "created_at": "2026-08-28T03:51:26Z",
+  "event": "pull_request",
+  "head_sha": "b6713a597bce54c388578b4aadd5ec9b1174ab87",
+  "html_url": "https://github.com/EffortlessMetrics/ub-review/actions/runs/33140110441",
+  "id": 33140110441,
+  "path": ".github/workflows/ub-review-gate.yml",
+  "repository": "EffortlessMetrics/ub-review",
+  "run_attempt": 1,
+  "run_started_at": "2026-08-28T03:51:26Z",
+  "source_json_sha256": "85eb6e0dafcf4b3f40c65f652370d887cbd6c37dcea7189db22ef7a99e657e3d",
+  "status": "completed",
+  "updated_at": "2026-08-28T03:56:42Z",
+  "workflow_id": 289600864
+}

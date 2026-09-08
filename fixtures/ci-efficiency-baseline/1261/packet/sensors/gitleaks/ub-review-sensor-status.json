@@ -1,0 +1,19 @@
+{
+  "class": "security",
+  "command": "gitleaks detect --redact --source . --report-format json --report-path target/ub-review/sensors/gitleaks/report.json",
+  "duration_ms": 0,
+  "exit_code": null,
+  "outputs": [
+    "stdout.txt",
+    "stderr.txt",
+    "report.json"
+  ],
+  "phase": "fast",
+  "reason": "disabled by config",
+  "required": false,
+  "requires_lease": false,
+  "sensor": "gitleaks",
+  "status": "skipped",
+  "timed_out": false,
+  "timeout_sec": 120
+}

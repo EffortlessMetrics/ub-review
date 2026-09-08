@@ -1,0 +1,9 @@
+{
+  "schema": "ub-review.revision_admission.v1",
+  "identity_canonical": "ub-review.revision-identity.v1\nsemantics=candidate_head\nbase=6f08d746f4ad6e17493ebfeb13e16227e6bca7d1 e2e81d4bf0d66442c7a287510bbd9a9419d26a55\nhead=612e67ed5788ace4be24dd759d8756dfe967840f 932b6dc676d132ebe2d95ca1a9bd4160b8d236f6\nreviewed=612e67ed5788ace4be24dd759d8756dfe967840f 932b6dc676d132ebe2d95ca1a9bd4160b8d236f6\nmerge=-\nchanged_paths=82a5ee11c808ab1a45811418d87b49bf14dda5a69d77f97e85bfefc2f09fc606\ndiff=e4f57799627634efb057c0451d82c837130043021064232ca9818c427694c634\n",
+  "identity_digest": "68b81228fdf2d21f834e3d6fe80edcf01f23439a8e74823e154b06c5061e3d99",
+  "semantics": "candidate_head",
+  "reviewed_commit_oid": "612e67ed5788ace4be24dd759d8756dfe967840f",
+  "pr_head_commit": "612e67ed5788ace4be24dd759d8756dfe967840f",
+  "worktree_dirty": false
+}

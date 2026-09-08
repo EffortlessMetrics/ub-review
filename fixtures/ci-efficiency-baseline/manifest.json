@@ -1,0 +1,1501 @@
+{
+  "cases": [
+    {
+      "archive_sha256": "15ac5247d324790c89a73fe5e8eeb4b73691e19bd5d4eb10fe61c1631b03bc20",
+      "artifact_id": 9664360106,
+      "attempt": 1,
+      "duplicate_relationship_status": "unproven_equivalence",
+      "files": [
+        {
+          "bytes": 389,
+          "path": "1261/github-artifact.json",
+          "sha256": "f11862955250a51352360be38950be356ea60a0a1c326dc498dd584fee357f7f"
+        },
+        {
+          "bytes": 5378,
+          "path": "1261/github-jobs.json",
+          "sha256": "9bceadc66421b8d67476e492438a6da9955b4fa614d3696ffa242a4db7b97aac"
+        },
+        {
+          "bytes": 611,
+          "path": "1261/github-run.json",
+          "sha256": "329de53264218fc13dcdf20c3081e22ed008950063d03f0875423e451faa3f46"
+        },
+        {
+          "bytes": 921,
+          "path": "1261/packet/input/revision-admission.json",
+          "sha256": "90b41734a6346db8b2db115a6ad41639996ebb0d62fc1249de61c38c64f7f4d3"
+        },
+        {
+          "bytes": 1175,
+          "path": "1261/packet/review/gate_outcome.json",
+          "sha256": "26486b04f699285db0ab8b9ef9a765632d6d287b38596ab60fab3db7aeca6514"
+        },
+        {
+          "bytes": 7252,
+          "path": "1261/packet/review/metrics.json",
+          "sha256": "0cf832a351a28b39810226ea88e378332e33a0f67efb6d0f52dc593b54cb1ca7"
+        },
+        {
+          "bytes": 2233,
+          "path": "1261/packet/review/proof_portfolio.json",
+          "sha256": "350086d37878901b1805d0352fb015d6a85cf77a0dea453f5cea2f3ead8081ed"
+        },
+        {
+          "bytes": 3077,
+          "path": "1261/packet/review/proof_receipts.json",
+          "sha256": "c087b78ce71f0f827f5f81097c3bd52bb736c951f46139c7bcab2f1ada227ed9"
+        },
+        {
+          "bytes": 2175,
+          "path": "1261/packet/review/resource_leases.json",
+          "sha256": "67820cb5db5b931890624d6043e249e782af216847a51a4c702736ea184c34cb"
+        },
+        {
+          "bytes": 672,
+          "path": "1261/packet/review/terminal_state.json",
+          "sha256": "4233fc96cedb67b12a87a933d4c0d5a6806dd98971cd0d888b840bc19b82438f"
+        },
+        {
+          "bytes": 377,
+          "path": "1261/packet/sensors/actionlint/ub-review-sensor-status.json",
+          "sha256": "2f95e5c09d366e90988978fd1a4500e2642b8625ff4307c5b9853fc5e3d89675"
+        },
+        {
+          "bytes": 378,
+          "path": "1261/packet/sensors/artifact-verifier/ub-review-sensor-status.json",
+          "sha256": "b3ad4dc6bfd28e1daa19dedfc00ae131afa37e458cd9090d81c07539e07e74bc"
+        },
+        {
+          "bytes": 384,
+          "path": "1261/packet/sensors/ast-grep/ub-review-sensor-status.json",
+          "sha256": "70894d757a3f2e1e70cb4d11356f267ace2578cf383c1bcca7ea042b677305bf"
+        },
+        {
+          "bytes": 352,
+          "path": "1261/packet/sensors/build/ub-review-sensor-status.json",
+          "sha256": "f35d3dc717ca78dd2e6d4f3124c99806ea8189a9fc18e6d2215a556926e3cc5d"
+        },
+        {
+          "bytes": 573,
+          "path": "1261/packet/sensors/cargo-allow/ub-review-sensor-status.json",
+          "sha256": "caea0806322d238543da690a744df712f65f1d959876420fb2870c740b53b8b4"
+        },
+        {
+          "bytes": 351,
+          "path": "1261/packet/sensors/cargo-audit/ub-review-sensor-status.json",
+          "sha256": "158d6d65783dbf1e4837109f86e518009122e0f1d581a4ea9610b2c55a69fd22"
+        },
+        {
+          "bytes": 362,
+          "path": "1261/packet/sensors/cargo-check/ub-review-sensor-status.json",
+          "sha256": "068842a23f20816ef62b9618682140aba9e38169c7e507878fe3141ebfc796a5"
+        },
+        {
+          "bytes": 379,
+          "path": "1261/packet/sensors/cargo-clippy/ub-review-sensor-status.json",
+          "sha256": "c8a911372c6fa6b5bb5ff054e51a2b9a8299c80b42d1d91ead3576187422390b"
+        },
+        {
+          "bytes": 348,
+          "path": "1261/packet/sensors/cargo-deny/ub-review-sensor-status.json",
+          "sha256": "269468893472dac0d55af46de76f236a84ca96d974abff0d16a79d69695008cc"
+        },
+        {
+          "bytes": 353,
+          "path": "1261/packet/sensors/cargo-doc/ub-review-sensor-status.json",
+          "sha256": "d81571a8095484751c6950cb16f3360e40b2f37a1a0fe004e2da880e55d766a1"
+        },
+        {
+          "bytes": 336,
+          "path": "1261/packet/sensors/cargo-fmt/ub-review-sensor-status.json",
+          "sha256": "393dc63406d086419120d942879299bc610ddde3b659b2ce6c99994022fd3c85"
+        },
+        {
+          "bytes": 376,
+          "path": "1261/packet/sensors/cargo-mutants/ub-review-sensor-status.json",
+          "sha256": "8865c84c9d7d3532e895455ff68193fd9213d922908147bb78b300345c809ccf"
+        },
+        {
+          "bytes": 359,
+          "path": "1261/packet/sensors/cargo-test/ub-review-sensor-status.json",
+          "sha256": "9001f2a77de3f640d001e5318a224790fabcb21e16b20b31dc5d990dc05ee086"
+        },
+        {
+          "bytes": 542,
+          "path": "1261/packet/sensors/coverage/ub-review-sensor-status.json",
+          "sha256": "a3b1d2d7da9557140a1f180a3a1b0e5fa7b8107832361fda3326899508a07102"
+        },
+        {
+          "bytes": 346,
+          "path": "1261/packet/sensors/cppcheck/ub-review-sensor-status.json",
+          "sha256": "a0ecbf2105b848dc8664ac4d711fe22dbc24a232c397879d175f2eab6cf11516"
+        },
+        {
+          "bytes": 465,
+          "path": "1261/packet/sensors/gitleaks/ub-review-sensor-status.json",
+          "sha256": "f53b36278136b228a0f65761540e5ae25c9c957702a4da3c0a822a1f13ea33f4"
+        },
+        {
+          "bytes": 358,
+          "path": "1261/packet/sensors/miri/ub-review-sensor-status.json",
+          "sha256": "3948b4b604322d80cf9b9fe3e75f6c96194586d1ede45058889ec75ce6233b26"
+        },
+        {
+          "bytes": 377,
+          "path": "1261/packet/sensors/osv-scanner/ub-review-sensor-status.json",
+          "sha256": "73e1dec48933dc5ebdcb341f667ad99bacf25f8cc18349a12102b661aca367d6"
+        },
+        {
+          "bytes": 525,
+          "path": "1261/packet/sensors/ripr/ub-review-sensor-status.json",
+          "sha256": "8f208e31c0d3da5faaf5650f6f884a89302d1aec10bb814ab3bca992465b2045"
+        },
+        {
+          "bytes": 435,
+          "path": "1261/packet/sensors/semgrep/ub-review-sensor-status.json",
+          "sha256": "33ea612cfe7f0f89d8da92f84c164f41f2c77021941c51250a625448cbc7d92d"
+        },
+        {
+          "bytes": 349,
+          "path": "1261/packet/sensors/shellcheck/ub-review-sensor-status.json",
+          "sha256": "7d84830f5a7623eb39483ca9d3cc59eb56eebb000ac04498192a7041fe3c0790"
+        },
+        {
+          "bytes": 348,
+          "path": "1261/packet/sensors/test/ub-review-sensor-status.json",
+          "sha256": "60819a4bb6cfc45563651e09c4c793f452207cd5da6c85ef9311146c2223261a"
+        },
+        {
+          "bytes": 598,
+          "path": "1261/packet/sensors/tokmd/ub-review-sensor-status.json",
+          "sha256": "0c4485907acf51053fc509358b922e6f482dd8accbf1e98a55f486e0231b9ad2"
+        },
+        {
+          "bytes": 904,
+          "path": "1261/packet/sensors/unsafe-review/ub-review-sensor-status.json",
+          "sha256": "be75d89a5a29c4183e0b6dd41fe44535c0d259a14874889f46834965ba00952c"
+        },
+        {
+          "bytes": 366,
+          "path": "1261/packet/sensors/zizmor/ub-review-sensor-status.json",
+          "sha256": "46ccebdf6f26c2a25bca297f12461a86e03ebf04cbcd685a2954fa311b510e48"
+        },
+        {
+          "bytes": 36364,
+          "path": "1261/zip-inventory.json",
+          "sha256": "0bccfa7fb866ee35230aaf54f49f7abd6012e4ab5d77d0abf8f06fd6e3ca2494"
+        }
+      ],
+      "head_revision": "19f20eb2f8253fb4c06f8e429e1eb81cc4b9ed4e",
+      "id": "1261",
+      "independent_baseline": null,
+      "measurements": [
+        {
+          "basis": "zip_inventory",
+          "file": "1261/zip-inventory.json",
+          "name": "artifact_entry_compressed",
+          "pointer": "/entry_compressed_bytes",
+          "reason": "",
+          "status": "derived",
+          "unit": "bytes",
+          "value": 767525
+        },
+        {
+          "basis": "zip_inventory",
+          "file": "1261/zip-inventory.json",
+          "name": "artifact_expanded",
+          "pointer": "/expanded_bytes",
+          "reason": "",
+          "status": "derived",
+          "unit": "bytes",
+          "value": 5577381
+        },
+        {
+          "basis": "zip_inventory",
+          "file": "1261/zip-inventory.json",
+          "name": "artifact_zip",
+          "pointer": "/archive_bytes",
+          "reason": "",
+          "status": "derived",
+          "unit": "bytes",
+          "value": 811167
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "avoided_executions",
+          "pointer": null,
+          "reason": "Similar command text is unproven_equivalence, not evidence of interchangeable execution or savings.",
+          "status": "not_measured",
+          "unit": "count",
+          "value": null
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "billable_estimate",
+          "pointer": null,
+          "reason": "No billing receipt, price schedule, job-rounding rule or billable inclusion basis is retained.",
+          "status": "not_measured",
+          "unit": "usd",
+          "value": null
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "cache_hits",
+          "pointer": null,
+          "reason": "Cache step outcome does not establish a cache hit; cache keys and restore telemetry are omitted.",
+          "status": "not_measured",
+          "unit": "count",
+          "value": null
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "critical_path",
+          "pointer": null,
+          "reason": "Job spans and packet role intervals are retained; no complete causal DAG makes either the workflow critical path.",
+          "status": "not_measured",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "full_process_sum",
+          "pointer": null,
+          "reason": "Proof command receipts and sensor durations are retained; sensor duration can cover setup and multiple children.",
+          "status": "not_measured",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "basis": "json_pointer",
+          "file": "1261/packet/review/metrics.json",
+          "name": "legacy_phase_wall",
+          "pointer": "/wall_clock_ms",
+          "reason": "",
+          "status": "reported",
+          "unit": "ms",
+          "value": 2960
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "linux_equivalent",
+          "pointer": null,
+          "reason": "No applied multiplier and billable runner interval authority is retained; job elapsed time remains separate.",
+          "status": "not_measured",
+          "unit": "linux_runner_minutes",
+          "value": null
+        },
+        {
+          "basis": "json_pointer",
+          "file": "1261/packet/review/metrics.json",
+          "name": "model_call_sum_reported",
+          "pointer": "/run/model_call_duration_ms_sum",
+          "reason": "",
+          "status": "reported",
+          "unit": "ms",
+          "value": 0
+        },
+        {
+          "basis": "json_pointer",
+          "file": "1261/packet/review/metrics.json",
+          "name": "packet_elapsed_wall",
+          "pointer": "/run/elapsed_wall_ms",
+          "reason": "",
+          "status": "reported",
+          "unit": "ms",
+          "value": 200764
+        },
+        {
+          "basis": "zip_inventory",
+          "file": "1261/zip-inventory.json",
+          "name": "packet_expanded",
+          "pointer": "/packet_expanded_bytes",
+          "reason": "",
+          "status": "derived",
+          "unit": "bytes",
+          "value": 4575363
+        },
+        {
+          "basis": "json_pointer",
+          "file": "1261/packet/review/metrics.json",
+          "name": "proof_process_sum_reported",
+          "pointer": "/run/proof_command_duration_ms_sum",
+          "reason": "",
+          "status": "reported",
+          "unit": "ms",
+          "value": 28966
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "queue_split",
+          "pointer": null,
+          "reason": "GitHub created/start observations are retained but do not isolate runner queue, setup and scheduler delay.",
+          "status": "not_measured",
+          "unit": "ms",
+          "value": null
+        }
+      ],
+      "omissions": [
+        "Full ZIP archives; raw sensor stdout/stderr; source patches; provider/model messages and prompts; delivery bodies; and private payloads are intentionally omitted.",
+        "Run/jobs metadata retains only named public timing and identity fields. source_json_sha256 identifies the pre-projection API bytes, not a signature.",
+        "Toolchain/cache/target-root execution details absent from these selected receipts are unknown. Configured commands remain in proof and sensor receipts without a claim of tool identity equivalence."
+      ],
+      "pull_request": 1261,
+      "repository": "EffortlessMetrics/ub-review",
+      "reviewed_revision": "fad32c56f90209720d113b8274b67258b742c758",
+      "run_id": 33114795957,
+      "semantics": "merge_result",
+      "shapes": [
+        "changed_test"
+      ]
+    },
+    {
+      "archive_sha256": "37dae78b2b3a9028999248c51dc7e9de563217641cb36e81a7cfc8b0cb45ffbe",
+      "artifact_id": 9673683728,
+      "attempt": 1,
+      "duplicate_relationship_status": "unproven_equivalence",
+      "files": [
+        {
+          "bytes": 2651,
+          "path": "1263/baseline-checks.json",
+          "sha256": "5048e109c44b27246d2b2240a5437139112e06c7d922286323722603f4fd50e4"
+        },
+        {
+          "bytes": 396,
+          "path": "1263/github-artifact.json",
+          "sha256": "f610cbd4670820ae78cb1ce38f557cb7c5a33235de50e80c5bfbe82d89c524b0"
+        },
+        {
+          "bytes": 5378,
+          "path": "1263/github-jobs.json",
+          "sha256": "44f87ea74ffa2ce3ce743fe90384babd8c38629170c4903d6161962fafaf4793"
+        },
+        {
+          "bytes": 611,
+          "path": "1263/github-run.json",
+          "sha256": "8be66ccdc0fd60f6ca9145387879a536ad43c75d5e1d7a4575d3f214ca3e3d90"
+        },
+        {
+          "bytes": 921,
+          "path": "1263/packet/input/revision-admission.json",
+          "sha256": "9e473d648a286ad12bd461fc1f12cc4afc9885d63f9a4063ea32424ff8efb1e2"
+        },
+        {
+          "bytes": 1180,
+          "path": "1263/packet/review/gate_outcome.json",
+          "sha256": "3347686eb91b6ed485473dcf34e6e16d6124ad9aa4fe2d92cc1efbb5daf4eb6e"
+        },
+        {
+          "bytes": 7298,
+          "path": "1263/packet/review/metrics.json",
+          "sha256": "7008385ff17165f02226651cb420d5a314d7ec9bb65bb5ed032292e5330a83b3"
+        },
+        {
+          "bytes": 2233,
+          "path": "1263/packet/review/proof_portfolio.json",
+          "sha256": "431031e28109f82d7836468b42faac106612fae954348b91dab41188850aa344"
+        },
+        {
+          "bytes": 3088,
+          "path": "1263/packet/review/proof_receipts.json",
+          "sha256": "f48d037724b1553f3403c2c5ec1608d8f1623c465f123cb9f8203a16727cd331"
+        },
+        {
+          "bytes": 2187,
+          "path": "1263/packet/review/resource_leases.json",
+          "sha256": "1d5a7363fc923eb6204dca5929f78b36eb38de51aa182813957d172515560f31"
+        },
+        {
+          "bytes": 23286,
+          "path": "1263/packet/review/task_ledger_snapshot.json",
+          "sha256": "fff56d67645c1e7a5fdaa24c5d649bceada526a1305218a8b83b77dc05abf372"
+        },
+        {
+          "bytes": 674,
+          "path": "1263/packet/review/terminal_state.json",
+          "sha256": "74da7d008cc99560b170fd291caf79a6966163f68b69ff6f387bed17ef8aab40"
+        },
+        {
+          "bytes": 377,
+          "path": "1263/packet/sensors/actionlint/ub-review-sensor-status.json",
+          "sha256": "2f95e5c09d366e90988978fd1a4500e2642b8625ff4307c5b9853fc5e3d89675"
+        },
+        {
+          "bytes": 378,
+          "path": "1263/packet/sensors/artifact-verifier/ub-review-sensor-status.json",
+          "sha256": "b6368b90dd8381f6d085d8cc9539e0c4a2101dc0aa97e44fce3f09bb98682b4b"
+        },
+        {
+          "bytes": 385,
+          "path": "1263/packet/sensors/ast-grep/ub-review-sensor-status.json",
+          "sha256": "2c493e7aa9d318ed658c16170e6f39ac18c8ca6b658372321767726b34a3fcbf"
+        },
+        {
+          "bytes": 352,
+          "path": "1263/packet/sensors/build/ub-review-sensor-status.json",
+          "sha256": "f35d3dc717ca78dd2e6d4f3124c99806ea8189a9fc18e6d2215a556926e3cc5d"
+        },
+        {
+          "bytes": 573,
+          "path": "1263/packet/sensors/cargo-allow/ub-review-sensor-status.json",
+          "sha256": "9c88b8e9bef380ed9f4e87033faaeec93d3ee8e285f9485d64903838268d9e56"
+        },
+        {
+          "bytes": 351,
+          "path": "1263/packet/sensors/cargo-audit/ub-review-sensor-status.json",
+          "sha256": "158d6d65783dbf1e4837109f86e518009122e0f1d581a4ea9610b2c55a69fd22"
+        },
+        {
+          "bytes": 362,
+          "path": "1263/packet/sensors/cargo-check/ub-review-sensor-status.json",
+          "sha256": "dadc217a768a866a99c89a0b8df5b01f598e539662357ed75d8a2904c0d71a33"
+        },
+        {
+          "bytes": 379,
+          "path": "1263/packet/sensors/cargo-clippy/ub-review-sensor-status.json",
+          "sha256": "18259bfc444b85770664f87ccab6f8bc37018218a26984c568a692bcc0d04aa8"
+        },
+        {
+          "bytes": 348,
+          "path": "1263/packet/sensors/cargo-deny/ub-review-sensor-status.json",
+          "sha256": "269468893472dac0d55af46de76f236a84ca96d974abff0d16a79d69695008cc"
+        },
+        {
+          "bytes": 353,
+          "path": "1263/packet/sensors/cargo-doc/ub-review-sensor-status.json",
+          "sha256": "be949b64348d027048ab0540fd9ea5f5ac27d4c956ac1f1e479b4eb419dd8cca"
+        },
+        {
+          "bytes": 336,
+          "path": "1263/packet/sensors/cargo-fmt/ub-review-sensor-status.json",
+          "sha256": "8655f316208fff3e0e57003ad04a7d2b09f2f9260aafcc7eda8913e59165ce44"
+        },
+        {
+          "bytes": 376,
+          "path": "1263/packet/sensors/cargo-mutants/ub-review-sensor-status.json",
+          "sha256": "8865c84c9d7d3532e895455ff68193fd9213d922908147bb78b300345c809ccf"
+        },
+        {
+          "bytes": 359,
+          "path": "1263/packet/sensors/cargo-test/ub-review-sensor-status.json",
+          "sha256": "54b593c9c28ee0b27bbc97dfa76d2bc60b14220ed61f1a694f273477d1392e94"
+        },
+        {
+          "bytes": 558,
+          "path": "1263/packet/sensors/coverage/ub-review-sensor-status.json",
+          "sha256": "d1c4b1091a2c58514cb28d8e979e9d180ed8394ce6a227dfe90aaa56ce24f6aa"
+        },
+        {
+          "bytes": 346,
+          "path": "1263/packet/sensors/cppcheck/ub-review-sensor-status.json",
+          "sha256": "a0ecbf2105b848dc8664ac4d711fe22dbc24a232c397879d175f2eab6cf11516"
+        },
+        {
+          "bytes": 465,
+          "path": "1263/packet/sensors/gitleaks/ub-review-sensor-status.json",
+          "sha256": "f53b36278136b228a0f65761540e5ae25c9c957702a4da3c0a822a1f13ea33f4"
+        },
+        {
+          "bytes": 358,
+          "path": "1263/packet/sensors/miri/ub-review-sensor-status.json",
+          "sha256": "3948b4b604322d80cf9b9fe3e75f6c96194586d1ede45058889ec75ce6233b26"
+        },
+        {
+          "bytes": 377,
+          "path": "1263/packet/sensors/osv-scanner/ub-review-sensor-status.json",
+          "sha256": "73e1dec48933dc5ebdcb341f667ad99bacf25f8cc18349a12102b661aca367d6"
+        },
+        {
+          "bytes": 525,
+          "path": "1263/packet/sensors/ripr/ub-review-sensor-status.json",
+          "sha256": "e91175d6c4748d36420ff8defb77643a22c9d85e9ce8d38f808bc501014cdfeb"
+        },
+        {
+          "bytes": 435,
+          "path": "1263/packet/sensors/semgrep/ub-review-sensor-status.json",
+          "sha256": "33ea612cfe7f0f89d8da92f84c164f41f2c77021941c51250a625448cbc7d92d"
+        },
+        {
+          "bytes": 349,
+          "path": "1263/packet/sensors/shellcheck/ub-review-sensor-status.json",
+          "sha256": "7d84830f5a7623eb39483ca9d3cc59eb56eebb000ac04498192a7041fe3c0790"
+        },
+        {
+          "bytes": 348,
+          "path": "1263/packet/sensors/test/ub-review-sensor-status.json",
+          "sha256": "60819a4bb6cfc45563651e09c4c793f452207cd5da6c85ef9311146c2223261a"
+        },
+        {
+          "bytes": 599,
+          "path": "1263/packet/sensors/tokmd/ub-review-sensor-status.json",
+          "sha256": "34af5ba5e31e0bfe53a004b7121a95f5e7a4566a9a495e3605f9d6bffc2fe274"
+        },
+        {
+          "bytes": 876,
+          "path": "1263/packet/sensors/unsafe-review/ub-review-sensor-status.json",
+          "sha256": "08c3acd388b6f00c40b551998d0dfe581c09882071e7cd1bf549fb9110656754"
+        },
+        {
+          "bytes": 366,
+          "path": "1263/packet/sensors/zizmor/ub-review-sensor-status.json",
+          "sha256": "46ccebdf6f26c2a25bca297f12461a86e03ebf04cbcd685a2954fa311b510e48"
+        },
+        {
+          "bytes": 101817,
+          "path": "1263/packet/task_ledger_events.ndjson",
+          "sha256": "d8521979754c28d99e18b87b38c0468b2ea7296e8c628f70828cba529aae8637"
+        },
+        {
+          "bytes": 44085,
+          "path": "1263/zip-inventory.json",
+          "sha256": "927170c8ce1f68ca1e0bb75734a926037edcdaa5646ba0fc2502e429a3b9daa0"
+        }
+      ],
+      "head_revision": "b6713a597bce54c388578b4aadd5ec9b1174ab87",
+      "id": "1263",
+      "independent_baseline": {
+        "artifact_digest": "sha256:eb06357f83531ad426f3d511496c22e5bd400e090b065ebd6dcaf865da9a49fb",
+        "artifact_id": 9673611284,
+        "receipt_status": "unavailable_expired_http_410",
+        "run_id": 33140109246
+      },
+      "measurements": [
+        {
+          "basis": "zip_inventory",
+          "file": "1263/zip-inventory.json",
+          "name": "artifact_entry_compressed",
+          "pointer": "/entry_compressed_bytes",
+          "reason": "",
+          "status": "derived",
+          "unit": "bytes",
+          "value": 33784261
+        },
+        {
+          "basis": "zip_inventory",
+          "file": "1263/zip-inventory.json",
+          "name": "artifact_expanded",
+          "pointer": "/expanded_bytes",
+          "reason": "",
+          "status": "derived",
+          "unit": "bytes",
+          "value": 337448532
+        },
+        {
+          "basis": "zip_inventory",
+          "file": "1263/zip-inventory.json",
+          "name": "artifact_zip",
+          "pointer": "/archive_bytes",
+          "reason": "",
+          "status": "derived",
+          "unit": "bytes",
+          "value": 33837713
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "avoided_executions",
+          "pointer": null,
+          "reason": "Similar command text is unproven_equivalence, not evidence of interchangeable execution or savings.",
+          "status": "not_measured",
+          "unit": "count",
+          "value": null
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "billable_estimate",
+          "pointer": null,
+          "reason": "No billing receipt, price schedule, job-rounding rule or billable inclusion basis is retained.",
+          "status": "not_measured",
+          "unit": "usd",
+          "value": null
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "cache_hits",
+          "pointer": null,
+          "reason": "Cache step outcome does not establish a cache hit; cache keys and restore telemetry are omitted.",
+          "status": "not_measured",
+          "unit": "count",
+          "value": null
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "critical_path",
+          "pointer": null,
+          "reason": "Job spans and packet role intervals are retained; no complete causal DAG makes either the workflow critical path.",
+          "status": "not_measured",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "full_process_sum",
+          "pointer": null,
+          "reason": "Proof command receipts and sensor durations are retained; sensor duration can cover setup and multiple children.",
+          "status": "not_measured",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "basis": "json_pointer",
+          "file": "1263/packet/review/metrics.json",
+          "name": "legacy_phase_wall",
+          "pointer": "/wall_clock_ms",
+          "reason": "",
+          "status": "reported",
+          "unit": "ms",
+          "value": 18509
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "linux_equivalent",
+          "pointer": null,
+          "reason": "No applied multiplier and billable runner interval authority is retained; job elapsed time remains separate.",
+          "status": "not_measured",
+          "unit": "linux_runner_minutes",
+          "value": null
+        },
+        {
+          "basis": "json_pointer",
+          "file": "1263/packet/review/metrics.json",
+          "name": "model_call_sum_reported",
+          "pointer": "/run/model_call_duration_ms_sum",
+          "reason": "",
+          "status": "reported",
+          "unit": "ms",
+          "value": 0
+        },
+        {
+          "basis": "json_pointer",
+          "file": "1263/packet/review/metrics.json",
+          "name": "packet_elapsed_wall",
+          "pointer": "/run/elapsed_wall_ms",
+          "reason": "",
+          "status": "reported",
+          "unit": "ms",
+          "value": 197771
+        },
+        {
+          "basis": "zip_inventory",
+          "file": "1263/zip-inventory.json",
+          "name": "packet_expanded",
+          "pointer": "/packet_expanded_bytes",
+          "reason": "",
+          "status": "derived",
+          "unit": "bytes",
+          "value": 336446063
+        },
+        {
+          "basis": "json_pointer",
+          "file": "1263/packet/review/metrics.json",
+          "name": "proof_process_sum_reported",
+          "pointer": "/run/proof_command_duration_ms_sum",
+          "reason": "",
+          "status": "reported",
+          "unit": "ms",
+          "value": 28525
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "queue_split",
+          "pointer": null,
+          "reason": "GitHub created/start observations are retained but do not isolate runner queue, setup and scheduler delay.",
+          "status": "not_measured",
+          "unit": "ms",
+          "value": null
+        }
+      ],
+      "omissions": [
+        "Full ZIP archives; raw sensor stdout/stderr; source patches; provider/model messages and prompts; delivery bodies; and private payloads are intentionally omitted.",
+        "Run/jobs metadata retains only named public timing and identity fields. source_json_sha256 identifies the pre-projection API bytes, not a signature.",
+        "Toolchain/cache/target-root execution details absent from these selected receipts are unknown. Configured commands remain in proof and sensor receipts without a claim of tool identity equivalence."
+      ],
+      "pull_request": 1263,
+      "repository": "EffortlessMetrics/ub-review",
+      "reviewed_revision": "8537f725f46a18e894e3f90250402ad87777b4aa",
+      "run_id": 33140110441,
+      "semantics": "merge_result",
+      "shapes": [
+        "reported_sensor_failure"
+      ]
+    },
+    {
+      "archive_sha256": "153c1d17c0252bcc49dba12ecf74ab4dc0643f70ba04d91a6755beb8f74c5963",
+      "artifact_id": 9966907900,
+      "attempt": 1,
+      "duplicate_relationship_status": "unproven_equivalence",
+      "files": [
+        {
+          "bytes": 395,
+          "path": "1264/github-artifact.json",
+          "sha256": "27667a8822de1598f9373fc89467834f847aa849864845ee4dc9845bd8fa9e2e"
+        },
+        {
+          "bytes": 5382,
+          "path": "1264/github-jobs.json",
+          "sha256": "fa3edb483c56b0cd6306847e532145db02d3efb9c32de518bb4d7e7d4deb7f21"
+        },
+        {
+          "bytes": 616,
+          "path": "1264/github-run.json",
+          "sha256": "bec84f446199724d63b35e71ff2c6ef4f0e1b99dd16fe441840da5cf4709af1e"
+        },
+        {
+          "bytes": 845,
+          "path": "1264/packet/input/revision-admission.json",
+          "sha256": "e7217ecc390651c706c69d639fe1430fbe9a2b8450068e02239e4b87518325ca"
+        },
+        {
+          "bytes": 1177,
+          "path": "1264/packet/review/gate_outcome.json",
+          "sha256": "586553c08586ede76662a7be5a2b88763f88a80772eb4f3746901b752563134a"
+        },
+        {
+          "bytes": 7239,
+          "path": "1264/packet/review/metrics.json",
+          "sha256": "34c47bf7e1bc8f0dcd8c341720d315ea834bcb684fa1614ac9741381a9656a7a"
+        },
+        {
+          "bytes": 1109,
+          "path": "1264/packet/review/proof_portfolio.json",
+          "sha256": "d19624931bcacff50921567122721d4343884f48eda2ca579a6f81c684e9f545"
+        },
+        {
+          "bytes": 3094,
+          "path": "1264/packet/review/proof_receipts.json",
+          "sha256": "04f7e7a40b32819731d6272640b4d2d1bd6a585e3ec504b563e65e2198077c43"
+        },
+        {
+          "bytes": 2193,
+          "path": "1264/packet/review/resource_leases.json",
+          "sha256": "8115bd66484f46a993fa7395eadd3883aa7bf484fa72953e52b843fe87a51f75"
+        },
+        {
+          "bytes": 22822,
+          "path": "1264/packet/review/task_ledger_snapshot.json",
+          "sha256": "c3126f52fb613e339e4fae1c60f0a633efc3730990b80c2957f1b6c497f925a6"
+        },
+        {
+          "bytes": 671,
+          "path": "1264/packet/review/terminal_state.json",
+          "sha256": "bd2b55950fa76606be02e8fc22c7cfbb518d81582e8fa33e4c5d1000986b6cbb"
+        },
+        {
+          "bytes": 377,
+          "path": "1264/packet/sensors/actionlint/ub-review-sensor-status.json",
+          "sha256": "2f95e5c09d366e90988978fd1a4500e2642b8625ff4307c5b9853fc5e3d89675"
+        },
+        {
+          "bytes": 378,
+          "path": "1264/packet/sensors/artifact-verifier/ub-review-sensor-status.json",
+          "sha256": "69954a4347e6e4b3d7b1fdad53f3d1f0ad2371b91a3793dc0f6314be42643021"
+        },
+        {
+          "bytes": 413,
+          "path": "1264/packet/sensors/ast-grep/ub-review-sensor-status.json",
+          "sha256": "7577c1b2a1d4015f198635b9702bd9d2728c5211d17caf319b92bfea8da4c181"
+        },
+        {
+          "bytes": 352,
+          "path": "1264/packet/sensors/build/ub-review-sensor-status.json",
+          "sha256": "f35d3dc717ca78dd2e6d4f3124c99806ea8189a9fc18e6d2215a556926e3cc5d"
+        },
+        {
+          "bytes": 601,
+          "path": "1264/packet/sensors/cargo-allow/ub-review-sensor-status.json",
+          "sha256": "5d25f1985d8483efeed97311e0c7411ec3bb4b7f2ec89ec208cec81e77f38eb7"
+        },
+        {
+          "bytes": 351,
+          "path": "1264/packet/sensors/cargo-audit/ub-review-sensor-status.json",
+          "sha256": "158d6d65783dbf1e4837109f86e518009122e0f1d581a4ea9610b2c55a69fd22"
+        },
+        {
+          "bytes": 362,
+          "path": "1264/packet/sensors/cargo-check/ub-review-sensor-status.json",
+          "sha256": "1be916c39a0693a0303f6e9f650c1bc6223980756a7be6002ab1febe42cf2779"
+        },
+        {
+          "bytes": 379,
+          "path": "1264/packet/sensors/cargo-clippy/ub-review-sensor-status.json",
+          "sha256": "6673b06efc9e89a3aed0888589db88eafafddfa9b0d398fc982a6ff14172a23a"
+        },
+        {
+          "bytes": 348,
+          "path": "1264/packet/sensors/cargo-deny/ub-review-sensor-status.json",
+          "sha256": "269468893472dac0d55af46de76f236a84ca96d974abff0d16a79d69695008cc"
+        },
+        {
+          "bytes": 353,
+          "path": "1264/packet/sensors/cargo-doc/ub-review-sensor-status.json",
+          "sha256": "289a8e26b0d99ada1accfb63919becab9c6c321f7eee9935b274f79a663bc837"
+        },
+        {
+          "bytes": 335,
+          "path": "1264/packet/sensors/cargo-fmt/ub-review-sensor-status.json",
+          "sha256": "0f7ad0d99073124be8a057dbe99bac920458262d7200240be503d11992fbafa3"
+        },
+        {
+          "bytes": 376,
+          "path": "1264/packet/sensors/cargo-mutants/ub-review-sensor-status.json",
+          "sha256": "8865c84c9d7d3532e895455ff68193fd9213d922908147bb78b300345c809ccf"
+        },
+        {
+          "bytes": 359,
+          "path": "1264/packet/sensors/cargo-test/ub-review-sensor-status.json",
+          "sha256": "9ffc46720452393aa7493ce19827cdb2b0c5dbbb6f3b27d3b6f1d55ac43f33f7"
+        },
+        {
+          "bytes": 542,
+          "path": "1264/packet/sensors/coverage/ub-review-sensor-status.json",
+          "sha256": "7c7a7e4c7f1a9e7dd0249bc1e276ef91b6cafafe30d5cc4f11c20ecc35243712"
+        },
+        {
+          "bytes": 346,
+          "path": "1264/packet/sensors/cppcheck/ub-review-sensor-status.json",
+          "sha256": "a0ecbf2105b848dc8664ac4d711fe22dbc24a232c397879d175f2eab6cf11516"
+        },
+        {
+          "bytes": 465,
+          "path": "1264/packet/sensors/gitleaks/ub-review-sensor-status.json",
+          "sha256": "f53b36278136b228a0f65761540e5ae25c9c957702a4da3c0a822a1f13ea33f4"
+        },
+        {
+          "bytes": 358,
+          "path": "1264/packet/sensors/miri/ub-review-sensor-status.json",
+          "sha256": "3948b4b604322d80cf9b9fe3e75f6c96194586d1ede45058889ec75ce6233b26"
+        },
+        {
+          "bytes": 377,
+          "path": "1264/packet/sensors/osv-scanner/ub-review-sensor-status.json",
+          "sha256": "73e1dec48933dc5ebdcb341f667ad99bacf25f8cc18349a12102b661aca367d6"
+        },
+        {
+          "bytes": 553,
+          "path": "1264/packet/sensors/ripr/ub-review-sensor-status.json",
+          "sha256": "e4434fd5b75e8b0d97c9e8509985bd364518b6d0fdc25585309641a8d8824d65"
+        },
+        {
+          "bytes": 435,
+          "path": "1264/packet/sensors/semgrep/ub-review-sensor-status.json",
+          "sha256": "33ea612cfe7f0f89d8da92f84c164f41f2c77021941c51250a625448cbc7d92d"
+        },
+        {
+          "bytes": 349,
+          "path": "1264/packet/sensors/shellcheck/ub-review-sensor-status.json",
+          "sha256": "7d84830f5a7623eb39483ca9d3cc59eb56eebb000ac04498192a7041fe3c0790"
+        },
+        {
+          "bytes": 348,
+          "path": "1264/packet/sensors/test/ub-review-sensor-status.json",
+          "sha256": "60819a4bb6cfc45563651e09c4c793f452207cd5da6c85ef9311146c2223261a"
+        },
+        {
+          "bytes": 597,
+          "path": "1264/packet/sensors/tokmd/ub-review-sensor-status.json",
+          "sha256": "8f8f52e97f5b937f7f9134c66c7c652ee88e623d08c57f3bb04139ce5d981c53"
+        },
+        {
+          "bytes": 904,
+          "path": "1264/packet/sensors/unsafe-review/ub-review-sensor-status.json",
+          "sha256": "be75d89a5a29c4183e0b6dd41fe44535c0d259a14874889f46834965ba00952c"
+        },
+        {
+          "bytes": 366,
+          "path": "1264/packet/sensors/zizmor/ub-review-sensor-status.json",
+          "sha256": "46ccebdf6f26c2a25bca297f12461a86e03ebf04cbcd685a2954fa311b510e48"
+        },
+        {
+          "bytes": 85219,
+          "path": "1264/packet/task_ledger_events.ndjson",
+          "sha256": "b2431cb354915f6ceb0e3204509b3df5228b62f6f0455359187dd036ae1e4858"
+        },
+        {
+          "bytes": 32688,
+          "path": "1264/zip-inventory.json",
+          "sha256": "de3ecd76a131674ad22fbcaad6dc771a0f562ec9aa2c5ce7e3144c5c06a26684"
+        }
+      ],
+      "head_revision": "612e67ed5788ace4be24dd759d8756dfe967840f",
+      "id": "1264",
+      "independent_baseline": null,
+      "measurements": [
+        {
+          "basis": "zip_inventory",
+          "file": "1264/zip-inventory.json",
+          "name": "artifact_entry_compressed",
+          "pointer": "/entry_compressed_bytes",
+          "reason": "",
+          "status": "derived",
+          "unit": "bytes",
+          "value": 811310
+        },
+        {
+          "basis": "zip_inventory",
+          "file": "1264/zip-inventory.json",
+          "name": "artifact_expanded",
+          "pointer": "/expanded_bytes",
+          "reason": "",
+          "status": "derived",
+          "unit": "bytes",
+          "value": 4663055
+        },
+        {
+          "basis": "zip_inventory",
+          "file": "1264/zip-inventory.json",
+          "name": "artifact_zip",
+          "pointer": "/archive_bytes",
+          "reason": "",
+          "status": "derived",
+          "unit": "bytes",
+          "value": 850374
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "avoided_executions",
+          "pointer": null,
+          "reason": "Similar command text is unproven_equivalence, not evidence of interchangeable execution or savings.",
+          "status": "not_measured",
+          "unit": "count",
+          "value": null
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "billable_estimate",
+          "pointer": null,
+          "reason": "No billing receipt, price schedule, job-rounding rule or billable inclusion basis is retained.",
+          "status": "not_measured",
+          "unit": "usd",
+          "value": null
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "cache_hits",
+          "pointer": null,
+          "reason": "Cache step outcome does not establish a cache hit; cache keys and restore telemetry are omitted.",
+          "status": "not_measured",
+          "unit": "count",
+          "value": null
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "critical_path",
+          "pointer": null,
+          "reason": "Job spans and packet role intervals are retained; no complete causal DAG makes either the workflow critical path.",
+          "status": "not_measured",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "full_process_sum",
+          "pointer": null,
+          "reason": "Proof command receipts and sensor durations are retained; sensor duration can cover setup and multiple children.",
+          "status": "not_measured",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "basis": "json_pointer",
+          "file": "1264/packet/review/metrics.json",
+          "name": "legacy_phase_wall",
+          "pointer": "/wall_clock_ms",
+          "reason": "",
+          "status": "reported",
+          "unit": "ms",
+          "value": 930
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "linux_equivalent",
+          "pointer": null,
+          "reason": "No applied multiplier and billable runner interval authority is retained; job elapsed time remains separate.",
+          "status": "not_measured",
+          "unit": "linux_runner_minutes",
+          "value": null
+        },
+        {
+          "basis": "json_pointer",
+          "file": "1264/packet/review/metrics.json",
+          "name": "model_call_sum_reported",
+          "pointer": "/run/model_call_duration_ms_sum",
+          "reason": "",
+          "status": "reported",
+          "unit": "ms",
+          "value": 0
+        },
+        {
+          "basis": "json_pointer",
+          "file": "1264/packet/review/metrics.json",
+          "name": "packet_elapsed_wall",
+          "pointer": "/run/elapsed_wall_ms",
+          "reason": "",
+          "status": "reported",
+          "unit": "ms",
+          "value": 145775
+        },
+        {
+          "basis": "zip_inventory",
+          "file": "1264/zip-inventory.json",
+          "name": "packet_expanded",
+          "pointer": "/packet_expanded_bytes",
+          "reason": "",
+          "status": "derived",
+          "unit": "bytes",
+          "value": 3660586
+        },
+        {
+          "basis": "json_pointer",
+          "file": "1264/packet/review/metrics.json",
+          "name": "proof_process_sum_reported",
+          "pointer": "/run/proof_command_duration_ms_sum",
+          "reason": "",
+          "status": "reported",
+          "unit": "ms",
+          "value": 22377
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "queue_split",
+          "pointer": null,
+          "reason": "GitHub created/start observations are retained but do not isolate runner queue, setup and scheduler delay.",
+          "status": "not_measured",
+          "unit": "ms",
+          "value": null
+        }
+      ],
+      "omissions": [
+        "Full ZIP archives; raw sensor stdout/stderr; source patches; provider/model messages and prompts; delivery bodies; and private payloads are intentionally omitted.",
+        "Run/jobs metadata retains only named public timing and identity fields. source_json_sha256 identifies the pre-projection API bytes, not a signature.",
+        "Toolchain/cache/target-root execution details absent from these selected receipts are unknown. Configured commands remain in proof and sensor receipts without a claim of tool identity equivalence."
+      ],
+      "pull_request": 1264,
+      "repository": "EffortlessMetrics/ub-review",
+      "reviewed_revision": "612e67ed5788ace4be24dd759d8756dfe967840f",
+      "run_id": 33957570798,
+      "semantics": "candidate_head",
+      "shapes": [
+        "docs_only"
+      ]
+    },
+    {
+      "archive_sha256": "ec4f72bb5edf22e781f49ed1b340d8bc7040b473e2908cceccdd4e468dbb06bc",
+      "artifact_id": 9711388499,
+      "attempt": 1,
+      "duplicate_relationship_status": "unproven_equivalence",
+      "files": [
+        {
+          "bytes": 403,
+          "path": "1266/github-artifact.json",
+          "sha256": "fc3b7ac657c6ab02d532f64f5ea4930de8be9774ff945ede6662cdec4ec7803c"
+        },
+        {
+          "bytes": 5378,
+          "path": "1266/github-jobs.json",
+          "sha256": "8d85ae8285bc50bf18eb19f1842ad2b2475c3579c8b74923b5b0626c8b3905a5"
+        },
+        {
+          "bytes": 611,
+          "path": "1266/github-run.json",
+          "sha256": "ee11fcb245a627c3a8886ccd066c0cbb606f2fb9334a5473a656da2e095a2b96"
+        },
+        {
+          "bytes": 921,
+          "path": "1266/packet/input/revision-admission.json",
+          "sha256": "9825e209d1d8d4a348559534c4c1621b8077020f6139f4087f51341c9bf5740e"
+        },
+        {
+          "bytes": 1180,
+          "path": "1266/packet/review/gate_outcome.json",
+          "sha256": "b0e3000026ba32efb4fe7fdd69c323e99b32bc929b245c057fe77f034abbc25d"
+        },
+        {
+          "bytes": 7284,
+          "path": "1266/packet/review/metrics.json",
+          "sha256": "74d042fcea2fefe72ebf1597d31b952fe3ae7c98486ccfe277b52ab496c6c7f9"
+        },
+        {
+          "bytes": 2233,
+          "path": "1266/packet/review/proof_portfolio.json",
+          "sha256": "e258572fc9a40295375a6f3044a1eb27e235528bbee31ad226ed12d2165aefdf"
+        },
+        {
+          "bytes": 3088,
+          "path": "1266/packet/review/proof_receipts.json",
+          "sha256": "fd4d95eb97b4a152509984b19a2edf256cedfc3dcaffcbeab280449d2c23bb36"
+        },
+        {
+          "bytes": 2187,
+          "path": "1266/packet/review/resource_leases.json",
+          "sha256": "67c364af5d69e62245fd2b855c827dcc721e9e2c4ab584d0ef9da8370e7f074c"
+        },
+        {
+          "bytes": 30150,
+          "path": "1266/packet/review/task_ledger_snapshot.json",
+          "sha256": "92de9b96c78861f1f719fb4c8cb17d88d98b6cc5e0688eed69e159d6b426f09b"
+        },
+        {
+          "bytes": 674,
+          "path": "1266/packet/review/terminal_state.json",
+          "sha256": "2b2b42123c430ef4c246c23362d01a2c427e814e6a96e0421bdb06a383995808"
+        },
+        {
+          "bytes": 377,
+          "path": "1266/packet/sensors/actionlint/ub-review-sensor-status.json",
+          "sha256": "2f95e5c09d366e90988978fd1a4500e2642b8625ff4307c5b9853fc5e3d89675"
+        },
+        {
+          "bytes": 378,
+          "path": "1266/packet/sensors/artifact-verifier/ub-review-sensor-status.json",
+          "sha256": "f0a783f1d301681365f55e02ea9846eb8dd6dd047d052af33be02c4abbbf5ecd"
+        },
+        {
+          "bytes": 385,
+          "path": "1266/packet/sensors/ast-grep/ub-review-sensor-status.json",
+          "sha256": "37db3c8a8ef968e1a8f16f4dc58aeb82290d3892b3dcdfa4980198689a04588e"
+        },
+        {
+          "bytes": 352,
+          "path": "1266/packet/sensors/build/ub-review-sensor-status.json",
+          "sha256": "f35d3dc717ca78dd2e6d4f3124c99806ea8189a9fc18e6d2215a556926e3cc5d"
+        },
+        {
+          "bytes": 573,
+          "path": "1266/packet/sensors/cargo-allow/ub-review-sensor-status.json",
+          "sha256": "10158e80e6e70cd9fb06f21ffeeb7c79a6786ea5b0f2accd109aebae9af68236"
+        },
+        {
+          "bytes": 351,
+          "path": "1266/packet/sensors/cargo-audit/ub-review-sensor-status.json",
+          "sha256": "158d6d65783dbf1e4837109f86e518009122e0f1d581a4ea9610b2c55a69fd22"
+        },
+        {
+          "bytes": 362,
+          "path": "1266/packet/sensors/cargo-check/ub-review-sensor-status.json",
+          "sha256": "e702cbbbd3656732bb09d2041e4d2afc047ece57ebaddef35be2e7b1e295103d"
+        },
+        {
+          "bytes": 379,
+          "path": "1266/packet/sensors/cargo-clippy/ub-review-sensor-status.json",
+          "sha256": "6178c77e9d7860e2e415a30ba21f8ca7b34685948bb0b6d9e3378beb71f4fd19"
+        },
+        {
+          "bytes": 348,
+          "path": "1266/packet/sensors/cargo-deny/ub-review-sensor-status.json",
+          "sha256": "269468893472dac0d55af46de76f236a84ca96d974abff0d16a79d69695008cc"
+        },
+        {
+          "bytes": 353,
+          "path": "1266/packet/sensors/cargo-doc/ub-review-sensor-status.json",
+          "sha256": "ca2417df98879d8e9a222e5e9e56cf9abac528661c40f45a01b9b4b11aadd07a"
+        },
+        {
+          "bytes": 336,
+          "path": "1266/packet/sensors/cargo-fmt/ub-review-sensor-status.json",
+          "sha256": "605d7b38028add5a0f58608b5029a542bf5a7c06a4f2f3ebf6e56334faef6b83"
+        },
+        {
+          "bytes": 376,
+          "path": "1266/packet/sensors/cargo-mutants/ub-review-sensor-status.json",
+          "sha256": "8865c84c9d7d3532e895455ff68193fd9213d922908147bb78b300345c809ccf"
+        },
+        {
+          "bytes": 359,
+          "path": "1266/packet/sensors/cargo-test/ub-review-sensor-status.json",
+          "sha256": "c973047753888d402fa5dec7bf00a818062deaed37f0cdca378c76080d10532c"
+        },
+        {
+          "bytes": 542,
+          "path": "1266/packet/sensors/coverage/ub-review-sensor-status.json",
+          "sha256": "52168bf8f01316a9dbae724f7cc551697e8fa5a73f400b085f74261646978bb3"
+        },
+        {
+          "bytes": 346,
+          "path": "1266/packet/sensors/cppcheck/ub-review-sensor-status.json",
+          "sha256": "a0ecbf2105b848dc8664ac4d711fe22dbc24a232c397879d175f2eab6cf11516"
+        },
+        {
+          "bytes": 465,
+          "path": "1266/packet/sensors/gitleaks/ub-review-sensor-status.json",
+          "sha256": "f53b36278136b228a0f65761540e5ae25c9c957702a4da3c0a822a1f13ea33f4"
+        },
+        {
+          "bytes": 358,
+          "path": "1266/packet/sensors/miri/ub-review-sensor-status.json",
+          "sha256": "3948b4b604322d80cf9b9fe3e75f6c96194586d1ede45058889ec75ce6233b26"
+        },
+        {
+          "bytes": 377,
+          "path": "1266/packet/sensors/osv-scanner/ub-review-sensor-status.json",
+          "sha256": "73e1dec48933dc5ebdcb341f667ad99bacf25f8cc18349a12102b661aca367d6"
+        },
+        {
+          "bytes": 526,
+          "path": "1266/packet/sensors/ripr/ub-review-sensor-status.json",
+          "sha256": "0b4241501799a05ca595715434efe967c63ee56b5fab852b1e489eacd60182d8"
+        },
+        {
+          "bytes": 435,
+          "path": "1266/packet/sensors/semgrep/ub-review-sensor-status.json",
+          "sha256": "33ea612cfe7f0f89d8da92f84c164f41f2c77021941c51250a625448cbc7d92d"
+        },
+        {
+          "bytes": 349,
+          "path": "1266/packet/sensors/shellcheck/ub-review-sensor-status.json",
+          "sha256": "7d84830f5a7623eb39483ca9d3cc59eb56eebb000ac04498192a7041fe3c0790"
+        },
+        {
+          "bytes": 348,
+          "path": "1266/packet/sensors/test/ub-review-sensor-status.json",
+          "sha256": "60819a4bb6cfc45563651e09c4c793f452207cd5da6c85ef9311146c2223261a"
+        },
+        {
+          "bytes": 599,
+          "path": "1266/packet/sensors/tokmd/ub-review-sensor-status.json",
+          "sha256": "d7df72a604287e2ff5b3f5116807244d3bf4cb62b635d349851ce6964dca8a4e"
+        },
+        {
+          "bytes": 876,
+          "path": "1266/packet/sensors/unsafe-review/ub-review-sensor-status.json",
+          "sha256": "ab3b0c28da08c2b1a860a13092b0b161061c6f44fd28421fa7b1412fd0cfac9d"
+        },
+        {
+          "bytes": 366,
+          "path": "1266/packet/sensors/zizmor/ub-review-sensor-status.json",
+          "sha256": "46ccebdf6f26c2a25bca297f12461a86e03ebf04cbcd685a2954fa311b510e48"
+        },
+        {
+          "bytes": 135035,
+          "path": "1266/packet/task_ledger_events.ndjson",
+          "sha256": "adbfc346130271afde13be0353abecff2938fcc22746bcfd9e5c4fc719a50096"
+        },
+        {
+          "bytes": 43734,
+          "path": "1266/zip-inventory.json",
+          "sha256": "9459e218a521628ae8f30e18fb9b82c4406a66c3c5d60971e73e35bd073c5fdc"
+        }
+      ],
+      "head_revision": "c1e6872eee908f6f46134a3e0a148b31fd9df555",
+      "id": "1266",
+      "independent_baseline": null,
+      "measurements": [
+        {
+          "basis": "zip_inventory",
+          "file": "1266/zip-inventory.json",
+          "name": "artifact_entry_compressed",
+          "pointer": "/entry_compressed_bytes",
+          "reason": "",
+          "status": "derived",
+          "unit": "bytes",
+          "value": 148086001
+        },
+        {
+          "basis": "zip_inventory",
+          "file": "1266/zip-inventory.json",
+          "name": "artifact_expanded",
+          "pointer": "/expanded_bytes",
+          "reason": "",
+          "status": "derived",
+          "unit": "bytes",
+          "value": 1537034279
+        },
+        {
+          "basis": "zip_inventory",
+          "file": "1266/zip-inventory.json",
+          "name": "artifact_zip",
+          "pointer": "/archive_bytes",
+          "reason": "",
+          "status": "derived",
+          "unit": "bytes",
+          "value": 148138955
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "avoided_executions",
+          "pointer": null,
+          "reason": "Similar command text is unproven_equivalence, not evidence of interchangeable execution or savings.",
+          "status": "not_measured",
+          "unit": "count",
+          "value": null
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "billable_estimate",
+          "pointer": null,
+          "reason": "No billing receipt, price schedule, job-rounding rule or billable inclusion basis is retained.",
+          "status": "not_measured",
+          "unit": "usd",
+          "value": null
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "cache_hits",
+          "pointer": null,
+          "reason": "Cache step outcome does not establish a cache hit; cache keys and restore telemetry are omitted.",
+          "status": "not_measured",
+          "unit": "count",
+          "value": null
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "critical_path",
+          "pointer": null,
+          "reason": "Job spans and packet role intervals are retained; no complete causal DAG makes either the workflow critical path.",
+          "status": "not_measured",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "full_process_sum",
+          "pointer": null,
+          "reason": "Proof command receipts and sensor durations are retained; sensor duration can cover setup and multiple children.",
+          "status": "not_measured",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "basis": "json_pointer",
+          "file": "1266/packet/review/metrics.json",
+          "name": "legacy_phase_wall",
+          "pointer": "/wall_clock_ms",
+          "reason": "",
+          "status": "reported",
+          "unit": "ms",
+          "value": 64168
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "linux_equivalent",
+          "pointer": null,
+          "reason": "No applied multiplier and billable runner interval authority is retained; job elapsed time remains separate.",
+          "status": "not_measured",
+          "unit": "linux_runner_minutes",
+          "value": null
+        },
+        {
+          "basis": "json_pointer",
+          "file": "1266/packet/review/metrics.json",
+          "name": "model_call_sum_reported",
+          "pointer": "/run/model_call_duration_ms_sum",
+          "reason": "",
+          "status": "reported",
+          "unit": "ms",
+          "value": 0
+        },
+        {
+          "basis": "json_pointer",
+          "file": "1266/packet/review/metrics.json",
+          "name": "packet_elapsed_wall",
+          "pointer": "/run/elapsed_wall_ms",
+          "reason": "",
+          "status": "reported",
+          "unit": "ms",
+          "value": 259371
+        },
+        {
+          "basis": "zip_inventory",
+          "file": "1266/zip-inventory.json",
+          "name": "packet_expanded",
+          "pointer": "/packet_expanded_bytes",
+          "reason": "",
+          "status": "derived",
+          "unit": "bytes",
+          "value": 1536015391
+        },
+        {
+          "basis": "json_pointer",
+          "file": "1266/packet/review/metrics.json",
+          "name": "proof_process_sum_reported",
+          "pointer": "/run/proof_command_duration_ms_sum",
+          "reason": "",
+          "status": "reported",
+          "unit": "ms",
+          "value": 26880
+        },
+        {
+          "basis": "unavailable",
+          "file": null,
+          "name": "queue_split",
+          "pointer": null,
+          "reason": "GitHub created/start observations are retained but do not isolate runner queue, setup and scheduler delay.",
+          "status": "not_measured",
+          "unit": "ms",
+          "value": null
+        }
+      ],
+      "omissions": [
+        "Full ZIP archives; raw sensor stdout/stderr; source patches; provider/model messages and prompts; delivery bodies; and private payloads are intentionally omitted.",
+        "Run/jobs metadata retains only named public timing and identity fields. source_json_sha256 identifies the pre-projection API bytes, not a signature.",
+        "Toolchain/cache/target-root execution details absent from these selected receipts are unknown. Configured commands remain in proof and sensor receipts without a claim of tool identity equivalence."
+      ],
+      "pull_request": 1266,
+      "repository": "EffortlessMetrics/ub-review",
+      "reviewed_revision": "d7f35ce4a1dad3ae46208fe862ab7b996fca2378",
+      "run_id": 33240853970,
+      "semantics": "merge_result",
+      "shapes": [
+        "required_unavailable",
+        "large_packet"
+      ]
+    }
+  ],
+  "gaps": {
+    "cost_authority": "not_established: these are historical observations, not canonical economics or fleet savings.",
+    "multi_package": "not_measured: no verified representative multi-package packet selected in this extraction.",
+    "second_repository": "not_measured: outside this first repository corpus."
+  },
+  "incident_reference": {
+    "cases": [
+      {
+        "artifact_digest": "sha256:dbd084ca66eb789b6a6d6aaf476388d5beb2fe8615ea03c49c89968ecdef282f",
+        "artifact_id": 9481061943,
+        "pull_request": 915,
+        "workflow_run": 32593806467
+      },
+      {
+        "artifact_digest": "sha256:816569eaa9182bdb8166389b3a6d2692f9de78022548464caadf654cd4bf1b55",
+        "artifact_id": 9467384189,
+        "pull_request": 916,
+        "workflow_run": 32542016728
+      },
+      {
+        "artifact_digest": "sha256:df1f4d1d6d71821bd7af1cdc9068c05232d29e3acb6a65d13c829ad41c6f9eb5",
+        "artifact_id": 9490287288,
+        "pull_request": 921,
+        "workflow_run": 32628010111
+      }
+    ],
+    "git_blob": "e56878bb595dc7339bf1524d16808860f2f5911c",
+    "path": "fixtures/authority-incidents/manifest.json",
+    "sha256": "82e8238150c3618fe49f23f730a659025af7b63cc2c048e6b0cd24a338537052"
+  },
+  "max_total_bytes": 1048576,
+  "schema": "ub-review.ci_efficiency_baseline.v1"
+}

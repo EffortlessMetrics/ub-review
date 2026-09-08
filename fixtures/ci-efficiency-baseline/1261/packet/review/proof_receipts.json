@@ -1,0 +1,104 @@
+[
+  {
+    "schema": "ub-review.proof_receipt.v1",
+    "id": "proof-head-1e1c35087a81",
+    "kind": "focused-head",
+    "base": "origin/main",
+    "head": "HEAD",
+    "revision": {
+      "digest": "d6b934ebb43884970fe01b7b815f8d053520d88ca370c8f9a37a3e28a61beb85",
+      "semantics": "merge_result",
+      "reviewed_commit": "fad32c56f90209720d113b8274b67258b742c758"
+    },
+    "test_patch_mode": "head-only",
+    "requested_by": [
+      "impact-planner"
+    ],
+    "request_ids": [],
+    "commands": [
+      {
+        "side": "head",
+        "command": "cargo test --locked --package ub-review --test cli_contract",
+        "env": {},
+        "status": "passed",
+        "exit_code": 0,
+        "timed_out": false,
+        "timeout_sec": 600,
+        "duration_ms": 16819,
+        "stdout": "proof/proof-head-1e1c35087a81/head/stdout.txt",
+        "stderr": "proof/proof-head-1e1c35087a81/head/stderr.txt",
+        "reason": "completed"
+      }
+    ],
+    "result": "head_passed",
+    "reason": "HEAD proof passed: completed"
+  },
+  {
+    "schema": "ub-review.proof_receipt.v1",
+    "id": "proof-head-46be498ef577",
+    "kind": "focused-head",
+    "base": "origin/main",
+    "head": "HEAD",
+    "revision": {
+      "digest": "d6b934ebb43884970fe01b7b815f8d053520d88ca370c8f9a37a3e28a61beb85",
+      "semantics": "merge_result",
+      "reviewed_commit": "fad32c56f90209720d113b8274b67258b742c758"
+    },
+    "test_patch_mode": "head-only",
+    "requested_by": [
+      "impact-planner"
+    ],
+    "request_ids": [],
+    "commands": [
+      {
+        "side": "head",
+        "command": "cargo test --locked --package ub-review --test cli",
+        "env": {},
+        "status": "passed",
+        "exit_code": 0,
+        "timed_out": false,
+        "timeout_sec": 600,
+        "duration_ms": 11092,
+        "stdout": "proof/proof-head-46be498ef577/head/stdout.txt",
+        "stderr": "proof/proof-head-46be498ef577/head/stderr.txt",
+        "reason": "completed"
+      }
+    ],
+    "result": "head_passed",
+    "reason": "HEAD proof passed: completed"
+  },
+  {
+    "schema": "ub-review.proof_receipt.v1",
+    "id": "proof-head-73b76272b0c1",
+    "kind": "focused-head",
+    "base": "origin/main",
+    "head": "HEAD",
+    "revision": {
+      "digest": "d6b934ebb43884970fe01b7b815f8d053520d88ca370c8f9a37a3e28a61beb85",
+      "semantics": "merge_result",
+      "reviewed_commit": "fad32c56f90209720d113b8274b67258b742c758"
+    },
+    "test_patch_mode": "head-only",
+    "requested_by": [
+      "impact-planner"
+    ],
+    "request_ids": [],
+    "commands": [
+      {
+        "side": "head",
+        "command": "cargo test --locked --package ub-review --test cli_run",
+        "env": {},
+        "status": "passed",
+        "exit_code": 0,
+        "timed_out": false,
+        "timeout_sec": 600,
+        "duration_ms": 1055,
+        "stdout": "proof/proof-head-73b76272b0c1/head/stdout.txt",
+        "stderr": "proof/proof-head-73b76272b0c1/head/stderr.txt",
+        "reason": "completed"
+      }
+    ],
+    "result": "head_passed",
+    "reason": "HEAD proof passed: completed"
+  }
+]

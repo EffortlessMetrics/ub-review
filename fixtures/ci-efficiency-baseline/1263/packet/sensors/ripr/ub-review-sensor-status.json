@@ -1,0 +1,24 @@
+{
+  "class": "static",
+  "command": "ripr check --root . --diff target/ub-review/input/diff.patch --mode ready --format badge-json",
+  "duration_ms": 6577,
+  "exit_code": 0,
+  "gate": {
+    "max_new_unsuppressed": 0,
+    "scope": "on-diff"
+  },
+  "outputs": [
+    "stdout.txt",
+    "stderr.txt",
+    "gate-decision.json",
+    "exposure-gaps.json"
+  ],
+  "phase": "fast",
+  "reason": "completed",
+  "required": true,
+  "requires_lease": false,
+  "sensor": "ripr",
+  "status": "ok",
+  "timed_out": false,
+  "timeout_sec": 240
+}

@@ -1,0 +1,20 @@
+{
+  "class": "static",
+  "command": "cargo-allow check --config ./policy/cargo-allow.toml --format markdown --receipt target/ub-review/sensors/cargo-allow/cargo-allow.receipt.json --output target/ub-review/sensors/cargo-allow/cargo-allow.md",
+  "duration_ms": 0,
+  "exit_code": null,
+  "outputs": [
+    "stdout.txt",
+    "stderr.txt",
+    "cargo-allow.md",
+    "cargo-allow.receipt.json"
+  ],
+  "phase": "fast",
+  "reason": "trigger did not match this diff",
+  "required": false,
+  "requires_lease": false,
+  "sensor": "cargo-allow",
+  "status": "skipped",
+  "timed_out": false,
+  "timeout_sec": 120
+}

@@ -1,0 +1,18 @@
+{
+  "class": "build",
+  "command": "cargo fmt --all --check",
+  "duration_ms": 1933,
+  "exit_code": 0,
+  "outputs": [
+    "stdout.txt",
+    "stderr.txt"
+  ],
+  "phase": "fast",
+  "reason": "completed",
+  "required": true,
+  "requires_lease": false,
+  "sensor": "cargo-fmt",
+  "status": "ok",
+  "timed_out": false,
+  "timeout_sec": 120
+}

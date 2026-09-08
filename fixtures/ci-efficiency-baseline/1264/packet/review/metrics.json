@@ -1,0 +1,265 @@
+{
+  "schema_version": 1,
+  "wall_clock_ms": 930,
+  "wall_clock_seconds": 0,
+  "run": {
+    "concurrency_model": "profiled-stream-scheduler-v0",
+    "scheduler_profile": "default-three-stream-v0",
+    "local_proof_wall_excludes_model_wait": true,
+    "elapsed_wall_ms": 145775,
+    "coordination_wall_ms": 123393,
+    "investigation_wall_ms": 0,
+    "proof_wall_ms": 22380,
+    "evidence_wall_ms": 123392,
+    "model_wall_ms": 0,
+    "local_proof_wall_ms": 22380,
+    "compiler_wall_ms": 1,
+    "model_call_duration_ms_sum": 0,
+    "proof_command_duration_ms_sum": 22377,
+    "investigation_proof_overlap_ms": 0,
+    "model_proof_overlap_ms": 0,
+    "proof_overlap_ms": 0,
+    "scheduler_roles": {
+      "evidence": {
+        "started_at_offset_ms": 58,
+        "finished_at_offset_ms": 123450,
+        "wall_ms": 123392
+      },
+      "model": {
+        "started_at_offset_ms": 956,
+        "finished_at_offset_ms": 145832,
+        "wall_ms": 0
+      },
+      "proof": {
+        "started_at_offset_ms": 123450,
+        "finished_at_offset_ms": 145832,
+        "wall_ms": 22380
+      }
+    },
+    "streams": {
+      "coordination": {
+        "started_at_offset_ms": 58,
+        "finished_at_offset_ms": 145833,
+        "wall_ms": 123393
+      },
+      "investigation": {
+        "started_at_offset_ms": 956,
+        "finished_at_offset_ms": 145832,
+        "wall_ms": 0
+      },
+      "proof": {
+        "started_at_offset_ms": 123450,
+        "finished_at_offset_ms": 145832,
+        "wall_ms": 22380
+      }
+    },
+    "loops": {
+      "evidence": {
+        "started_at_offset_ms": 58,
+        "finished_at_offset_ms": 123450,
+        "wall_ms": 123392
+      },
+      "model": {
+        "started_at_offset_ms": 956,
+        "finished_at_offset_ms": 145832,
+        "wall_ms": 0
+      },
+      "proof": {
+        "started_at_offset_ms": 123450,
+        "finished_at_offset_ms": 145832,
+        "wall_ms": 22380
+      },
+      "compiler": {
+        "started_at_offset_ms": 145831,
+        "finished_at_offset_ms": 145833,
+        "wall_ms": 1
+      }
+    },
+    "phases": [
+      {
+        "loop_id": "evidence",
+        "stream_id": "coordination",
+        "stage": "sensors-and-packet",
+        "status": "completed",
+        "started_at_offset_ms": 58,
+        "finished_at_offset_ms": 930,
+        "duration_ms": 871
+      },
+      {
+        "loop_id": "model",
+        "stream_id": "investigation",
+        "stage": "primary",
+        "status": "skipped_model_mode_off",
+        "started_at_offset_ms": 956,
+        "finished_at_offset_ms": 956,
+        "duration_ms": 0
+      },
+      {
+        "loop_id": "evidence",
+        "stream_id": "coordination",
+        "stage": "late-sensors",
+        "status": "completed",
+        "started_at_offset_ms": 929,
+        "finished_at_offset_ms": 123450,
+        "duration_ms": 122521
+      },
+      {
+        "loop_id": "proof",
+        "stream_id": "proof",
+        "stage": "initial-diff-broker",
+        "status": "completed",
+        "started_at_offset_ms": 123450,
+        "finished_at_offset_ms": 145830,
+        "duration_ms": 22379
+      },
+      {
+        "loop_id": "proof",
+        "stream_id": "proof",
+        "stage": "model-request-broker",
+        "status": "completed",
+        "started_at_offset_ms": 145831,
+        "finished_at_offset_ms": 145831,
+        "duration_ms": 0
+      },
+      {
+        "loop_id": "model",
+        "stream_id": "investigation",
+        "stage": "reporter",
+        "status": "completed",
+        "started_at_offset_ms": 145831,
+        "finished_at_offset_ms": 145831,
+        "duration_ms": 0
+      },
+      {
+        "loop_id": "compiler",
+        "stream_id": "coordination",
+        "stage": "preliminary",
+        "status": "completed",
+        "started_at_offset_ms": 145831,
+        "finished_at_offset_ms": 145832,
+        "duration_ms": 0
+      },
+      {
+        "loop_id": "model",
+        "stream_id": "investigation",
+        "stage": "follow-up",
+        "status": "completed",
+        "started_at_offset_ms": 145832,
+        "finished_at_offset_ms": 145832,
+        "duration_ms": 0
+      },
+      {
+        "loop_id": "proof",
+        "stream_id": "proof",
+        "stage": "follow-up-broker",
+        "status": "completed",
+        "started_at_offset_ms": 145832,
+        "finished_at_offset_ms": 145832,
+        "duration_ms": 0
+      },
+      {
+        "loop_id": "compiler",
+        "stream_id": "coordination",
+        "stage": "final",
+        "status": "completed",
+        "started_at_offset_ms": 145833,
+        "finished_at_offset_ms": 145833,
+        "duration_ms": 0
+      }
+    ]
+  },
+  "shared_context_id": "f829c4bc95a35063687a93cfe679ef86753ffc8dc748caa597496e60f85bc1cd",
+  "base": "origin/main",
+  "head": "HEAD",
+  "review_profile": "ub-review-self",
+  "profile_name": "gh-runner-full",
+  "runtime_profile": "gh-runner-full",
+  "mode": "intelligent-ci",
+  "posting": "artifact-only",
+  "run_pass": "manual",
+  "model_mode": "off",
+  "depth": "deep",
+  "provider_policy": "primary-with-fallback",
+  "lane_width": 20,
+  "model_concurrency": 8,
+  "max_model_calls": 24,
+  "max_inline_comments": 8,
+  "changed_files": 4,
+  "diff_flags": {
+    "source_changed": false,
+    "rust_changed": false,
+    "rust_tests_changed": false,
+    "workflow_changed": false,
+    "dependency_changed": false,
+    "shell_changed": false,
+    "cpp_changed": false,
+    "docs_only": true,
+    "unsafe_or_native_risk": false
+  },
+  "lane_packets": 3,
+  "sensors": {
+    "total": 25,
+    "planned": 8,
+    "skipped_by_plan": 17,
+    "status_counts": {
+      "ok": 8,
+      "skipped": 17
+    }
+  },
+  "models": {
+    "provider_preflights": 1,
+    "provider_preflight_status_counts": {
+      "skipped": 1
+    },
+    "provider_preflight_calls_attempted": 0,
+    "model_lanes": 3,
+    "model_lane_status_counts": {
+      "skipped": 3
+    },
+    "model_lane_calls_attempted": 0,
+    "model_fallbacks_used": 0,
+    "prompt_cache_creation_input_tokens": 0,
+    "prompt_cache_read_input_tokens": 0,
+    "prompt_cache_lane_hits": 0,
+    "prompt_cache_lane_misses": 0,
+    "prompt_cache_lane_unknown": 0
+  },
+  "inline_comments": 0,
+  "github_review_comments": 0,
+  "prepared_inline_comments": 0,
+  "prepared_review_body": false,
+  "summary_only_findings": 0,
+  "observations": 3,
+  "follow_up_results": {
+    "total": 3,
+    "status_counts": {
+      "skipped": 3
+    },
+    "calls_attempted": 0
+  },
+  "final_follow_up_tasks": 3,
+  "proof_requests": 1,
+  "proof_request_status_counts": {
+    "deferred": 1
+  },
+  "proof_requests_terminal": 1,
+  "proof_request_terminal_rate": 1.0,
+  "proof_receipts": 3,
+  "proof_receipts_current_head": 3,
+  "proof_receipts_stale_head": 0,
+  "proof_receipts_with_request_links": 0,
+  "proof_changed_conclusions": 0,
+  "resource_leases": 3,
+  "off_diff_candidates_rejected": 0,
+  "missing_or_failed_sensor_evidence": 0,
+  "missing_or_failed_model_evidence": 3,
+  "provider_evidence_failures": 0,
+  "terminal_state": "needs-reviewer-attention",
+  "review_payload_status": "skipped_empty_smoke",
+  "post_status": "not_attempted_by_run",
+  "review_body_bytes": 1846,
+  "artifact_review_body_bytes": 1846,
+  "github_review_body_bytes": 0,
+  "review_body_truncated": false,
+  "github_review_body_truncated": false
+}

@@ -1,0 +1,28 @@
+{
+  "class": "static",
+  "command": "unsafe-review first-pr --root . --base origin/main --out-dir target/ub-review/sensors/unsafe-review/unsafe-review-output",
+  "duration_ms": 0,
+  "exit_code": null,
+  "outputs": [
+    "stdout.txt",
+    "stderr.txt",
+    "unsafe-review-output/unsafe-review-gate.json",
+    "unsafe-review-output/cards.json",
+    "unsafe-review-output/comment-plan.json",
+    "unsafe-review-output/repair-queue.json",
+    "unsafe-review-output/receipt-audit.md",
+    "unsafe-review-output/review-kit.json",
+    "unsafe-review-output/pr-summary.md",
+    "unsafe-review-output/cards.sarif",
+    "unsafe-review-output/lsp.json",
+    "unsafe-review-output/policy-report.json"
+  ],
+  "phase": "fast",
+  "reason": "trigger did not match this diff",
+  "required": false,
+  "requires_lease": false,
+  "sensor": "unsafe-review",
+  "status": "skipped",
+  "timed_out": false,
+  "timeout_sec": 240
+}

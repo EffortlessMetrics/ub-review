@@ -1,0 +1,46 @@
+{
+  "schema": "ub-review.gate_outcome.v1",
+  "conclusion": "pass",
+  "terminal_status": "needs-reviewer-attention",
+  "analysis_result": "not_proven",
+  "publication_result": "not_needed",
+  "gate_result": "not_proven",
+  "reasons": [],
+  "required_proof": {
+    "matched": 3,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 3
+  },
+  "tool_gates": {
+    "evaluated": 1,
+    "passed": 1,
+    "failed": 0
+  },
+  "evidence_gaps_blocking": 0,
+  "evidence_gaps_advisory": 7,
+  "sensor_coverage": {
+    "required_total": 9,
+    "required_completed": 9,
+    "optional_total": 2,
+    "optional_completed": 2,
+    "failed": 0,
+    "timed_out": 0,
+    "skipped": 0
+  },
+  "model_coverage": {
+    "lanes_total": 7,
+    "lanes_usable": 0,
+    "budget_exhausted_lanes": 0,
+    "budget_exhausted": false
+  },
+  "not_proven_reasons": [
+    "required-proof: 3 of 3 required proof requests produced no passing receipt",
+    "model-coverage: 0 of 7 model lanes produced usable output"
+  ],
+  "revision": {
+    "digest": "d6b934ebb43884970fe01b7b815f8d053520d88ca370c8f9a37a3e28a61beb85",
+    "semantics": "merge_result",
+    "reviewed_commit": "fad32c56f90209720d113b8274b67258b742c758"
+  }
+}

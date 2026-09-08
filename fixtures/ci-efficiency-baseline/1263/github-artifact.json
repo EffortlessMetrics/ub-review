@@ -1,0 +1,13 @@
+{
+  "digest": "sha256:37dae78b2b3a9028999248c51dc7e9de563217641cb36e81a7cfc8b0cb45ffbe",
+  "id": 9673683728,
+  "name": "ub-review-gate",
+  "size_in_bytes": 33837713,
+  "workflow_run": {
+    "head_branch": "codex/955-sensor-task-ledger",
+    "head_repository_id": 1256687314,
+    "head_sha": "b6713a597bce54c388578b4aadd5ec9b1174ab87",
+    "id": 33140110441,
+    "repository_id": 1256687314
+  }
+}

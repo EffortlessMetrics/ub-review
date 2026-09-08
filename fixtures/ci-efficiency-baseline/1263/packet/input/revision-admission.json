@@ -1,0 +1,9 @@
+{
+  "schema": "ub-review.revision_admission.v1",
+  "identity_canonical": "ub-review.revision-identity.v1\nsemantics=merge_result\nbase=f02f4a85449ec8b8faf3dafb67071ccd544afae0 181519f1c29b7994daff39fb0c399c00b4e4b66f\nhead=b6713a597bce54c388578b4aadd5ec9b1174ab87 3cd89aa4a29518e9ca44b331b98ac47ce9a1e8f5\nreviewed=8537f725f46a18e894e3f90250402ad87777b4aa 3cd89aa4a29518e9ca44b331b98ac47ce9a1e8f5\nmerge=8537f725f46a18e894e3f90250402ad87777b4aa 3cd89aa4a29518e9ca44b331b98ac47ce9a1e8f5\nchanged_paths=b66741495cd0d87f53ce4d5e6ab670c334f025ba9386e6017363eb46ac338ca3\ndiff=52f373dace7493523b325cf83be04bd3300cb8f5e8d723f709aad2feb84d4310\n",
+  "identity_digest": "7e4f24baa62f0c6b4a9c407fa61ff2bb9c79dc67c70152b2f5283b9a2ed1e66e",
+  "semantics": "merge_result",
+  "reviewed_commit_oid": "8537f725f46a18e894e3f90250402ad87777b4aa",
+  "pr_head_commit": "b6713a597bce54c388578b4aadd5ec9b1174ab87",
+  "worktree_dirty": false
+}
