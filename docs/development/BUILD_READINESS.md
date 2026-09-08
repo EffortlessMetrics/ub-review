@@ -18,7 +18,8 @@ active work. Recheck issue comments, PR heads, and branch ownership before
 claiming a lane. June plans and the old issue ledger retain useful history;
 their tallies and proposed sequences are not the current board.
 
-Proof/worker TaskLedger observation landed in [#1266], and receipt-content
+The [#956] TaskLedger observation of configured, impact, model-request, and
+follow-up proof plus standalone workers landed through [#1266]. Receipt-content
 verification landed in [#1290]. The latter is only part of [#957]: queue,
 portfolio, Required satisfaction, and lease projection reconciliation remain
 incomplete. TaskLedger still observes execution in shadow; existing brokers,
@@ -77,6 +78,7 @@ hosted checks before merge. This checkpoint is not itself a passing receipt.
 [Issue #945]: https://github.com/EffortlessMetrics/ub-review/issues/945
 [#913]: https://github.com/EffortlessMetrics/ub-review/issues/913
 [#915]: https://github.com/EffortlessMetrics/ub-review/pull/915
+[#956]: https://github.com/EffortlessMetrics/ub-review/issues/956
 [#957]: https://github.com/EffortlessMetrics/ub-review/issues/957
 [#1071]: https://github.com/EffortlessMetrics/ub-review/issues/1071
 [#1216]: https://github.com/EffortlessMetrics/ub-review/issues/1216
