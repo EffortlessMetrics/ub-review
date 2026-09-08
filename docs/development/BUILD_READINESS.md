@@ -1,8 +1,13 @@
 # Build-readiness checkpoint
 
-_Audit date: 2026-09-08 UTC. Source: main at
+_Audit date: 2026-09-08 UTC. Initial source: main at
 [`5e3a043`](https://github.com/EffortlessMetrics/ub-review/commit/5e3a043f70f33505f62672405e2fae36b196081b).
 Documentation reconciliation: [#1297]._
+
+_Freshness amendment: [#1289] merged as
+[`33f4271`](https://github.com/EffortlessMetrics/ub-review/commit/33f4271a8e2bf507d387aac7b409a5fc20578512)
+during the audit. Current capability and next-work text below includes that
+merge; initial board counts and ownership observations remain historical._
 
 This checkpoint records what builders should recheck before selecting work.
 [Issue #945] remains execution-order authority, and [Product state] records
@@ -14,15 +19,19 @@ a release-readiness declaration.
 The initial full GitHub board contained 263 open issues and three open PRs;
 creating [#1297] brought the issue count to 264. Open issues were unassigned,
 but assignment absence did not establish availability: PR [#1289] had recent
-active work. Recheck issue comments, PR heads, and branch ownership before
+active work at the initial snapshot and has since merged. Recheck issue
+comments, PR heads, and branch ownership before
 claiming a lane. June plans and the old issue ledger retain useful history;
 their tallies and proposed sequences are not the current board.
 
 The [#956] TaskLedger observation of configured, impact, model-request, and
 follow-up proof plus standalone workers landed through [#1266]. Receipt-content
-verification landed in [#1290]. The latter is only part of [#957]: queue,
-portfolio, Required satisfaction, and lease projection reconciliation remain
-incomplete. TaskLedger still observes execution in shadow; existing brokers,
+verification landed in [#1290]. Merged [#1289] adds a bounded checker comparing
+persisted queue, portfolio, receipts, leases, Required links, and accounting
+projections in shadow. It retains generated coherent fixtures and historical
+negative cases; coherent production packets and complete publication-boundary
+integration remain unproven under [#957]. TaskLedger still observes execution
+in shadow; existing brokers,
 leases, and budgets own execution. The legacy `gate_outcome.conclusion` remains
 enforcement authority. The next serial product obligation is [#957], followed
 by #958, #959, #960, and the complete #962 Horizon A packet proof.
@@ -36,10 +45,10 @@ basis to promise that a documentation-only PR receives a cheaper hosted route.
 
 | Existing lane | Next acceptance boundary | Ownership and scope |
 | --- | --- | --- |
-| [#957], PR [#1289] | Reconcile projections across every publication boundary and retain production-generated coherent packets plus contradictory-input proof. Receipt-content joins alone do not satisfy it. | Active product front; coordinate with the PR owner. |
+| [#957], merged PR [#1289] | Build on the bounded shadow checker to establish production-generated coherent packets and integration across every publication boundary. | Remaining product acceptance; neither generated fixtures nor issue closure authorizes #958. Recheck live ownership before claiming implementation. |
 | [#1293] | Reconcile release-specific runbooks and publication claims against actual source and pipeline receipts. | Separate active documentation lane; no release is authorized by this checkpoint. |
 | [#913] | Retain the remaining model-off smoke against unsafe-review 0.3.8, including receipt hashes, argv, and exits; parser behavior already landed in [#915]. | Recheck the remaining issue scope before rebuilding parser work. |
-| [#1292] | Establish Rust verifier parity before replacing the governed Python verifier. | Preparation only until overlapping PR [#1289] is terminal or its owner explicitly hands off the seam. Keep the existing verifier effective; its next review is 2026-10-10. |
+| [#1292] | Establish Rust verifier parity against the merged [#1289] implementation before replacing the governed Python verifier. | Recheck ownership of the shared verifier seam before implementation. Keep the existing verifier effective; its next review is 2026-10-10. |
 | [#1296] | Reproduce and isolate intermittent Windows fixture failures with current binaries. | Proof reliability work; a passing unrelated run does not close it. |
 | [#1270] | Retain actual baseline evidence for the model-off comparison. | PR [#1287] is scaffold work, not the measured acceptance receipt. |
 | PR [#1265] | Review its retained v0.1.0 Ubuntu 24.04/glibc 2.39 portability proof against [#1071]. | Preserve that historical scope: Ubuntu 22.04/glibc 2.35 and newer-release support remain excluded. |

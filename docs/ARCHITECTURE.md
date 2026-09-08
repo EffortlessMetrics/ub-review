@@ -68,7 +68,8 @@ prepared GitHub review transaction
 
 TaskLedger observes sensors (#1263/#955) and proof/workers (#1266/#956) in shadow
 receipt-content joins are verifier-covered through #1290
-cross-projection reconciliation remains incomplete under #957 (PR #1289 in flight)
+bounded projection comparisons run in shadow through merged #1289
+coherent production packets and complete publication boundaries remain #957
 FinalizedOutcome remains a shadow-first train
 legacy gate_outcome.conclusion remains the enforced field
 ```
@@ -77,8 +78,11 @@ The immutable revision contract is already admitted and joined across core
 current-run artifacts. The pure TaskLedger, execution accounting, ledger
 artifact verifier, retained contradiction corpus, and sensor/proof/worker
 lifecycle adapters also exist. The packet verifier joins ledger claims to
-receipt content through #1290; this does not reconcile all legacy projections,
-schedule work, or deduplicate cross-source tasks. #957 remains incomplete.
+receipt content through #1290. The bounded
+[projection checker](TASK_PROJECTION_RECONCILIATION.md) added by #1289 compares
+persisted projections in shadow; coherent production packets and complete
+publication-boundary integration remain unproven under #957. Neither checker
+schedules work or deduplicates cross-source tasks.
 Existing pools, brokers, leases, and budgets remain execution authority until
 the later scheduler migration earns that authority.
 

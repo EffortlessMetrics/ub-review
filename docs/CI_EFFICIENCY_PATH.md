@@ -2,9 +2,10 @@
 
 _Status at source commit `55e4fbab879b3a83c31f35cdc9f7e5cd99f0a6c8`._
 
-_Execution-front update at `5e3a043`, 2026-09-08 UTC: [#1266]/[#956] and the
-narrow [#1290] receipt-content join have landed. [#957] remains incomplete,
-with [#1289] in flight. The source-commit boundary below remains historical;
+_Execution-front update at `33f4271`, 2026-09-08 UTC: [#1266]/[#956], the
+narrow [#1290] receipt-content join, and [#1289] bounded shadow comparisons
+have landed. Full production acceptance under [#957] remains unproven.
+The source-commit boundary below remains historical;
 [Product state](PRODUCT_STATE.md) records current earned capability._
 
 Issue [#1268] owns this programme. Issue [#945] remains the complete product
@@ -69,8 +70,10 @@ an existing check because UB Review can run a command with a similar string.
 
 The original authority path began with [#1266]/[#956], now merged. The
 remaining front is [#957] -> [#958] -> [#959] -> [#960] -> [#962]. [#1290]
-provides receipt-content joins within #957; neither it nor the in-flight
-[#1289] establishes complete projection reconciliation.
+provides receipt-content joins within #957, and merged [#1289] compares
+persisted projections in shadow. Neither establishes coherent production
+packets and integration at every publication boundary. Issue closure alone
+does not satisfy those prerequisites or authorize the next authority change.
 
 This sequence must establish one coherent account of the exact revision, every
 proposed and executed task, terminal receipts or failures, resource release,

@@ -184,6 +184,13 @@ projections, and does not turn candidate-produced evidence into independent
 merge authority. The verifier therefore still permits
 the pair to be absent in legacy/non-run packets during the shadow rollout.
 
+The separate [bounded projection checker](../TASK_PROJECTION_RECONCILIATION.md)
+added by #1289 compares persisted queue, portfolio, receipt, lease, Required,
+and accounting projections. Its live contained-CI comparison is non-blocking.
+Generated coherent fixtures and historical negatives do not establish coherent
+production packets or integration at every publication boundary; that #957
+acceptance remains unproven.
+
 `review/` (the compiled review surface):
 
 ```text
@@ -722,7 +729,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | tool-gate-outcomes.json + review/ mirror | stable | tool_gate_outcomes.v1; entries tool_gate_outcome.v1 | downstream automation; gate-check cross-check | required (require_tool_gate_outcome_artifacts) |
 | work_queue.json | stable | work_queue.v1; tasks work_queue_task.v1 | downstream automation | required (require_work_queue_artifacts) |
 | work_events.ndjson | stable | work_event.v1 lines | downstream automation | required (require_work_queue_artifacts) |
-| task_ledger_events.ndjson + review/task_ledger_snapshot.json | experimental shadow coverage | task_ledger_event.v1 lines + task_ledger_snapshot.v1 derived replay cache; sensor/proof/worker observation and receipt-content joins implemented; full projection reconciliation remains #957 | downstream reconciliation | emitted by `run` and `worker` when the recorder has events; verified when present (require_task_ledger_artifacts) |
+| task_ledger_events.ndjson + review/task_ledger_snapshot.json | experimental shadow coverage | task_ledger_event.v1 lines + task_ledger_snapshot.v1 derived replay cache; sensor/proof/worker observation, receipt-content joins, and bounded shadow projection comparison implemented; complete production/publication acceptance remains #957 | downstream reconciliation | emitted by `run` and `worker` when the recorder has events; verified when present (require_task_ledger_artifacts) |
 | events.ndjson | stable | none (ts/kind/payload; eight required kinds) | downstream automation | required (require_events) |
 | running-summary.md | stable | five required headings | humans (GitHub step summary) | required (require_summary) |
 | input/changed-files.txt, input/diff.patch, input/diff-context.json | stable | none | downstream automation | required (require_common_tree) |

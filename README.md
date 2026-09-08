@@ -61,8 +61,9 @@ review/proof substrate, immutable current-run revision joins, and the
 pure/replayable TaskLedger exist. Synthetic merge-result delivery binding and
 post-confirmed publication finalization remain open. Fast and late sensor
 execution, brokered proof, and standalone workers are now shadow-observed in
-the ledger. Receipt-content joins landed in #1290; cross-projection
-reconciliation remains incomplete under #957, with PR #1289 in flight.
+the ledger. Receipt-content joins landed in #1290, and bounded shadow
+projection comparisons landed in #1289. Production-generated coherent packets
+and complete publication-boundary integration remain unproven under #957.
 The repository does **not** yet have one live task/resource scheduler,
 Required-first shared run plan, authoritative final lead, finalized outcome
 enforcement, trusted learning, hostile-head-safe stable coordinator, or
@@ -485,12 +486,13 @@ roadmap/spec documents remain useful for design intent, but they are not the
 current merge-front authority.
 
 Fast/late sensor shadowing completed in #1263/#955, and proof/worker shadowing
-completed in #1266/#956. The #1290 receipt-content join is partial progress on
-#957; PR #1289 is in flight and does not establish complete #957 acceptance.
+completed in #1266/#956. The #1290 receipt-content join and #1289 bounded
+shadow comparison are partial progress on #957; complete production packet
+and publication-boundary acceptance remains unproven.
 The remaining authority migration is deliberately serial:
 
 ```text
-#957         projection reconciliation (incomplete)
+#957         coherent production packets and publication boundaries (unproven)
   -> #958     pure FinalizedOutcome
   -> #959     delivery finalization
   -> #960     shadow integration and verification

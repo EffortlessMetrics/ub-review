@@ -1,8 +1,8 @@
 # Product state
 
-_Last reconciled against `main` at `5e3a043` on 2026-09-08 UTC; roadmap
-dependencies retain the model-off CI-efficiency amendment. PR [#1289] is
-in flight at this snapshot, not evidence of completed #957 acceptance._
+_Last reconciled against `main` at `33f4271` on 2026-09-08 UTC; roadmap
+dependencies retain the model-off CI-efficiency amendment. Merged [#1289]
+provides bounded shadow comparisons, not completed #957 acceptance._
 
 This is the canonical capability-state document. [Issue #945] owns execution
 order; parent issues own capability contracts; retained receipts and runtime
@@ -21,9 +21,11 @@ lifecycle, ledger artifact verifier, retained contradiction corpus, and the
 production shadow adapters also exist. Fast and late sensors emit
 revision-bound TaskLedger lifecycles through #1263/#955; brokered proof and
 standalone workers do so through [#1266]/[#956]. The packet verifier joins
-ledger claims to current receipt content through [#1290]. TaskLedger still
-does not schedule that work or reconcile every legacy projection; [#957]
-remains the incomplete front.
+ledger claims to current receipt content through [#1290]. The bounded
+[projection checker] added by [#1289] compares persisted projections and runs
+non-blocking against the contained CI packet. Production-generated coherent
+packets and complete publication-boundary integration remain unproven under
+[#957]. TaskLedger still does not schedule that work.
 
 One live scheduler/resource authority, a repository-native architecture
 contract, a Required-first CI spine, one shared run plan, authoritative final
@@ -137,9 +139,9 @@ The final matrix column keeps three evidence objects distinct:
 | --- | --- | --- | --- | --- |
 | Reviewer-facing compilation | **Proven by a retained run** | Evidence-backed item admission, value-ordered degradation, concise line notes, summary preservation, guarded suggestions, and exact GitHub payload goldens are merged; a bounded external-PR replay retains the resulting review surface. | Sustained maintainer value is not externally calibrated; one authoritative architecture-aware final lead remains future work. | **Retained evidence:** [review-experience replay], [review-output goldens]. **Source evidence:** [#829 commit], [#834], [#846], [#849], [#850], [#851], [#853]. **Roadmap/dependency:** [#840], [#865]. |
 | Candidate-head delivery and fixed-head silence | **Proven by a retained run** | Candidate-head pending-review transactions, exact comment reconciliation, current-head revalidation, idempotent replies/fallbacks, and replay deduplication exist; the external-PR replay retains one posted reply receipt and fixed-head silence. | Synthetic merge-result delivery is not proven: the current adapter reads `revision.reviewed_commit` (the synthetic merge object) as the expected delivery head, while GitHub exposes the pull-request head SHA. Carry both identities or select the PR-head delivery subject before claiming merge-result delivery. Cross-push memory/reanchoring and stable-coordinator ownership also remain open. | **Retained evidence:** [review-experience replay]. **Source evidence:** [delivery transaction], [reply delivery], [#835], [#880], [#867]. **Roadmap/dependency:** [#923], [#814]. |
-| Proof requests and execution adapters | **Wired in production** | Semantic model intents resolve to approved focused tasks; current-head receipt replanning, Rust impact tests, base-plus-tests red/green selection, candidate cataloguing, budgets, leases, and focused proof receipts run in production. Brokered proof and standalone worker execution now emit shadow task lifecycles. | Executable paths still enter through multiple legacy adapters. Their projections must be reconciled before canonical identity, deduplication, or live scheduling; source requests remain distinct from executed command tasks. | **Source evidence:** [#836], [#837], [#852], [#854], [#916], [#1266]. **Roadmap/dependency:** [#957], [#860]. |
+| Proof requests and execution adapters | **Wired in production** | Semantic model intents resolve to approved focused tasks; current-head receipt replanning, Rust impact tests, base-plus-tests red/green selection, candidate cataloguing, budgets, leases, and focused proof receipts run in production. Brokered proof and standalone worker execution emit shadow task lifecycles; a bounded checker compares persisted projections. | Executable paths still enter through multiple legacy adapters. Coherent production packets and complete publication-boundary integration must be proven before later authority changes; source requests remain distinct from executed command tasks. | **Source evidence:** [#836], [#837], [#852], [#854], [#916], [#1266], [#1289]. **Roadmap/dependency:** [#957], [#860]. |
 | Immutable revision identity | **Wired in production** | Pure identity, ordinary Git admission, exact candidate-head/merge-result semantics, propagation through core proof/claim/cost/gate artifacts, verifier joins, and trusted-base diff admission are merged. Symbolic refs remain compatibility labels. | Authority is not complete across delivery: merge-result `reviewed_commit` is a synthetic merge object, not the GitHub PR-head object used for posting revalidation. Keep #923 open until delivery and every future reuse/stable surface preserve both identities and reject the wrong subject. | **Source evidence:** [#1245], [#1246], [#1248], [#1250], [#1251], [#1252], [#1255]. **Roadmap/dependency:** [#923]. |
-| Task and resource authority | **Wired in production** | Pure task lifecycle/accounting, deterministic ledger artifacts/verifier, the sanitized contradiction corpus, and sensor/proof/worker lifecycle shadowing are merged. The packet verifier checks referenced receipt content, revision, producer, and terminal outcome. | TaskLedger is observation/replay authority only. Existing pools, brokers, workers, leases, and budgets still control execution. The #1290 receipt join does not reconcile queue, portfolio, Required satisfaction, or lease reuse; [#957] remains incomplete, with [#1289] in flight. | **Retained evidence:** [authority-incident corpus]. **Source evidence:** [#1253], [#1256], [#1259], [#1262], [#1263], [#1266], [#1290]. **Roadmap/dependency:** [#957], [#861]. |
+| Task and resource authority | **Wired in production** | Pure task lifecycle/accounting, deterministic ledger artifacts/verifier, the sanitized contradiction corpus, and sensor/proof/worker lifecycle shadowing are merged. Receipt-content verification and a bounded comparison of queue, portfolio, receipts, leases, Required links, and accounting projections exist; contained CI retains the shadow comparison. | TaskLedger remains observation/replay authority only. Existing pools, brokers, workers, leases, and budgets control execution. [#1289] does not prove coherent production packets or integration at every publication boundary; that [#957] acceptance remains unproven. | **Retained evidence:** [authority-incident corpus]. **Source evidence:** [#1253], [#1256], [#1259], [#1262], [#1263], [#1266], [#1290], [#1289]. **Roadmap/dependency:** [#957], [#861]. |
 | Required CI spine and evidence portfolio | **Wired in production** | Configured proof, impact proof, portfolio selection, receipt catalogues, required-tool semantics, and additive coverage accounting run in production. | Required/Detective/Advisory semantics, one repository-owned minimal spine, one authority-ordered portfolio, and one shared frozen run plan are not yet the live source of truth. | **Source evidence:** [#855], [#852], [#916], [#941], [#928], [#942]. **Roadmap/dependency:** [The model-off CI-efficiency path]. |
 | Model routing, reconsideration, and final lead | **Wired in production** | Bounded specialist lanes, semantic proof intents, artifact-only private audits, and receipt-linked reconsideration substrate run in production. | Material-change-driven programme selection, proof intake while other lanes are still running, one ModelStageLedger, protected final-call reserve, and typed final-lead authority remain open; [#1120] remains the complete enriched-plan proof. | **Source evidence:** [#836], [#912], [#914], [#864], [#859]. **Roadmap/dependency:** [#930], [#865], [#929], [#1120]. |
 | Gate result and enforcement | **Wired in production** | Analysis, run-stage publication projection, sensor/model coverage, and current `gate-result` values are reported separately from the legacy conclusion; insufficient evidence can be represented as `not_proven`. A prepared payload currently serializes `publication_result = posted` before GitHub delivery runs. | Post success/failure receipts remain separate and do not recompute `gate_outcome`; #959/#960 must finalize prepared versus confirmed/failed delivery. Measured [#1275] acceptance and [#1277] result-plane non-interference must precede [#1015], which switches enforcement to target `ci_evidence_result`. `gate-check` still enforces the legacy conclusion. | **Source evidence:** [#855], [#926]. **Roadmap/dependency:** [#958], [#959], [#960], [#1275], [#1277], [#1015]. |
@@ -197,7 +199,7 @@ has landed and must not remain an agent instruction. The live serial authority
 front is:
 
 ```text
-#957         reconcile queue/portfolio/lease/gate projections (incomplete)
+#957         coherent production packets and publication boundaries (unproven)
   -> #958     pure FinalizedOutcome reducer
   -> #959     prepared-versus-confirmed delivery finalization
   -> #960     shadow FinalizedOutcome integration and verification
@@ -205,10 +207,11 @@ front is:
 ```
 
 Fast/late sensor shadowing completed in [#1263]/[#955], and proof/worker
-shadowing completed in [#1266]/[#956]. [#1290] adds receipt-content joins only;
-[#1289] is an active reconciliation PR, not completion evidence for all of
-[#957]. The complete Horizon A packet proof remains [#962]. [Issue #945]
-remains execution-order authority.
+shadowing completed in [#1266]/[#956]. [#1290] adds receipt-content joins;
+merged [#1289] adds bounded shadow comparisons, generated coherent fixtures,
+and historical negative cases. Its [remaining production acceptance] is not
+established by those fixtures or by issue closure. The complete Horizon A
+packet proof remains [#962]. [Issue #945] remains execution-order authority.
 
 The CI-efficiency programme is a bounded path through the same architecture,
 not a competing plan. [#1269] through [#1283] bound process and packet output.
@@ -288,8 +291,10 @@ rewrite a historical packet to make the current architecture look coherent.
 [#1015]: https://github.com/EffortlessMetrics/ub-review/issues/1015
 [#1120]: https://github.com/EffortlessMetrics/ub-review/issues/1120
 [#1266]: https://github.com/EffortlessMetrics/ub-review/commit/274d62cf3362f3bfcb47034e6c7d6301efcc5912
-[#1289]: https://github.com/EffortlessMetrics/ub-review/pull/1289
+[#1289]: https://github.com/EffortlessMetrics/ub-review/commit/33f4271a8e2bf507d387aac7b409a5fc20578512
 [#1290]: https://github.com/EffortlessMetrics/ub-review/commit/3bad5d2781967dd602e691a21333d17c38aaf81c
+[projection checker]: TASK_PROJECTION_RECONCILIATION.md
+[remaining production acceptance]: TASK_PROJECTION_RECONCILIATION.md#what-remains-before-957-closes
 [#1269]: https://github.com/EffortlessMetrics/ub-review/issues/1269
 [#1274]: https://github.com/EffortlessMetrics/ub-review/issues/1274
 [#1275]: https://github.com/EffortlessMetrics/ub-review/issues/1275
