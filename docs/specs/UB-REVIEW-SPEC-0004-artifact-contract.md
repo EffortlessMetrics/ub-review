@@ -132,10 +132,12 @@ task_ledger_events.ndjson          ub-review.task_ledger_event.v1 lines
 review/task_ledger_snapshot.json   ub-review.task_ledger_snapshot.v1
 ```
 
-`run` emits both after the late sensor phase joins when the resolved plan has
-at least one sensor; a legitimately empty sensor plan omits the optional pair.
-Empty-plan runs remove a stale pair from a reused output directory as one
-rollback-safe pair transition.
+`run` emits both after the late sensor phase joins when the shared recorder
+contains sensor, proof-command, or source-request events. Standalone `worker`
+execution also publishes the pair after its receipt is reconciled. Only an
+empty recorder omits the optional pair; an empty sensor plan alone does not
+imply an empty ledger. Empty-ledger runs remove a stale pair from a reused
+output directory as one rollback-safe pair transition.
 Publication stages both files and restores the prior on-disk pair state when
 either final publish fails, so a failed run does not leave a mixed pair.
 Every resolved sensor has one proposal. Runnable fast and late sensors record queued, admitted, setup,
@@ -151,6 +153,16 @@ and optional changed-path context command because each subprocess receives the
 configured timeout independently.
 Plan construction normalizes a configured zero-second sensor timeout to a
 one-second safe floor for runnable, skipped, and dry-run proposals.
+Brokered configured/impact, model-request, and follow-up proof, plus standalone
+workers, record one task per executed command side. Source-shaped proof
+requests remain separate non-executing proposals so existing broker grouping
+does not imply canonical task equivalence. On successful publication, ledger
+receipt-creation and resource-release events follow reconciliation of the
+current aggregate or worker receipt. The worker publication-failure path uses
+receipt-failure and release events without claiming a created receipt. This
+does not establish complete failure reconciliation at every run publication
+boundary; that remains part of #957. The legacy broker and leases still
+decide what executes.
 Sensor phase remains scheduling metadata in the linked sensor status receipt,
 not a second lifecycle model. Event records use contiguous caller order, a
 SHA-256 source-digest chain, strict transition replay, canonical LF-delimited
@@ -171,6 +183,13 @@ portfolio, Required satisfaction, lease reuse, scheduler, cost, or calibration
 projections, and does not turn candidate-produced evidence into independent
 merge authority. The verifier therefore still permits
 the pair to be absent in legacy/non-run packets during the shadow rollout.
+
+The separate [bounded projection checker](../TASK_PROJECTION_RECONCILIATION.md)
+added by #1289 compares persisted queue, portfolio, receipt, lease, Required,
+and accounting projections. Its live contained-CI comparison is non-blocking.
+Generated coherent fixtures and historical negatives do not establish coherent
+production packets or integration at every publication boundary; that #957
+acceptance remains unproven.
 
 `review/` (the compiled review surface):
 
@@ -710,7 +729,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | tool-gate-outcomes.json + review/ mirror | stable | tool_gate_outcomes.v1; entries tool_gate_outcome.v1 | downstream automation; gate-check cross-check | required (require_tool_gate_outcome_artifacts) |
 | work_queue.json | stable | work_queue.v1; tasks work_queue_task.v1 | downstream automation | required (require_work_queue_artifacts) |
 | work_events.ndjson | stable | work_event.v1 lines | downstream automation | required (require_work_queue_artifacts) |
-| task_ledger_events.ndjson + review/task_ledger_snapshot.json | experimental shadow coverage | task_ledger_event.v1 lines + task_ledger_snapshot.v1 derived replay cache; sensor sources complete, proof/worker sources pending #956 | downstream reconciliation | emitted by `run`; verified when present (require_task_ledger_artifacts) |
+| task_ledger_events.ndjson + review/task_ledger_snapshot.json | experimental shadow coverage | task_ledger_event.v1 lines + task_ledger_snapshot.v1 derived replay cache; sensor/proof/worker observation, receipt-content joins, and bounded shadow projection comparison implemented; complete production/publication acceptance remains #957 | downstream reconciliation | emitted by `run` and `worker` when the recorder has events; verified when present (require_task_ledger_artifacts) |
 | events.ndjson | stable | none (ts/kind/payload; eight required kinds) | downstream automation | required (require_events) |
 | running-summary.md | stable | five required headings | humans (GitHub step summary) | required (require_summary) |
 | input/changed-files.txt, input/diff.patch, input/diff-context.json | stable | none | downstream automation | required (require_common_tree) |

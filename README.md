@@ -60,8 +60,10 @@ Candidate-head delivery transactions, current-head reconciliation, substantial
 review/proof substrate, immutable current-run revision joins, and the
 pure/replayable TaskLedger exist. Synthetic merge-result delivery binding and
 post-confirmed publication finalization remain open. Fast and late sensor
-execution is now shadow-observed in the ledger; proof/worker execution and
-cross-projection reconciliation remain open through #1266/#956 and #957.
+execution, brokered proof, and standalone workers are now shadow-observed in
+the ledger. Receipt-content joins landed in #1290, and bounded shadow
+projection comparisons landed in #1289. Production-generated coherent packets
+and complete publication-boundary integration remain unproven under #957.
 The repository does **not** yet have one live task/resource scheduler,
 Required-first shared run plan, authoritative final lead, finalized outcome
 enforcement, trusted learning, hostile-head-safe stable coordinator, or
@@ -462,10 +464,13 @@ consuming workflow can cache Cargo registry and target directories if needed.
 
 ## Codex lane notes
 
-Codex work should follow [docs/CODEX_FINISH.md](docs/CODEX_FINISH.md): one
-small green PR at a time, MiniMax M3 primary for v0, GLM skipped until
-approved, agent harnesses out of the hot path, and real sensor defects filed in
-the matching `*-swarm` repo instead of silently absorbed into `ub-review`.
+Codex work follows the current execution order in
+[issue #945](https://github.com/EffortlessMetrics/ub-review/issues/945) and the
+earned-state boundaries in [Product state](docs/PRODUCT_STATE.md).
+[The v0 lane brief](docs/CODEX_FINISH.md) retains historical Bun/provider
+decisions; it does not select today's next work. Keep one reviewable PR at a
+time and file real sensor defects in the matching `*-swarm` repo instead of
+silently absorbing them into `ub-review`.
 
 ## Product state and implementation order
 
@@ -480,12 +485,14 @@ packets and exact-head verification outrank both prose surfaces. Historical
 roadmap/spec documents remain useful for design intent, but they are not the
 current merge-front authority.
 
-Fast/late sensor shadowing completed in #1263/#955. The live authority migration
-is deliberately serial:
+Fast/late sensor shadowing completed in #1263/#955, and proof/worker shadowing
+completed in #1266/#956. The #1290 receipt-content join and #1289 bounded
+shadow comparison are partial progress on #957; complete production packet
+and publication-boundary acceptance remains unproven.
+The remaining authority migration is deliberately serial:
 
 ```text
-#1266 / #956  proof and worker execution -> shadow TaskLedger
-  -> #957     projection reconciliation
+#957         coherent production packets and publication boundaries (unproven)
   -> #958     pure FinalizedOutcome
   -> #959     delivery finalization
   -> #960     shadow integration and verification

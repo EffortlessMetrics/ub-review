@@ -1,5 +1,12 @@
 # Codex lane goal
 
+This is the historical Bun v0 lane brief. Its provider choices, implementation
+sequence, and non-goals describe that lane; they do not override current repo
+configuration, source, or the broader product contract.
+[Issue #945](https://github.com/EffortlessMetrics/ub-review/issues/945) selects
+current work, and [Product state](PRODUCT_STATE.md) defines earned capability
+and authority boundaries.
+
 `ub-review` is the Bun UB review gate: one CI pass builds shared evidence,
 many cheap model investigations reason over it, and the runner compiles one
 grounded Pull Request Review. Do not build a generic review bot, Droid clone,

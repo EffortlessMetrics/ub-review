@@ -66,20 +66,25 @@ prepared GitHub review transaction
   -> separate post step
   -> post/reconciliation receipts (do not recompute gate_outcome)
 
-TaskLedger observes fast/late sensor execution in shadow through #1263/#955
-proof and worker execution remain outside the ledger until #1266/#956
-cross-projection reconciliation remains #957
+TaskLedger observes sensors (#1263/#955) and proof/workers (#1266/#956) in shadow
+receipt-content joins are verifier-covered through #1290
+bounded projection comparisons run in shadow through merged #1289
+coherent production packets and complete publication boundaries remain #957
 FinalizedOutcome remains a shadow-first train
 legacy gate_outcome.conclusion remains the enforced field
 ```
 
 The immutable revision contract is already admitted and joined across core
 current-run artifacts. The pure TaskLedger, execution accounting, ledger
-artifact verifier, retained contradiction corpus, and sensor lifecycle adapter
-also exist. The ledger now observes fast/late sensor execution, but it does not
-yet observe proof/worker paths, reconcile all legacy projections, schedule
-work, or deduplicate cross-source tasks. Until #1266/#956 -> #957 closes, the
-existing pools, brokers, leases, and budgets remain execution authority.
+artifact verifier, retained contradiction corpus, and sensor/proof/worker
+lifecycle adapters also exist. The packet verifier joins ledger claims to
+receipt content through #1290. The bounded
+[projection checker](TASK_PROJECTION_RECONCILIATION.md) added by #1289 compares
+persisted projections in shadow; coherent production packets and complete
+publication-boundary integration remain unproven under #957. Neither checker
+schedules work or deduplicates cross-source tasks.
+Existing pools, brokers, leases, and budgets remain execution authority until
+the later scheduler migration earns that authority.
 
 The same distinction applies to gate truth. Additive `analysis_result`,
 `publication_result`, and `gate_result` fields can state that a run is limited
