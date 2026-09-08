@@ -71,13 +71,45 @@ impl Options {
     }
 }
 
+fn source_git_command(root: &Path, args: &[&str], workspace: Option<&Path>) -> Result<Command> {
+    let mut command = Command::new("git");
+    if let Some(workspace) = workspace {
+        let root = root.canonicalize().context("resolve proof checkout")?;
+        ensure!(
+            root == workspace.canonicalize()?,
+            "proof checkout is not the dispatched workspace"
+        );
+        // Container jobs bind-mount the runner-owned checkout. Scope Git's
+        // ownership acknowledgement to this exact dispatched workspace and
+        // this read-only process; no global config or wildcard is installed.
+        command
+            .arg("-c")
+            .arg(format!("safe.directory={}", root.display()));
+    }
+    command.args(args).current_dir(root);
+    Ok(command)
+}
+
 fn git_text(root: &Path, args: &[&str]) -> Result<String> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(root)
+    let workspace = if env::var("GITHUB_ACTIONS").ok().as_deref() == Some("true") {
+        Some(PathBuf::from(
+            env::var_os("GITHUB_WORKSPACE").context("workflow workspace identity")?,
+        ))
+    } else {
+        None
+    };
+    let output = source_git_command(root, args, workspace.as_deref())?
         .output()
         .context("inspect proof source")?;
-    ensure!(output.status.success(), "source Git inspection failed");
+    ensure!(
+        output.status.success(),
+        "source Git inspection failed ({}): {}",
+        args.join(" "),
+        String::from_utf8_lossy(&output.stderr)
+            .chars()
+            .take(512)
+            .collect::<String>()
+    );
     Ok(String::from_utf8(output.stdout)?.trim().to_owned())
 }
 
@@ -279,6 +311,34 @@ pub(crate) fn run(root: &Path, args: impl Iterator<Item = String>) -> Result<()>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn source_git_override_only_names_the_dispatched_workspace() -> Result<()> {
+        let workspace = tempfile::tempdir()?;
+        let other = tempfile::tempdir()?;
+        let args = ["rev-parse", "HEAD"];
+        let local = source_git_command(workspace.path(), &args, None)?;
+        ensure!(local.get_args().collect::<Vec<_>>() == ["rev-parse", "HEAD"]);
+        ensure!(source_git_command(workspace.path(), &args, Some(other.path())).is_err());
+        let dispatched = source_git_command(workspace.path(), &args, Some(workspace.path()))?;
+        let expected = vec![
+            "-c".to_owned(),
+            format!(
+                "safe.directory={}",
+                workspace.path().canonicalize()?.display()
+            ),
+            "rev-parse".to_owned(),
+            "HEAD".to_owned(),
+        ];
+        ensure!(
+            dispatched
+                .get_args()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                == expected
+        );
+        Ok(())
+    }
 
     #[test]
     fn portability_options_require_explicit_resolver_outcome() -> Result<()> {
