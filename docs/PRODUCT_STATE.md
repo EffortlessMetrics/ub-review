@@ -1,324 +1,341 @@
-# Product state assessment (July 2026)
+# Product state
 
-## Category
+_Last reconciled against `main` at `55e4fba` on 2026-08-28; roadmap
+dependencies reconciled through the 2026-08-30 model-off CI-efficiency
+amendment._
 
-`ub-review` is an intelligent targeted PR CI gate with review judgment
-built in. It replaces fixed CI + cold-start AI review + manual triage
-with one runner-owned decision loop.
+This is the canonical capability-state document. [Issue #945] owns execution
+order; parent issues own capability contracts; retained receipts and runtime
+verification outrank this file. [The model-off CI-efficiency path] records the
+bounded deterministic path within that same architecture. Update earned state
+after authority-bearing implementation and evidence, not after a type, schema,
+fixture, issue plan, or roadmap document lands.
 
-The core system exists. The job now is to finish the execution loop,
-harden the contracts, and make adoption boring.
+## Current position
 
-## Architecture boundary (invariant)
+Transactional review delivery, current-head reconciliation, substantial
+sensor/proof/review compilation, and additive result separation exist.
+Immutable revision identity is admitted and verifier-joined across core
+current-run artifacts on `main`. The pure TaskLedger, execution-accounting
+lifecycle, ledger artifact verifier, retained contradiction corpus, and the
+first production shadow adapter also exist. Fast and late sensor execution now
+emits revision-bound TaskLedger lifecycles through #1263/#955. Proof and worker
+observation remains the live [#1266]/[#956] front; TaskLedger still does not
+schedule that work or reconcile every legacy projection.
+
+One live scheduler/resource authority, a repository-native architecture
+contract, a Required-first CI spine, one shared run plan, authoritative final
+judgment, finalized outcome enforcement, trusted learning, a hostile-head-safe
+stable coordinator, and externally calibrated sole-gate operation remain
+incomplete. The shortest accurate statement is:
+
+> Transactional delivery and substantial review/proof substrate exist.
+> Revision authority is materially advanced; task authority is in shadow.
+> Scheduler, final-judgment, finalized-outcome, learning, and stable-gate
+> authority remain incomplete in the precise ways tracked by #923–#945 and the
+> current amendments to [Issue #945].
+
+## What makes UB Review different
+
+UB Review is not distinct because it calls models, and its product boundary is
+not limited to undefined-behaviour review. Its distinguishing design is one
+revision-bound evidence transaction that can produce both a senior PR review
+and a deterministic CI evidence decision:
 
 ```text
-models investigate
-sensors produce evidence
-proof broker runs commands
-resource broker controls the box
-compiler decides what earns attention
-GitHub broker performs side effects
-gate_outcome decides pass/fail/inconclusive
+exact admitted revision
+  -> repository and diff evidence
+  -> one bounded gate-and-review plan
+  -> deterministic sensors/proof + model investigation
+  <-> approved proof tasks and revision-bound receipts
+  -> claim/evidence reconciliation
+  -> concise senior review
+  + eventual PASS / FAIL / NOT_PROVEN FinalizedOutcome
+  -> retained audit artifacts
 ```
 
-Models do not prove correctness. No model finding is proof.
+The important hinges are:
 
-## What is already done
+- **Models investigate; receipts decide.** A model can form a hypothesis or ask
+  a material question. It cannot prove correctness, authorize an arbitrary
+  command, or make missing Required evidence clean.
+- **The reviewer has a lab.** The intended loop starts approved focused proof
+  while investigation continues, then lets the resulting receipt change only
+  the exact claim it tests.
+- **Review and CI share evidence without sharing a verdict.** Review quality,
+  publication success, instrument coverage, and CI sufficiency are separate
+  results compiled from the same revision-bound run.
+- **One required check does not mean one giant job.** The destination is one
+  stable coordinator over independently receipted tasks, caches, deadlines,
+  and side effects—not a serial workflow or a model acting as judge.
+- **Private machinery, public judgment.** Full planner, lane, sensor, cost, and
+  failure detail remains auditable in artifacts. The PR surface spends
+  attention only on material findings, verification questions, and the
+  smallest complete decision.
+- **Repository-native evidence is the destination.** Explicit architecture,
+  ownership, support, mirror, CI, and proof contracts should determine which
+  review programmes apply. A fixed panel of generic reviewers is transitional
+  implementation, not the product model.
 
-Do not reopen these without a concrete failing receipt.
+Some of this loop is live today; some remains the destination. The matrix below
+keeps those states separate.
 
-- Incident-only workflow settings removed; normal `model-mode: auto` and
-  heavy-proof posture restored.
-- `doctor` gives expected versions and exact repair commands for missing
-  or stale tools.
-- `ripr` tool-gate detail chain has verifier coverage.
-- Focused-build fill-ledger entries carry matching proof and lease anchors.
-- Receipt routes use exact `proof_receipts.json#...` and
-  `resource_leases.json#...` pointers.
-- Adapter handoff reflects `fill-ledger`, `ripr` exposure gaps, and
-  current `audit-ci` / `setup-ci` boundaries.
-- Work queue and fill-ledger surfaces exist with verifier coverage.
-- Proof requests are terminalized before final artifacts; receipted requests
-  retain their result, duplicates are marked `deduplicated`, and unreceipted
-  requests become explicit `deferred` dispositions (PR #747).
-- Human-facing review output uses evidence-first structural claim identity and
-  preserves distinct claims with shared vocabulary (PRs #749/#750).
-- Internal planner language is withheld to artifacts rather than failing a
-  valid code gate at the final compiler boundary (PR #751).
-- The artifact verifier now enforces watchdog cross-field coherence (current
-  main), and direct runs fail closed for every non-pass gate conclusion (PR
-  #800).
-- The current-head watchdog classifier landed (#745, child of #658): a pure
-  `src/gate_watchdog.rs` classifier over frozen observations, the
-  `gate-watchdog` CLI, the `review/gate_watchdog.json` artifact
-  (`gate_watchdog.v1`), and verifier contract self-test coverage. It is
-  additive and inert — no GitHub queries, no check publication, no
-  branch-protection mutation — until a future stable coordinator consumes it.
-  Missing or malformed head evidence can never serialize `pass`.
+## CI outcome vocabulary
 
-## PR-by-PR status
+The target CI authority is `FinalizedOutcome.ci_evidence_result`. Its semantic
+and serialized contract is:
 
-### PR 1 — Proof-broker edge reliability — DONE
+Finalization evaluates the terminal inputs in precedence order: deterministic
+`FAIL`, complete `PASS`, then `NOT_PROVEN`. A current-revision deterministic
+policy violation remains failure even when another Required obligation is
+unavailable.
 
-Lease validation (no lease -> no command), duplicate request dedup,
-timeout, `base_patch_failed`, bounded stdout/stderr, cleanup after
-partial execution. Issue-ledger #312 closed.
+| Semantic result | Serialized value | Earned only when |
+| --- | --- | --- |
+| **FAIL** | `fail` | A current-revision deterministic receipt establishes a policy-blocking violation. A model or Advisory finding never suffices. |
+| **PASS** | `pass` | No deterministic receipt establishes a policy-blocking violation, and every applicable Required obligation has a current-revision satisfying terminal receipt. |
+| **NOT_PROVEN** | `not_proven` | No deterministic receipt establishes a policy-blocking violation, and at least one applicable Required obligation is missing, unavailable, stale, malformed, or otherwise insufficient to establish PASS. |
 
-### PR 2 — Deterministic test-impact candidate planning — PARTIAL
+Current compatibility surfaces do not yet serialize that authority directly:
 
-Candidate planners exist (`focused_test_candidates_from_diff`,
-`focused_test_candidates_from_requests`, and
-`focused_build_candidates_from_requests`). The Cargo workspace graph now
-identifies changed-package ownership, direct reverse-dependency candidates,
-declared targets, and ranked test candidates.
+| Current surface | Values | Current authority |
+| --- | --- | --- |
+| `gate-result` | `pass`, `finding`, `not_proven` | Truthful additive report. `finding` is not an automatic alias for target `fail`. |
+| `gate-conclusion` / `gate_outcome.conclusion` | `pass`, `fail`, `inconclusive` | Legacy enforced compatibility result until [#1015]. |
 
-**Gap:** The Cargo graph always emits its artifact. Shadow, default, and invalid
-modes keep candidates artifact-only; explicit active mode may feed the ranked
-catalog to model proof planning, while Rust policy and the broker retain
-execution authority. The graph still uses `cargo metadata --no-deps`, package
-names, and direct manifest dependency names. Before it can determine required
-execution it needs package-ID/resolve-graph edges, bounded approved command
-templates, and receipt-backed broker execution.
+Do not mechanically translate `finding` to `fail` or `inconclusive` to
+`not_proven`. FinalizedOutcome recomputes the target result from typed
+current-revision terminal inputs. [#1015] changes enforcement authority only
+after its measurement and non-interference prerequisites.
 
-The planner emits `review/proof_intents.json` with an answer-shaped question,
-expected-result, proof-kind, value, and stable claim identity for each legacy
-request and model-native proof intent. Model intents are resolved against
-Cargo workspace metadata to one approved focused-test, base-plus-tests, or
-focused-build template before they enter the existing broker; zero, multiple,
-unsafe, unsupported, and over-budget targets terminalize artifact-only. The
-deterministic broker now ranks executable candidates by required
-floor, discriminating-test value, shared request coverage, and estimated cost;
-it reruns that selection after test receipts before considering builds. The
-final `review/proof_portfolio.json` records selected, receipt-satisfied,
-superseded, declined, and safe-wind-down dispositions without exposing the
-request queue to the reviewer.
+## Capability-state vocabulary
 
-The portfolio selector now consumes the observed box capacity, profile lease,
-remaining hard-deadline window, existing leases, and terminal receipts. Its
-portfolio artifact records those inputs and distinguishes box-capacity
-declines from safe deadline wind-down.
+| State | Meaning |
+| --- | --- |
+| **Implemented** | Types, reducers, schemas, or local behavior exist. |
+| **Wired in production** | A normal run emits or consumes the behavior. |
+| **Proven by a retained run** | A replay or hosted exact-head packet preserves the behavior and its receipts. |
+| **Trusted authority** | Production decisions depend on it and verification rejects stale, forged, missing, or contradictory authority. |
+| **Externally calibrated** | Representative external repositories show sustained usefulness, reliability, and acceptable economics. |
 
-Model lanes may now submit answer-shaped intents without a command field; Rust
-validates their claim, question, expected answer, typed proof kind, and safe
-repository target before routing them into the planner artifacts. Legacy
-command-shaped requests remain accepted for compatibility.
+A later state is never inferred from an earlier one. Issue closure, schema
+presence, and a green self-test are not substitutes for production authority.
 
-**Gap:** The executor still consumes the legacy request/task adapters for
-execution. A future seam must resolve typed intent targets to approved task
-templates before model-native intents can select execution directly.
+The final matrix column keeps three evidence objects distinct:
 
-### PR 3 — Base+tests red/green — DONE
+- **Retained evidence** is a committed replay/receipt corpus or a durably linked
+  exact-head packet.
+- **Source evidence** identifies merged implementation.
+- **Roadmap/dependency** identifies work that remains; it never proves current
+  capability.
 
-All six states handled: `discriminating`, `non_discriminating`,
-`head_failed`, `base_patch_failed`, `timed_out`, `skipped_budget`.
+## Capability matrix
 
-### PR 4 — Targeted heavy witnesses — PARTIAL
+| Surface | Highest earned state | What exists now | Missing authority / next contract | Evidence classification |
+| --- | --- | --- | --- | --- |
+| Reviewer-facing compilation | **Proven by a retained run** | Evidence-backed item admission, value-ordered degradation, concise line notes, summary preservation, guarded suggestions, and exact GitHub payload goldens are merged; a bounded external-PR replay retains the resulting review surface. | Sustained maintainer value is not externally calibrated; one authoritative architecture-aware final lead remains future work. | **Retained evidence:** [review-experience replay], [review-output goldens]. **Source evidence:** [#829 commit], [#834], [#846], [#849], [#850], [#851], [#853]. **Roadmap/dependency:** [#840], [#865]. |
+| Candidate-head delivery and fixed-head silence | **Proven by a retained run** | Candidate-head pending-review transactions, exact comment reconciliation, current-head revalidation, idempotent replies/fallbacks, and replay deduplication exist; the external-PR replay retains one posted reply receipt and fixed-head silence. | Synthetic merge-result delivery is not proven: the current adapter reads `revision.reviewed_commit` (the synthetic merge object) as the expected delivery head, while GitHub exposes the pull-request head SHA. Carry both identities or select the PR-head delivery subject before claiming merge-result delivery. Cross-push memory/reanchoring and stable-coordinator ownership also remain open. | **Retained evidence:** [review-experience replay]. **Source evidence:** [delivery transaction], [reply delivery], [#835], [#880], [#867]. **Roadmap/dependency:** [#923], [#814]. |
+| Proof requests and execution adapters | **Wired in production** | Semantic model intents resolve to approved focused tasks; current-head receipt replanning, Rust impact tests, base-plus-tests red/green selection, candidate cataloguing, budgets, leases, and focused proof receipts run in production. | Executable paths still enter through multiple legacy adapters. They must all be observed and reconciled in TaskLedger before canonical identity, deduplication, or live scheduling. | **Source evidence:** [#836], [#837], [#852], [#854], [#916]. **Roadmap/dependency:** [#956], [#957], [#860]. |
+| Immutable revision identity | **Wired in production** | Pure identity, ordinary Git admission, exact candidate-head/merge-result semantics, propagation through core proof/claim/cost/gate artifacts, verifier joins, and trusted-base diff admission are merged. Symbolic refs remain compatibility labels. | Authority is not complete across delivery: merge-result `reviewed_commit` is a synthetic merge object, not the GitHub PR-head object used for posting revalidation. Keep #923 open until delivery and every future reuse/stable surface preserve both identities and reject the wrong subject. | **Source evidence:** [#1245], [#1246], [#1248], [#1250], [#1251], [#1252], [#1255]. **Roadmap/dependency:** [#923]. |
+| Task and resource authority | **Wired in production** | Pure task lifecycle/accounting, deterministic ledger artifacts/verifier, the sanitized contradiction corpus, and normal-run fast/late sensor lifecycle shadowing are merged. | TaskLedger is observation/replay authority only. Existing pools, brokers, workers, leases, and budgets still control execution; [#1266]/[#956] must observe proof/workers and [#957] must reconcile every projection before live scheduling owns authority. | **Retained evidence:** [authority-incident corpus]. **Source evidence:** [#1253], [#1256], [#1259], [#1262], [#1263], [#955]. **Roadmap/dependency:** [#1266], [#956], [#957], [#861]. |
+| Required CI spine and evidence portfolio | **Wired in production** | Configured proof, impact proof, portfolio selection, receipt catalogues, required-tool semantics, and additive coverage accounting run in production. | Required/Detective/Advisory semantics, one repository-owned minimal spine, one authority-ordered portfolio, and one shared frozen run plan are not yet the live source of truth. | **Source evidence:** [#855], [#852], [#916], [#941], [#928], [#942]. **Roadmap/dependency:** [The model-off CI-efficiency path]. |
+| Model routing, reconsideration, and final lead | **Wired in production** | Bounded specialist lanes, semantic proof intents, artifact-only private audits, and receipt-linked reconsideration substrate run in production. | Material-change-driven programme selection, proof intake while other lanes are still running, one ModelStageLedger, protected final-call reserve, and typed final-lead authority remain open; [#1120] remains the complete enriched-plan proof. | **Source evidence:** [#836], [#912], [#914], [#864], [#859]. **Roadmap/dependency:** [#930], [#865], [#929], [#1120]. |
+| Gate result and enforcement | **Wired in production** | Analysis, run-stage publication projection, sensor/model coverage, and current `gate-result` values are reported separately from the legacy conclusion; insufficient evidence can be represented as `not_proven`. A prepared payload currently serializes `publication_result = posted` before GitHub delivery runs. | Post success/failure receipts remain separate and do not recompute `gate_outcome`; #959/#960 must finalize prepared versus confirmed/failed delivery. Measured [#1275] acceptance and [#1277] result-plane non-interference must precede [#1015], which switches enforcement to target `ci_evidence_result`. `gate-check` still enforces the legacy conclusion. | **Source evidence:** [#855], [#926]. **Roadmap/dependency:** [#958], [#959], [#960], [#1275], [#1277], [#1015]. |
+| Learning and calibration | **Implemented** | Cost, token, timing, finding, delivery, and calibration-v0 telemetry can retain observations. | Those observations are not trusted learning authority, adaptive omission evidence, or proof that later runs improve. Canonical learning, economics, counterfactuals, and external calibration remain post-useful-product work. | **Source evidence:** [#840]. **Roadmap/dependency:** [#868], [#932], [#933], [#939]. |
+| Candidate-head containment | **Wired in production** | Candidate-head dogfood runs model-off/artifact-only with a base-owned deterministic baseline, committed source lockfile, and trusted-base diff admission. | The committed contracts do not by themselves prove full hostile-head isolation. Bounded process/packet output through [#1269]–[#1283] and the untrusted-evidence to trusted-review/posting handoff remain open. | **Source evidence:** [#1240], [#1241], [#1249], [#1255]. **Roadmap/dependency:** [#876], [#1269], [#1283]. |
+| Release and install distribution | **Wired in production** | Archive/binary identity validation and the v0.1.2 release path exist. | Clean no-host-Cargo portability, stable analyzer bundle authority, upgrade/rollback acceptance, and external install proof remain open. | **Source evidence:** [#903], [#906], [#1242]. **Roadmap/dependency:** [#815]. |
+| Stable coordinator and terminal check | **Implemented** | Pure watchdog classification and stable/candidate authority contracts exist; candidate self-gate authority is separately contained. | A released stable coordinator, identical-input candidate shadow, exact-head terminal publication, rollback, and break-glass are not wired as required authority. | **Source evidence:** [#745]. **Roadmap/dependency:** [#814], [#658]. |
+| Onboarding commands | **Wired in production** | `init`, `enable --inspect`, `audit-ci`, and `setup-ci` inspect and generate adoption proposals without silently changing branch protection. | Fresh-repo release-installed adoption, upgrade/rollback, and architecture/CI-spine proposal acceptance remain open. | **Source evidence:** [#845]. **Roadmap/dependency:** [#944]. |
+| External pilot and promotion substrate | **Implemented** | Advisory pilot contracts, disposition/economics surfaces, and explicit promotion authority nodes exist. | Bun/Perl pilot execution, comparative calibration, measured advantage over the existing review process, and repository-owner sole-gate authorization remain open. | **Source evidence:** [#840]. **Roadmap/dependency:** [#806], [#807], [#808], [#658]. |
 
-Mutation and sanitizer are declared as heavy-witness types with skip and
-parked reasons. Config and budget surfaces exist
-(`[budgets].mutation`, `[budgets].sanitizer`, `requires_lease`,
-`--allow-heavy`).
+## Live authority map
 
-**Gap:** No executor route for mutation (cargo-mutants) or sanitizer
-(asan/msan/tsan). They are parked, not executed. Coverage and miri have
-config wiring but miri execution is a nightly external step, not an
-in-broker route.
+The current run has several useful planes, but they do not yet form one live
+control plane:
 
-### PR 5 — Lane routing and convergence — PARTIAL
+```text
+RevisionIdentity
+  = bounded current-run identity and verifier join authority;
+    merge-result delivery binding is not yet authoritative
 
-Lane definitions and width routing exist. Sufficient terminal state
-works. Late receipt routing reconciles receipts back into candidates.
-Per-comment and same-claim dedupe is implemented.
+legacy sensor pools + proof broker + worker paths + leases/budgets
+  = current execution and resource authority
 
-**Status:** Cross-lane contradiction detection and suppression are DONE
-(issue-ledger #147 closed by PRs #459/#460: surface-aware lane gating +
-explicit cross-lane conflict receipts). Conflicted findings are suppressed
-and replaced with a verification question. Evidence-precedence adjudication
-is now active in the final claim graph for those explicit conflict pairs:
-proof receipts outrank validated facts, citations, and model interpretations;
-equal-precedence conflicts remain explicitly conflicted. Diff-irrelevance is
-guidance text, not enforced routing. Cross-section body dedupe is doctrine
-and structural cross-section claim identity is now implemented (PRs #749/#750).
-Transactional inline delivery is complete through merged PRs #831 and #832.
-The upstream RIPR
-CLI-subprocess analyzer contract is now merged in RIPR #1455, with the
-structured warning consumer and 0.10.1 release-prep work merged in PR #1457
-and PR #1456.
+TaskLedger
+  = shadow observation/replay authority only
 
-### Proof request execution and terminalization — PARTIAL
+review compiler + delivery transaction
+  = candidate-head public-output preparation and side-effect path;
+    post receipts remain separate from gate truth
 
-The focused-test and focused-build broker executes approved requests with
-leases, bounded receipts, and follow-up routing. PR #747 closes the final
-artifact request queue so no `requested` status reaches the reporter. The
-remaining proof-depth gap is production sanitizer/mutation execution; issue
-#681 preserves the sanitizer route while its current consumer diff is held on
-the upstream RIPR semantic-probe boundary. The preserved watchdog branch also
-has local receipt provenance hardening (`8391ed0`), but it is not published
-while the same RIPR blocker remains unresolved.
+gate_outcome.conclusion
+  = current enforcement field
 
-The current-head topic slice is now active at the final compiler boundary:
-`review/claim_graph.json` carries structural topics, exact head identity,
-current versus stale thread references, proof request/receipt links, and
-delivery state. Each topic also records the current thread disposition
-(`novel`, `already_covered`, `corroborated_with_new_evidence`,
-`refuted_by_new_evidence`, `accepted_tradeoff`, or
-`fixed_on_current_head`, or `superseded_by_head_change`). Current-head inline
-candidates already covered by an anchored
-thread are withheld from a second comment; stale threads do not suppress new
-delivery. Pending-review creation, exact comment reconciliation, head
-revalidation, replies, retry identity, and confirmed GitHub delivery receipts
-are now exercised by the production Perl #3627 replay in #801. Explicit
-evidence-precedence conflicts now carry winner/loser claim IDs, and final
-surface reconciliation suppresses only the adjudicated loser while retaining
-it in the claim graph artifact.
+analysis_result / publication_result / gate_result
+  = run-stage additive diagnostics, not yet delivery-confirmed or enforcement authority
 
-Late proof now has a lane-reconsideration boundary as well: follow-up receipts
-are routed to the message bus, receipt-linked lanes receive a bounded
-evidence-reconsideration turn before final claim compilation, and exact request
-IDs are required before an answer can change an observation disposition. The
-turns, `review/receipt_reconsiderations.json`, and `TopicUpdate` messages are
-auditable; unrelated claims owned by the same lane remain unchanged. Model
-budget exhaustion or a failed reconsideration is recorded as an internal
-terminal/deferred result and does not become maintainer homework.
+model outputs
+  = hypotheses, proposed findings, and semantic proof intents; never proof
 
-### PR 6 — Pure-signal compiler enforcement — DONE
+calibration.v0 and cost telemetry
+  = observations; never trusted learning or omission authority
+```
 
-`has_forbidden_pr_review_boilerplate` rejects lane rosters, tool tables,
-provider status, command logs, generic caveats, successful-tool
-announcements, approval filler, and machine-state summaries. Body byte
-and bullet caps enforced. Refuted-only and summary-only posts governed. Body
-quality is separate from finding quality: when noisy PR prose is suppressed,
-independently validated inline findings remain eligible for concise inline-only
-delivery. Successful lane/provider/sensor tables and execution summaries are
-also suppressed as review-quality defects rather than becoming code-gate
-failures.
+Do not describe the resource broker as controlling the box, TaskLedger as the
+scheduler, `gate_result` as the enforced verdict, or calibration-v0 as learned
+policy. Those are destination claims, not current behavior.
 
-Run metrics now keep reviewer-value signals separate from GitHub delivery:
-`prepared_inline_comments` and `prepared_review_body` describe the payload
-compiled by `run`; proof request status counts and terminal rate show whether
-the request queue closed; and receipt counters distinguish current-head,
-stale-head, and request-linked evidence, including proof-driven conclusion
-changes. `post_status` remains `not_attempted_by_run` until the post stage
-writes its receipt, so prepared output is never reported as delivered.
+## Active implementation front
 
-### PR 7 — Provider and cache reliability — DONE
+The containment, committed-lockfile, and RevisionIdentity front named in #963
+has landed and must not remain an agent instruction. The live serial authority
+front is:
 
-`max_concurrency` enforced. Backpressure diverts to fallback on
-`ProviderBackpressure`. 429/timeout/5xx runtime fallback via
-`runtime_fallback_retry_spec`. Prompt-prefix cache accounting with
-fresh vs cached token receipts flowing into cost receipt.
+```text
+#1266 / #956  observe configured/impact/model/follow-up proof and workers
+  -> #957     reconcile queue/portfolio/lease/gate projections
+  -> #958     pure FinalizedOutcome reducer
+  -> #959     prepared-versus-confirmed delivery finalization
+  -> #960     shadow FinalizedOutcome integration and verification
+  -> #962     complete Horizon A revision/task/delivery/outcome packet proof
+```
 
-### PR 8 — init, audit-ci, setup-ci — DONE
+Fast/late sensor shadowing completed in [#1263]/[#955]. The complete Horizon A
+packet proof remains [#962]. [Issue #945] remains execution-order authority.
 
-- `cmd_init` renders config proposal and guide.
-- `cmd_audit_ci` produces inventory, recommendations, history, costs,
-  correlation artifacts (read-only).
-- `cmd_setup_ci` requires `--accept <job>=<command>` for required proof
-  materialization, generates config + workflow + branch-protection
-  instructions, opens PR via `--open-pr` with `--action-sha` pinning.
-  Never silently mutates branch protection.
+The CI-efficiency programme is a bounded path through the same architecture,
+not a competing plan. [#1269] through [#1283] bound process and packet output.
+[#1274] proves the frozen model-off `SharedRunPlan` core and unlocks the pure
+[#986] then deterministic [#987] scheduler path. [#1120] remains mandatory
+before model-programme and final-lead augmentation enter that plan. Measured
+[#1275] acceptance and [#1277] result-plane non-interference precede [#1015].
+[The model-off CI-efficiency path] owns the full dependency graph and promotion
+bar.
 
-### PR 9 — Follow-up issue capture — DONE
+File-disjoint documentation, read-only research, frozen fixtures, and baseline
+measurement may proceed in parallel. Authority-bearing implementation must not
+jump the legal front.
 
-Candidate validation, classification, fingerprinting for duplicate
-search, broker plan with allowlist gating. Artifacts:
-`review/issue_broker_plan.json`, `review/suggested_issues.md`.
+## Do not start yet
 
-### PR 10 — Economics and calibration — DONE
+While Horizon A and the explicit model-off prerequisites remain incomplete, do
+not begin production implementation of:
 
-`review/ub-review-cost.json` (CostReceipt v1), `review/fill-ledger.json`
-with verifier parity, `work_queue.json`, floor-trend artifact. Telemetry
-fields: `comments_posted`, `comments_accepted`, cached-token accounting.
-Issue-ledger #336-339 closed.
+- live scheduler/resource authority outside the ordered [#1274] -> [#986] ->
+  [#987] migration;
+- model-programme or final-lead augmentation before [#1120];
+- trusted learning, adaptive omission, or counterfactual selection
+  (#868/#932/#933);
+- production heavy-witness expansion unrelated to the active authority front;
+- provider-native fork/multi-agent orchestration ([#934] and [#938]);
+- the CI advisor ([#936]);
+- stable-coordinator or sole-required-check promotion (#814/#658).
 
-**Minor gap:** `floor_time`, `llm_wall_time`, `fresh_tokens` as exact
-field names are absent; equivalent data exists under different names.
+This is sequencing, not product retreat. The destination remains the integrated,
+architecture-aware reviewer and trustworthy sole gate in #840/#945.
 
-### PR 11 — Release and install — DONE (workflow ready, tag pending)
+## Evidence discipline for status changes
 
-Release workflow: tag-triggered, builds Linux x64 archive, emits
-`.sha256` checksum, publishes via `gh release`. GitHub Action download
-path with checksum validation. Doctor reports install status.
-Source-build fallback for non-release refs.
+Promote a row only when the strongest relevant receipt exists:
 
-The release-aware `enable` path is merged and generates release downloads with
-cached source builds only when no installable release is resolvable. Generated
-workflows use MiniMax primary with optional OpenCode fallback. The release happy
-path needs no action SHA; an explicit validated SHA is required only to permit
-the cached source-build fallback.
+1. **Implemented:** merged code plus focused success/failure/serialization tests.
+2. **Wired:** a normal run emits and consumes the new surface.
+3. **Retained:** an exact-head or replay packet is committed or durably linked.
+4. **Authority:** stale, forged, missing, mixed, and contradictory inputs fail at
+   the production decision boundary.
+5. **Calibrated:** external runs are reconciled for value, misses, noise,
+   reliability, latency, cost, and maintainer disposition.
 
-**Release state:** v0.1.0 was published with maintainer authorization. The
-remaining post-release evidence is the clean no-host-Cargo installation proof
-tracked in #815; v0.1.1 preparation and publication remain separately
-authorized through #816/#817.
+When evidence conflicts, retain the contradiction and lower the claim. Do not
+rewrite a historical packet to make the current architecture look coherent.
 
-### PR 12 — Fleet rollout — IN PROGRESS (external adoption blocked)
-
-No fleet or swarm orchestration code in ub-review. The `*-swarm`
-references in `.ripr/suppressions.toml` point to upstream tooling issue
-trackers, not ub-review rollout infrastructure.
-
-The single-gate adoption surface is now executable but has not been applied to
-an external repository. v0.1.0 is published with its Linux archive and
-checksum; the remaining release-only installation receipt is tracked in #815.
-Current release-installed pilot drafts are Bun #34046 and perl-lsp-swarm #4015;
-both remain advisory until the next released product path is independently
-validated.
-
-Read-only GitHub inspection found the current adoption blockers:
-
-- `EffortlessSteven/bun` has a successful packet-only UB Review workflow, but
-  it is advisory and the default branch is not protected.
-- `EffortlessMetrics/perl-lsp` has a successful advisory workflow with
-  `continue-on-error`, and the default branch is not protected.
-- `audit-ci` plus `setup-ci --print-pr` produced fail-closed migration plans
-  for both repositories. The Perl-lsp retry included seven days of GitHub
-  history; Bun remained inventory-only. Every inspected job is
-  `flag-for-human`; no job was eligible for automatic acceptance, so no
-  migration plan invented a proof command or old-check removal list.
-
-External adoption therefore requires, in order: an authorized stable release
-pin, a reviewed migration PR in each selected repository, a green current-head
-gate run, and repository-owner action to require only `ub-review/gate`. Until
-those receipts exist, ub-review is a proven self-gate and an advisory external
-consumer, not a fleet-wide sole gate.
-
-## Modularization status (June 2026)
-
-`main.rs` reduced from 45,547 to 21,764 lines (-52.2%) via the cleanup train
-(one pure-code-motion extraction per PR, reached step 59). All merged clean
-through the ub-review gate.
-
-49 top-level modules now live under `src/*.rs` (plus the `proof/` subtree of
-10 files and the `sensors/` subtree of 5 files). Extracted dispatchers include
-`cmd_init` (`init.rs`), `cmd_gate_check` (`gate.rs`), and the
-`cmd_quality_github_*` pair (`quality_github.rs`). Remaining seams worth
-extracting when next touched:
-
-- the inline `mod tests` in `main.rs` (~19.6k lines, 337 tests) — co-locate
-  tests with the modules they exercise;
-- the CI subsystem (`cmd_audit_ci`, `cmd_setup_ci`, ~25 `ci_*` helpers, YAML
-  parse, GitHub REST, gate-workflow templating) — a ~2,300-line island
-  unrelated to the review pipeline;
-- the `pub(crate) use x::*` glob re-exports — replacing them with explicit
-  imports would create real module boundaries (currently modules are
-  physically split but logically one flat namespace).
-
-## Known blockers
-
-- **ripr-swarm#1324:** runner OOM when a PR introduces a large new file
-  (~2,600+ lines); ripr's analysis of the full codebase exceeds the 7 GB
-  runner budget. The self-gate is back at a strict zero ceiling; any future
-  exception must be narrowly receipted and evidenced.
-- **Issue #716:** `v0.1.0` is shipped; the remaining release-only proof is the
-  clean no-host-Cargo installation receipt tracked by #815. Any `v0.1.1`
-  candidate still requires exact-SHA preparation and explicit authorization.
-- **RIPR semantic-probe contract:** #681 (production sanitizer witness) remains
-  outside the focused M1 release path. No aliases or threshold relaxation are
-  permitted; current upstream tracking is ripr-swarm#1528 and the related
-  semantic-probe fixes. (#745, the terminal watchdog classifier slice, landed
-  separately — see "What is already done".)
-- **Issue-ledger #147:** closed (PRs #459/#460). Cross-lane conflict detection
-  and suppression shipped; deeper evidence-precedence adjudication is the open
-  next step (epic #655 milestone 4).
-  but not closed.
+[Issue #945]: https://github.com/EffortlessMetrics/ub-review/issues/945
+[The model-off CI-efficiency path]: CI_EFFICIENCY_PATH.md
+[review-experience replay]: ../fixtures/review-experience/perl-lsp-3627.json
+[review-output goldens]: ../fixtures/review-golden/
+[authority-incident corpus]: ../fixtures/authority-incidents/manifest.json
+[#840]: https://github.com/EffortlessMetrics/ub-review/issues/840
+[#923]: https://github.com/EffortlessMetrics/ub-review/issues/923
+[#926]: https://github.com/EffortlessMetrics/ub-review/issues/926
+[#928]: https://github.com/EffortlessMetrics/ub-review/issues/928
+[#929]: https://github.com/EffortlessMetrics/ub-review/issues/929
+[#930]: https://github.com/EffortlessMetrics/ub-review/issues/930
+[#932]: https://github.com/EffortlessMetrics/ub-review/issues/932
+[#933]: https://github.com/EffortlessMetrics/ub-review/issues/933
+[#934]: https://github.com/EffortlessMetrics/ub-review/issues/934
+[#936]: https://github.com/EffortlessMetrics/ub-review/issues/936
+[#938]: https://github.com/EffortlessMetrics/ub-review/issues/938
+[#939]: https://github.com/EffortlessMetrics/ub-review/issues/939
+[#941]: https://github.com/EffortlessMetrics/ub-review/issues/941
+[#942]: https://github.com/EffortlessMetrics/ub-review/issues/942
+[#944]: https://github.com/EffortlessMetrics/ub-review/issues/944
+[#955]: https://github.com/EffortlessMetrics/ub-review/issues/955
+[#956]: https://github.com/EffortlessMetrics/ub-review/issues/956
+[#957]: https://github.com/EffortlessMetrics/ub-review/issues/957
+[#958]: https://github.com/EffortlessMetrics/ub-review/issues/958
+[#959]: https://github.com/EffortlessMetrics/ub-review/issues/959
+[#960]: https://github.com/EffortlessMetrics/ub-review/issues/960
+[#962]: https://github.com/EffortlessMetrics/ub-review/issues/962
+[#986]: https://github.com/EffortlessMetrics/ub-review/issues/986
+[#987]: https://github.com/EffortlessMetrics/ub-review/issues/987
+[#1015]: https://github.com/EffortlessMetrics/ub-review/issues/1015
+[#1120]: https://github.com/EffortlessMetrics/ub-review/issues/1120
+[#1266]: https://github.com/EffortlessMetrics/ub-review/pull/1266
+[#1269]: https://github.com/EffortlessMetrics/ub-review/issues/1269
+[#1274]: https://github.com/EffortlessMetrics/ub-review/issues/1274
+[#1275]: https://github.com/EffortlessMetrics/ub-review/issues/1275
+[#1277]: https://github.com/EffortlessMetrics/ub-review/issues/1277
+[#1283]: https://github.com/EffortlessMetrics/ub-review/issues/1283
+[#745]: https://github.com/EffortlessMetrics/ub-review/issues/745
+[#806]: https://github.com/EffortlessMetrics/ub-review/issues/806
+[#807]: https://github.com/EffortlessMetrics/ub-review/issues/807
+[#808]: https://github.com/EffortlessMetrics/ub-review/issues/808
+[#814]: https://github.com/EffortlessMetrics/ub-review/issues/814
+[#815]: https://github.com/EffortlessMetrics/ub-review/issues/815
+[#861]: https://github.com/EffortlessMetrics/ub-review/issues/861
+[#864]: https://github.com/EffortlessMetrics/ub-review/issues/864
+[#865]: https://github.com/EffortlessMetrics/ub-review/issues/865
+[#867]: https://github.com/EffortlessMetrics/ub-review/issues/867
+[#868]: https://github.com/EffortlessMetrics/ub-review/issues/868
+[#876]: https://github.com/EffortlessMetrics/ub-review/issues/876
+[#658]: https://github.com/EffortlessMetrics/ub-review/issues/658
+[#859]: https://github.com/EffortlessMetrics/ub-review/issues/859
+[#860]: https://github.com/EffortlessMetrics/ub-review/issues/860
+[#829 commit]: https://github.com/EffortlessMetrics/ub-review/commit/469288586d6ef01e50a2968f8826c89f1c1009f0
+[#834]: https://github.com/EffortlessMetrics/ub-review/commit/7da3d68d82ff5d930a2968a4b109301ab274382e
+[#835]: https://github.com/EffortlessMetrics/ub-review/commit/87b7023b85bb2ab05b5b2ff2ee820d03fc442745
+[#836]: https://github.com/EffortlessMetrics/ub-review/commit/1510d29d5394fa9ca936e3c390a85ac93dec5b13
+[#837]: https://github.com/EffortlessMetrics/ub-review/commit/7b112d9cebe989e1e9d4b693dfe5c743dc4a22df
+[#845]: https://github.com/EffortlessMetrics/ub-review/commit/e53f5820db1b4d031c91bb840031b4904c7ea3cc
+[#846]: https://github.com/EffortlessMetrics/ub-review/commit/d92c6f9c8790cb7a56c6b3ccbb22e974a425b20b
+[#849]: https://github.com/EffortlessMetrics/ub-review/commit/875d54468ca5b0649421f78469c06ccedbee2770
+[#850]: https://github.com/EffortlessMetrics/ub-review/commit/5a9bf3d640361a08be8eedb41ffddc55578d3337
+[#851]: https://github.com/EffortlessMetrics/ub-review/commit/ec5d9e2c484246c7373d25a330a1577417eee607
+[#852]: https://github.com/EffortlessMetrics/ub-review/commit/fa9fccd109b024cdeb051edca39cef4646a4229d
+[#853]: https://github.com/EffortlessMetrics/ub-review/commit/7098c05256197169fd958a02581259dcd7417395
+[#854]: https://github.com/EffortlessMetrics/ub-review/commit/56f83d72f1724b7324ff7bece4223b287fb94986
+[#855]: https://github.com/EffortlessMetrics/ub-review/commit/5edcc8c107b3bbef508c35e7164c831cbfcb7fa4
+[#880]: https://github.com/EffortlessMetrics/ub-review/commit/96e1b1dbb2d6508cc8ee35dcc5402684b722687b
+[#903]: https://github.com/EffortlessMetrics/ub-review/commit/4a8eb7ee0c19e88084a2fd4f8af9d7f58098849e
+[#906]: https://github.com/EffortlessMetrics/ub-review/commit/798db6d8f628701bce343e5d9ae28bff03d367e1
+[#912]: https://github.com/EffortlessMetrics/ub-review/commit/d4dc4830bcfb94ee8fb1c0099c08c69f00dc6cbf
+[#914]: https://github.com/EffortlessMetrics/ub-review/commit/f6c7a1c2d84817b54df2e3380066af11c1bf540b
+[#916]: https://github.com/EffortlessMetrics/ub-review/commit/c11677ca917da00066759fc07d8c7da66465ae81
+[#1240]: https://github.com/EffortlessMetrics/ub-review/commit/d6aa30cdafc2cf45e8b66f305e64a43d959a18c7
+[#1241]: https://github.com/EffortlessMetrics/ub-review/commit/0227d8a4300e23e1f5c77e04bf164668a32924e4
+[#1242]: https://github.com/EffortlessMetrics/ub-review/commit/3e51ec8dda19baf4d377c8543868cf2c9eb76d85
+[#1245]: https://github.com/EffortlessMetrics/ub-review/commit/932b887f2b111423a3bc7ad846213ffa5feba1b7
+[#1246]: https://github.com/EffortlessMetrics/ub-review/commit/39a27a65459b525cf8735c6f43fc8b32502ade1e
+[#1248]: https://github.com/EffortlessMetrics/ub-review/commit/bcaa102ab0424c5ad376670a476a145d9b360643
+[#1249]: https://github.com/EffortlessMetrics/ub-review/commit/84477696e4213a81b0f5e78c048fb25f05bb50c9
+[#1250]: https://github.com/EffortlessMetrics/ub-review/commit/a85fd3bc8d18d6f8d90ca6b3c5211fa5cc7998c1
+[#1251]: https://github.com/EffortlessMetrics/ub-review/commit/8f6d817cd5e6b6937ff747dac5a0770431e2be8e
+[#1252]: https://github.com/EffortlessMetrics/ub-review/commit/89560a9060afa033d7470d00dec4d136cf896459
+[#1253]: https://github.com/EffortlessMetrics/ub-review/commit/afcccb472a9cf1f361aea9f0c6484160556224a8
+[#1255]: https://github.com/EffortlessMetrics/ub-review/commit/28f4f4bfd8344dc00baa24f213c69279f593418d
+[#1256]: https://github.com/EffortlessMetrics/ub-review/commit/fac7983d49ed94d3d17899fdf6cc007e33a23630
+[#1259]: https://github.com/EffortlessMetrics/ub-review/commit/e24f7edb3502f4308b45f690c171de863299c329
+[#1262]: https://github.com/EffortlessMetrics/ub-review/commit/f02f4a85449ec8b8faf3dafb67071ccd544afae0
+[#1263]: https://github.com/EffortlessMetrics/ub-review/commit/55e4fbab879b3a83c31f35cdc9f7e5cd99f0a6c8
+[delivery transaction]: https://github.com/EffortlessMetrics/ub-review/commit/55221c1b9832a43f30b36470a0266fced516653d
+[reply delivery]: https://github.com/EffortlessMetrics/ub-review/commit/65289d6489adacf4e5ba89e8518906f8d720f682

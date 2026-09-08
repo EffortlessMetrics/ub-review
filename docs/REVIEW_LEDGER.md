@@ -42,6 +42,10 @@ src/work_queue.rs work_queue_task_from_sensor (#325 late-phase pending rule)
 src/task_ledger_artifact.rs strict v1 replay, digest, and snapshot contract
   <-> verifier require_task_ledger_artifacts (cross-language golden pinned by
       self_test_task_ledger_contract)
+src/proof_task_ledger.rs proof-command IDs and command receipt pointers
+  + src/sensors/mod.rs sensor receipt disposition mapping
+  <-> verifier require_task_ledger_receipt_links (current file/identity/outcome
+      joins, pinned by self_test_task_ledger_receipt_links; no scheduling authority)
 src/sensor_task_ledger.rs production sensor shadow adapter and artifact writer
   <-> src/sensors/mod.rs fast/late execution boundaries and status receipts
       (focused sensor lifecycle tests plus dry-run CLI artifact inventory)
