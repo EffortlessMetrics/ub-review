@@ -1,0 +1,1269 @@
+{
+  "archive_bytes": 850374,
+  "archive_sha256": "153c1d17c0252bcc49dba12ecf74ab4dc0643f70ba04d91a6755beb8f74c5963",
+  "entries": [
+    {
+      "bytes": 1002469,
+      "compressed_bytes": 171024,
+      "crc32": "a5cfe949",
+      "path": "src/main.rs"
+    },
+    {
+      "bytes": 109,
+      "compressed_bytes": 88,
+      "crc32": "f7ed81b3",
+      "path": "target/ub-review/box-state.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/candidates.ndjson"
+    },
+    {
+      "bytes": 20417,
+      "compressed_bytes": 3274,
+      "crc32": "b7f798f2",
+      "path": "target/ub-review/effective-config.json"
+    },
+    {
+      "bytes": 20234,
+      "compressed_bytes": 2669,
+      "crc32": "15b3fcff",
+      "path": "target/ub-review/events.ndjson"
+    },
+    {
+      "bytes": 1569,
+      "compressed_bytes": 372,
+      "crc32": "ceaea517",
+      "path": "target/ub-review/follow_up_outputs.ndjson"
+    },
+    {
+      "bytes": 1863,
+      "compressed_bytes": 420,
+      "crc32": "655b4976",
+      "path": "target/ub-review/follow_up_questions.ndjson"
+    },
+    {
+      "bytes": 2205,
+      "compressed_bytes": 488,
+      "crc32": "a1f3c769",
+      "path": "target/ub-review/follow_up_results.ndjson"
+    },
+    {
+      "bytes": 62,
+      "compressed_bytes": 50,
+      "crc32": "67599e47",
+      "path": "target/ub-review/input/changed-files.txt"
+    },
+    {
+      "bytes": 325,
+      "compressed_bytes": 220,
+      "crc32": "ce4df800",
+      "path": "target/ub-review/input/claims.md"
+    },
+    {
+      "bytes": 86961,
+      "compressed_bytes": 28671,
+      "crc32": "6af5f89b",
+      "path": "target/ub-review/input/diff-context.json"
+    },
+    {
+      "bytes": 84986,
+      "compressed_bytes": 28344,
+      "crc32": "14a39709",
+      "path": "target/ub-review/input/diff.patch"
+    },
+    {
+      "bytes": 433,
+      "compressed_bytes": 232,
+      "crc32": "4568efc2",
+      "path": "target/ub-review/input/pr.md"
+    },
+    {
+      "bytes": 845,
+      "compressed_bytes": 426,
+      "crc32": "028f0146",
+      "path": "target/ub-review/input/revision-admission.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/issue_actions.ndjson"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/issue_candidates.ndjson"
+    },
+    {
+      "bytes": 1954,
+      "compressed_bytes": 1083,
+      "crc32": "4d83c784",
+      "path": "target/ub-review/lanes/contract-mirror.md"
+    },
+    {
+      "bytes": 1880,
+      "compressed_bytes": 1042,
+      "crc32": "01430260",
+      "path": "target/ub-review/lanes/gate-semantics.md"
+    },
+    {
+      "bytes": 1816,
+      "compressed_bytes": 1007,
+      "crc32": "31114b59",
+      "path": "target/ub-review/lanes/spec-honesty.md"
+    },
+    {
+      "bytes": 3809,
+      "compressed_bytes": 630,
+      "crc32": "6b974344",
+      "path": "target/ub-review/model_stages.ndjson"
+    },
+    {
+      "bytes": 528,
+      "compressed_bytes": 311,
+      "crc32": "dbc513e3",
+      "path": "target/ub-review/observations/contract-mirror.ndjson"
+    },
+    {
+      "bytes": 525,
+      "compressed_bytes": 310,
+      "crc32": "f28a2a19",
+      "path": "target/ub-review/observations/gate-semantics.ndjson"
+    },
+    {
+      "bytes": 519,
+      "compressed_bytes": 310,
+      "crc32": "1db8dbf3",
+      "path": "target/ub-review/observations/spec-honesty.ndjson"
+    },
+    {
+      "bytes": 10864,
+      "compressed_bytes": 1982,
+      "crc32": "a8fdac92",
+      "path": "target/ub-review/plan.json"
+    },
+    {
+      "bytes": 268,
+      "compressed_bytes": 182,
+      "crc32": "48a0219e",
+      "path": "target/ub-review/proof/proof-head-1e1c35087a81/head/stderr.txt"
+    },
+    {
+      "bytes": 367,
+      "compressed_bytes": 197,
+      "crc32": "871550db",
+      "path": "target/ub-review/proof/proof-head-1e1c35087a81/head/stdout.txt"
+    },
+    {
+      "bytes": 281,
+      "compressed_bytes": 186,
+      "crc32": "e3678c53",
+      "path": "target/ub-review/proof/proof-head-28cd63224f5b/head/stderr.txt"
+    },
+    {
+      "bytes": 499,
+      "compressed_bytes": 263,
+      "crc32": "98384c9c",
+      "path": "target/ub-review/proof/proof-head-28cd63224f5b/head/stdout.txt"
+    },
+    {
+      "bytes": 249,
+      "compressed_bytes": 176,
+      "crc32": "0fa7c4ca",
+      "path": "target/ub-review/proof/proof-head-46be498ef577/head/stderr.txt"
+    },
+    {
+      "bytes": 4166,
+      "compressed_bytes": 1419,
+      "crc32": "fd3b3a2b",
+      "path": "target/ub-review/proof/proof-head-46be498ef577/head/stdout.txt"
+    },
+    {
+      "bytes": 2348,
+      "compressed_bytes": 542,
+      "crc32": "a189fa58",
+      "path": "target/ub-review/proof_receipts.ndjson"
+    },
+    {
+      "bytes": 428,
+      "compressed_bytes": 266,
+      "crc32": "50a18f10",
+      "path": "target/ub-review/proof_requests.ndjson"
+    },
+    {
+      "bytes": 481,
+      "compressed_bytes": 276,
+      "crc32": "2dbe101e",
+      "path": "target/ub-review/proof_requests/proof-0000-d2ae3e742e84.json"
+    },
+    {
+      "bytes": 809,
+      "compressed_bytes": 411,
+      "crc32": "a8b53285",
+      "path": "target/ub-review/proof_tasks.ndjson"
+    },
+    {
+      "bytes": 803,
+      "compressed_bytes": 360,
+      "crc32": "bf568312",
+      "path": "target/ub-review/questions/contract-mirror/missing-model-evidence.json"
+    },
+    {
+      "bytes": 799,
+      "compressed_bytes": 358,
+      "crc32": "29400f16",
+      "path": "target/ub-review/questions/gate-semantics/missing-model-evidence.json"
+    },
+    {
+      "bytes": 1534,
+      "compressed_bytes": 613,
+      "crc32": "114e5334",
+      "path": "target/ub-review/questions/orchestrator-follow-up/follow-up-15cecd47e478.json"
+    },
+    {
+      "bytes": 1534,
+      "compressed_bytes": 612,
+      "crc32": "40cb78c1",
+      "path": "target/ub-review/questions/orchestrator-follow-up/follow-up-313d26804061.json"
+    },
+    {
+      "bytes": 1534,
+      "compressed_bytes": 610,
+      "crc32": "c9f8ae0f",
+      "path": "target/ub-review/questions/orchestrator-follow-up/follow-up-8fc11ac1add2.json"
+    },
+    {
+      "bytes": 791,
+      "compressed_bytes": 355,
+      "crc32": "9048319d",
+      "path": "target/ub-review/questions/spec-honesty/missing-model-evidence.json"
+    },
+    {
+      "bytes": 1821,
+      "compressed_bytes": 350,
+      "crc32": "78fbcf67",
+      "path": "target/ub-review/receipt_routes.ndjson"
+    },
+    {
+      "bytes": 12775,
+      "compressed_bytes": 2082,
+      "crc32": "1c704b8d",
+      "path": "target/ub-review/resolved-plan.json"
+    },
+    {
+      "bytes": 11332,
+      "compressed_bytes": 1915,
+      "crc32": "daed74ed",
+      "path": "target/ub-review/resolved-profile.json"
+    },
+    {
+      "bytes": 16945,
+      "compressed_bytes": 1587,
+      "crc32": "37c31573",
+      "path": "target/ub-review/resolved-tools.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/resolved_candidates.ndjson"
+    },
+    {
+      "bytes": 1834,
+      "compressed_bytes": 452,
+      "crc32": "afb95d53",
+      "path": "target/ub-review/resource_leases.ndjson"
+    },
+    {
+      "bytes": 308,
+      "compressed_bytes": 192,
+      "crc32": "1a851dac",
+      "path": "target/ub-review/review/cache_events.ndjson"
+    },
+    {
+      "bytes": 1378,
+      "compressed_bytes": 363,
+      "crc32": "14489dd1",
+      "path": "target/ub-review/review/cache_manifest.json"
+    },
+    {
+      "bytes": 819,
+      "compressed_bytes": 367,
+      "crc32": "a1b4e7e0",
+      "path": "target/ub-review/review/calibration.json"
+    },
+    {
+      "bytes": 2,
+      "compressed_bytes": 4,
+      "crc32": "0d4cbb29",
+      "path": "target/ub-review/review/candidates.json"
+    },
+    {
+      "bytes": 362,
+      "compressed_bytes": 242,
+      "crc32": "50270b86",
+      "path": "target/ub-review/review/claim_graph.json"
+    },
+    {
+      "bytes": 171,
+      "compressed_bytes": 117,
+      "crc32": "3111aa8b",
+      "path": "target/ub-review/review/compiler_reconciliation.json"
+    },
+    {
+      "bytes": 2,
+      "compressed_bytes": 4,
+      "crc32": "0d4cbb29",
+      "path": "target/ub-review/review/dropped_observations.json"
+    },
+    {
+      "bytes": 13342,
+      "compressed_bytes": 1371,
+      "crc32": "a7b40b96",
+      "path": "target/ub-review/review/fill-ledger.json"
+    },
+    {
+      "bytes": 6171,
+      "compressed_bytes": 1060,
+      "crc32": "7122d97b",
+      "path": "target/ub-review/review/final_compiler_input.json"
+    },
+    {
+      "bytes": 4958,
+      "compressed_bytes": 831,
+      "crc32": "4d726025",
+      "path": "target/ub-review/review/final_orchestrator_plan.json"
+    },
+    {
+      "bytes": 2323,
+      "compressed_bytes": 543,
+      "crc32": "ee745c6c",
+      "path": "target/ub-review/review/floor-trend.json"
+    },
+    {
+      "bytes": 177,
+      "compressed_bytes": 124,
+      "crc32": "e66fc19f",
+      "path": "target/ub-review/review/follow_up_evidence.json"
+    },
+    {
+      "bytes": 1895,
+      "compressed_bytes": 393,
+      "crc32": "d37b3bdf",
+      "path": "target/ub-review/review/follow_up_outputs.json"
+    },
+    {
+      "bytes": 2702,
+      "compressed_bytes": 516,
+      "crc32": "32bce77e",
+      "path": "target/ub-review/review/follow_up_results.json"
+    },
+    {
+      "bytes": 1177,
+      "compressed_bytes": 526,
+      "crc32": "2d54241f",
+      "path": "target/ub-review/review/gate_outcome.json"
+    },
+    {
+      "bytes": 592,
+      "compressed_bytes": 323,
+      "crc32": "d09a33b9",
+      "path": "target/ub-review/review/github-review-skip.json"
+    },
+    {
+      "bytes": 2915,
+      "compressed_bytes": 479,
+      "crc32": "d02bda8c",
+      "path": "target/ub-review/review/impact_plan.json"
+    },
+    {
+      "bytes": 2,
+      "compressed_bytes": 4,
+      "crc32": "0d4cbb29",
+      "path": "target/ub-review/review/issue_actions.json"
+    },
+    {
+      "bytes": 2,
+      "compressed_bytes": 4,
+      "crc32": "0d4cbb29",
+      "path": "target/ub-review/review/issue_candidates.json"
+    },
+    {
+      "bytes": 2,
+      "compressed_bytes": 4,
+      "crc32": "0d4cbb29",
+      "path": "target/ub-review/review/merged_observations.json"
+    },
+    {
+      "bytes": 1769,
+      "compressed_bytes": 360,
+      "crc32": "588cff7f",
+      "path": "target/ub-review/review/messages.ndjson"
+    },
+    {
+      "bytes": 7239,
+      "compressed_bytes": 1533,
+      "crc32": "1d5ebc8b",
+      "path": "target/ub-review/review/metrics.json"
+    },
+    {
+      "bytes": 4507,
+      "compressed_bytes": 655,
+      "crc32": "8e062b3e",
+      "path": "target/ub-review/review/model_stages.json"
+    },
+    {
+      "bytes": 1862,
+      "compressed_bytes": 489,
+      "crc32": "20f1d48a",
+      "path": "target/ub-review/review/observations.json"
+    },
+    {
+      "bytes": 4958,
+      "compressed_bytes": 831,
+      "crc32": "4d726025",
+      "path": "target/ub-review/review/orchestrator_plan.json"
+    },
+    {
+      "bytes": 294,
+      "compressed_bytes": 169,
+      "crc32": "fb00af34",
+      "path": "target/ub-review/review/output_degradation.json"
+    },
+    {
+      "bytes": 395,
+      "compressed_bytes": 206,
+      "crc32": "ddf6dbf1",
+      "path": "target/ub-review/review/pr_thread_context.json"
+    },
+    {
+      "bytes": 2,
+      "compressed_bytes": 4,
+      "crc32": "0d4cbb29",
+      "path": "target/ub-review/review/prior_resolved_candidates.json"
+    },
+    {
+      "bytes": 681,
+      "compressed_bytes": 361,
+      "crc32": "367ecd35",
+      "path": "target/ub-review/review/proof_intents.json"
+    },
+    {
+      "bytes": 497,
+      "compressed_bytes": 303,
+      "crc32": "b9b0773d",
+      "path": "target/ub-review/review/proof_plan.md"
+    },
+    {
+      "bytes": 1811,
+      "compressed_bytes": 689,
+      "crc32": "615b31b7",
+      "path": "target/ub-review/review/proof_planner_input.json"
+    },
+    {
+      "bytes": 1944,
+      "compressed_bytes": 697,
+      "crc32": "19d80bd0",
+      "path": "target/ub-review/review/proof_planner_output.json"
+    },
+    {
+      "bytes": 1109,
+      "compressed_bytes": 466,
+      "crc32": "2b53e492",
+      "path": "target/ub-review/review/proof_portfolio.json"
+    },
+    {
+      "bytes": 3094,
+      "compressed_bytes": 584,
+      "crc32": "dd2ebbc8",
+      "path": "target/ub-review/review/proof_receipts.json"
+    },
+    {
+      "bytes": 586,
+      "compressed_bytes": 313,
+      "crc32": "c0fbbd18",
+      "path": "target/ub-review/review/proof_request_groups.json"
+    },
+    {
+      "bytes": 515,
+      "compressed_bytes": 283,
+      "crc32": "9bc0d143",
+      "path": "target/ub-review/review/proof_requests.json"
+    },
+    {
+      "bytes": 491,
+      "compressed_bytes": 268,
+      "crc32": "2ff21350",
+      "path": "target/ub-review/review/proof_requests_v2.json"
+    },
+    {
+      "bytes": 265,
+      "compressed_bytes": 162,
+      "crc32": "f7a68422",
+      "path": "target/ub-review/review/provider-preflight-status.json"
+    },
+    {
+      "bytes": 1636,
+      "compressed_bytes": 543,
+      "crc32": "85336ffd",
+      "path": "target/ub-review/review/quality-receipt.json"
+    },
+    {
+      "bytes": 2710,
+      "compressed_bytes": 517,
+      "crc32": "1dddf8a7",
+      "path": "target/ub-review/review/quality-trend.json"
+    },
+    {
+      "bytes": 197,
+      "compressed_bytes": 133,
+      "crc32": "872a1d56",
+      "path": "target/ub-review/review/receipt_reconsiderations.json"
+    },
+    {
+      "bytes": 2827,
+      "compressed_bytes": 529,
+      "crc32": "4d908b49",
+      "path": "target/ub-review/review/receipt_routes.json"
+    },
+    {
+      "bytes": 16945,
+      "compressed_bytes": 1587,
+      "crc32": "37c31573",
+      "path": "target/ub-review/review/resolved-tools.json"
+    },
+    {
+      "bytes": 2,
+      "compressed_bytes": 4,
+      "crc32": "0d4cbb29",
+      "path": "target/ub-review/review/resolved_candidates.json"
+    },
+    {
+      "bytes": 2193,
+      "compressed_bytes": 480,
+      "crc32": "d794288d",
+      "path": "target/ub-review/review/resource_leases.json"
+    },
+    {
+      "bytes": 1159,
+      "compressed_bytes": 324,
+      "crc32": "583c5c36",
+      "path": "target/ub-review/review/resource_plan.md"
+    },
+    {
+      "bytes": 12477,
+      "compressed_bytes": 2541,
+      "crc32": "1c85cd8f",
+      "path": "target/ub-review/review/review.json"
+    },
+    {
+      "bytes": 1846,
+      "compressed_bytes": 765,
+      "crc32": "53164833",
+      "path": "target/ub-review/review/review.md"
+    },
+    {
+      "bytes": 3981,
+      "compressed_bytes": 604,
+      "crc32": "d7d0e27f",
+      "path": "target/ub-review/review/scheduler.json"
+    },
+    {
+      "bytes": 2801,
+      "compressed_bytes": 812,
+      "crc32": "984bc9c8",
+      "path": "target/ub-review/review/shared-prefix-manifest.json"
+    },
+    {
+      "bytes": 98512,
+      "compressed_bytes": 32300,
+      "crc32": "3d844c11",
+      "path": "target/ub-review/review/shared_context.md"
+    },
+    {
+      "bytes": 98512,
+      "compressed_bytes": 32300,
+      "crc32": "3d844c11",
+      "path": "target/ub-review/review/shared_context_cache_block.md"
+    },
+    {
+      "bytes": 65,
+      "compressed_bytes": 54,
+      "crc32": "335cfac8",
+      "path": "target/ub-review/review/shared_context_hash.txt"
+    },
+    {
+      "bytes": 200,
+      "compressed_bytes": 143,
+      "crc32": "82fe5322",
+      "path": "target/ub-review/review/suggested_issues.md"
+    },
+    {
+      "bytes": 22822,
+      "compressed_bytes": 1646,
+      "crc32": "8c563876",
+      "path": "target/ub-review/review/task_ledger_snapshot.json"
+    },
+    {
+      "bytes": 671,
+      "compressed_bytes": 349,
+      "crc32": "3e5b2f50",
+      "path": "target/ub-review/review/terminal_state.json"
+    },
+    {
+      "bytes": 944,
+      "compressed_bytes": 366,
+      "crc32": "c2c98e53",
+      "path": "target/ub-review/review/tool-gate-outcomes.json"
+    },
+    {
+      "bytes": 18616,
+      "compressed_bytes": 1650,
+      "crc32": "fc461daf",
+      "path": "target/ub-review/review/tool-status.json"
+    },
+    {
+      "bytes": 1444,
+      "compressed_bytes": 641,
+      "crc32": "ba5878dc",
+      "path": "target/ub-review/review/ub-review-cost.json"
+    },
+    {
+      "bytes": 1964,
+      "compressed_bytes": 435,
+      "crc32": "48edc042",
+      "path": "target/ub-review/review/unique_observations.json"
+    },
+    {
+      "bytes": 660,
+      "compressed_bytes": 281,
+      "crc32": "ba40c0b0",
+      "path": "target/ub-review/review/witness_registry.json"
+    },
+    {
+      "bytes": 3141,
+      "compressed_bytes": 645,
+      "crc32": "d09d480b",
+      "path": "target/ub-review/review/witnesses.json"
+    },
+    {
+      "bytes": 5888,
+      "compressed_bytes": 1817,
+      "crc32": "b8a69578",
+      "path": "target/ub-review/running-summary.md"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/actionlint/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/actionlint/stdout.txt"
+    },
+    {
+      "bytes": 377,
+      "compressed_bytes": 217,
+      "crc32": "65bcfe21",
+      "path": "target/ub-review/sensors/actionlint/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/artifact-verifier/stderr.txt"
+    },
+    {
+      "bytes": 5446,
+      "compressed_bytes": 150,
+      "crc32": "4637772d",
+      "path": "target/ub-review/sensors/artifact-verifier/stdout.txt"
+    },
+    {
+      "bytes": 378,
+      "compressed_bytes": 220,
+      "crc32": "1f7e3151",
+      "path": "target/ub-review/sensors/artifact-verifier/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/ast-grep/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/ast-grep/stdout.txt"
+    },
+    {
+      "bytes": 413,
+      "compressed_bytes": 233,
+      "crc32": "0e3dc1e4",
+      "path": "target/ub-review/sensors/ast-grep/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/build/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/build/stdout.txt"
+    },
+    {
+      "bytes": 352,
+      "compressed_bytes": 201,
+      "crc32": "9db8caba",
+      "path": "target/ub-review/sensors/build/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/cargo-allow/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/cargo-allow/stdout.txt"
+    },
+    {
+      "bytes": 601,
+      "compressed_bytes": 283,
+      "crc32": "6fd082b0",
+      "path": "target/ub-review/sensors/cargo-allow/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/cargo-audit/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/cargo-audit/stdout.txt"
+    },
+    {
+      "bytes": 351,
+      "compressed_bytes": 202,
+      "crc32": "1830f1a4",
+      "path": "target/ub-review/sensors/cargo-audit/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 1909,
+      "compressed_bytes": 670,
+      "crc32": "8fdc18d8",
+      "path": "target/ub-review/sensors/cargo-check/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/cargo-check/stdout.txt"
+    },
+    {
+      "bytes": 362,
+      "compressed_bytes": 213,
+      "crc32": "8e4a1fd1",
+      "path": "target/ub-review/sensors/cargo-check/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 215,
+      "compressed_bytes": 134,
+      "crc32": "1bdb83a8",
+      "path": "target/ub-review/sensors/cargo-clippy/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/cargo-clippy/stdout.txt"
+    },
+    {
+      "bytes": 379,
+      "compressed_bytes": 224,
+      "crc32": "c1b5302c",
+      "path": "target/ub-review/sensors/cargo-clippy/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/cargo-deny/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/cargo-deny/stdout.txt"
+    },
+    {
+      "bytes": 348,
+      "compressed_bytes": 201,
+      "crc32": "d94d29a2",
+      "path": "target/ub-review/sensors/cargo-deny/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 971,
+      "compressed_bytes": 425,
+      "crc32": "186c722c",
+      "path": "target/ub-review/sensors/cargo-doc/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/cargo-doc/stdout.txt"
+    },
+    {
+      "bytes": 353,
+      "compressed_bytes": 208,
+      "crc32": "960731cc",
+      "path": "target/ub-review/sensors/cargo-doc/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/cargo-fmt/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/cargo-fmt/stdout.txt"
+    },
+    {
+      "bytes": 335,
+      "compressed_bytes": 197,
+      "crc32": "a3589348",
+      "path": "target/ub-review/sensors/cargo-fmt/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/cargo-mutants/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/cargo-mutants/stdout.txt"
+    },
+    {
+      "bytes": 376,
+      "compressed_bytes": 217,
+      "crc32": "aa7ade11",
+      "path": "target/ub-review/sensors/cargo-mutants/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 2312,
+      "compressed_bytes": 805,
+      "crc32": "cf5b90d6",
+      "path": "target/ub-review/sensors/cargo-test/stderr.txt"
+    },
+    {
+      "bytes": 98928,
+      "compressed_bytes": 21619,
+      "crc32": "d20b4efc",
+      "path": "target/ub-review/sensors/cargo-test/stdout.txt"
+    },
+    {
+      "bytes": 359,
+      "compressed_bytes": 206,
+      "crc32": "5199b95f",
+      "path": "target/ub-review/sensors/cargo-test/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 294,
+      "compressed_bytes": 189,
+      "crc32": "ef3294ec",
+      "path": "target/ub-review/sensors/coverage/changed-lines.json"
+    },
+    {
+      "bytes": 371,
+      "compressed_bytes": 216,
+      "crc32": "5ec88bf9",
+      "path": "target/ub-review/sensors/coverage/coverage-summary.json"
+    },
+    {
+      "bytes": 2553982,
+      "compressed_bytes": 374775,
+      "crc32": "59d2ed97",
+      "path": "target/ub-review/sensors/coverage/lcov.info"
+    },
+    {
+      "bytes": 533,
+      "compressed_bytes": 230,
+      "crc32": "8a57fe84",
+      "path": "target/ub-review/sensors/coverage/status.json"
+    },
+    {
+      "bytes": 3117,
+      "compressed_bytes": 1113,
+      "crc32": "8788c98f",
+      "path": "target/ub-review/sensors/coverage/stderr.txt"
+    },
+    {
+      "bytes": 98928,
+      "compressed_bytes": 21629,
+      "crc32": "250cad4b",
+      "path": "target/ub-review/sensors/coverage/stdout.txt"
+    },
+    {
+      "bytes": 542,
+      "compressed_bytes": 281,
+      "crc32": "096735ef",
+      "path": "target/ub-review/sensors/coverage/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 257,
+      "compressed_bytes": 176,
+      "crc32": "b1864101",
+      "path": "target/ub-review/sensors/coverage/upload.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/cppcheck/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/cppcheck/stdout.txt"
+    },
+    {
+      "bytes": 346,
+      "compressed_bytes": 198,
+      "crc32": "1a46e430",
+      "path": "target/ub-review/sensors/cppcheck/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/gitleaks/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/gitleaks/stdout.txt"
+    },
+    {
+      "bytes": 465,
+      "compressed_bytes": 250,
+      "crc32": "82fd0300",
+      "path": "target/ub-review/sensors/gitleaks/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/miri/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/miri/stdout.txt"
+    },
+    {
+      "bytes": 358,
+      "compressed_bytes": 209,
+      "crc32": "12107e2d",
+      "path": "target/ub-review/sensors/miri/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/osv-scanner/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/osv-scanner/stdout.txt"
+    },
+    {
+      "bytes": 377,
+      "compressed_bytes": 215,
+      "crc32": "c562bb5a",
+      "path": "target/ub-review/sensors/osv-scanner/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/ripr/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/ripr/stdout.txt"
+    },
+    {
+      "bytes": 553,
+      "compressed_bytes": 308,
+      "crc32": "f48a3d02",
+      "path": "target/ub-review/sensors/ripr/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/semgrep/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/semgrep/stdout.txt"
+    },
+    {
+      "bytes": 435,
+      "compressed_bytes": 236,
+      "crc32": "73a56717",
+      "path": "target/ub-review/sensors/semgrep/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/shellcheck/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/shellcheck/stdout.txt"
+    },
+    {
+      "bytes": 349,
+      "compressed_bytes": 198,
+      "crc32": "8d57080c",
+      "path": "target/ub-review/sensors/shellcheck/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/test/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/test/stdout.txt"
+    },
+    {
+      "bytes": 348,
+      "compressed_bytes": 198,
+      "crc32": "7e311b1e",
+      "path": "target/ub-review/sensors/test/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/tokmd/analyze-json.stderr.txt"
+    },
+    {
+      "bytes": 22309,
+      "compressed_bytes": 3842,
+      "crc32": "6db590b8",
+      "path": "target/ub-review/sensors/tokmd/analyze.json"
+    },
+    {
+      "bytes": 6733,
+      "compressed_bytes": 2462,
+      "crc32": "03357b1b",
+      "path": "target/ub-review/sensors/tokmd/analyze.md"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/tokmd/analyze.stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/tokmd/cockpit-json.stderr.txt"
+    },
+    {
+      "bytes": 2107,
+      "compressed_bytes": 751,
+      "crc32": "910d54b4",
+      "path": "target/ub-review/sensors/tokmd/cockpit.json"
+    },
+    {
+      "bytes": 1443,
+      "compressed_bytes": 613,
+      "crc32": "f97f4374",
+      "path": "target/ub-review/sensors/tokmd/cockpit.md"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/tokmd/cockpit.stderr.txt"
+    },
+    {
+      "bytes": 1826,
+      "compressed_bytes": 391,
+      "crc32": "ce67f688",
+      "path": "target/ub-review/sensors/tokmd/commands.json"
+    },
+    {
+      "bytes": 367,
+      "compressed_bytes": 233,
+      "crc32": "f5b1f6dc",
+      "path": "target/ub-review/sensors/tokmd/context.md"
+    },
+    {
+      "bytes": 86,
+      "compressed_bytes": 67,
+      "crc32": "5b39369e",
+      "path": "target/ub-review/sensors/tokmd/context.stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/tokmd/context.stdout.txt"
+    },
+    {
+      "bytes": 86,
+      "compressed_bytes": 67,
+      "crc32": "5b39369e",
+      "path": "target/ub-review/sensors/tokmd/stderr.txt"
+    },
+    {
+      "bytes": 33526,
+      "compressed_bytes": 7122,
+      "crc32": "60b78f31",
+      "path": "target/ub-review/sensors/tokmd/stdout.txt"
+    },
+    {
+      "bytes": 597,
+      "compressed_bytes": 300,
+      "crc32": "20fe6a26",
+      "path": "target/ub-review/sensors/tokmd/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/tokmd/version.stderr.txt"
+    },
+    {
+      "bytes": 13,
+      "compressed_bytes": 15,
+      "crc32": "787b5010",
+      "path": "target/ub-review/sensors/tokmd/version.stdout.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/unsafe-review/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/unsafe-review/stdout.txt"
+    },
+    {
+      "bytes": 904,
+      "compressed_bytes": 341,
+      "crc32": "4ec77fa6",
+      "path": "target/ub-review/sensors/unsafe-review/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/zizmor/stderr.txt"
+    },
+    {
+      "bytes": 0,
+      "compressed_bytes": 2,
+      "crc32": "00000000",
+      "path": "target/ub-review/sensors/zizmor/stdout.txt"
+    },
+    {
+      "bytes": 366,
+      "compressed_bytes": 212,
+      "crc32": "871ef4e1",
+      "path": "target/ub-review/sensors/zizmor/ub-review-sensor-status.json"
+    },
+    {
+      "bytes": 85219,
+      "compressed_bytes": 9298,
+      "crc32": "0ec1cfd2",
+      "path": "target/ub-review/task_ledger_events.ndjson"
+    },
+    {
+      "bytes": 944,
+      "compressed_bytes": 366,
+      "crc32": "c2c98e53",
+      "path": "target/ub-review/tool-gate-outcomes.json"
+    },
+    {
+      "bytes": 18616,
+      "compressed_bytes": 1650,
+      "crc32": "fc461daf",
+      "path": "target/ub-review/tool-status.json"
+    },
+    {
+      "bytes": 629,
+      "compressed_bytes": 303,
+      "crc32": "02454833",
+      "path": "target/ub-review/tool_gate_outcomes.ndjson"
+    },
+    {
+      "bytes": 2689,
+      "compressed_bytes": 620,
+      "crc32": "cabdf20c",
+      "path": "target/ub-review/witnesses.ndjson"
+    },
+    {
+      "bytes": 9817,
+      "compressed_bytes": 791,
+      "crc32": "536a7695",
+      "path": "target/ub-review/work_events.ndjson"
+    },
+    {
+      "bytes": 19255,
+      "compressed_bytes": 1249,
+      "crc32": "7c64b89d",
+      "path": "target/ub-review/work_queue.json"
+    }
+  ],
+  "entry_compressed_bytes": 811310,
+  "expanded_bytes": 4663055,
+  "packet_expanded_bytes": 3660586
+}

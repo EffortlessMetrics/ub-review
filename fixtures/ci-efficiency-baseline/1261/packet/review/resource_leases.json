@@ -1,0 +1,62 @@
+[
+  {
+    "schema": "ub-review.resource_lease.v1",
+    "id": "lease-proof-head-1e1c35087a81",
+    "kind": "focused-test",
+    "consumer": "proof-head-1e1c35087a81",
+    "status": "granted",
+    "reason": "focused red/green proof lease granted by runtime profile",
+    "cpu": 4,
+    "memory_mb": 4096,
+    "disk_mb": 2048,
+    "timeout_sec": 600,
+    "network": false,
+    "scratch": true,
+    "command": "head: cwd=target/ub-review/proof-worktrees/head cargo test --locked --package ub-review --test cli_contract",
+    "revision": {
+      "digest": "d6b934ebb43884970fe01b7b815f8d053520d88ca370c8f9a37a3e28a61beb85",
+      "semantics": "merge_result",
+      "reviewed_commit": "fad32c56f90209720d113b8274b67258b742c758"
+    }
+  },
+  {
+    "schema": "ub-review.resource_lease.v1",
+    "id": "lease-proof-head-46be498ef577",
+    "kind": "focused-test",
+    "consumer": "proof-head-46be498ef577",
+    "status": "granted",
+    "reason": "focused red/green proof lease granted by runtime profile",
+    "cpu": 4,
+    "memory_mb": 4096,
+    "disk_mb": 2048,
+    "timeout_sec": 600,
+    "network": false,
+    "scratch": true,
+    "command": "head: cwd=target/ub-review/proof-worktrees/head cargo test --locked --package ub-review --test cli",
+    "revision": {
+      "digest": "d6b934ebb43884970fe01b7b815f8d053520d88ca370c8f9a37a3e28a61beb85",
+      "semantics": "merge_result",
+      "reviewed_commit": "fad32c56f90209720d113b8274b67258b742c758"
+    }
+  },
+  {
+    "schema": "ub-review.resource_lease.v1",
+    "id": "lease-proof-head-73b76272b0c1",
+    "kind": "focused-test",
+    "consumer": "proof-head-73b76272b0c1",
+    "status": "granted",
+    "reason": "focused red/green proof lease granted by runtime profile",
+    "cpu": 4,
+    "memory_mb": 4096,
+    "disk_mb": 2048,
+    "timeout_sec": 600,
+    "network": false,
+    "scratch": true,
+    "command": "head: cwd=target/ub-review/proof-worktrees/head cargo test --locked --package ub-review --test cli_run",
+    "revision": {
+      "digest": "d6b934ebb43884970fe01b7b815f8d053520d88ca370c8f9a37a3e28a61beb85",
+      "semantics": "merge_result",
+      "reviewed_commit": "fad32c56f90209720d113b8274b67258b742c758"
+    }
+  }
+]

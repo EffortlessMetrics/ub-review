@@ -1,0 +1,18 @@
+{
+  "class": "build",
+  "command": "build --version",
+  "duration_ms": 0,
+  "exit_code": null,
+  "outputs": [
+    "stdout.txt",
+    "stderr.txt"
+  ],
+  "phase": "late",
+  "reason": "trigger did not match this diff",
+  "required": false,
+  "requires_lease": true,
+  "sensor": "build",
+  "status": "skipped",
+  "timed_out": false,
+  "timeout_sec": 1200
+}

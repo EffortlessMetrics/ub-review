@@ -1,0 +1,18 @@
+{
+  "class": "build",
+  "command": "cargo clippy --workspace --all-targets --locked -- -D warnings",
+  "duration_ms": 24825,
+  "exit_code": 0,
+  "outputs": [
+    "stdout.txt",
+    "stderr.txt"
+  ],
+  "phase": "late",
+  "reason": "completed",
+  "required": true,
+  "requires_lease": false,
+  "sensor": "cargo-clippy",
+  "status": "ok",
+  "timed_out": false,
+  "timeout_sec": 600
+}

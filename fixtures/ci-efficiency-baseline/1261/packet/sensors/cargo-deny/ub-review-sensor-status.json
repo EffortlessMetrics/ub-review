@@ -1,0 +1,18 @@
+{
+  "class": "security",
+  "command": "cargo deny check",
+  "duration_ms": 0,
+  "exit_code": null,
+  "outputs": [
+    "stdout.txt",
+    "stderr.txt"
+  ],
+  "phase": "fast",
+  "reason": "disabled by config",
+  "required": false,
+  "requires_lease": false,
+  "sensor": "cargo-deny",
+  "status": "skipped",
+  "timed_out": false,
+  "timeout_sec": 180
+}

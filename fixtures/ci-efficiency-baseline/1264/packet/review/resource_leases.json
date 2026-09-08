@@ -1,0 +1,62 @@
+[
+  {
+    "schema": "ub-review.resource_lease.v1",
+    "id": "lease-proof-head-1e1c35087a81",
+    "kind": "focused-test",
+    "consumer": "proof-head-1e1c35087a81",
+    "status": "granted",
+    "reason": "focused red/green proof lease granted by runtime profile",
+    "cpu": 4,
+    "memory_mb": 4096,
+    "disk_mb": 2048,
+    "timeout_sec": 600,
+    "network": false,
+    "scratch": true,
+    "command": "head: cwd=target/ub-review/proof-worktrees/head cargo test --locked --package ub-review --test cli_contract",
+    "revision": {
+      "digest": "68b81228fdf2d21f834e3d6fe80edcf01f23439a8e74823e154b06c5061e3d99",
+      "semantics": "candidate_head",
+      "reviewed_commit": "612e67ed5788ace4be24dd759d8756dfe967840f"
+    }
+  },
+  {
+    "schema": "ub-review.resource_lease.v1",
+    "id": "lease-proof-head-28cd63224f5b",
+    "kind": "focused-test",
+    "consumer": "proof-head-28cd63224f5b",
+    "status": "granted",
+    "reason": "focused red/green proof lease granted by runtime profile",
+    "cpu": 4,
+    "memory_mb": 4096,
+    "disk_mb": 2048,
+    "timeout_sec": 600,
+    "network": false,
+    "scratch": true,
+    "command": "head: cwd=target/ub-review/proof-worktrees/head cargo test --locked --package ub-review --test authority_incidents",
+    "revision": {
+      "digest": "68b81228fdf2d21f834e3d6fe80edcf01f23439a8e74823e154b06c5061e3d99",
+      "semantics": "candidate_head",
+      "reviewed_commit": "612e67ed5788ace4be24dd759d8756dfe967840f"
+    }
+  },
+  {
+    "schema": "ub-review.resource_lease.v1",
+    "id": "lease-proof-head-46be498ef577",
+    "kind": "focused-test",
+    "consumer": "proof-head-46be498ef577",
+    "status": "granted",
+    "reason": "focused red/green proof lease granted by runtime profile",
+    "cpu": 4,
+    "memory_mb": 4096,
+    "disk_mb": 2048,
+    "timeout_sec": 600,
+    "network": false,
+    "scratch": true,
+    "command": "head: cwd=target/ub-review/proof-worktrees/head cargo test --locked --package ub-review --test cli",
+    "revision": {
+      "digest": "68b81228fdf2d21f834e3d6fe80edcf01f23439a8e74823e154b06c5061e3d99",
+      "semantics": "candidate_head",
+      "reviewed_commit": "612e67ed5788ace4be24dd759d8756dfe967840f"
+    }
+  }
+]
