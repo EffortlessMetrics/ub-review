@@ -32,6 +32,10 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Verify task projection regressions
+        timeout-minutes: 2
+        run: python scripts/test-task-projections.py
+
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95.0
@@ -83,6 +87,17 @@ jobs:
           python scripts/verify-bun-review-artifacts.py target/ub-review
           --expected-review-profile ub-review-self
           --expected-repo-kind ub-review
+
+      # #957 observes contradictions without changing the existing product
+      # gate. The regression suite above is enforced; live accounting remains
+      # shadow until the authority migration is independently proven.
+      - name: Reconcile terminal task projections (shadow)
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 2
+        run: >
+          python scripts/reconcile-task-projections.py target/ub-review
+          --write-report
 
       - uses: actions/upload-artifact@v7
         if: always()
