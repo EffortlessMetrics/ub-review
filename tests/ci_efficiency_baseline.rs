@@ -886,7 +886,7 @@ fn baseline_retains_large_packet_and_legacy_disagreement() -> Result<()> {
 
 #[test]
 fn baseline_rejects_privacy_and_path_escapes() -> Result<()> {
-    ensure!(privacy(b"Bearer fixture-not-a-real-credential").is_err());
+    ensure!(privacy(&synthetic_bearer_header()).is_err());
     ensure!(private_keys(&serde_json::json!({"provider_request": "fixture"})).is_err());
     for path in ["../outside", "/outside", "C:\\outside", ""] {
         ensure!(confined(path).is_err());
@@ -898,6 +898,12 @@ fn baseline_rejects_privacy_and_path_escapes() -> Result<()> {
         "anonymous extra file accepted"
     );
     Ok(())
+}
+
+fn synthetic_bearer_header() -> Vec<u8> {
+    // Construct the negative input at runtime so source-review packets do
+    // not themselves contain a credential-shaped header.
+    [b"Bearer ".as_slice(), b"fixture-not-a-real-credential"].concat()
 }
 
 #[test]
@@ -933,7 +939,7 @@ fn baseline_file_inventory_rejects_mutation_omission_and_extra_payloads() -> Res
     let extra = temporary.path().join("extra.json");
     fs::write(&extra, b"{}")?;
     ensure!(load(temporary.path()).is_err(), "unlisted file accepted");
-    fs::write(&extra, b"Bearer fixture-not-a-real-credential")?;
+    fs::write(&extra, synthetic_bearer_header())?;
     ensure!(
         load(temporary.path()).is_err(),
         "credential-shaped extra accepted"
