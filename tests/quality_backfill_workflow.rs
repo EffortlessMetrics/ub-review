@@ -16,6 +16,7 @@ fn quality_backfill_publishes_only_compact_current_output() -> Result<(), String
         "--pull-numbers-file target/ub-review-quality/source/github/pr-numbers.txt",
         "--out \"$UB_REVIEW_QUALITY_PUBLISH_DIR\"",
         "--github-outcomes \"$UB_REVIEW_QUALITY_INPUT_DIR/github/github-quality-outcomes.json\"",
+        "- name: Download previous quality backfill (bounded)",
         "- name: Verify quality backfill publication tree",
         "test -s \"$UB_REVIEW_QUALITY_PUBLISH_DIR/review/quality-backfill.json\"",
         "-type l -print -quit",
@@ -42,7 +43,8 @@ fn quality_backfill_publishes_only_compact_current_output() -> Result<(), String
         );
     }
 
-    let preflight = required_position(workflow, "- name: Verify quality backfill publication tree")?;
+    let preflight =
+        required_position(workflow, "- name: Verify quality backfill publication tree")?;
     let upload = required_position(workflow, "- uses: actions/upload-artifact@v7")?;
     assert!(
         preflight < upload,
@@ -51,7 +53,7 @@ fn quality_backfill_publishes_only_compact_current_output() -> Result<(), String
 
     let previous_download = required_position(
         workflow,
-        "- name: Download bounded previous quality backfill",
+        "- name: Download previous quality backfill (bounded)",
     )?;
     let build = required_position(workflow, "- name: Build compact quality backfill")?;
     assert!(
