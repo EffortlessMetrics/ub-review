@@ -20,10 +20,13 @@ work_events_terminal.ndjson
 
 The terminal projection never infers that two source-shaped requests are the
 same execution. A planner task retains its own identity and embeds its exact
-plan row. Proof receipts join to that row only through an exact task identity or
-an explicit shared `request_id`. Every remaining receipt is represented under
-its own receipt identity, including impact proof that was not present in the
-planner catalog.
+plan row. Proof receipts join to that row only through an explicit shared
+`request_id`; equality between a planner task ID and receipt ID is not itself a
+join. A receipt may join at most one planner task in this slice. Every remaining
+receipt is represented under its own receipt identity, including impact proof
+that was not present in the planner catalog. Each receipt identity appears once,
+either as the exact joined receipt reference on one planner task or as one
+standalone receipt-backed task.
 
 Sensor tasks retain their plan status separately and project the terminal
 status receipt as one of:
