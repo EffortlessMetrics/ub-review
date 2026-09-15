@@ -87,7 +87,14 @@ def base_packet(root: Path, *, prepared: bool = False) -> dict[str, str]:
         write_json(
             root,
             "review/github-review-skip.json",
-            {"status": "skipped_artifact_only_body", "reason": "artifact-only"},
+            {
+                "schema_version": 1,
+                "status": "skipped",
+                "reason": "artifact-only",
+                "review_payload_status": "skipped_artifact_only_body",
+                "terminal_state": "sufficient",
+                "github_review_json": None,
+            },
         )
     return binding
 
@@ -186,7 +193,12 @@ class PublicationBoundaries(unittest.TestCase):
         write_json(
             self.root,
             "review/github-review-skip.json",
-            {"status": "skipped_pass_policy"},
+            {
+                "schema_version": 1,
+                "status": "skipped",
+                "review_payload_status": "skipped_pass_policy",
+                "github_review_json": None,
+            },
         )
         post_result(self.root, binding)
         write_json(
@@ -210,7 +222,12 @@ class PublicationBoundaries(unittest.TestCase):
         write_json(
             self.root,
             "review/github-review-skip.json",
-            {"status": "skipped_artifact_only_body"},
+            {
+                "schema_version": 1,
+                "status": "skipped",
+                "review_payload_status": "skipped_artifact_only_body",
+                "github_review_json": None,
+            },
         )
         (self.root / "review/gate_outcome.json").write_bytes(
             b'{"schema":"ub-review.gate_outcome.v1","schema":"other"}'
@@ -231,6 +248,39 @@ class PublicationBoundaries(unittest.TestCase):
             timeout=10,
         )
         self.assertEqual(completed.returncode, 2)
+
+    def test_skip_post_result_is_accepted(self) -> None:
+        base_packet(self.root)
+        write_json(
+            self.root,
+            "review/post-result.json",
+            {"schema_version": 1, "status": "skipped", "reason": "artifact-only"},
+        )
+        report = self.report()
+        self.assertEqual(report["status"], "coherent", report["issues"])
+        self.assertEqual(report["delivery_state"], "not_needed")
+
+    def test_success_without_response_head_is_unverifiable(self) -> None:
+        binding = base_packet(self.root, prepared=True)
+        post_result(self.root, binding)
+        result = read_json(self.root, "review/post-result.json")
+        result["response"].pop("commit_id")
+        write_json(self.root, "review/post-result.json", result)
+        report = self.report()
+        self.assertEqual(report["status"], "unverifiable", report["issues"])
+        self.assertEqual(report["delivery_state"], "unverifiable")
+        self.assertIn(
+            "post_response_head_unavailable",
+            {row["code"] for row in report["observations"]},
+        )
+
+    def test_missing_required_input_is_unverifiable(self) -> None:
+        base_packet(self.root)
+        (self.root / "input/revision-admission.json").unlink()
+        report = self.report()
+        self.assertTrue(report["input_unavailable"])
+        self.assertEqual(report["status"], "unverifiable")
+        self.assertIn("missing_publication_artifact", self.codes())
 
     def test_report_is_deterministic_bounded_and_atomic(self) -> None:
         base_packet(self.root)
