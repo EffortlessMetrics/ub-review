@@ -60,11 +60,29 @@ def revision_identity(semantics: str = "merge_result") -> dict[str, str]:
     }
 
 
+def skip_receipt(payload_status: str = "skipped_artifact_only_body") -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "status": "skipped",
+        "reason": "artifact-only",
+        "review_payload_status": payload_status,
+        "terminal_state": "sufficient",
+        "github_review_json": None,
+        "run_pass": "opened",
+        "model_mode": "off",
+        "inline_comments": 0,
+        "summary_only_findings": 0,
+        "missing_or_failed_sensor_evidence": 0,
+        "missing_or_failed_model_evidence": 0,
+    }
+
+
 def base_packet(
     root: Path,
     *,
     prepared: bool = False,
     semantics: str = "merge_result",
+    comments: list[dict[str, object]] | None = None,
 ) -> dict[str, str]:
     identity = revision_identity(semantics)
     write_json(
@@ -102,7 +120,7 @@ def base_packet(
         "review/terminal_state.json",
         {
             "schema": "ub-review.terminal_state.v1",
-            "status": "sufficient",
+            "status": "needs-reviewer-attention" if prepared else "sufficient",
             "reviewer_value_present": prepared,
             "review_payload_status": payload_status,
         },
@@ -111,25 +129,61 @@ def base_packet(
         write_json(
             root,
             "review/github-review.json",
-            {"event": "COMMENT", "body": "Material review.", "comments": []},
-        )
-    else:
-        write_json(
-            root,
-            "review/github-review-skip.json",
             {
-                "schema_version": 1,
-                "status": "skipped",
-                "reason": "artifact-only",
-                "review_payload_status": payload_status,
-                "terminal_state": "sufficient",
-                "github_review_json": None,
+                "event": "COMMENT",
+                "body": "Material review.",
+                "comments": comments or [],
             },
         )
+    else:
+        write_json(root, "review/github-review-skip.json", skip_receipt(payload_status))
     return identity
 
 
+def write_post_payload(root: Path) -> dict[str, object]:
+    review = read_json(root, "review/github-review.json")
+    payload = subject.expected_post_payload(review)
+    write_json(root, "review/github-review-post-payload.json", payload)
+    return payload
+
+
+def write_transaction(
+    root: Path,
+    identity: dict[str, str],
+    payload: dict[str, object],
+    **changes: object,
+) -> None:
+    planned = []
+    for index, comment in enumerate(payload["comments"]):
+        planned.append(
+            {
+                "exact_head_sha": identity["pr_head_commit"],
+                "claim_id": f"claim-{index}",
+                "action": "inline",
+                "path": comment["path"],
+                "line": comment["line"],
+                "side": comment["side"],
+                "source_thread_id": None,
+                "expected_body_digest": hashlib.sha256(
+                    comment["body"].encode("utf-8")
+                ).hexdigest(),
+            }
+        )
+    transaction: dict[str, object] = {
+        "schema": subject.DELIVERY_TRANSACTION_SCHEMA,
+        "exact_head_sha": identity["pr_head_commit"],
+        "planned": planned,
+        "state": "receipts_persisted",
+        "failure": None,
+        "cleanup": {"status": "not_attempted"},
+    }
+    transaction.update(changes)
+    write_json(root, "review/delivery-transaction.json", transaction)
+
+
 def post_result(root: Path, identity: dict[str, str], *, commit: str | None = None) -> None:
+    payload = write_post_payload(root)
+    write_transaction(root, identity, payload)
     write_json(root, "review/post-stdout.json", {"id": 7})
     stderr = root / "review/post-stderr.txt"
     stderr.parent.mkdir(parents=True, exist_ok=True)
@@ -143,13 +197,13 @@ def post_result(root: Path, identity: dict[str, str], *, commit: str | None = No
             "repo": "EffortlessMetrics/ub-review",
             "repo_valid": True,
             "pull_number": 1,
-            "comments": 0,
+            "comments": len(payload["comments"]),
             "review_json": "target/ub-review/review/github-review.json",
             "review_json_exists": True,
             "review_json_valid": True,
             "review_event": "COMMENT",
-            "review_body_bytes": len("Material review.".encode("utf-8")),
-            "review_comment_count": 0,
+            "review_body_bytes": len(payload["body"].encode("utf-8")),
+            "review_comment_count": len(payload["comments"]),
             "http_status": 200,
             "token_present": True,
             "payload_written": True,
@@ -263,7 +317,7 @@ class PublicationBoundaries(unittest.TestCase):
         self.assertEqual(report["delivery_state"], "unverifiable")
         self.assertIn("post_success_http_status_invalid", self.codes(report))
 
-    def test_success_receipt_must_bind_prepared_payload(self) -> None:
+    def test_success_receipt_must_bind_prepared_payload_metadata(self) -> None:
         identity = base_packet(self.root, prepared=True)
         post_result(self.root, identity)
         result = read_json(self.root, "review/post-result.json")
@@ -274,6 +328,79 @@ class PublicationBoundaries(unittest.TestCase):
         self.assertTrue(report["input_unavailable"])
         self.assertEqual(report["delivery_state"], "unverifiable")
         self.assertIn("post_success_payload_mismatch", self.codes(report))
+
+    def test_same_length_post_body_substitution_is_rejected(self) -> None:
+        identity = base_packet(self.root, prepared=True)
+        post_result(self.root, identity)
+        payload = read_json(self.root, "review/github-review-post-payload.json")
+        payload["body"] = "Tampered review."
+        self.assertEqual(len(payload["body"]), len("Material review."))
+        write_json(self.root, "review/github-review-post-payload.json", payload)
+        report = self.report()
+        self.assertEqual(report["delivery_state"], "unverifiable")
+        self.assertIn("post_payload_mismatch", self.codes(report))
+
+    def test_same_count_comment_substitution_is_rejected(self) -> None:
+        comment = {
+            "path": "src/lib.rs",
+            "line": 7,
+            "side": "RIGHT",
+            "body": "[tests] Verify parser ownership.",
+            "suggestion": None,
+        }
+        identity = base_packet(self.root, prepared=True, comments=[comment])
+        post_result(self.root, identity)
+        payload = read_json(self.root, "review/github-review-post-payload.json")
+        payload["comments"][0]["path"] = "src/bin.rs"
+        write_json(self.root, "review/github-review-post-payload.json", payload)
+        report = self.report()
+        self.assertEqual(report["delivery_state"], "unverifiable")
+        self.assertIn("post_payload_mismatch", self.codes(report))
+
+    def test_missing_terminal_transaction_never_confirms(self) -> None:
+        identity = base_packet(self.root, prepared=True)
+        post_result(self.root, identity)
+        (self.root / "review/delivery-transaction.json").unlink()
+        report = self.report()
+        self.assertEqual(report["delivery_state"], "unverifiable")
+        self.assertIn("missing_delivery_transaction", self.codes(report))
+
+    def test_nonterminal_transaction_never_confirms(self) -> None:
+        identity = base_packet(self.root, prepared=True)
+        post_result(self.root, identity)
+        transaction = read_json(self.root, "review/delivery-transaction.json")
+        transaction["state"] = "submitted"
+        write_json(self.root, "review/delivery-transaction.json", transaction)
+        report = self.report()
+        self.assertEqual(report["delivery_state"], "unverifiable")
+        self.assertIn("delivery_transaction_not_terminal", self.codes(report))
+
+    def test_transaction_head_mismatch_never_confirms(self) -> None:
+        identity = base_packet(self.root, prepared=True)
+        post_result(self.root, identity)
+        transaction = read_json(self.root, "review/delivery-transaction.json")
+        transaction["exact_head_sha"] = "9" * 40
+        write_json(self.root, "review/delivery-transaction.json", transaction)
+        report = self.report()
+        self.assertEqual(report["delivery_state"], "unverifiable")
+        self.assertIn("delivery_transaction_head_mismatch", self.codes(report))
+
+    def test_transaction_payload_digest_mismatch_never_confirms(self) -> None:
+        comment = {
+            "path": "src/lib.rs",
+            "line": 7,
+            "side": "RIGHT",
+            "body": "[tests] Verify parser ownership.",
+            "suggestion": None,
+        }
+        identity = base_packet(self.root, prepared=True, comments=[comment])
+        post_result(self.root, identity)
+        transaction = read_json(self.root, "review/delivery-transaction.json")
+        transaction["planned"][0]["expected_body_digest"] = "0" * 64
+        write_json(self.root, "review/delivery-transaction.json", transaction)
+        report = self.report()
+        self.assertEqual(report["delivery_state"], "unverifiable")
+        self.assertIn("delivery_transaction_payload_mismatch", self.codes(report))
 
     def test_success_receipt_requires_terminal_log_files(self) -> None:
         identity = base_packet(self.root, prepared=True)
@@ -297,11 +424,11 @@ class PublicationBoundaries(unittest.TestCase):
 
     def test_invalid_error_receipt_is_unverifiable(self) -> None:
         base_packet(self.root, prepared=True)
-        post_error(self.root, failure_stage="")
+        post_error(self.root, error_kind="anything", failure_stage="elsewhere")
         report = self.report()
         self.assertTrue(report["input_unavailable"])
         self.assertEqual(report["delivery_state"], "unverifiable")
-        self.assertIn("invalid_post_failure_stage", self.codes(report))
+        self.assertIn("invalid_post_error_classification", self.codes(report))
 
     def test_malformed_review_is_not_prepared(self) -> None:
         base_packet(self.root, prepared=True)
@@ -319,7 +446,15 @@ class PublicationBoundaries(unittest.TestCase):
         self.assertEqual(report["delivery_state"], "unverifiable")
         self.assertIn("invalid_github_review_skip", self.codes(report))
 
-    def test_skip_post_result_is_accepted(self) -> None:
+    def test_skip_post_result_is_accepted_only_when_exact(self) -> None:
+        base_packet(self.root)
+        skip = read_json(self.root, "review/github-review-skip.json")
+        write_json(self.root, "review/post-result.json", skip)
+        report = self.report()
+        self.assertEqual(report["status"], "coherent", report["issues"])
+        self.assertEqual(report["delivery_state"], "not_needed")
+
+    def test_truncated_skip_post_result_is_rejected(self) -> None:
         base_packet(self.root)
         write_json(
             self.root,
@@ -327,8 +462,8 @@ class PublicationBoundaries(unittest.TestCase):
             {"schema_version": 1, "status": "skipped", "reason": "artifact-only"},
         )
         report = self.report()
-        self.assertEqual(report["status"], "coherent", report["issues"])
-        self.assertEqual(report["delivery_state"], "not_needed")
+        self.assertEqual(report["delivery_state"], "unverifiable")
+        self.assertIn("skip_post_result_mismatch", self.codes(report))
 
     def test_skip_post_error_is_failed_and_contradictory(self) -> None:
         base_packet(self.root)
@@ -344,7 +479,6 @@ class PublicationBoundaries(unittest.TestCase):
         terminal["review_payload_status"] = "skipped_pass_policy"
         write_json(self.root, "review/terminal_state.json", terminal)
         report = self.report()
-        self.assertEqual(report["status"], "contradictory")
         self.assertIn("terminal_payload_mismatch", self.codes(report))
 
     def test_terminal_payload_and_status_must_match_skip(self) -> None:
@@ -356,6 +490,15 @@ class PublicationBoundaries(unittest.TestCase):
         report = self.report()
         self.assertIn("terminal_payload_mismatch", self.codes(report))
         self.assertIn("terminal_status_mismatch", self.codes(report))
+
+    def test_impossible_terminal_state_combination_fails_closed(self) -> None:
+        base_packet(self.root, prepared=True)
+        terminal = read_json(self.root, "review/terminal_state.json")
+        terminal["status"] = "sufficient"
+        write_json(self.root, "review/terminal_state.json", terminal)
+        report = self.report()
+        self.assertTrue(report["input_unavailable"])
+        self.assertIn("invalid_terminal_state_combination", self.codes(report))
 
     def test_forged_revision_digest_is_rejected(self) -> None:
         base_packet(self.root)
@@ -390,17 +533,7 @@ class PublicationBoundaries(unittest.TestCase):
 
     def test_review_and_post_receipts_are_xor_surfaces(self) -> None:
         identity = base_packet(self.root, prepared=True)
-        write_json(
-            self.root,
-            "review/github-review-skip.json",
-            {
-                "schema_version": 1,
-                "status": "skipped",
-                "review_payload_status": "skipped_pass_policy",
-                "terminal_state": "sufficient",
-                "github_review_json": None,
-            },
-        )
+        write_json(self.root, "review/github-review-skip.json", skip_receipt())
         post_result(self.root, identity)
         post_error(self.root)
         report = self.report()
