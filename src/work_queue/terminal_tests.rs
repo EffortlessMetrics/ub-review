@@ -33,8 +33,14 @@ fn proof_receipt(id: &str, request_ids: &[&str], requested_by: &[&str]) -> Proof
         head: "b".repeat(40),
         revision: None,
         test_patch_mode: "head-only".to_owned(),
-        requested_by: requested_by.iter().map(|value| (*value).to_owned()).collect(),
-        request_ids: request_ids.iter().map(|value| (*value).to_owned()).collect(),
+        requested_by: requested_by
+            .iter()
+            .map(|value| (*value).to_owned())
+            .collect(),
+        request_ids: request_ids
+            .iter()
+            .map(|value| (*value).to_owned())
+            .collect(),
         commands: vec![ProofCommandReceipt {
             side: "head".to_owned(),
             command: "cargo test --locked queue_terminal".to_owned(),
@@ -115,6 +121,7 @@ fn terminal_projection_preserves_plan_and_accounts_for_receipts() -> Result<()> 
             sensor_task("failed", "planned"),
             sensor_task("timed", "planned"),
             sensor_task("missing-command", "planned"),
+            sensor_task("runtime-skipped", "planned"),
             sensor_task("absent", "planned"),
             sensor_task("skipped", "skipped"),
             proof_plan_task("proof-task-a"),
@@ -126,6 +133,7 @@ fn terminal_projection_preserves_plan_and_accounts_for_receipts() -> Result<()> 
         ("failed", "failed"),
         ("timed", "timed_out"),
         ("missing-command", "missing"),
+        ("runtime-skipped", "skipped"),
     ] {
         write_sensor_receipt(out, id, status)?;
     }
@@ -158,12 +166,16 @@ fn terminal_projection_preserves_plan_and_accounts_for_receipts() -> Result<()> 
         ("sensor-failed", "failed"),
         ("sensor-timed", "timed_out"),
         ("sensor-missing-command", "missing"),
+        ("sensor-runtime-skipped", "skipped"),
         ("sensor-absent", "missing_receipt"),
         ("sensor-skipped", "skipped"),
         ("proof-task-a", "head_passed"),
         ("impact-receipt", "head_passed"),
     ] {
-        assert_eq!(by_id[id]["status"], status, "wrong terminal status for {id}");
+        assert_eq!(
+            by_id[id]["status"], status,
+            "wrong terminal status for {id}"
+        );
     }
     assert!(
         !by_id.contains_key("proof-receipt-a"),
@@ -173,6 +185,9 @@ fn terminal_projection_preserves_plan_and_accounts_for_receipts() -> Result<()> 
         by_id["proof-task-a"]["receipt_ids"],
         serde_json::json!(["proof-receipt-a"])
     );
+    assert!(by_id["proof-task-a"]["reason"]
+        .as_str()
+        .is_some_and(|reason| reason.contains("join=request_identity")));
     assert!(by_id["impact-receipt"]["plan_status"].is_null());
     assert_eq!(receipt_reference_count(rows, "proof-receipt-a"), 1);
     assert_eq!(receipt_reference_count(rows, "impact-receipt"), 1);
@@ -186,16 +201,51 @@ fn terminal_projection_preserves_plan_and_accounts_for_receipts() -> Result<()> 
 }
 
 #[test]
+fn terminal_projection_joins_current_receipt_by_exact_task_identity() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let out = temp.path();
+    write_plan(out, vec![proof_plan_task("proof-receipt-a")])?;
+    write_proof_tasks(out, &[("proof-receipt-a", &["planned-request"])])?;
+    let receipts = vec![proof_receipt(
+        "proof-receipt-a",
+        &["different-request"],
+        &["impact-planner"],
+    )];
+
+    write_terminal_work_queue_artifacts(out, &receipts)?;
+    let terminal: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("work_queue_terminal.json"))?)?;
+    let rows = terminal["tasks"]
+        .as_array()
+        .context("terminal tasks missing")?;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["id"], "proof-receipt-a");
+    assert_eq!(rows[0]["status"], "head_passed");
+    assert_eq!(rows[0]["receipt_ids"], serde_json::json!(["proof-receipt-a"]));
+    assert!(rows[0]["reason"]
+        .as_str()
+        .is_some_and(|reason| reason.contains("join=task_identity")));
+    assert_eq!(receipt_reference_count(rows, "proof-receipt-a"), 1);
+    Ok(())
+}
+
+#[test]
 fn terminal_projection_rejects_one_receipt_joined_to_multiple_plan_tasks() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let out = temp.path();
     write_plan(
         out,
-        vec![proof_plan_task("proof-task-a"), proof_plan_task("proof-task-b")],
+        vec![
+            proof_plan_task("proof-task-a"),
+            proof_plan_task("proof-task-b"),
+        ],
     )?;
     write_proof_tasks(
         out,
-        &[("proof-task-a", &["req-a"]), ("proof-task-b", &["req-a"])],
+        &[
+            ("proof-task-a", &["req-a"]),
+            ("proof-task-b", &["req-a"]),
+        ],
     )?;
     let receipts = vec![proof_receipt(
         "proof-receipt-a",
@@ -214,22 +264,34 @@ fn terminal_projection_rejects_one_receipt_joined_to_multiple_plan_tasks() -> Re
 }
 
 #[test]
-fn terminal_projection_rejects_unjoined_receipt_id_collision() -> Result<()> {
+fn terminal_projection_rejects_conflicting_task_and_request_identity_joins() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let out = temp.path();
-    write_plan(out, vec![proof_plan_task("proof-receipt-a")])?;
-    write_proof_tasks(out, &[("proof-receipt-a", &["planned-request"])])?;
+    write_plan(
+        out,
+        vec![
+            proof_plan_task("proof-receipt-a"),
+            proof_plan_task("proof-task-b"),
+        ],
+    )?;
+    write_proof_tasks(
+        out,
+        &[
+            ("proof-receipt-a", &["planned-request"]),
+            ("proof-task-b", &["req-b"]),
+        ],
+    )?;
     let receipts = vec![proof_receipt(
         "proof-receipt-a",
-        &["different-request"],
+        &["req-b"],
         &["impact-planner"],
     )];
 
     let error = write_terminal_work_queue_artifacts(out, &receipts)
         .err()
-        .context("unjoined receipt identity collision unexpectedly succeeded")?;
+        .context("conflicting receipt joins unexpectedly succeeded")?;
     assert!(
-        format!("{error:#}").contains("collides with planned task identity"),
+        format!("{error:#}").contains("joins multiple planned tasks"),
         "unexpected error: {error:#}"
     );
     Ok(())
