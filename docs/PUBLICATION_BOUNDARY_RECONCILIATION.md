@@ -62,15 +62,18 @@ A current skip receipt has `schema_version = 1`, `status = skipped`, one known
 
 Delivery:
 
-- `confirmed`: every required success-receipt field is valid and the response
-  identifies the admitted pull-request head;
-- `failed`: a valid post error exists or a valid success receipt names the
-  wrong head;
+- `confirmed`: every required success-receipt field is valid, the receipt's
+  event/body byte count/comment counts agree with the prepared payload, its
+  stdout and stderr terminal artifacts exist, the response state is
+  `COMMENTED`, and the response identifies the admitted pull-request head;
+- `failed`: a valid post error exists or an otherwise valid success receipt
+  names the wrong head;
 - `prepared`: review output exists but no post-attempt receipt exists;
 - `not_needed`: the run deliberately prepared no public review;
-- `unverifiable`: malformed receipts, failed success preconditions, missing
-  response-head identity, or contradictory receipt surfaces cannot establish a
-  delivery result.
+- `unverifiable`: malformed receipts, failed success preconditions, payload
+  metadata disagreement, missing terminal files, non-`COMMENTED` response,
+  missing response-head identity, or contradictory receipt surfaces cannot
+  establish a delivery result.
 
 A successful response is compared to `pr_head_commit`, not the synthetic merge
 object stored as `reviewed_commit` under `merge_result` semantics. HTTP success
@@ -88,6 +91,8 @@ The checker records bounded reason tokens including:
 - `skipped_review_projected_posted`;
 - `unverifiable_delivery_projected_posted`;
 - `post_response_head_mismatch`;
+- `post_success_payload_mismatch` and missing terminal-file classes;
+- `invalid_post_response_state` and invalid success/error receipt classes;
 - `terminal_payload_mismatch` and `terminal_status_mismatch`;
 - `revision_digest_mismatch` and exposed/canonical revision mismatches;
 - `prepared_review_xor_violation` and `post_receipt_xor_violation`;
@@ -116,7 +121,7 @@ horizon; expiry never grants authority.
 
 ## Commands
 
-Regression corpus (24 current cases):
+Regression corpus (27 current cases):
 
 ```bash
 python scripts/test-publication-boundaries.py
