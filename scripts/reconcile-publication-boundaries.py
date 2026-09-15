@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Reconcile prepared review and post receipts without changing product authority.
+"""Reconcile review preparation and terminal publication receipts in shadow.
 
-This #957 checker is deliberately read-only and shadow-only. It binds the
-prepared review/skip surface, post success/error receipts, and the run-stage
-gate publication projection to one admitted revision. It does not finalize the
-product outcome; #959/#960 own that authority migration.
+The checker is deliberately read-only and shadow-only. It binds the exact
+prepared/skip surface, the exact posted payload, terminal delivery transaction,
+post success/error receipt, and run-stage publication projection to one admitted
+revision. It never changes product enforcement; #959/#960 own that migration.
 """
 from __future__ import annotations
 
@@ -23,9 +23,10 @@ REPORT_PATH = "review/publication_boundary_reconciliation.json"
 REVISION_ADMISSION_SCHEMA = "ub-review.revision_admission.v1"
 REVISION_CANONICAL_VERSION = "ub-review.revision-identity.v1"
 REVISION_DIGEST_DOMAIN = b"ub-review.revision-identity.digest.v1"
+DELIVERY_TRANSACTION_SCHEMA = "ub-review.delivery_transaction.v1"
 MAX_FILE_BYTES = 4 * 1024 * 1024
 MAX_INPUT_BYTES = 16 * 1024 * 1024
-MAX_INPUT_FILES = 32
+MAX_INPUT_FILES = 40
 MAX_ISSUES = 128
 MAX_REPORT_BYTES = 256 * 1024
 OID_RE = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
@@ -41,6 +42,29 @@ TERMINAL_STATUSES = {
     "sufficient",
     "artifact-only",
     "failed-to-review",
+}
+POST_ERROR_PAIRS = {
+    ("missing_token", "preflight"),
+    ("invalid_repo", "preflight"),
+    ("missing_pull_number", "preflight"),
+    ("invalid_review_payload", "payload_validation"),
+    ("post_http_error", "network_post"),
+    ("post_failed", "network_post"),
+    ("failed", "unknown"),
+}
+SKIP_FIELDS = {
+    "schema_version",
+    "status",
+    "reason",
+    "review_payload_status",
+    "terminal_state",
+    "github_review_json",
+    "run_pass",
+    "model_mode",
+    "inline_comments",
+    "summary_only_findings",
+    "missing_or_failed_sensor_evidence",
+    "missing_or_failed_model_evidence",
 }
 
 
@@ -201,13 +225,13 @@ def valid_oid(value: Any) -> bool:
 def parse_pair(value: str) -> tuple[str, str]:
     parts = value.split(" ")
     if len(parts) != 2 or not all(valid_oid(part) for part in parts):
-        raise ValueError("revision pair must be exactly two valid object ids")
+        raise ValueError("revision pair must contain two valid object ids")
     return parts[0], parts[1]
 
 
 def parse_revision_canonical(text: Any) -> dict[str, Any]:
     if not isinstance(text, str) or "\r" in text or not text.endswith("\n"):
-        raise ValueError("canonical revision identity must be normalized LF text")
+        raise ValueError("canonical revision identity must use normalized LF text")
     lines = text[:-1].split("\n")
     if len(lines) != 8 or lines[0] != REVISION_CANONICAL_VERSION:
         raise ValueError("unsupported or malformed canonical revision identity")
@@ -229,7 +253,7 @@ def parse_revision_canonical(text: Any) -> dict[str, Any]:
 
     semantics = values["semantics"]
     if semantics not in {"candidate_head", "merge_result"}:
-        raise ValueError("unknown canonical review semantics")
+        raise ValueError("unknown review semantics")
     base = parse_pair(values["base"])
     head = parse_pair(values["head"])
     reviewed = parse_pair(values["reviewed"])
@@ -238,28 +262,27 @@ def parse_revision_canonical(text: Any) -> dict[str, Any]:
         raise ValueError("invalid changed-path digest")
     if SHA256_RE.fullmatch(values["diff"]) is None:
         raise ValueError("invalid diff digest")
-
     pairs = [base, head, reviewed] + ([] if merge is None else [merge])
-    widths = {len(oid) for pair in pairs for oid in pair}
-    if len(widths) != 1:
+    if len({len(oid) for pair in pairs for oid in pair}) != 1:
         raise ValueError("mixed object-id widths")
     if semantics == "candidate_head":
         if merge is not None or reviewed != head:
-            raise ValueError("candidate-head canonical identity is contradictory")
+            raise ValueError("candidate-head identity is contradictory")
     elif merge is None or reviewed != merge:
-        raise ValueError("merge-result canonical identity is contradictory")
+        raise ValueError("merge-result identity is contradictory")
 
-    normalized_lines = [
-        REVISION_CANONICAL_VERSION,
-        f"semantics={semantics}",
-        f"base={base[0]} {base[1]}",
-        f"head={head[0]} {head[1]}",
-        f"reviewed={reviewed[0]} {reviewed[1]}",
-        "merge=-" if merge is None else f"merge={merge[0]} {merge[1]}",
-        f"changed_paths={values['changed_paths']}",
-        f"diff={values['diff']}",
-    ]
-    normalized = "\n".join(normalized_lines) + "\n"
+    normalized = "\n".join(
+        [
+            REVISION_CANONICAL_VERSION,
+            f"semantics={semantics}",
+            f"base={base[0]} {base[1]}",
+            f"head={head[0]} {head[1]}",
+            f"reviewed={reviewed[0]} {reviewed[1]}",
+            "merge=-" if merge is None else f"merge={merge[0]} {merge[1]}",
+            f"changed_paths={values['changed_paths']}",
+            f"diff={values['diff']}",
+        ]
+    ) + "\n"
     if normalized != text:
         raise ValueError("canonical revision identity is not normalized")
     digest = hashlib.sha256(
@@ -287,22 +310,17 @@ def revision_binding(packet: Packet, admission: Any) -> dict[str, str] | None:
     except ValueError:
         packet.unavailable("invalid_revision_canonical", path)
         return None
-
     valid = True
-    digest = admission.get("identity_digest")
-    semantics = admission.get("semantics")
-    reviewed = admission.get("reviewed_commit_oid")
-    pr_head = admission.get("pr_head_commit")
-    if digest != parsed["digest"]:
-        packet.unavailable("revision_digest_mismatch", path)
-        valid = False
-    if semantics != parsed["semantics"]:
-        packet.unavailable("revision_semantics_mismatch", path)
-        valid = False
-    if reviewed != parsed["reviewed_commit"]:
-        packet.unavailable("reviewed_commit_mismatch", path)
-        valid = False
-    if not valid_oid(pr_head) or pr_head != parsed["head_commit"]:
+    for code, observed, expected in (
+        ("revision_digest_mismatch", admission.get("identity_digest"), parsed["digest"]),
+        ("revision_semantics_mismatch", admission.get("semantics"), parsed["semantics"]),
+        ("reviewed_commit_mismatch", admission.get("reviewed_commit_oid"), parsed["reviewed_commit"]),
+        ("pr_head_commit_mismatch", admission.get("pr_head_commit"), parsed["head_commit"]),
+    ):
+        if observed != expected:
+            packet.unavailable(code, path)
+            valid = False
+    if not valid_oid(admission.get("pr_head_commit")):
         packet.unavailable("pr_head_commit_mismatch", path)
         valid = False
     if not valid:
@@ -323,15 +341,14 @@ def gate_projection(packet: Packet, gate: Any, binding: dict[str, str] | None) -
     if gate.get("schema") != "ub-review.gate_outcome.v1":
         packet.unavailable("unsupported_gate_projection", path)
         return None
-    expected_revision = None
     if binding is not None:
         expected_revision = {
             "digest": binding["digest"],
             "semantics": binding["semantics"],
             "reviewed_commit": binding["reviewed_commit"],
         }
-    if expected_revision is not None and gate.get("revision") != expected_revision:
-        packet.issue("gate_revision_mismatch", path)
+        if gate.get("revision") != expected_revision:
+            packet.issue("gate_revision_mismatch", path)
     publication = gate.get("publication_result")
     if publication not in {"posted", "not_needed", "failed", "not_proven"}:
         packet.unavailable("invalid_gate_publication_result", path)
@@ -359,6 +376,25 @@ def terminal_projection(packet: Packet, terminal: Any) -> dict[str, Any] | None:
         valid = False
     if not valid:
         return None
+
+    if status == "needs-reviewer-attention":
+        combination_valid = reviewer_value and payload in {
+            "prepared",
+            "skipped_pass_policy",
+            "skipped_artifact_only_body",
+        }
+    else:
+        combination_valid = (not reviewer_value) and payload in {
+            "skipped_empty_smoke",
+            "skipped_artifact_only_body",
+            "skipped_gate_failure_artifact_only",
+        }
+    if not combination_valid:
+        packet.unavailable(
+            "invalid_terminal_state_combination",
+            path,
+            f"{status}|{payload}|reviewer_value={reviewer_value}",
+        )
     return {
         "status": status,
         "review_payload_status": payload,
@@ -366,30 +402,143 @@ def terminal_projection(packet: Packet, terminal: Any) -> dict[str, Any] | None:
     }
 
 
-def prepared_review_facts(review: Any) -> dict[str, Any] | None:
+def strip_bracketed_lane_prefix(value: str) -> str:
+    text = value.lstrip()
+    if not text.startswith("["):
+        return value.strip()
+    end = text.find("]")
+    if end < 0 or end > 80:
+        return value.strip()
+    return text[end + 1 :].lstrip()
+
+
+def strip_raw_lane_metadata_prefix(value: str) -> str:
+    lower = value.lower()
+    at_index = lower.find(" at ")
+    if at_index < 0:
+        return value
+    prefix = lower[:at_index].strip().split()
+    if not prefix or any(
+        token not in {"blocker", "high", "medium", "low", "medium-high"}
+        for token in prefix
+    ):
+        return value
+    after_at = value[at_index + 4 :]
+    body_index = after_at.find(": ")
+    return value if body_index < 0 else after_at[body_index + 2 :].lstrip()
+
+
+def public_comment_body(comment: dict[str, Any]) -> str:
+    body = comment["body"].strip()
+    body = strip_bracketed_lane_prefix(body)
+    body = strip_raw_lane_metadata_prefix(body)
+    for marker in (" Evidence:", " evidence:"):
+        index = body.find(marker)
+        if index >= 0:
+            body = body[:index].rstrip()
+            break
+    if not body:
+        body = comment["body"].strip()
+    suggestion = comment.get("suggestion")
+    if suggestion is None:
+        return body
+    if not isinstance(suggestion, str) or not suggestion.strip():
+        raise ValueError("invalid suggestion")
+    return f"{body.rstrip()}\n\n```suggestion\n{suggestion.rstrip()}\n```"
+
+
+def expected_post_payload(review: Any) -> dict[str, Any]:
     if not (
         isinstance(review, dict)
         and review.get("event") == "COMMENT"
         and isinstance(review.get("body"), str)
         and isinstance(review.get("comments"), list)
     ):
+        raise ValueError("invalid github review")
+    comments: list[dict[str, Any]] = []
+    for row in review["comments"]:
+        if not isinstance(row, dict):
+            raise ValueError("invalid github review comment")
+        path = row.get("path")
+        line = row.get("line")
+        side = row.get("side")
+        body = row.get("body")
+        if (
+            not isinstance(path, str)
+            or not path
+            or type(line) is not int
+            or line <= 0
+            or not isinstance(side, str)
+            or not side
+            or not isinstance(body, str)
+            or not body.strip()
+        ):
+            raise ValueError("invalid github review comment")
+        comments.append(
+            {
+                "path": path,
+                "line": line,
+                "side": side,
+                "body": public_comment_body(row),
+            }
+        )
+    return {"event": "COMMENT", "body": review["body"], "comments": comments}
+
+
+def prepared_review_facts(packet: Packet, review: Any) -> dict[str, Any] | None:
+    path = "review/github-review.json"
+    try:
+        expected_payload = expected_post_payload(review)
+    except (KeyError, TypeError, ValueError):
+        packet.unavailable("invalid_github_review", path)
         return None
+    payload_path = "review/github-review-post-payload.json"
+    actual_payload = packet.load(payload_path, required=False)
+    payload_verified = actual_payload is not None
+    if actual_payload is not None and actual_payload != expected_payload:
+        packet.unavailable("post_payload_mismatch", payload_path)
+        payload_verified = False
     return {
         "event": "COMMENT",
         "body_bytes": len(review["body"].encode("utf-8")),
         "comment_count": len(review["comments"]),
+        "payload": expected_payload,
+        "payload_sha256": hashlib.sha256(canonical(expected_payload)).hexdigest(),
+        "payload_verified": payload_verified,
     }
 
 
-def valid_skip_receipt(skip: Any) -> bool:
-    return (
-        isinstance(skip, dict)
-        and skip.get("schema_version") == 1
+def validate_skip_receipt(packet: Packet, skip: Any) -> dict[str, Any] | None:
+    path = "review/github-review-skip.json"
+    if not isinstance(skip, dict) or set(skip) != SKIP_FIELDS:
+        packet.unavailable("invalid_github_review_skip", path)
+        return None
+    valid = (
+        skip.get("schema_version") == 1
         and skip.get("status") == "skipped"
+        and isinstance(skip.get("reason"), str)
+        and bool(skip.get("reason"))
         and skip.get("review_payload_status") in SKIP_STATUSES
         and skip.get("terminal_state") in TERMINAL_STATUSES
         and skip.get("github_review_json") is None
+        and isinstance(skip.get("run_pass"), str)
+        and bool(skip.get("run_pass"))
+        and isinstance(skip.get("model_mode"), str)
+        and bool(skip.get("model_mode"))
+        and all(
+            type(skip.get(field)) is int and skip[field] >= 0
+            for field in (
+                "inline_comments",
+                "summary_only_findings",
+                "missing_or_failed_sensor_evidence",
+                "missing_or_failed_model_evidence",
+            )
+        )
     )
+    if not valid:
+        packet.unavailable("invalid_github_review_skip", path)
+        return None
+    return skip
 
 
 def response_commit(response: Any) -> str | None:
@@ -399,9 +548,86 @@ def response_commit(response: Any) -> str | None:
     return commit if valid_oid(commit) else None
 
 
+def validate_delivery_transaction(
+    packet: Packet,
+    transaction: Any,
+    binding: dict[str, str] | None,
+    prepared: dict[str, Any],
+) -> bool:
+    path = "review/delivery-transaction.json"
+    if not isinstance(transaction, dict):
+        packet.unavailable("missing_delivery_transaction", path)
+        return False
+    if transaction.get("schema") != DELIVERY_TRANSACTION_SCHEMA:
+        packet.unavailable("invalid_delivery_transaction", path, "schema")
+        return False
+    valid = True
+    if binding is None or transaction.get("exact_head_sha") != binding["pr_head_commit"]:
+        packet.unavailable("delivery_transaction_head_mismatch", path)
+        valid = False
+    if transaction.get("state") != "receipts_persisted":
+        packet.unavailable("delivery_transaction_not_terminal", path)
+        valid = False
+    if transaction.get("failure") is not None:
+        packet.unavailable("delivery_transaction_records_failure", path)
+        valid = False
+    cleanup = transaction.get("cleanup")
+    if cleanup != {"status": "not_attempted"}:
+        packet.unavailable("delivery_transaction_cleanup_mismatch", path)
+        valid = False
+    planned = transaction.get("planned")
+    if not isinstance(planned, list):
+        packet.unavailable("invalid_delivery_transaction", path, "planned")
+        return False
+
+    available: list[tuple[str, int, str, str]] = [
+        (row["path"], row["line"], row["side"], row["body"])
+        for row in prepared["payload"]["comments"]
+    ]
+    consumed: set[int] = set()
+    for index, row in enumerate(planned):
+        if not isinstance(row, dict):
+            packet.unavailable("invalid_delivery_transaction_plan", path, str(index))
+            valid = False
+            continue
+        exact_head = row.get("exact_head_sha")
+        action = row.get("action")
+        identity = (row.get("path"), row.get("line"), row.get("side"))
+        digest = row.get("expected_body_digest")
+        if (
+            binding is None
+            or exact_head != binding["pr_head_commit"]
+            or action != "inline"
+            or not isinstance(row.get("claim_id"), str)
+            or not row.get("claim_id")
+            or not isinstance(identity[0], str)
+            or type(identity[1]) is not int
+            or not isinstance(identity[2], str)
+            or not isinstance(digest, str)
+            or SHA256_RE.fullmatch(digest) is None
+        ):
+            packet.unavailable("invalid_delivery_transaction_plan", path, str(index))
+            valid = False
+            continue
+        matches = [
+            position
+            for position, candidate in enumerate(available)
+            if position not in consumed
+            and candidate[:3] == identity
+            and hashlib.sha256(candidate[3].encode("utf-8")).hexdigest() == digest
+        ]
+        if len(matches) != 1:
+            packet.unavailable("delivery_transaction_payload_mismatch", path, str(index))
+            valid = False
+        else:
+            consumed.add(matches[0])
+    return valid
+
+
 def post_result_state(
     packet: Packet,
     receipt: Any,
+    transaction: Any,
     binding: dict[str, str] | None,
     prepared: dict[str, Any],
 ) -> str:
@@ -409,7 +635,9 @@ def post_result_state(
     if not isinstance(receipt, dict):
         packet.unavailable("invalid_post_result", path)
         return "unverifiable"
-    valid = True
+    valid = prepared["payload_verified"]
+    if not valid:
+        packet.unavailable("post_success_payload_unverified", path)
     if receipt.get("schema_version") != 1 or receipt.get("status") != "ok":
         packet.unavailable("invalid_post_result", path)
         valid = False
@@ -462,6 +690,8 @@ def post_result_state(
     if commit is None:
         packet.observe("post_response_head_unavailable", path)
         valid = False
+    if not validate_delivery_transaction(packet, transaction, binding, prepared):
+        valid = False
     if not valid or binding is None:
         return "unverifiable"
     if commit != binding["pr_head_commit"]:
@@ -475,25 +705,22 @@ def post_error_state(packet: Packet, receipt: Any) -> str:
     if not isinstance(receipt, dict):
         packet.unavailable("invalid_post_error", path)
         return "unverifiable"
-    valid = True
     if receipt.get("schema_version") != 1 or receipt.get("status") != "failed":
         packet.unavailable("invalid_post_error", path)
-        valid = False
-    if not isinstance(receipt.get("error_kind"), str) or not receipt.get("error_kind"):
-        packet.unavailable("invalid_post_error_kind", path)
-        valid = False
-    if not isinstance(receipt.get("failure_stage"), str) or not receipt.get("failure_stage"):
-        packet.unavailable("invalid_post_failure_stage", path)
-        valid = False
-    return "failed" if valid else "unverifiable"
+        return "unverifiable"
+    pair = (receipt.get("error_kind"), receipt.get("failure_stage"))
+    if pair not in POST_ERROR_PAIRS:
+        packet.unavailable("invalid_post_error_classification", path, f"{pair[0]}|{pair[1]}")
+        return "unverifiable"
+    return "failed"
 
 
-def valid_skip_post_result(receipt: Any) -> bool:
-    return (
-        isinstance(receipt, dict)
-        and receipt.get("schema_version") == 1
-        and receipt.get("status") == "skipped"
-    )
+def valid_skip_post_result(packet: Packet, receipt: Any, skip: dict[str, Any]) -> bool:
+    path = "review/post-result.json"
+    if receipt != skip:
+        packet.unavailable("skip_post_result_mismatch", path)
+        return False
+    return True
 
 
 def reconcile(root: Path) -> dict[str, Any]:
@@ -506,61 +733,63 @@ def reconcile(root: Path) -> dict[str, Any]:
     terminal = terminal_projection(packet, terminal_value)
 
     review = packet.load("review/github-review.json")
-    skip = packet.load("review/github-review-skip.json")
+    skip_value = packet.load("review/github-review-skip.json")
     result = packet.load("review/post-result.json")
     error = packet.load("review/post-error.json")
+    transaction = packet.load("review/delivery-transaction.json")
 
     review_present = review is not None
-    skip_present = skip is not None
+    skip_present = skip_value is not None
     result_present = result is not None
     error_present = error is not None
-
-    if review_present == skip_present:
-        packet.issue("prepared_review_xor_violation", "review")
-        if not review_present:
-            packet.input_unavailable = True
-    if result_present and error_present:
-        packet.issue("post_receipt_xor_violation", "review")
 
     preparation_state = "unverifiable"
     delivery_state = "unverifiable"
 
-    if review_present and not skip_present:
-        prepared = prepared_review_facts(review)
+    preparation_xor = review_present == skip_present
+    post_xor = result_present and error_present
+    if preparation_xor:
+        packet.issue("prepared_review_xor_violation", "review")
+        if not review_present:
+            packet.input_unavailable = True
+    if post_xor:
+        packet.issue("post_receipt_xor_violation", "review")
+
+    if preparation_xor or post_xor:
+        pass
+    elif review_present:
+        prepared = prepared_review_facts(packet, review)
         if prepared is not None:
             preparation_state = "prepared"
             if terminal is not None and terminal["review_payload_status"] != "prepared":
                 packet.issue("terminal_payload_mismatch", "review/terminal_state.json")
-            if result_present and not error_present:
-                delivery_state = post_result_state(packet, result, binding, prepared)
-            elif error_present and not result_present:
+            if result_present:
+                delivery_state = post_result_state(
+                    packet, result, transaction, binding, prepared
+                )
+            elif error_present:
                 delivery_state = post_error_state(packet, error)
-            elif not result_present and not error_present:
+            else:
                 delivery_state = "prepared"
                 packet.observe("post_attempt_not_recorded", "review/github-review.json")
-        else:
-            packet.unavailable("invalid_github_review", "review/github-review.json")
-    elif skip_present and not review_present:
-        if valid_skip_receipt(skip):
+    else:
+        skip = validate_skip_receipt(packet, skip_value)
+        if skip is not None:
             preparation_state = "not_needed"
             if terminal is not None:
                 if terminal["review_payload_status"] != skip["review_payload_status"]:
                     packet.issue("terminal_payload_mismatch", "review/terminal_state.json")
                 if terminal["status"] != skip["terminal_state"]:
                     packet.issue("terminal_status_mismatch", "review/terminal_state.json")
-            if result_present and not error_present:
-                if valid_skip_post_result(result):
+            if result_present:
+                if valid_skip_post_result(packet, result, skip):
                     delivery_state = "not_needed"
-                else:
-                    packet.issue("invalid_skip_post_result", "review/post-result.json")
-            elif error_present and not result_present:
+            elif error_present:
                 delivery_state = post_error_state(packet, error)
                 if delivery_state == "failed":
                     packet.issue("post_error_present_for_skip", "review/post-error.json")
-            elif not result_present and not error_present:
+            else:
                 delivery_state = "not_needed"
-        else:
-            packet.unavailable("invalid_github_review_skip", "review/github-review-skip.json")
 
     if publication is not None:
         if delivery_state == "confirmed" and publication != "posted":
