@@ -12,10 +12,10 @@ fn sensor_task(id: &str, status: &str) -> serde_json::Value {
     })
 }
 
-fn proof_plan_task() -> serde_json::Value {
+fn proof_plan_task(id: &str) -> serde_json::Value {
     serde_json::json!({
         "schema": WORK_QUEUE_TASK_SCHEMA,
-        "id": "proof-receipt-a",
+        "id": id,
         "kind": "focused-test",
         "source": "proof-planner",
         "status": "planned",
@@ -53,6 +53,32 @@ fn proof_receipt(id: &str, request_ids: &[&str], requested_by: &[&str]) -> Proof
     }
 }
 
+fn write_plan(out: &Path, tasks: Vec<serde_json::Value>) -> Result<Vec<u8>> {
+    let plan = serde_json::json!({
+        "schema": WORK_QUEUE_SCHEMA,
+        "initial_packet_deadline_sec": 60,
+        "follow_up_deadline_sec": 300,
+        "tasks": tasks
+    });
+    let plan_bytes = serde_json::to_vec_pretty(&plan)?;
+    fs::write(out.join("work_queue_plan.json"), &plan_bytes)?;
+    fs::write(out.join("work_queue.json"), &plan_bytes)?;
+    Ok(plan_bytes)
+}
+
+fn write_proof_tasks(out: &Path, tasks: &[(&str, &[&str])]) -> Result<()> {
+    let mut ndjson = String::new();
+    for (id, request_ids) in tasks {
+        ndjson.push_str(&serde_json::to_string(&serde_json::json!({
+            "id": id,
+            "request_ids": request_ids
+        }))?);
+        ndjson.push('\n');
+    }
+    fs::write(out.join("proof_tasks.ndjson"), ndjson)?;
+    Ok(())
+}
+
 fn write_sensor_receipt(out: &Path, id: &str, status: &str) -> Result<()> {
     let path = out
         .join("sensors")
@@ -70,34 +96,31 @@ fn write_sensor_receipt(out: &Path, id: &str, status: &str) -> Result<()> {
     Ok(())
 }
 
+fn receipt_reference_count(rows: &[serde_json::Value], receipt_id: &str) -> usize {
+    rows.iter()
+        .filter_map(|row| row["receipt_ids"].as_array())
+        .flatten()
+        .filter(|value| value.as_str() == Some(receipt_id))
+        .count()
+}
+
 #[test]
 fn terminal_projection_preserves_plan_and_accounts_for_receipts() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let out = temp.path();
-    let plan = serde_json::json!({
-        "schema": WORK_QUEUE_SCHEMA,
-        "initial_packet_deadline_sec": 60,
-        "follow_up_deadline_sec": 300,
-        "tasks": [
+    let plan_bytes = write_plan(
+        out,
+        vec![
             sensor_task("ok", "planned"),
             sensor_task("failed", "planned"),
             sensor_task("timed", "planned"),
             sensor_task("missing-command", "planned"),
             sensor_task("absent", "planned"),
             sensor_task("skipped", "skipped"),
-            proof_plan_task()
-        ]
-    });
-    let plan_bytes = serde_json::to_vec_pretty(&plan)?;
-    fs::write(out.join("work_queue_plan.json"), &plan_bytes)?;
-    fs::write(out.join("work_queue.json"), &plan_bytes)?;
-    fs::write(
-        out.join("proof_tasks.ndjson"),
-        format!(
-            "{}\n",
-            serde_json::json!({"id":"proof-receipt-a","request_ids":["req-a"]})
-        ),
+            proof_plan_task("proof-task-a"),
+        ],
     )?;
+    write_proof_tasks(out, &[("proof-task-a", &["req-a"])])?;
     for (id, status) in [
         ("ok", "ok"),
         ("failed", "failed"),
@@ -137,21 +160,77 @@ fn terminal_projection_preserves_plan_and_accounts_for_receipts() -> Result<()> 
         ("sensor-missing-command", "missing"),
         ("sensor-absent", "missing_receipt"),
         ("sensor-skipped", "skipped"),
-        ("proof-receipt-a", "head_passed"),
+        ("proof-task-a", "head_passed"),
         ("impact-receipt", "head_passed"),
     ] {
         assert_eq!(by_id[id]["status"], status, "wrong terminal status for {id}");
     }
+    assert!(
+        !by_id.contains_key("proof-receipt-a"),
+        "joined receipt must not be duplicated as an independent task"
+    );
     assert_eq!(
-        by_id["proof-receipt-a"]["receipt_ids"],
+        by_id["proof-task-a"]["receipt_ids"],
         serde_json::json!(["proof-receipt-a"])
     );
     assert!(by_id["impact-receipt"]["plan_status"].is_null());
+    assert_eq!(receipt_reference_count(rows, "proof-receipt-a"), 1);
+    assert_eq!(receipt_reference_count(rows, "impact-receipt"), 1);
     assert_eq!(
         fs::read_to_string(out.join("work_events_terminal.ndjson"))?
             .lines()
             .count(),
         rows.len()
+    );
+    Ok(())
+}
+
+#[test]
+fn terminal_projection_rejects_one_receipt_joined_to_multiple_plan_tasks() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let out = temp.path();
+    write_plan(
+        out,
+        vec![proof_plan_task("proof-task-a"), proof_plan_task("proof-task-b")],
+    )?;
+    write_proof_tasks(
+        out,
+        &[("proof-task-a", &["req-a"]), ("proof-task-b", &["req-a"])],
+    )?;
+    let receipts = vec![proof_receipt(
+        "proof-receipt-a",
+        &["req-a"],
+        &["tests-oracle"],
+    )];
+
+    let error = write_terminal_work_queue_artifacts(out, &receipts)
+        .err()
+        .context("ambiguous receipt join unexpectedly succeeded")?;
+    assert!(
+        format!("{error:#}").contains("joins multiple planned tasks"),
+        "unexpected error: {error:#}"
+    );
+    Ok(())
+}
+
+#[test]
+fn terminal_projection_rejects_unjoined_receipt_id_collision() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let out = temp.path();
+    write_plan(out, vec![proof_plan_task("proof-receipt-a")])?;
+    write_proof_tasks(out, &[("proof-receipt-a", &["planned-request"])])?;
+    let receipts = vec![proof_receipt(
+        "proof-receipt-a",
+        &["different-request"],
+        &["impact-planner"],
+    )];
+
+    let error = write_terminal_work_queue_artifacts(out, &receipts)
+        .err()
+        .context("unjoined receipt identity collision unexpectedly succeeded")?;
+    assert!(
+        format!("{error:#}").contains("collides with planned task identity"),
+        "unexpected error: {error:#}"
     );
     Ok(())
 }
