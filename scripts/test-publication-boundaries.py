@@ -131,6 +131,9 @@ def base_packet(
 
 def post_result(root: Path, identity: dict[str, str], *, commit: str | None = None) -> None:
     write_json(root, "review/post-stdout.json", {"id": 7})
+    stderr = root / "review/post-stderr.txt"
+    stderr.parent.mkdir(parents=True, exist_ok=True)
+    stderr.write_text("", encoding="utf-8")
     write_json(
         root,
         "review/post-result.json",
@@ -144,13 +147,17 @@ def post_result(root: Path, identity: dict[str, str], *, commit: str | None = No
             "review_json": "target/ub-review/review/github-review.json",
             "review_json_exists": True,
             "review_json_valid": True,
+            "review_event": "COMMENT",
+            "review_body_bytes": len("Material review.".encode("utf-8")),
+            "review_comment_count": 0,
             "http_status": 200,
             "token_present": True,
             "payload_written": True,
             "post_stdout_written": True,
-            "post_stderr_written": False,
+            "post_stderr_written": True,
             "response": {
                 "id": 7,
+                "state": "COMMENTED",
                 "commit_id": commit or identity["pr_head_commit"],
             },
         },
@@ -255,6 +262,38 @@ class PublicationBoundaries(unittest.TestCase):
         self.assertTrue(report["input_unavailable"])
         self.assertEqual(report["delivery_state"], "unverifiable")
         self.assertIn("post_success_http_status_invalid", self.codes(report))
+
+    def test_success_receipt_must_bind_prepared_payload(self) -> None:
+        identity = base_packet(self.root, prepared=True)
+        post_result(self.root, identity)
+        result = read_json(self.root, "review/post-result.json")
+        result["review_body_bytes"] += 1
+        result["review_comment_count"] = 1
+        write_json(self.root, "review/post-result.json", result)
+        report = self.report()
+        self.assertTrue(report["input_unavailable"])
+        self.assertEqual(report["delivery_state"], "unverifiable")
+        self.assertIn("post_success_payload_mismatch", self.codes(report))
+
+    def test_success_receipt_requires_terminal_log_files(self) -> None:
+        identity = base_packet(self.root, prepared=True)
+        post_result(self.root, identity)
+        (self.root / "review/post-stderr.txt").unlink()
+        report = self.report()
+        self.assertTrue(report["input_unavailable"])
+        self.assertEqual(report["delivery_state"], "unverifiable")
+        self.assertIn("post_stderr_missing", self.codes(report))
+
+    def test_success_receipt_requires_commented_response_state(self) -> None:
+        identity = base_packet(self.root, prepared=True)
+        post_result(self.root, identity)
+        result = read_json(self.root, "review/post-result.json")
+        result["response"]["state"] = "PENDING"
+        write_json(self.root, "review/post-result.json", result)
+        report = self.report()
+        self.assertTrue(report["input_unavailable"])
+        self.assertEqual(report["delivery_state"], "unverifiable")
+        self.assertIn("invalid_post_response_state", self.codes(report))
 
     def test_invalid_error_receipt_is_unverifiable(self) -> None:
         base_packet(self.root, prepared=True)
