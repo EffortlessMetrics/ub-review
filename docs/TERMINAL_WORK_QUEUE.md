@@ -20,13 +20,20 @@ work_events_terminal.ndjson
 
 The terminal projection never infers that two source-shaped requests are the
 same execution. A planner task retains its own identity and embeds its exact
-plan row. Proof receipts join to that row only through an explicit shared
-`request_id`; equality between a planner task ID and receipt ID is not itself a
-join. A receipt may join at most one planner task in this slice. Every remaining
-receipt is represented under its own receipt identity, including impact proof
-that was not present in the planner catalog. Each receipt identity appears once,
-either as the exact joined receipt reference on one planner task or as one
-standalone receipt-backed task.
+plan row. Proof receipts join to that row through an explicit shared
+`request_id` when available. Current focused-proof producers also use the
+planner task ID as the receipt ID, so exact task/receipt identity is retained as
+a separately reported compatibility join when request identities do not line
+up. Fuzzy text, command, source, lane, or path similarity never creates a join.
+
+A receipt may join at most one planner task in this slice. If its request
+identity points to one task while its exact receipt identity names another, the
+projection fails closed instead of choosing a winner. Every remaining receipt
+is represented under its own receipt identity, including impact proof that was
+not present in the planner catalog. Each receipt identity appears once, either
+as the exact joined receipt reference on one planner task or as one standalone
+receipt-backed task. The terminal reason records `join=request_identity`,
+`join=task_identity`, or `join=request_and_task_identity` for auditability.
 
 Sensor tasks retain their plan status separately and project the terminal
 status receipt as one of:
@@ -39,6 +46,10 @@ missing
 missing_receipt
 skipped
 ```
+
+`skipped` may originate either from the immutable plan or from a terminal sensor
+receipt on a planned dry-run path; the plan and terminal statuses remain
+separate fields.
 
 A planned proof with no exact receipt join becomes `not_executed`; a proof
 receipt retains its producer result such as `head_passed`, `head_failed`, or
