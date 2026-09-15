@@ -1,6 +1,5 @@
 //! Deterministic terminal projection over the immutable planner queue.
 
-use crate::test_parse::push_unique;
 use crate::*;
 
 #[derive(Debug, Serialize)]
@@ -62,9 +61,11 @@ pub(super) fn write_terminal_work_queue_artifacts(
         .and_then(serde_json::Value::as_array)
         .context("terminal queue plan has no task array")?;
     let proof_request_ids = load_proof_task_request_ids(out)?;
+    let receipt_request_ids = validate_proof_receipts(proof_receipts)?;
     let mut source_receipts = BTreeSet::new();
     let mut tasks = Vec::new();
     let mut identities = BTreeSet::new();
+    let mut joined_receipts = BTreeMap::<String, String>::new();
 
     for plan_task in plan_tasks {
         let task = terminalize_planned_task(
@@ -72,6 +73,7 @@ pub(super) fn write_terminal_work_queue_artifacts(
             plan_task,
             proof_receipts,
             &proof_request_ids,
+            &receipt_request_ids,
             &mut source_receipts,
         )?;
         anyhow::ensure!(
@@ -79,39 +81,35 @@ pub(super) fn write_terminal_work_queue_artifacts(
             "terminal queue duplicate task identity {}",
             task.id
         );
+        for receipt_id in &task.receipt_ids {
+            if let Some(previous_task) =
+                joined_receipts.insert(receipt_id.clone(), task.id.clone())
+            {
+                anyhow::bail!(
+                    "terminal queue proof receipt {receipt_id} joins multiple planned tasks {previous_task} and {}",
+                    task.id
+                );
+            }
+        }
         tasks.push(task);
     }
 
     if !proof_receipts.is_empty() {
         source_receipts.insert("review/proof_receipts.json".to_owned());
     }
-    let mut receipt_ids = BTreeSet::new();
     for receipt in proof_receipts {
-        anyhow::ensure!(
-            !receipt.id.trim().is_empty(),
-            "terminal queue proof receipt has empty identity"
-        );
-        anyhow::ensure!(
-            receipt_ids.insert(receipt.id.clone()),
-            "terminal queue duplicate proof receipt identity {}",
-            receipt.id
-        );
-        let mut request_ids = receipt.request_ids.clone();
-        request_ids.sort();
-        request_ids.dedup();
-        if let Some(task) = tasks.iter_mut().find(|task| task.id == receipt.id) {
-            task.status = terminal_proof_receipt_status(receipt)?;
-            task.reason = receipt.reason.clone();
-            for request_id in request_ids {
-                push_unique(&mut task.request_ids, &request_id);
-            }
-            task.request_ids.sort();
-            push_unique(&mut task.receipt_ids, &receipt.id);
-            task.receipt_ids.sort();
-            task.receipt_path = Some(format!("review/proof_receipts.json#{}", receipt.id));
+        if joined_receipts.contains_key(&receipt.id) {
             continue;
         }
-        identities.insert(receipt.id.clone());
+        anyhow::ensure!(
+            identities.insert(receipt.id.clone()),
+            "terminal queue unjoined proof receipt identity {} collides with planned task identity",
+            receipt.id
+        );
+        let request_ids = receipt_request_ids
+            .get(&receipt.id)
+            .cloned()
+            .with_context(|| format!("validated proof receipt {} disappeared", receipt.id))?;
         tasks.push(TerminalTask {
             id: receipt.id.clone(),
             kind: receipt.kind.clone(),
@@ -159,11 +157,40 @@ pub(super) fn write_terminal_work_queue_artifacts(
     Ok(())
 }
 
+fn validate_proof_receipts(receipts: &[ProofReceipt]) -> Result<BTreeMap<String, Vec<String>>> {
+    let mut result = BTreeMap::new();
+    for receipt in receipts {
+        anyhow::ensure!(
+            !receipt.id.trim().is_empty(),
+            "terminal queue proof receipt has empty identity"
+        );
+        terminal_proof_receipt_status(receipt)?;
+        let mut request_ids = Vec::with_capacity(receipt.request_ids.len());
+        for request_id in &receipt.request_ids {
+            anyhow::ensure!(
+                !request_id.trim().is_empty(),
+                "terminal queue proof receipt {} contains an empty request identity",
+                receipt.id
+            );
+            request_ids.push(request_id.clone());
+        }
+        request_ids.sort();
+        request_ids.dedup();
+        anyhow::ensure!(
+            result.insert(receipt.id.clone(), request_ids).is_none(),
+            "terminal queue duplicate proof receipt identity {}",
+            receipt.id
+        );
+    }
+    Ok(result)
+}
+
 fn terminalize_planned_task(
     out: &Path,
     plan_task: &serde_json::Value,
     proof_receipts: &[ProofReceipt],
     proof_request_ids: &BTreeMap<String, Vec<String>>,
+    receipt_request_ids: &BTreeMap<String, Vec<String>>,
     source_receipts: &mut BTreeSet<String>,
 ) -> Result<TerminalTask> {
     let object = plan_task
@@ -184,7 +211,13 @@ fn terminalize_planned_task(
             source_receipts,
         )?
     } else {
-        terminalize_proof(&id, &plan_status, proof_receipts, proof_request_ids)?
+        terminalize_proof(
+            &id,
+            &plan_status,
+            proof_receipts,
+            proof_request_ids,
+            receipt_request_ids,
+        )?
     };
     Ok(TerminalTask {
         id,
@@ -263,6 +296,7 @@ fn terminalize_proof(
     plan_status: &str,
     receipts: &[ProofReceipt],
     proof_request_ids: &BTreeMap<String, Vec<String>>,
+    receipt_request_ids: &BTreeMap<String, Vec<String>>,
 ) -> Result<(String, String, Vec<String>, Vec<String>)> {
     let mut request_ids = proof_request_ids.get(task_id).cloned().unwrap_or_default();
     request_ids.sort();
@@ -274,10 +308,13 @@ fn terminalize_proof(
     let mut matching = receipts
         .iter()
         .filter(|receipt| {
-            receipt
-                .request_ids
-                .iter()
-                .any(|request_id| request_set.contains(request_id.as_str()))
+            receipt_request_ids
+                .get(&receipt.id)
+                .is_some_and(|receipt_requests| {
+                    receipt_requests
+                        .iter()
+                        .any(|request_id| request_set.contains(request_id.as_str()))
+                })
         })
         .collect::<Vec<_>>();
     matching.sort_by(|left, right| left.id.cmp(&right.id));
