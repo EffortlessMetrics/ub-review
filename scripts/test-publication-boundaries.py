@@ -473,6 +473,24 @@ class PublicationBoundaries(unittest.TestCase):
         self.assertEqual(report["delivery_state"], "failed")
         self.assertIn("post_error_present_for_skip", self.codes(report))
 
+    def test_proof_only_reviewer_value_can_skip_empty_publication(self) -> None:
+        base_packet(self.root)
+        terminal = read_json(self.root, "review/terminal_state.json")
+        terminal["status"] = "needs-reviewer-attention"
+        terminal["reviewer_value_present"] = True
+        terminal["review_payload_status"] = "skipped_empty_smoke"
+        write_json(self.root, "review/terminal_state.json", terminal)
+        skip = read_json(self.root, "review/github-review-skip.json")
+        skip["terminal_state"] = "needs-reviewer-attention"
+        skip["review_payload_status"] = "skipped_empty_smoke"
+        write_json(self.root, "review/github-review-skip.json", skip)
+
+        report = self.report()
+        self.assertEqual(report["status"], "coherent", report["issues"])
+        self.assertEqual(report["preparation_state"], "not_needed")
+        self.assertEqual(report["delivery_state"], "not_needed")
+        self.assertNotIn("invalid_terminal_state_combination", self.codes(report))
+
     def test_terminal_payload_must_match_prepared_surface(self) -> None:
         base_packet(self.root, prepared=True)
         terminal = read_json(self.root, "review/terminal_state.json")

@@ -377,18 +377,15 @@ def terminal_projection(packet: Packet, terminal: Any) -> dict[str, Any] | None:
     if not valid:
         return None
 
-    if status == "needs-reviewer-attention":
-        combination_valid = reviewer_value and payload in {
-            "prepared",
-            "skipped_pass_policy",
-            "skipped_artifact_only_body",
-        }
-    else:
-        combination_valid = (not reviewer_value) and payload in {
-            "skipped_empty_smoke",
-            "skipped_artifact_only_body",
-            "skipped_gate_failure_artifact_only",
-        }
+    combination_valid = True
+    if status == "needs-reviewer-attention" and not reviewer_value:
+        combination_valid = False
+    elif status in {"sufficient", "artifact-only"} and reviewer_value:
+        combination_valid = False
+    elif payload in {"prepared", "skipped_pass_policy"} and (
+        status != "needs-reviewer-attention" or not reviewer_value
+    ):
+        combination_valid = False
     if not combination_valid:
         packet.unavailable(
             "invalid_terminal_state_combination",

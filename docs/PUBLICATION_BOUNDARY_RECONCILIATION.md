@@ -156,7 +156,7 @@ horizon; expiry never grants authority.
 
 ## Commands
 
-Regression corpus (35 current cases):
+Regression corpus (36 current cases):
 
 ```bash
 python scripts/test-publication-boundaries.py
@@ -168,7 +168,8 @@ python -m py_compile \
 The corpus includes candidate-head and merge-result positives; prepared,
 confirmed, failed, and skipped paths; same-length body and same-count comment
 substitution; missing, wrong-head, nonterminal, failed, and payload-mismatched
-delivery transactions; impossible terminal-state combinations; unknown error
+delivery transactions; proof-only reviewer value with an intentionally empty public
+payload; impossible terminal-state combinations; unknown error
 enums; truncated skip receipts; forged revision identity; XOR, path, symlink,
 budget, determinism, and atomic-replacement controls.
 
