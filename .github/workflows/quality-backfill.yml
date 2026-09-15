@@ -20,13 +20,17 @@ jobs:
   backfill:
     name: Quality telemetry backfill
     runs-on: ubuntu-latest
-    # The lane downloads up to 100 gate packets sequentially, so runtime
-    # scales with gate traffic in the window; 20 minutes killed both the
-    # 2026-08-22 scheduled run (24m38s) and its manual re-dispatch (20m41s)
-    # after the release-queue merges grew that traffic.
+    # Source packets are inspected only when their compressed artifact is
+    # bounded. Downloaded inputs live under runner.temp and are never uploaded.
     timeout-minutes: 45
     env:
       UB_REVIEW_QUALITY_WINDOW_DAYS: 30
+      UB_REVIEW_QUALITY_INPUT_DIR: ${{ runner.temp }}/ub-review-quality-input
+      UB_REVIEW_QUALITY_PUBLISH_DIR: target/ub-review-quality-publish
+      UB_REVIEW_QUALITY_SOURCE_ARTIFACT_MAX_BYTES: 67108864
+      UB_REVIEW_QUALITY_MAX_FILES: 512
+      UB_REVIEW_QUALITY_MAX_FILE_BYTES: 16777216
+      UB_REVIEW_QUALITY_MAX_TOTAL_BYTES: 67108864
     steps:
       - uses: actions/checkout@v5
 
@@ -45,23 +49,25 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          mkdir -p target/ub-review-quality/source/github
+          rm -rf -- "$UB_REVIEW_QUALITY_INPUT_DIR"
+          mkdir -p "$UB_REVIEW_QUALITY_INPUT_DIR/github"
           gh run list \
             --workflow ub-review-gate.yml \
             --event pull_request \
             --limit 100 \
             --json databaseId,headSha,conclusion,createdAt,displayTitle,url \
-            > target/ub-review-quality/source/github/actions-runs.json
+            > "$UB_REVIEW_QUALITY_INPUT_DIR/github/actions-runs.json"
           gh pr list \
             --state all \
             --limit 100 \
             --json number,title,state,isDraft,mergedAt,reviewDecision,headRefOid,comments,reviews,url \
-            > target/ub-review-quality/source/github/pr-state.json
-          python - <<'PY' > target/ub-review-quality/source/github/pr-numbers.txt
+            > "$UB_REVIEW_QUALITY_INPUT_DIR/github/pr-state.json"
+          python - <<'PY' > "$UB_REVIEW_QUALITY_INPUT_DIR/github/pr-numbers.txt"
           import json
+          import os
           from pathlib import Path
 
-          source = Path("target/ub-review-quality/source/github")
+          source = Path(os.environ["UB_REVIEW_QUALITY_INPUT_DIR"]) / "github"
           for pull in json.loads((source / "pr-state.json").read_text()):
               number = pull.get("number")
               if isinstance(number, int):
@@ -69,26 +75,27 @@ jobs:
           PY
           target/debug/ub-review quality-github-collect \
             --repo "$GH_REPO" \
-            --source-dir target/ub-review-quality/source/github \
-            --pull-numbers-file target/ub-review-quality/source/github/pr-numbers.txt
+            --source-dir "$UB_REVIEW_QUALITY_INPUT_DIR/github" \
+            --pull-numbers-file "$UB_REVIEW_QUALITY_INPUT_DIR/github/pr-numbers.txt"
           target/debug/ub-review quality-github-outcomes \
-            --source-dir target/ub-review-quality/source/github \
-            --out target/ub-review-quality/source/github/github-quality-outcomes.json
+            --source-dir "$UB_REVIEW_QUALITY_INPUT_DIR/github" \
+            --out "$UB_REVIEW_QUALITY_INPUT_DIR/github/github-quality-outcomes.json"
 
-      - name: Download recent gate artifacts
+      - name: Download bounded recent gate artifacts
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p target/ub-review-quality/source/runs
-          python - <<'PY' > target/ub-review-quality/source/run-ids.txt
+          mkdir -p "$UB_REVIEW_QUALITY_INPUT_DIR/runs"
+          python - <<'PY' > "$UB_REVIEW_QUALITY_INPUT_DIR/run-ids.txt"
           import json
           import os
           from datetime import datetime, timedelta, timezone
           from pathlib import Path
 
-          runs = json.loads(Path("target/ub-review-quality/source/github/actions-runs.json").read_text())
+          source = Path(os.environ["UB_REVIEW_QUALITY_INPUT_DIR"])
+          runs = json.loads((source / "github/actions-runs.json").read_text())
           window_days = int(os.environ["UB_REVIEW_QUALITY_WINDOW_DAYS"])
           cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
           for run in runs:
@@ -105,25 +112,38 @@ jobs:
           PY
           while IFS= read -r run_id; do
             [[ -n "$run_id" ]] || continue
-            mkdir -p "target/ub-review-quality/source/runs/$run_id"
+            artifact_size="$(
+              gh api "repos/${GITHUB_REPOSITORY:?}/actions/runs/$run_id/artifacts" \
+                --jq '.artifacts[] | select(.name == "ub-review-gate" and .expired == false) | .size_in_bytes' \
+                2>/dev/null | head -n 1 || true
+            )"
+            if [[ ! "$artifact_size" =~ ^[0-9]+$ ]]; then
+              echo "::notice::gate artifact unavailable for run $run_id; skipping quality source"
+              continue
+            fi
+            if (( artifact_size > UB_REVIEW_QUALITY_SOURCE_ARTIFACT_MAX_BYTES )); then
+              echo "::notice::gate artifact for run $run_id is $artifact_size bytes; skipping source above $UB_REVIEW_QUALITY_SOURCE_ARTIFACT_MAX_BYTES bytes"
+              continue
+            fi
+            mkdir -p "$UB_REVIEW_QUALITY_INPUT_DIR/runs/$run_id"
             gh run download "$run_id" \
               --name ub-review-gate \
-              --dir "target/ub-review-quality/source/runs/$run_id" || true
-          done < target/ub-review-quality/source/run-ids.txt
+              --dir "$UB_REVIEW_QUALITY_INPUT_DIR/runs/$run_id" || true
+          done < "$UB_REVIEW_QUALITY_INPUT_DIR/run-ids.txt"
 
-      - name: Download previous quality backfill
+      - name: Download bounded previous quality backfill
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p target/ub-review-quality/source/previous
+          mkdir -p "$UB_REVIEW_QUALITY_INPUT_DIR/previous"
           gh run list \
             --workflow quality-backfill.yml \
             --status success \
             --limit 5 \
             --json databaseId \
-            > target/ub-review-quality/source/previous/previous-quality-runs.json
+            > "$UB_REVIEW_QUALITY_INPUT_DIR/previous/previous-quality-runs.json"
           previous_run="$(
             python - <<'PY'
           import json
@@ -131,7 +151,8 @@ jobs:
           from pathlib import Path
 
           current = os.environ.get("GITHUB_RUN_ID")
-          runs = json.loads(Path("target/ub-review-quality/source/previous/previous-quality-runs.json").read_text())
+          source = Path(os.environ["UB_REVIEW_QUALITY_INPUT_DIR"])
+          runs = json.loads((source / "previous/previous-quality-runs.json").read_text())
           for run in runs:
               run_id = str(run.get("databaseId") or "")
               if run_id and run_id != current:
@@ -140,36 +161,92 @@ jobs:
           PY
           )"
           if [[ -n "$previous_run" ]]; then
-            gh run download "$previous_run" \
-              --name ub-review-quality-backfill \
-              --dir target/ub-review-quality/source/previous || true
+            artifact_size="$(
+              gh api "repos/${GITHUB_REPOSITORY:?}/actions/runs/$previous_run/artifacts" \
+                --jq '.artifacts[] | select(.name == "ub-review-quality-backfill" and .expired == false) | .size_in_bytes' \
+                2>/dev/null | head -n 1 || true
+            )"
+            if [[ ! "$artifact_size" =~ ^[0-9]+$ ]]; then
+              echo "::notice::previous quality artifact unavailable on run $previous_run; continuing without trend input"
+            elif (( artifact_size > UB_REVIEW_QUALITY_SOURCE_ARTIFACT_MAX_BYTES )); then
+              echo "::notice::previous quality artifact is $artifact_size bytes; skipping recursive source above $UB_REVIEW_QUALITY_SOURCE_ARTIFACT_MAX_BYTES bytes"
+            else
+              gh run download "$previous_run" \
+                --name ub-review-quality-backfill \
+                --dir "$UB_REVIEW_QUALITY_INPUT_DIR/previous" || true
+            fi
           fi
 
-      - name: Build quality backfill
+      - name: Build compact quality backfill
+        id: build
         shell: bash
         run: |
           set -euo pipefail
+          rm -rf -- "$UB_REVIEW_QUALITY_PUBLISH_DIR"
+          mkdir -p "$UB_REVIEW_QUALITY_PUBLISH_DIR"
           args=()
           while IFS= read -r receipt; do
             run_dir="${receipt%/review/quality-receipt.json}"
             args+=(--run-dir "$run_dir")
-          done < <(find target/ub-review-quality/source/runs -path '*/review/quality-receipt.json' -type f | sort)
+          done < <(find "$UB_REVIEW_QUALITY_INPUT_DIR/runs" -path '*/review/quality-receipt.json' -type f | sort)
           previous=()
-          previous_file="$(find target/ub-review-quality/source/previous -path '*/review/quality-backfill.json' -type f | sort | head -n 1 || true)"
+          previous_file="$(find "$UB_REVIEW_QUALITY_INPUT_DIR/previous" -path '*/review/quality-backfill.json' -type f | sort | head -n 1 || true)"
           if [[ -n "$previous_file" ]]; then
             previous=(--previous "$previous_file")
           fi
           target/debug/ub-review quality-backfill \
-            --out target/ub-review-quality \
-            --github-outcomes target/ub-review-quality/source/github/github-quality-outcomes.json \
+            --out "$UB_REVIEW_QUALITY_PUBLISH_DIR" \
+            --github-outcomes "$UB_REVIEW_QUALITY_INPUT_DIR/github/github-quality-outcomes.json" \
             --window-days "$UB_REVIEW_QUALITY_WINDOW_DAYS" \
             "${previous[@]}" \
             "${args[@]}"
 
-      - uses: actions/upload-artifact@v7
+      - name: Verify quality backfill publication tree
+        id: publish_preflight
         if: always()
+        shell: bash
+        env:
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+        run: |
+          set -euo pipefail
+          if [[ "$BUILD_OUTCOME" != "success" ]]; then
+            echo "quality backfill build ended $BUILD_OUTCOME; refusing artifact upload" >&2
+            exit 1
+          fi
+          test -s "$UB_REVIEW_QUALITY_PUBLISH_DIR/review/quality-backfill.json"
+          if find "$UB_REVIEW_QUALITY_PUBLISH_DIR" -type l -print -quit | grep -q .; then
+            echo "quality backfill publish tree contains a symlink" >&2
+            exit 1
+          fi
+          if find "$UB_REVIEW_QUALITY_PUBLISH_DIR" -type d \( -name source -o -name input -o -name runs -o -name previous \) -print -quit | grep -q .; then
+            echo "quality backfill publish tree contains a source/input directory" >&2
+            exit 1
+          fi
+          mapfile -d '' files < <(find "$UB_REVIEW_QUALITY_PUBLISH_DIR" -type f -print0 | sort -z)
+          file_count="${#files[@]}"
+          if (( file_count == 0 || file_count > UB_REVIEW_QUALITY_MAX_FILES )); then
+            echo "quality backfill publish file count $file_count is outside 1..$UB_REVIEW_QUALITY_MAX_FILES" >&2
+            exit 1
+          fi
+          total_bytes=0
+          for file in "${files[@]}"; do
+            file_bytes="$(stat -c '%s' -- "$file")"
+            if (( file_bytes > UB_REVIEW_QUALITY_MAX_FILE_BYTES )); then
+              echo "quality backfill file $file is $file_bytes bytes; limit is $UB_REVIEW_QUALITY_MAX_FILE_BYTES" >&2
+              exit 1
+            fi
+            total_bytes=$((total_bytes + file_bytes))
+          done
+          if (( total_bytes > UB_REVIEW_QUALITY_MAX_TOTAL_BYTES )); then
+            echo "quality backfill publish tree is $total_bytes bytes; limit is $UB_REVIEW_QUALITY_MAX_TOTAL_BYTES" >&2
+            exit 1
+          fi
+          printf 'Quality backfill publish tree: %s files, %s expanded bytes\n' "$file_count" "$total_bytes" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        if: steps.publish_preflight.outcome == 'success'
         with:
           name: ub-review-quality-backfill
-          path: target/ub-review-quality
+          path: ${{ env.UB_REVIEW_QUALITY_PUBLISH_DIR }}
           if-no-files-found: error
           retention-days: 30
