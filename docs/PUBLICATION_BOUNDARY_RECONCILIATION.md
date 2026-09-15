@@ -2,7 +2,7 @@
 
 Issue [#957] requires current packets to account for every publication boundary
 before `FinalizedOutcome` can consume delivery truth. This document describes
-the bounded shadow checker in
+the bounded shadow checker entered through
 `scripts/reconcile-publication-boundaries.py`.
 
 The checker is deliberately **read-only and non-authoritative**. It compares
@@ -25,76 +25,66 @@ validated canonical revision admission
 -> bounded shadow reconciliation report
 ```
 
-The revision admission is not trusted from matching exposed strings alone. The
-checker parses the normalized `ub-review.revision-identity.v1` canonical form,
-recomputes its domain-separated SHA-256 digest, validates candidate-head versus
-merge-result semantics, and requires the exposed semantics, reviewed commit,
-and pull-request head to match the canonical identity.
+The checker parses the normalized `ub-review.revision-identity.v1` canonical
+form, recomputes its domain-separated SHA-256 digest, validates candidate-head
+versus merge-result semantics, and requires the exposed semantics, reviewed
+commit, and pull-request head to match that canonical identity.
 
-The report is written to:
+The report is written atomically to:
 
 ```text
 review/publication_boundary_reconciliation.json
 ```
 
-with schema:
+with schema `ub-review.publication_boundary_reconciliation.v1` and authority
+`shadow-only`.
 
-```text
-ub-review.publication_boundary_reconciliation.v1
-```
+## Preparation and delivery states
 
-Its authority is always `shadow-only`.
+Preparation is one of:
 
-## States
-
-Preparation:
-
-- `prepared`: one valid grouped GitHub review exists and terminal state reports
-  the producer-valid combination `needs-reviewer-attention`, reviewer value
-  present, and `review_payload_status = prepared`;
-- `not_needed`: one valid skip receipt exists and its payload/terminal values
-  agree with a producer-valid terminal-state combination;
+- `prepared`: one valid grouped GitHub review exists and terminal state agrees;
+- `not_needed`: one complete skip receipt exists and terminal state agrees;
 - `unverifiable`: the preparation surface is missing, malformed,
   contradictory, or cannot be joined to terminal state.
 
-A current skip receipt has `schema_version = 1`, top-level `status = skipped`,
-a reason, known `review_payload_status`, valid `terminal_state`, null
-`github_review_json`, run/model identity, and the four nonnegative count fields
-emitted by `GitHubReviewSkipReceipt`. When `cmd_post` consumes that skip,
-`post-result.json` is accepted only when it is the complete identical skip
-receipt. A truncated, stale, or unrelated skip result cannot establish
-`not_needed`.
+A current skip receipt must contain the complete producer shape. When
+`cmd_post` consumes that skip, `post-result.json` is accepted only when it is
+the identical complete skip receipt. A truncated, stale, or unrelated skip
+result cannot establish `not_needed`.
 
-Delivery:
+Delivery is one of:
 
 - `confirmed`: the retained post payload exactly equals the public payload
-  derived from the prepared review, every required success-receipt field is
-  valid, its metadata agrees with that payload, terminal stdout/stderr files
-  exist, the response state is `COMMENTED`, the response identifies the
-  admitted pull-request head, and `delivery-transaction.json` is a successful
-  exact-head `receipts_persisted` transaction;
+  derived from the prepared review; every success-receipt field is valid;
+  terminal stdout/stderr files exist; the response state is `COMMENTED`; the
+  response identifies the admitted pull-request head; and the terminal
+  delivery transaction accounts for every prepared inline delivery;
 - `failed`: a valid bounded post error exists or an otherwise valid success
   receipt names the wrong head;
 - `prepared`: review output exists but no post-attempt receipt exists;
 - `not_needed`: the run deliberately prepared no public review and any skip
-  post receipt exactly matches the validated skip artifact;
-- `unverifiable`: malformed receipts, failed success preconditions, exact
-  payload disagreement, missing/nonterminal/failed transaction state, missing
-  terminal files, non-`COMMENTED` response, missing response-head identity, or
-  contradictory receipt surfaces cannot establish a delivery result.
+  result exactly matches the validated skip artifact;
+- `unverifiable`: the available artifacts cannot establish one of the states
+  above.
 
 Exact payload identity includes the event, full body, every inline anchor, and
 the public comment body after the same lane-prefix/evidence trimming and
-suggestion rendering used by posting. Cardinality and byte length are retained
-as receipt checks but never substitute for identity. Each planned delivery in
-the terminal transaction must bind the exact PR head and one exact prepared
-inline body digest; ambiguous, duplicate, or substituted content fails closed.
+suggestion rendering used by posting. Cardinality and byte length remain useful
+receipt checks but never substitute for identity.
+
+Every prepared inline item must be represented exactly once by the terminal
+transaction, with the exact pull-request head and public-body digest. A
+terminal transaction that contains only a subset of the prepared comments is
+`unverifiable` with `delivery_transaction_incomplete`. The live producer can
+legitimately create a transaction over only `remaining_inline` during a retry;
+this shadow checker therefore fails such a packet closed until [#959] can join
+omitted items to independently validated prior-confirmation evidence. It does
+not infer that earlier delivery succeeded.
 
 A successful response is compared to `pr_head_commit`, not the synthetic merge
 object stored as `reviewed_commit` under `merge_result` semantics. HTTP success
-without a usable response head remains `unverifiable`. A skip receipt combined
-with a valid post error is retained as failed delivery and a typed
-contradiction; it cannot remain coherent `not_needed` state.
+without a usable response head remains `unverifiable`.
 
 `post-error.json` is definitive only for the bounded producer combinations:
 
@@ -112,66 +102,58 @@ Unknown pairs are malformed evidence, not inferred failure truth.
 
 ## Stable contradiction classes
 
-The checker records bounded reason tokens including:
+The checker retains bounded reason tokens including:
 
-- `prepared_payload_projected_posted`;
-- `failed_delivery_projected_posted`;
-- `confirmed_delivery_not_projected_posted`;
-- `skipped_review_projected_posted`;
-- `unverifiable_delivery_projected_posted`;
-- `post_response_head_mismatch`;
-- `post_payload_mismatch` and `post_success_payload_mismatch`;
-- `missing_delivery_transaction`, transaction head/state/failure/cleanup, and
-  transaction payload mismatch classes;
-- missing terminal-file and invalid response-state classes;
-- `invalid_post_error_classification`;
-- `skip_post_result_mismatch`;
-- `invalid_terminal_state_combination`, `terminal_payload_mismatch`, and
-  `terminal_status_mismatch`;
-- `revision_digest_mismatch` and exposed/canonical revision mismatches;
-- `prepared_review_xor_violation` and `post_receipt_xor_violation`;
-- malformed, missing, unsafe-path, and bounded-input classes.
+- prepared, failed, skipped, confirmed, and unverifiable projection mismatch;
+- response-head, exact-payload, and success-metadata mismatch;
+- missing, wrong-head, nonterminal, failed, cleanup-mismatched, payload-mismatched,
+  and incomplete delivery transactions;
+- missing terminal files and invalid response state;
+- invalid post-error classification and skip-result mismatch;
+- impossible terminal-state combinations and terminal projection mismatch;
+- canonical revision mismatch;
+- preparation/post XOR violations;
+- malformed, missing, unsafe-path, symlink, and budget failures.
 
 An unavailable GitHub response head remains an explicit observation. The
-checker does not invent confirmation from HTTP success, equal payload lengths,
-or matching item counts.
+checker never invents confirmation from HTTP success, equal payload lengths, or
+matching item counts.
 
-## Bounds, ownership, and mutation policy
+## Bounds and temporary implementation
 
-The checker:
+The checker reads only a fixed allowlisted artifact set; rejects duplicate JSON
+keys, non-finite numbers, unsafe paths, and symlinks; caps per-file and aggregate
+input, retained findings, and report bytes; records source byte counts and
+SHA-256 digests; and never changes product authority.
 
-- reads only a fixed allowlisted artifact set;
-- rejects duplicate JSON keys, non-finite numbers, unsafe paths, and symlinks;
-- caps individual files, aggregate input, retained findings, and report bytes;
-- records input byte counts and SHA-256 digests;
-- writes the optional report atomically;
-- removes a stale prior report before a requested rewrite;
-- never changes run, review, delivery, scheduling, or gate authority.
+The temporary Python family is:
 
-The two Python files are temporary, owned `release/ci` shadow checks under the
-existing `policy/allow.toml` receipt. They must move into a durable Rust/verifier
-boundary or be removed before #960 can make `FinalizedOutcome`
-production-authoritative. The policy receipt retains the review and expiry
-horizon; expiry never grants authority.
+```text
+scripts/reconcile-publication-boundaries.py             entrypoint and final fail-closed guards
+scripts/reconcile-publication-boundaries-core.py        reviewed bounded reconciliation core
+scripts/test-publication-boundaries.py                  primary regression corpus
+scripts/test-publication-transaction-completeness.py    complete prepared-to-terminal negative
+```
+
+These files are owned by `release/ci` under the existing
+`policy/allow.toml` script receipt. The family must move into a durable
+Rust/verifier boundary or be removed before #960 can make `FinalizedOutcome`
+production-authoritative. The receipt's review and expiry dates grant no
+authority by themselves.
 
 ## Commands
 
-Regression corpus (36 current cases):
+Regression corpus: 37 cases across the two suites.
 
 ```bash
 python scripts/test-publication-boundaries.py
+python scripts/test-publication-transaction-completeness.py
 python -m py_compile \
   scripts/reconcile-publication-boundaries.py \
-  scripts/test-publication-boundaries.py
+  scripts/reconcile-publication-boundaries-core.py \
+  scripts/test-publication-boundaries.py \
+  scripts/test-publication-transaction-completeness.py
 ```
-
-The corpus includes candidate-head and merge-result positives; prepared,
-confirmed, failed, and skipped paths; same-length body and same-count comment
-substitution; missing, wrong-head, nonterminal, failed, and payload-mismatched
-delivery transactions; proof-only reviewer value with an intentionally empty public
-payload; impossible terminal-state combinations; unknown error
-enums; truncated skip receipts; forged revision identity; XOR, path, symlink,
-budget, determinism, and atomic-replacement controls.
 
 Inspect a packet and atomically retain the shadow report:
 
@@ -184,9 +166,9 @@ Exit status is `0` for coherent shadow input, `1` for a typed contradiction or
 otherwise incomplete but readable relationship, and `2` when required input or
 bounded processing is unavailable.
 
-The contained candidate gate runs the regression corpus as an enforced source
-check and runs packet reconciliation with `continue-on-error`. A contradictory
-shadow report is evidence for #957; it does not alter legacy gate enforcement.
+The contained candidate gate enforces both regression suites and runs packet
+reconciliation with `continue-on-error`. A contradictory shadow report is
+evidence for #957; it does not alter legacy gate enforcement.
 
 ## Acceptance boundary
 
