@@ -38,7 +38,9 @@ jobs:
 
       - name: Verify publication boundary regressions
         timeout-minutes: 2
-        run: python scripts/test-publication-boundaries.py
+        run: |
+          python scripts/test-publication-boundaries.py
+          python scripts/test-publication-transaction-completeness.py
 
       - uses: dtolnay/rust-toolchain@master
         with:
