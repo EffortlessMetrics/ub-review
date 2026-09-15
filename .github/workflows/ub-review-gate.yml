@@ -36,6 +36,10 @@ jobs:
         timeout-minutes: 2
         run: python scripts/test-task-projections.py
 
+      - name: Verify publication boundary regressions
+        timeout-minutes: 2
+        run: python scripts/test-publication-boundaries.py
+
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95.0
@@ -97,6 +101,16 @@ jobs:
         timeout-minutes: 2
         run: >
           python scripts/reconcile-task-projections.py target/ub-review
+          --write-report
+
+      # A prepared review is not confirmed GitHub delivery. Keep this
+      # comparison shadow-only until #959/#960 own finalization and outcome.
+      - name: Reconcile publication boundary (shadow)
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 2
+        run: >
+          python scripts/reconcile-publication-boundaries.py target/ub-review
           --write-report
 
       - uses: actions/upload-artifact@v7
