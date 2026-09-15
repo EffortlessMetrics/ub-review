@@ -366,13 +366,19 @@ def terminal_projection(packet: Packet, terminal: Any) -> dict[str, Any] | None:
     }
 
 
-def valid_review(review: Any) -> bool:
-    return (
+def prepared_review_facts(review: Any) -> dict[str, Any] | None:
+    if not (
         isinstance(review, dict)
         and review.get("event") == "COMMENT"
         and isinstance(review.get("body"), str)
         and isinstance(review.get("comments"), list)
-    )
+    ):
+        return None
+    return {
+        "event": "COMMENT",
+        "body_bytes": len(review["body"].encode("utf-8")),
+        "comment_count": len(review["comments"]),
+    }
 
 
 def valid_skip_receipt(skip: Any) -> bool:
@@ -397,6 +403,7 @@ def post_result_state(
     packet: Packet,
     receipt: Any,
     binding: dict[str, str] | None,
+    prepared: dict[str, Any],
 ) -> str:
     path = "review/post-result.json"
     if not isinstance(receipt, dict):
@@ -412,23 +419,46 @@ def post_result_state(
         "review_json_valid",
         "token_present",
         "payload_written",
+        "post_stdout_written",
+        "post_stderr_written",
     ):
         if receipt.get(key) is not True:
             packet.unavailable("post_success_precondition_missing", path, key)
             valid = False
+    expected_metadata = {
+        "review_event": prepared["event"],
+        "review_body_bytes": prepared["body_bytes"],
+        "review_comment_count": prepared["comment_count"],
+        "comments": prepared["comment_count"],
+    }
+    for key, expected in expected_metadata.items():
+        if receipt.get(key) != expected:
+            packet.unavailable("post_success_payload_mismatch", path, key)
+            valid = False
+    pull_number = receipt.get("pull_number")
+    if type(pull_number) is not int or pull_number <= 0:
+        packet.unavailable("invalid_post_pull_number", path)
+        valid = False
     status = receipt.get("http_status")
     if type(status) is not int or not 200 <= status < 300:
         packet.unavailable("post_success_http_status_invalid", path)
         valid = False
-    if receipt.get("post_stdout_written") is True:
+    for artifact, code in (
+        ("review/post-stdout.json", "post_stdout_missing"),
+        ("review/post-stderr.txt", "post_stderr_missing"),
+    ):
         try:
-            stdout_exists = packet.path("review/post-stdout.json").is_file()
+            exists = packet.path(artifact).is_file()
         except OSError:
-            stdout_exists = False
-        if not stdout_exists:
-            packet.unavailable("post_stdout_missing", "review/post-stdout.json")
+            exists = False
+        if not exists:
+            packet.unavailable(code, artifact)
             valid = False
-    commit = response_commit(receipt.get("response"))
+    response = receipt.get("response")
+    if not isinstance(response, dict) or response.get("state") != "COMMENTED":
+        packet.unavailable("invalid_post_response_state", path)
+        valid = False
+    commit = response_commit(response)
     if commit is None:
         packet.observe("post_response_head_unavailable", path)
         valid = False
@@ -496,12 +526,13 @@ def reconcile(root: Path) -> dict[str, Any]:
     delivery_state = "unverifiable"
 
     if review_present and not skip_present:
-        if valid_review(review):
+        prepared = prepared_review_facts(review)
+        if prepared is not None:
             preparation_state = "prepared"
             if terminal is not None and terminal["review_payload_status"] != "prepared":
                 packet.issue("terminal_payload_mismatch", "review/terminal_state.json")
             if result_present and not error_present:
-                delivery_state = post_result_state(packet, result, binding)
+                delivery_state = post_result_state(packet, result, binding, prepared)
             elif error_present and not result_present:
                 delivery_state = post_error_state(packet, error)
             elif not result_present and not error_present:
