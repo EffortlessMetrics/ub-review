@@ -136,6 +136,7 @@ class Packet:
         if name in self.raw:
             data = self.raw[name]
             if required and data is None:
+                self.input_unavailable = True
                 self.issue("missing_publication_artifact", name)
             return data
         if len(self.raw) >= MAX_INPUT_FILES:
@@ -144,6 +145,7 @@ class Packet:
         if not path.exists():
             self.raw[name] = None
             if required:
+                self.input_unavailable = True
                 self.issue("missing_publication_artifact", name)
             return None
         if not path.is_file():
@@ -319,7 +321,11 @@ def reconcile(root: Path) -> dict[str, Any]:
     gate = packet.load("review/gate_outcome.json", required=True)
     publication = gate_projection(packet, gate, binding)
     terminal = packet.load("review/terminal_state.json", required=True)
-    if not isinstance(terminal, dict) or terminal.get("schema") != "ub-review.terminal_state.v1":
+    terminal_valid = (
+        isinstance(terminal, dict)
+        and terminal.get("schema") == "ub-review.terminal_state.v1"
+    )
+    if not terminal_valid:
         packet.input_unavailable = True
         packet.issue("invalid_terminal_state", "review/terminal_state.json")
 
@@ -335,6 +341,8 @@ def reconcile(root: Path) -> dict[str, Any]:
 
     if review_present == skip_present:
         packet.issue("prepared_review_xor_violation", "review")
+        if not review_present:
+            packet.input_unavailable = True
     if result_present and error_present:
         packet.issue("post_receipt_xor_violation", "review")
 
@@ -360,12 +368,26 @@ def reconcile(root: Path) -> dict[str, Any]:
             packet.observe("post_attempt_not_recorded", "review/github-review.json")
     elif skip_present and not review_present:
         preparation_state = "not_needed"
-        if not isinstance(skip, dict) or skip.get("status") not in SKIP_STATUSES:
+        valid_skip = (
+            isinstance(skip, dict)
+            and skip.get("schema_version") == 1
+            and skip.get("status") == "skipped"
+            and skip.get("review_payload_status") in SKIP_STATUSES
+            and skip.get("github_review_json") is None
+        )
+        if not valid_skip:
             packet.input_unavailable = True
             packet.issue("invalid_github_review_skip", "review/github-review-skip.json")
         delivery_state = "not_needed"
-        if result_present or error_present:
-            packet.observe("post_receipt_present_for_skip", "review")
+        if result_present and not error_present:
+            if not (
+                isinstance(result, dict)
+                and result.get("schema_version") == 1
+                and result.get("status") == "skipped"
+            ):
+                packet.issue("invalid_skip_post_result", "review/post-result.json")
+        elif error_present and not result_present:
+            packet.issue("post_error_present_for_skip", "review/post-error.json")
 
     if publication is not None:
         if delivery_state == "confirmed" and publication != "posted":
@@ -377,7 +399,13 @@ def reconcile(root: Path) -> dict[str, Any]:
         elif delivery_state == "not_needed" and publication == "posted":
             packet.issue("skipped_review_projected_posted", "review/gate_outcome.json")
 
-    complete = binding is not None and preparation_state != "unverifiable"
+    complete = (
+        binding is not None
+        and terminal_valid
+        and publication is not None
+        and preparation_state != "unverifiable"
+        and delivery_state != "unverifiable"
+    )
     if packet.input_unavailable:
         status = "unverifiable"
     elif packet.issues or packet.issues_truncated:
