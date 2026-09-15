@@ -82,9 +82,7 @@ pub(super) fn write_terminal_work_queue_artifacts(
             task.id
         );
         for receipt_id in &task.receipt_ids {
-            if let Some(previous_task) =
-                joined_receipts.insert(receipt_id.clone(), task.id.clone())
-            {
+            if let Some(previous_task) = joined_receipts.insert(receipt_id.clone(), task.id.clone()) {
                 anyhow::bail!(
                     "terminal queue proof receipt {receipt_id} joins multiple planned tasks {previous_task} and {}",
                     task.id
@@ -279,7 +277,7 @@ fn terminalize_sensor(
         .and_then(serde_json::Value::as_str)
         .context("sensor receipt has no string status")?;
     anyhow::ensure!(
-        matches!(status, "ok" | "failed" | "timed_out" | "missing"),
+        matches!(status, "ok" | "failed" | "timed_out" | "missing" | "skipped"),
         "sensor receipt has unsupported terminal status {status}"
     );
     let reason = receipt
@@ -307,26 +305,35 @@ fn terminalize_proof(
         .collect::<BTreeSet<_>>();
     let mut matching = receipts
         .iter()
-        .filter(|receipt| {
-            receipt_request_ids
-                .get(&receipt.id)
-                .is_some_and(|receipt_requests| {
+        .filter_map(|receipt| {
+            let request_identity_matches = receipt_request_ids.get(&receipt.id).is_some_and(
+                |receipt_requests| {
                     receipt_requests
                         .iter()
                         .any(|request_id| request_set.contains(request_id.as_str()))
-                })
+                },
+            );
+            let task_identity_matches = receipt.id == task_id;
+            let relation = match (request_identity_matches, task_identity_matches) {
+                (true, true) => "request_and_task_identity",
+                (true, false) => "request_identity",
+                (false, true) => "task_identity",
+                (false, false) => return None,
+            };
+            Some((receipt, relation))
         })
         .collect::<Vec<_>>();
-    matching.sort_by(|left, right| left.id.cmp(&right.id));
+    matching.sort_by(|(left, _), (right, _)| left.id.cmp(&right.id));
     let receipt_ids = matching
         .iter()
-        .map(|receipt| receipt.id.clone())
+        .map(|(receipt, _)| receipt.id.clone())
         .collect::<Vec<_>>();
     if matching.is_empty() {
         let (status, reason) = if plan_status == "planned" {
             (
                 "not_executed".to_owned(),
-                "planned proof task has no terminal receipt joined by request identity".to_owned(),
+                "planned proof task has no terminal receipt joined by request or task identity"
+                    .to_owned(),
             )
         } else {
             (
@@ -338,7 +345,7 @@ fn terminalize_proof(
     }
     let mut results = matching
         .iter()
-        .map(|receipt| terminal_proof_receipt_status(receipt))
+        .map(|(receipt, _)| terminal_proof_receipt_status(receipt))
         .collect::<Result<Vec<_>>>()?;
     results.sort();
     results.dedup();
@@ -349,7 +356,12 @@ fn terminalize_proof(
     };
     let reason = matching
         .iter()
-        .map(|receipt| format!("{}={}", receipt.id, receipt.result))
+        .map(|(receipt, relation)| {
+            format!(
+                "{}={} join={relation}",
+                receipt.id, receipt.result
+            )
+        })
         .collect::<Vec<_>>()
         .join("; ");
     Ok((status, reason, request_ids, receipt_ids))
