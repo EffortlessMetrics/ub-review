@@ -8,11 +8,12 @@ fn quality_backfill_publishes_only_compact_current_output() -> Result<(), String
     let workflow = include_str!("../.github/workflows/quality-backfill.yml");
 
     for expected in [
-        "UB_REVIEW_QUALITY_INPUT_DIR: ${{ runner.temp }}/ub-review-quality-input",
+        "UB_REVIEW_QUALITY_INPUT_DIR: target/ub-review-quality/source",
         "UB_REVIEW_QUALITY_PUBLISH_DIR: target/ub-review-quality-publish",
         "UB_REVIEW_QUALITY_SOURCE_ARTIFACT_MAX_BYTES: 67108864",
         "rm -rf -- \"$UB_REVIEW_QUALITY_INPUT_DIR\"",
         "rm -rf -- \"$UB_REVIEW_QUALITY_PUBLISH_DIR\"",
+        "--pull-numbers-file target/ub-review-quality/source/github/pr-numbers.txt",
         "--out \"$UB_REVIEW_QUALITY_PUBLISH_DIR\"",
         "--github-outcomes \"$UB_REVIEW_QUALITY_INPUT_DIR/github/github-quality-outcomes.json\"",
         "- name: Verify quality backfill publication tree",
@@ -31,9 +32,9 @@ fn quality_backfill_publishes_only_compact_current_output() -> Result<(), String
     }
 
     for forbidden in [
-        "target/ub-review-quality/source",
         "path: target/ub-review-quality\n",
         "--out target/ub-review-quality \\",
+        "path: ${{ env.UB_REVIEW_QUALITY_INPUT_DIR }}",
     ] {
         assert!(
             !workflow.contains(forbidden),
@@ -41,10 +42,7 @@ fn quality_backfill_publishes_only_compact_current_output() -> Result<(), String
         );
     }
 
-    let preflight = required_position(
-        workflow,
-        "- name: Verify quality backfill publication tree",
-    )?;
+    let preflight = required_position(workflow, "- name: Verify quality backfill publication tree")?;
     let upload = required_position(workflow, "- uses: actions/upload-artifact@v7")?;
     assert!(
         preflight < upload,
