@@ -31,25 +31,53 @@ def read_json(root: Path, path: str) -> object:
     return json.loads((root / path).read_bytes())
 
 
-def base_packet(root: Path, *, prepared: bool = False) -> dict[str, str]:
-    digest = "a" * 64
-    reviewed = "b" * 40
-    pr_head = "c" * 40
-    binding = {
+def revision_identity(semantics: str = "merge_result") -> dict[str, str]:
+    base = ("1" * 40, "2" * 40)
+    head = ("3" * 40, "4" * 40)
+    merge = ("5" * 40, "6" * 40)
+    reviewed = head if semantics == "candidate_head" else merge
+    canonical_text = "\n".join(
+        [
+            subject.REVISION_CANONICAL_VERSION,
+            f"semantics={semantics}",
+            f"base={base[0]} {base[1]}",
+            f"head={head[0]} {head[1]}",
+            f"reviewed={reviewed[0]} {reviewed[1]}",
+            "merge=-" if semantics == "candidate_head" else f"merge={merge[0]} {merge[1]}",
+            f"changed_paths={'7' * 64}",
+            f"diff={'8' * 64}",
+        ]
+    ) + "\n"
+    digest = hashlib.sha256(
+        subject.REVISION_DIGEST_DOMAIN + b"\x00" + canonical_text.encode("utf-8")
+    ).hexdigest()
+    return {
+        "canonical": canonical_text,
         "digest": digest,
-        "semantics": "merge_result",
-        "reviewed_commit": reviewed,
-        "pr_head_commit": pr_head,
+        "semantics": semantics,
+        "reviewed_commit": reviewed[0],
+        "pr_head_commit": head[0],
     }
+
+
+def base_packet(
+    root: Path,
+    *,
+    prepared: bool = False,
+    semantics: str = "merge_result",
+) -> dict[str, str]:
+    identity = revision_identity(semantics)
     write_json(
         root,
         "input/revision-admission.json",
         {
-            "schema": "ub-review.revision_admission.v1",
-            "identity_digest": digest,
-            "semantics": "merge_result",
-            "reviewed_commit_oid": reviewed,
-            "pr_head_commit": pr_head,
+            "schema": subject.REVISION_ADMISSION_SCHEMA,
+            "identity_canonical": identity["canonical"],
+            "identity_digest": identity["digest"],
+            "semantics": identity["semantics"],
+            "reviewed_commit_oid": identity["reviewed_commit"],
+            "pr_head_commit": identity["pr_head_commit"],
+            "worktree_dirty": False,
         },
     )
     write_json(
@@ -58,9 +86,9 @@ def base_packet(root: Path, *, prepared: bool = False) -> dict[str, str]:
         {
             "schema": "ub-review.gate_outcome.v1",
             "revision": {
-                "digest": digest,
-                "semantics": "merge_result",
-                "reviewed_commit": reviewed,
+                "digest": identity["digest"],
+                "semantics": identity["semantics"],
+                "reviewed_commit": identity["reviewed_commit"],
             },
             "conclusion": "pass",
             "analysis_result": "clean",
@@ -68,6 +96,7 @@ def base_packet(root: Path, *, prepared: bool = False) -> dict[str, str]:
             "gate_result": "pass",
         },
     )
+    payload_status = "prepared" if prepared else "skipped_artifact_only_body"
     write_json(
         root,
         "review/terminal_state.json",
@@ -75,6 +104,7 @@ def base_packet(root: Path, *, prepared: bool = False) -> dict[str, str]:
             "schema": "ub-review.terminal_state.v1",
             "status": "sufficient",
             "reviewer_value_present": prepared,
+            "review_payload_status": payload_status,
         },
     )
     if prepared:
@@ -91,15 +121,15 @@ def base_packet(root: Path, *, prepared: bool = False) -> dict[str, str]:
                 "schema_version": 1,
                 "status": "skipped",
                 "reason": "artifact-only",
-                "review_payload_status": "skipped_artifact_only_body",
+                "review_payload_status": payload_status,
                 "terminal_state": "sufficient",
                 "github_review_json": None,
             },
         )
-    return binding
+    return identity
 
 
-def post_result(root: Path, binding: dict[str, str], *, commit: str | None = None) -> None:
+def post_result(root: Path, identity: dict[str, str], *, commit: str | None = None) -> None:
     write_json(root, "review/post-stdout.json", {"id": 7})
     write_json(
         root,
@@ -121,10 +151,21 @@ def post_result(root: Path, binding: dict[str, str], *, commit: str | None = Non
             "post_stderr_written": False,
             "response": {
                 "id": 7,
-                "commit_id": commit or binding["pr_head_commit"],
+                "commit_id": commit or identity["pr_head_commit"],
             },
         },
     )
+
+
+def post_error(root: Path, **changes: object) -> None:
+    receipt: dict[str, object] = {
+        "schema_version": 1,
+        "status": "failed",
+        "error_kind": "post_failed",
+        "failure_stage": "network_post",
+    }
+    receipt.update(changes)
+    write_json(root, "review/post-error.json", receipt)
 
 
 class PublicationBoundaries(unittest.TestCase):
@@ -136,8 +177,13 @@ class PublicationBoundaries(unittest.TestCase):
     def report(self) -> dict:
         return subject.reconcile(self.root)
 
-    def codes(self) -> set[str]:
-        return {row["code"] for row in self.report()["issues"]}
+    @staticmethod
+    def codes(report: dict) -> set[str]:
+        return {row["code"] for row in report["issues"]}
+
+    @staticmethod
+    def observations(report: dict) -> set[str]:
+        return {row["code"] for row in report["observations"]}
 
     def test_artifact_only_boundary_is_coherent(self) -> None:
         base_packet(self.root)
@@ -148,106 +194,91 @@ class PublicationBoundaries(unittest.TestCase):
         self.assertEqual(report["gate_publication_result"], "not_needed")
         self.assertEqual(report["authority"], "shadow-only")
 
+    def test_candidate_head_identity_is_coherent(self) -> None:
+        base_packet(self.root, semantics="candidate_head")
+        report = self.report()
+        self.assertEqual(report["status"], "coherent", report["issues"])
+        self.assertEqual(report["revision"]["semantics"], "candidate_head")
+        self.assertEqual(
+            report["revision"]["reviewed_commit"],
+            report["revision"]["pr_head_commit"],
+        )
+
     def test_prepared_payload_is_not_confirmed_delivery(self) -> None:
         base_packet(self.root, prepared=True)
         report = self.report()
         self.assertEqual(report["delivery_state"], "prepared")
-        self.assertIn("prepared_payload_projected_posted", self.codes())
-        self.assertIn(
-            "post_attempt_not_recorded",
-            {row["code"] for row in report["observations"]},
-        )
+        self.assertIn("prepared_payload_projected_posted", self.codes(report))
+        self.assertIn("post_attempt_not_recorded", self.observations(report))
 
     def test_exact_pr_head_post_is_confirmed(self) -> None:
-        binding = base_packet(self.root, prepared=True)
-        post_result(self.root, binding)
+        identity = base_packet(self.root, prepared=True)
+        post_result(self.root, identity)
         report = self.report()
         self.assertEqual(report["status"], "coherent", report["issues"])
         self.assertEqual(report["delivery_state"], "confirmed")
 
     def test_stale_or_wrong_post_head_is_rejected(self) -> None:
-        binding = base_packet(self.root, prepared=True)
-        post_result(self.root, binding, commit="d" * 40)
+        identity = base_packet(self.root, prepared=True)
+        post_result(self.root, identity, commit="9" * 40)
         report = self.report()
         self.assertEqual(report["status"], "contradictory")
-        self.assertIn("post_response_head_mismatch", self.codes())
+        self.assertEqual(report["delivery_state"], "failed")
+        self.assertIn("post_response_head_mismatch", self.codes(report))
 
     def test_post_error_cannot_remain_projected_as_posted(self) -> None:
         base_packet(self.root, prepared=True)
-        write_json(
-            self.root,
-            "review/post-error.json",
-            {
-                "schema_version": 1,
-                "status": "failed",
-                "error_kind": "missing_token",
-                "failure_stage": "preflight",
-            },
-        )
+        post_error(self.root)
         report = self.report()
         self.assertEqual(report["delivery_state"], "failed")
-        self.assertIn("failed_delivery_projected_posted", self.codes())
+        self.assertIn("failed_delivery_projected_posted", self.codes(report))
 
-    def test_review_and_post_receipts_are_xor_surfaces(self) -> None:
-        binding = base_packet(self.root, prepared=True)
-        write_json(
-            self.root,
-            "review/github-review-skip.json",
-            {
-                "schema_version": 1,
-                "status": "skipped",
-                "review_payload_status": "skipped_pass_policy",
-                "github_review_json": None,
-            },
-        )
-        post_result(self.root, binding)
-        write_json(
-            self.root,
-            "review/post-error.json",
-            {
-                "schema_version": 1,
-                "status": "failed",
-                "error_kind": "post_failed",
-                "failure_stage": "network_post",
-            },
-        )
-        codes = self.codes()
-        self.assertIn("prepared_review_xor_violation", codes)
-        self.assertIn("post_receipt_xor_violation", codes)
+    def test_success_without_response_head_is_unverifiable(self) -> None:
+        identity = base_packet(self.root, prepared=True)
+        post_result(self.root, identity)
+        result = read_json(self.root, "review/post-result.json")
+        result["response"].pop("commit_id")
+        write_json(self.root, "review/post-result.json", result)
+        report = self.report()
+        self.assertEqual(report["status"], "contradictory", report["issues"])
+        self.assertEqual(report["delivery_state"], "unverifiable")
+        self.assertIn("unverifiable_delivery_projected_posted", self.codes(report))
+        self.assertIn("post_response_head_unavailable", self.observations(report))
 
-    def test_missing_and_invalid_inputs_fail_closed(self) -> None:
-        base_packet(self.root)
-        (self.root / "review/github-review-skip.json").unlink()
-        self.assertIn("prepared_review_xor_violation", self.codes())
-        write_json(
-            self.root,
-            "review/github-review-skip.json",
-            {
-                "schema_version": 1,
-                "status": "skipped",
-                "review_payload_status": "skipped_artifact_only_body",
-                "github_review_json": None,
-            },
-        )
-        (self.root / "review/gate_outcome.json").write_bytes(
-            b'{"schema":"ub-review.gate_outcome.v1","schema":"other"}'
-        )
+    def test_invalid_success_receipt_never_confirms(self) -> None:
+        identity = base_packet(self.root, prepared=True)
+        post_result(self.root, identity)
+        result = read_json(self.root, "review/post-result.json")
+        result["http_status"] = 500
+        write_json(self.root, "review/post-result.json", result)
         report = self.report()
         self.assertTrue(report["input_unavailable"])
-        self.assertEqual(report["status"], "unverifiable")
-        self.assertIn("invalid_publication_artifact", self.codes())
+        self.assertEqual(report["delivery_state"], "unverifiable")
+        self.assertIn("post_success_http_status_invalid", self.codes(report))
 
-    def test_symlink_input_is_rejected(self) -> None:
+    def test_invalid_error_receipt_is_unverifiable(self) -> None:
+        base_packet(self.root, prepared=True)
+        post_error(self.root, failure_stage="")
+        report = self.report()
+        self.assertTrue(report["input_unavailable"])
+        self.assertEqual(report["delivery_state"], "unverifiable")
+        self.assertIn("invalid_post_failure_stage", self.codes(report))
+
+    def test_malformed_review_is_not_prepared(self) -> None:
+        base_packet(self.root, prepared=True)
+        write_json(self.root, "review/github-review.json", {"body": 7, "comments": []})
+        report = self.report()
+        self.assertEqual(report["preparation_state"], "unverifiable")
+        self.assertEqual(report["delivery_state"], "unverifiable")
+        self.assertIn("invalid_github_review", self.codes(report))
+
+    def test_malformed_skip_is_not_not_needed(self) -> None:
         base_packet(self.root)
-        target = self.root / "review/github-review-skip.json"
-        target.unlink()
-        target.symlink_to(self.root / "review/gate_outcome.json")
-        completed = subprocess.run(
-            [sys.executable, str(HERE / "reconcile-publication-boundaries.py"), str(self.root)],
-            capture_output=True,
-            timeout=10,
-        )
-        self.assertEqual(completed.returncode, 2)
+        write_json(self.root, "review/github-review-skip.json", {})
+        report = self.report()
+        self.assertEqual(report["preparation_state"], "unverifiable")
+        self.assertEqual(report["delivery_state"], "unverifiable")
+        self.assertIn("invalid_github_review_skip", self.codes(report))
 
     def test_skip_post_result_is_accepted(self) -> None:
         base_packet(self.root)
@@ -260,19 +291,94 @@ class PublicationBoundaries(unittest.TestCase):
         self.assertEqual(report["status"], "coherent", report["issues"])
         self.assertEqual(report["delivery_state"], "not_needed")
 
-    def test_success_without_response_head_is_unverifiable(self) -> None:
-        binding = base_packet(self.root, prepared=True)
-        post_result(self.root, binding)
-        result = read_json(self.root, "review/post-result.json")
-        result["response"].pop("commit_id")
-        write_json(self.root, "review/post-result.json", result)
+    def test_skip_post_error_is_failed_and_contradictory(self) -> None:
+        base_packet(self.root)
+        post_error(self.root)
         report = self.report()
-        self.assertEqual(report["status"], "unverifiable", report["issues"])
-        self.assertEqual(report["delivery_state"], "unverifiable")
-        self.assertIn(
-            "post_response_head_unavailable",
-            {row["code"] for row in report["observations"]},
+        self.assertEqual(report["status"], "contradictory")
+        self.assertEqual(report["delivery_state"], "failed")
+        self.assertIn("post_error_present_for_skip", self.codes(report))
+
+    def test_terminal_payload_must_match_prepared_surface(self) -> None:
+        base_packet(self.root, prepared=True)
+        terminal = read_json(self.root, "review/terminal_state.json")
+        terminal["review_payload_status"] = "skipped_pass_policy"
+        write_json(self.root, "review/terminal_state.json", terminal)
+        report = self.report()
+        self.assertEqual(report["status"], "contradictory")
+        self.assertIn("terminal_payload_mismatch", self.codes(report))
+
+    def test_terminal_payload_and_status_must_match_skip(self) -> None:
+        base_packet(self.root)
+        terminal = read_json(self.root, "review/terminal_state.json")
+        terminal["review_payload_status"] = "skipped_pass_policy"
+        terminal["status"] = "artifact-only"
+        write_json(self.root, "review/terminal_state.json", terminal)
+        report = self.report()
+        self.assertIn("terminal_payload_mismatch", self.codes(report))
+        self.assertIn("terminal_status_mismatch", self.codes(report))
+
+    def test_forged_revision_digest_is_rejected(self) -> None:
+        base_packet(self.root)
+        admission = read_json(self.root, "input/revision-admission.json")
+        admission["identity_digest"] = "a" * 64
+        write_json(self.root, "input/revision-admission.json", admission)
+        report = self.report()
+        self.assertTrue(report["input_unavailable"])
+        self.assertIsNone(report["revision"])
+        self.assertIn("revision_digest_mismatch", self.codes(report))
+
+    def test_exposed_revision_fields_must_match_canonical(self) -> None:
+        base_packet(self.root)
+        admission = read_json(self.root, "input/revision-admission.json")
+        admission["semantics"] = "candidate_head"
+        admission["reviewed_commit_oid"] = "9" * 40
+        admission["pr_head_commit"] = "a" * 40
+        write_json(self.root, "input/revision-admission.json", admission)
+        report = self.report()
+        codes = self.codes(report)
+        self.assertIn("revision_semantics_mismatch", codes)
+        self.assertIn("reviewed_commit_mismatch", codes)
+        self.assertIn("pr_head_commit_mismatch", codes)
+
+    def test_non_normalized_canonical_identity_is_rejected(self) -> None:
+        base_packet(self.root)
+        admission = read_json(self.root, "input/revision-admission.json")
+        admission["identity_canonical"] = admission["identity_canonical"].replace("\n", "\r\n")
+        write_json(self.root, "input/revision-admission.json", admission)
+        report = self.report()
+        self.assertIn("invalid_revision_canonical", self.codes(report))
+
+    def test_review_and_post_receipts_are_xor_surfaces(self) -> None:
+        identity = base_packet(self.root, prepared=True)
+        write_json(
+            self.root,
+            "review/github-review-skip.json",
+            {
+                "schema_version": 1,
+                "status": "skipped",
+                "review_payload_status": "skipped_pass_policy",
+                "terminal_state": "sufficient",
+                "github_review_json": None,
+            },
         )
+        post_result(self.root, identity)
+        post_error(self.root)
+        report = self.report()
+        codes = self.codes(report)
+        self.assertIn("prepared_review_xor_violation", codes)
+        self.assertIn("post_receipt_xor_violation", codes)
+        self.assertEqual(report["preparation_state"], "unverifiable")
+
+    def test_duplicate_json_keys_fail_closed(self) -> None:
+        base_packet(self.root)
+        (self.root / "review/gate_outcome.json").write_bytes(
+            b'{"schema":"ub-review.gate_outcome.v1","schema":"other"}'
+        )
+        report = self.report()
+        self.assertTrue(report["input_unavailable"])
+        self.assertEqual(report["status"], "unverifiable")
+        self.assertIn("invalid_publication_artifact", self.codes(report))
 
     def test_missing_required_input_is_unverifiable(self) -> None:
         base_packet(self.root)
@@ -280,7 +386,19 @@ class PublicationBoundaries(unittest.TestCase):
         report = self.report()
         self.assertTrue(report["input_unavailable"])
         self.assertEqual(report["status"], "unverifiable")
-        self.assertIn("missing_publication_artifact", self.codes())
+        self.assertIn("missing_publication_artifact", self.codes(report))
+
+    def test_symlink_input_is_rejected(self) -> None:
+        base_packet(self.root)
+        target = self.root / "review/github-review-skip.json"
+        target.unlink()
+        target.symlink_to(self.root / "review/gate_outcome.json")
+        completed = subprocess.run(
+            [sys.executable, str(HERE / "reconcile-publication-boundaries.py"), str(self.root)],
+            capture_output=True,
+            timeout=10,
+        )
+        self.assertEqual(completed.returncode, 2)
 
     def test_report_is_deterministic_bounded_and_atomic(self) -> None:
         base_packet(self.root)
