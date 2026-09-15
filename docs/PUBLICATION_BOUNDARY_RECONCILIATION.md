@@ -45,6 +45,11 @@ Preparation:
 - `unverifiable`: the preparation surface is missing, malformed, or
   contradictory.
 
+A current skip receipt has `schema_version = 1`, `status = skipped`, one known
+`review_payload_status`, and `github_review_json = null`. When `cmd_post`
+consumes that skip, an optional `post-result.json` with `status = skipped`
+remains consistent with `not_needed`; it does not prove a public delivery.
+
 Delivery:
 
 - `confirmed`: a successful post receipt identifies the admitted pull-request
@@ -55,7 +60,8 @@ Delivery:
 - `unverifiable`: available receipts cannot establish a delivery result.
 
 A successful response is compared to `pr_head_commit`, not the synthetic merge
-object stored as `reviewed_commit` under `merge_result` semantics.
+object stored as `reviewed_commit` under `merge_result` semantics. HTTP success
+without a usable response head remains `unverifiable`.
 
 ## Stable contradiction classes
 
