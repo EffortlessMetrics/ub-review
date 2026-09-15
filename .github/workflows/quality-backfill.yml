@@ -21,11 +21,11 @@ jobs:
     name: Quality telemetry backfill
     runs-on: ubuntu-latest
     # Source packets are inspected only when their compressed artifact is
-    # bounded. Downloaded inputs live under runner.temp and are never uploaded.
+    # bounded. Downloaded inputs live outside the publication tree.
     timeout-minutes: 45
     env:
       UB_REVIEW_QUALITY_WINDOW_DAYS: 30
-      UB_REVIEW_QUALITY_INPUT_DIR: ${{ runner.temp }}/ub-review-quality-input
+      UB_REVIEW_QUALITY_INPUT_DIR: target/ub-review-quality/source
       UB_REVIEW_QUALITY_PUBLISH_DIR: target/ub-review-quality-publish
       UB_REVIEW_QUALITY_SOURCE_ARTIFACT_MAX_BYTES: 67108864
       UB_REVIEW_QUALITY_MAX_FILES: 512
@@ -76,7 +76,7 @@ jobs:
           target/debug/ub-review quality-github-collect \
             --repo "$GH_REPO" \
             --source-dir "$UB_REVIEW_QUALITY_INPUT_DIR/github" \
-            --pull-numbers-file "$UB_REVIEW_QUALITY_INPUT_DIR/github/pr-numbers.txt"
+            --pull-numbers-file target/ub-review-quality/source/github/pr-numbers.txt
           target/debug/ub-review quality-github-outcomes \
             --source-dir "$UB_REVIEW_QUALITY_INPUT_DIR/github" \
             --out "$UB_REVIEW_QUALITY_INPUT_DIR/github/github-quality-outcomes.json"
