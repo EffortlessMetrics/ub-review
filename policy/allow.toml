@@ -123,7 +123,7 @@ glob = "action.yml"
 category = "platform-required-action-metadata"
 language = "yaml"
 owner = "release/ci"
-reason = "The repo's own gate policy lives at the root .ub-review.toml, the same path consumer repos use, so the dogfood contract is explicit and copyable."
+reason = "GitHub composite/action metadata must be YAML for consumers of this action."
 created = "2026-06-03"
 review_after = "2026-09-03"
 
