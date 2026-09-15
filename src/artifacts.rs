@@ -91,5 +91,7 @@ pub(crate) const TOOL_STATUS_SCHEMA: &str = "ub-review.tool_status.v1";
 pub(crate) const WITNESS_REGISTRY_SCHEMA: &str = "ub-review.witness_registry.v1";
 pub(crate) const WITNESS_SCHEMA: &str = "ub-review.witness.v1";
 pub(crate) const WORK_EVENT_SCHEMA: &str = "ub-review.work_event.v1";
+pub(crate) const WORK_EVENT_TERMINAL_SCHEMA: &str = "ub-review.work_event_terminal.v1";
 pub(crate) const WORK_QUEUE_SCHEMA: &str = "ub-review.work_queue.v1";
 pub(crate) const WORK_QUEUE_TASK_SCHEMA: &str = "ub-review.work_queue_task.v1";
+pub(crate) const WORK_QUEUE_TERMINAL_SCHEMA: &str = "ub-review.work_queue_terminal.v1";
