@@ -131,7 +131,7 @@ jobs:
               --dir "$UB_REVIEW_QUALITY_INPUT_DIR/runs/$run_id" || true
           done < "$UB_REVIEW_QUALITY_INPUT_DIR/run-ids.txt"
 
-      - name: Download bounded previous quality backfill
+      - name: Download previous quality backfill (bounded)
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
