@@ -1,3 +1,4 @@
+/// Find a required workflow marker so ordering assertions fail with context.
 fn required_position(text: &str, needle: &str) -> Result<usize, String> {
     text.find(needle)
         .ok_or_else(|| format!("workflow contract is missing `{needle}`"))
@@ -6,6 +7,8 @@ fn required_position(text: &str, needle: &str) -> Result<usize, String> {
 #[test]
 fn quality_backfill_publishes_only_compact_current_output() -> Result<(), String> {
     let workflow = include_str!("../.github/workflows/quality-backfill.yml");
+    let pinned_upload =
+        "- uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7";
 
     for expected in [
         "UB_REVIEW_QUALITY_INPUT_DIR: target/ub-review-quality/source",
@@ -25,6 +28,7 @@ fn quality_backfill_publishes_only_compact_current_output() -> Result<(), String
         "UB_REVIEW_QUALITY_MAX_TOTAL_BYTES",
         "if: steps.publish_preflight.outcome == 'success'",
         "path: ${{ env.UB_REVIEW_QUALITY_PUBLISH_DIR }}",
+        pinned_upload,
     ] {
         assert!(
             workflow.contains(expected),
@@ -36,16 +40,17 @@ fn quality_backfill_publishes_only_compact_current_output() -> Result<(), String
         "path: target/ub-review-quality\n",
         "--out target/ub-review-quality \\",
         "path: ${{ env.UB_REVIEW_QUALITY_INPUT_DIR }}",
+        "- uses: actions/upload-artifact@v7",
     ] {
         assert!(
             !workflow.contains(forbidden),
-            "quality backfill workflow restored shared source/publish path `{forbidden}`"
+            "quality backfill workflow restored shared or mutable publication contract `{forbidden}`"
         );
     }
 
     let preflight =
         required_position(workflow, "- name: Verify quality backfill publication tree")?;
-    let upload = required_position(workflow, "- uses: actions/upload-artifact@v7")?;
+    let upload = required_position(workflow, pinned_upload)?;
     assert!(
         preflight < upload,
         "publication preflight must run before artifact upload"
