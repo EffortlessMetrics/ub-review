@@ -82,18 +82,27 @@ positive calibration recommendation does not complete them.
 
 ### Posting posture (`summary_only_body`)
 
-Posting is independent of deterministic evidence sufficiency:
+Posting is independent of deterministic evidence sufficiency. This setting
+controls whether the compiler may retain a summary-only body after a
+suppressible body-policy rejection; it is not a global posting switch:
 
-| Setting | Configured public-output intent |
+| Setting | Summary-body policy |
 | --- | --- |
-| `suppress` | Keep model findings in artifacts; do not rely on posted-review metrics. |
-| `post_substantive` | Prepare a grouped review for substantive findings; suppress lane-status boilerplate. |
-| `post_all` | Broader classified output; requires deliberate calibration and review. |
+| `suppress` | Do not waive suppressible body-policy rejections. Independently valid review prose and inline findings are not globally disabled. |
+| `post_substantive` | Permit the summary-only waiver when substantive findings qualify; all non-waivable validation still applies. |
+| `post_all` | Permit the summary-only waiver for classified findings; all non-waivable validation still applies. |
+
+Internal machinery prose is withheld regardless of the waiver. As implemented
+in [the review compiler](../src/review_compiler.rs), a suppressed body does not
+discard independently validated inline findings. Use `posting: artifact-only`
+to prevent GitHub delivery; do not rely on `summary_only_body = "suppress"`
+for that boundary.
 
 The chosen tool version, `posting` input, terminal-state policy, and actual
 GitHub delivery receipts still govern the observed result. None of these values
-proves a payload was delivered. With artifact-only or suppression, zero acted-on
-comments is expected and is not a measurement of reviewer usefulness.
+proves a payload was delivered. An artifact-only run cannot establish
+posted-review usefulness. For a model-on posting run, measure acted-on findings
+from confirmed delivery and human disposition, not from the summary policy.
 
 ## Staged promotion checklist
 
