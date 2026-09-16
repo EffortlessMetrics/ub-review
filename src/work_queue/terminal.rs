@@ -372,13 +372,14 @@ fn terminalize_proof(
     let mut matching = receipts
         .iter()
         .filter_map(|receipt| {
-            let request_identity_matches = receipt_request_ids
-                .get(&receipt.id)
-                .is_some_and(|receipt_requests| {
-                    receipt_requests
-                        .iter()
-                        .any(|request_id| request_set.contains(request_id.as_str()))
-                });
+            let request_identity_matches =
+                receipt_request_ids
+                    .get(&receipt.id)
+                    .is_some_and(|receipt_requests| {
+                        receipt_requests
+                            .iter()
+                            .any(|request_id| request_set.contains(request_id.as_str()))
+                    });
             let task_identity_matches = receipt.id == task_id;
             let relation = match (request_identity_matches, task_identity_matches) {
                 (true, true) => "request_and_task_identity",
