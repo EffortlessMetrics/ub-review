@@ -280,6 +280,37 @@ fn terminal_projection_removes_stale_outputs_before_invalid_plan_fails() -> Resu
 }
 
 #[test]
+fn proof_receipt_writer_invalidates_commit_marker_before_replacing_receipts() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let out = temp.path();
+    write_plan(out, vec![proof_plan_task("proof-task-a")])?;
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir)?;
+    let prior_json = b"prior proof receipt json";
+    let prior_ndjson = b"prior proof receipt ndjson\n";
+    fs::write(review_dir.join("proof_receipts.json"), prior_json)?;
+    fs::write(out.join("proof_receipts.ndjson"), prior_ndjson)?;
+    fs::create_dir(out.join(TERMINAL_QUEUE_FILE))?;
+    let receipts = vec![proof_receipt(
+        "proof-receipt-a",
+        &["req-a"],
+        &["tests-oracle"],
+    )];
+
+    let error = write_proof_receipt_artifacts(out, &receipts, None)
+        .err()
+        .context("receipt publication unexpectedly ignored an unremovable commit marker")?;
+    assert!(
+        format!("{error:#}").contains("remove stale terminal queue commit marker"),
+        "unexpected error: {error:#}"
+    );
+    assert_eq!(fs::read(review_dir.join("proof_receipts.json"))?, prior_json);
+    assert_eq!(fs::read(out.join("proof_receipts.ndjson"))?, prior_ndjson);
+    assert!(out.join(TERMINAL_QUEUE_FILE).is_dir());
+    Ok(())
+}
+
+#[test]
 fn terminal_projection_rejects_one_receipt_joined_to_multiple_plan_tasks() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let out = temp.path();
