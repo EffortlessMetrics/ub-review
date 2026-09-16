@@ -89,7 +89,8 @@ pub(super) fn write_terminal_work_queue_artifacts(
             task.id
         );
         for receipt_id in &task.receipt_ids {
-            if let Some(previous_task) = joined_receipts.insert(receipt_id.clone(), task.id.clone()) {
+            if let Some(previous_task) = joined_receipts.insert(receipt_id.clone(), task.id.clone())
+            {
                 anyhow::bail!(
                     "terminal queue proof receipt {receipt_id} joins multiple planned tasks {previous_task} and {}",
                     task.id
@@ -171,8 +172,9 @@ fn remove_terminal_work_queue_artifacts(out: &Path) -> Result<()> {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => {
-                return Err(error)
-                    .with_context(|| format!("remove stale terminal queue artifact {}", path.display()));
+                return Err(error).with_context(|| {
+                    format!("remove stale terminal queue artifact {}", path.display())
+                });
             }
         }
     }
@@ -200,12 +202,8 @@ fn publish_terminal_work_queue_artifacts(
     if let Err(error) = fs::rename(&events_tmp, &events_path) {
         let _ = fs::remove_file(&queue_tmp);
         let _ = fs::remove_file(&events_tmp);
-        return Err(error).with_context(|| {
-            format!(
-                "publish terminal event artifact {}",
-                events_path.display()
-            )
-        });
+        return Err(error)
+            .with_context(|| format!("publish terminal event artifact {}", events_path.display()));
     }
     if let Err(error) = fs::rename(&queue_tmp, &queue_path) {
         let _ = fs::remove_file(&queue_tmp);
@@ -256,8 +254,7 @@ fn terminalize_planned_task(
         .as_object()
         .context("terminal queue plan task is not an object")?;
     anyhow::ensure!(
-        object.get("schema").and_then(serde_json::Value::as_str)
-            == Some(WORK_QUEUE_TASK_SCHEMA),
+        object.get("schema").and_then(serde_json::Value::as_str) == Some(WORK_QUEUE_TASK_SCHEMA),
         "terminal queue plan task has unsupported schema"
     );
     let id = string_field(object, "id")?;
@@ -375,13 +372,13 @@ fn terminalize_proof(
     let mut matching = receipts
         .iter()
         .filter_map(|receipt| {
-            let request_identity_matches = receipt_request_ids.get(&receipt.id).is_some_and(
-                |receipt_requests| {
+            let request_identity_matches = receipt_request_ids
+                .get(&receipt.id)
+                .is_some_and(|receipt_requests| {
                     receipt_requests
                         .iter()
                         .any(|request_id| request_set.contains(request_id.as_str()))
-                },
-            );
+                });
             let task_identity_matches = receipt.id == task_id;
             let relation = match (request_identity_matches, task_identity_matches) {
                 (true, true) => "request_and_task_identity",
@@ -425,12 +422,7 @@ fn terminalize_proof(
     };
     let reason = matching
         .iter()
-        .map(|(receipt, relation)| {
-            format!(
-                "{}={} join={relation}",
-                receipt.id, receipt.result
-            )
-        })
+        .map(|(receipt, relation)| format!("{}={} join={relation}", receipt.id, receipt.result))
         .collect::<Vec<_>>()
         .join("; ");
     Ok((status, reason, request_ids, receipt_ids))
@@ -461,7 +453,9 @@ fn load_proof_task_request_ids(out: &Path) -> Result<BTreeMap<String, Vec<String
         }
         let task: serde_json::Value = serde_json::from_str(line)
             .with_context(|| format!("parse proof_tasks.ndjson line {}", index + 1))?;
-        let object = task.as_object().context("proof task row is not an object")?;
+        let object = task
+            .as_object()
+            .context("proof task row is not an object")?;
         let id = string_field(object, "id")?;
         let request_ids = string_list_field(object, "request_ids")?;
         anyhow::ensure!(
