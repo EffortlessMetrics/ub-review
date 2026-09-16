@@ -246,10 +246,7 @@ fn terminal_projection_distinguishes_unexecuted_and_multiple_receipts() -> Resul
         by_id["proof-unexecuted"]["receipt_ids"],
         serde_json::json!([])
     );
-    assert_eq!(
-        by_id["proof-multi"]["status"],
-        "multiple_terminal_receipts"
-    );
+    assert_eq!(by_id["proof-multi"]["status"], "multiple_terminal_receipts");
     assert_eq!(
         by_id["proof-multi"]["receipt_ids"],
         serde_json::json!(["proof-fail", "proof-pass"])
@@ -267,4 +264,3 @@ fn terminal_projection_distinguishes_unexecuted_and_multiple_receipts() -> Resul
     );
     Ok(())
 }
-
