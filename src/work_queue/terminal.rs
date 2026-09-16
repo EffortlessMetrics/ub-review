@@ -2,6 +2,11 @@
 
 use crate::*;
 
+const TERMINAL_QUEUE_FILE: &str = "work_queue_terminal.json";
+const TERMINAL_EVENTS_FILE: &str = "work_events_terminal.ndjson";
+const TERMINAL_QUEUE_TMP_FILE: &str = ".work_queue_terminal.json.tmp";
+const TERMINAL_EVENTS_TMP_FILE: &str = ".work_events_terminal.ndjson.tmp";
+
 #[derive(Debug, Serialize)]
 struct TerminalQueue {
     schema: &'static str,
@@ -47,6 +52,8 @@ pub(super) fn write_terminal_work_queue_artifacts(
     out: &Path,
     proof_receipts: &[ProofReceipt],
 ) -> Result<()> {
+    remove_terminal_work_queue_artifacts(out)?;
+
     let plan_path = out.join("work_queue_plan.json");
     let plan_bytes = fs::read(&plan_path)
         .with_context(|| format!("read terminal queue plan {}", plan_path.display()))?;
@@ -131,10 +138,7 @@ pub(super) fn write_terminal_work_queue_artifacts(
         source_receipts: source_receipts.into_iter().collect(),
         tasks,
     };
-    fs::write(
-        out.join("work_queue_terminal.json"),
-        serde_json::to_vec_pretty(&artifact)?,
-    )?;
+    let queue_bytes = serde_json::to_vec_pretty(&artifact)?;
 
     let mut events = String::new();
     for task in &artifact.tasks {
@@ -151,7 +155,64 @@ pub(super) fn write_terminal_work_queue_artifacts(
         })?);
         events.push('\n');
     }
-    fs::write(out.join("work_events_terminal.ndjson"), events)?;
+
+    publish_terminal_work_queue_artifacts(out, &queue_bytes, events.as_bytes())
+}
+
+fn remove_terminal_work_queue_artifacts(out: &Path) -> Result<()> {
+    for name in [
+        TERMINAL_QUEUE_FILE,
+        TERMINAL_EVENTS_FILE,
+        TERMINAL_QUEUE_TMP_FILE,
+        TERMINAL_EVENTS_TMP_FILE,
+    ] {
+        let path = out.join(name);
+        match fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("remove stale terminal queue artifact {}", path.display()));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn publish_terminal_work_queue_artifacts(
+    out: &Path,
+    queue_bytes: &[u8],
+    event_bytes: &[u8],
+) -> Result<()> {
+    let queue_path = out.join(TERMINAL_QUEUE_FILE);
+    let events_path = out.join(TERMINAL_EVENTS_FILE);
+    let queue_tmp = out.join(TERMINAL_QUEUE_TMP_FILE);
+    let events_tmp = out.join(TERMINAL_EVENTS_TMP_FILE);
+
+    fs::write(&queue_tmp, queue_bytes)
+        .with_context(|| format!("stage terminal queue artifact {}", queue_tmp.display()))?;
+    if let Err(error) = fs::write(&events_tmp, event_bytes) {
+        let _ = fs::remove_file(&queue_tmp);
+        let _ = fs::remove_file(&events_tmp);
+        return Err(error)
+            .with_context(|| format!("stage terminal event artifact {}", events_tmp.display()));
+    }
+    if let Err(error) = fs::rename(&events_tmp, &events_path) {
+        let _ = fs::remove_file(&queue_tmp);
+        let _ = fs::remove_file(&events_tmp);
+        return Err(error).with_context(|| {
+            format!(
+                "publish terminal event artifact {}",
+                events_path.display()
+            )
+        });
+    }
+    if let Err(error) = fs::rename(&queue_tmp, &queue_path) {
+        let _ = fs::remove_file(&queue_tmp);
+        let _ = fs::remove_file(&events_path);
+        return Err(error)
+            .with_context(|| format!("publish terminal queue artifact {}", queue_path.display()));
+    }
     Ok(())
 }
 
@@ -194,6 +255,11 @@ fn terminalize_planned_task(
     let object = plan_task
         .as_object()
         .context("terminal queue plan task is not an object")?;
+    anyhow::ensure!(
+        object.get("schema").and_then(serde_json::Value::as_str)
+            == Some(WORK_QUEUE_TASK_SCHEMA),
+        "terminal queue plan task has unsupported schema"
+    );
     let id = string_field(object, "id")?;
     let kind = string_field(object, "kind")?;
     let source = string_field(object, "source")?;
@@ -277,7 +343,10 @@ fn terminalize_sensor(
         .and_then(serde_json::Value::as_str)
         .context("sensor receipt has no string status")?;
     anyhow::ensure!(
-        matches!(status, "ok" | "failed" | "timed_out" | "missing" | "skipped"),
+        matches!(
+            status,
+            "ok" | "failed" | "timed_out" | "missing" | "skipped"
+        ),
         "sensor receipt has unsupported terminal status {status}"
     );
     let reason = receipt
