@@ -185,9 +185,11 @@ fn terminal_projection_preserves_plan_and_accounts_for_receipts() -> Result<()> 
         by_id["proof-task-a"]["receipt_ids"],
         serde_json::json!(["proof-receipt-a"])
     );
-    assert!(by_id["proof-task-a"]["reason"]
-        .as_str()
-        .is_some_and(|reason| reason.contains("join=request_identity")));
+    assert!(
+        by_id["proof-task-a"]["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("join=request_identity"))
+    );
     assert!(by_id["impact-receipt"]["plan_status"].is_null());
     assert_eq!(receipt_reference_count(rows, "proof-receipt-a"), 1);
     assert_eq!(receipt_reference_count(rows, "impact-receipt"), 1);
@@ -227,9 +229,11 @@ fn terminal_projection_joins_current_receipt_by_exact_task_identity() -> Result<
         rows[0]["receipt_ids"],
         serde_json::json!(["proof-receipt-a"])
     );
-    assert!(rows[0]["reason"]
-        .as_str()
-        .is_some_and(|reason| reason.contains("join=task_identity")));
+    assert!(
+        rows[0]["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("join=task_identity"))
+    );
     assert_eq!(receipt_reference_count(rows, "proof-receipt-a"), 1);
     Ok(())
 }
@@ -288,10 +292,7 @@ fn terminal_projection_rejects_one_receipt_joined_to_multiple_plan_tasks() -> Re
     )?;
     write_proof_tasks(
         out,
-        &[
-            ("proof-task-a", &["req-a"]),
-            ("proof-task-b", &["req-a"]),
-        ],
+        &[("proof-task-a", &["req-a"]), ("proof-task-b", &["req-a"])],
     )?;
     let receipts = vec![proof_receipt(
         "proof-receipt-a",
