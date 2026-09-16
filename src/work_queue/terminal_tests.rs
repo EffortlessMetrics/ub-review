@@ -14,3 +14,6 @@ mod validation;
 
 #[path = "terminal_contract_tests.rs"]
 mod contracts;
+
+#[path = "terminal_status_tests.rs"]
+mod statuses;
