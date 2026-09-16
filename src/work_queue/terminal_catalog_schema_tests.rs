@@ -29,7 +29,11 @@ fn unsupported_catalog_schema_cannot_authorize_a_terminal_receipt_join() -> Resu
             )?;
             let receipts = match join {
                 "request" => vec![proof_receipt("proof-receipt-a", &["req-a"], &["tests"])],
-                "task" => vec![proof_receipt("proof-task-a", &["other-request"], &["tests"])],
+                "task" => vec![proof_receipt(
+                    "proof-task-a",
+                    &["other-request"],
+                    &["tests"],
+                )],
                 _ => Vec::new(),
             };
             write_terminal_work_queue_artifacts(out, &receipts)?;

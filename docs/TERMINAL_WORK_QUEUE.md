@@ -43,6 +43,15 @@ not joined to any planner task. An unsupported schema or planner kind,
 duplicate task or receipt identity, empty identity, or ambiguous join aborts
 projection rather than silently changing the queue.
 
+Every present row in `proof_tasks.ndjson` must use `ub-review.proof_task.v1`
+before its request identities can participate in a receipt join. Missing,
+non-string, foreign, padded, or future schema values reject the entire terminal
+projection, including when an otherwise successful receipt has the exact task
+identity. The diagnostic identifies the physical catalog line. A wholly absent
+catalog retains the existing missing-evidence and exact task-identity
+compatibility behavior; this guard does not infer missing request identities or
+change Required satisfaction. Rejection leaves no committed terminal generation.
+
 Sensor tasks retain their plan status separately and project the terminal
 status receipt as one of:
 
