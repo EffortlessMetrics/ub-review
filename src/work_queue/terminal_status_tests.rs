@@ -83,3 +83,108 @@ fn supported_broker_result_vocabulary_is_preserved_without_promoting_success() -
     }
     Ok(())
 }
+
+#[test]
+fn unsupported_planner_status_cannot_become_terminal_truth() -> Result<()> {
+    for kind in ["sensor", "focused-test", "focused-build"] {
+        for plan_status in [
+            "queued",
+            "running",
+            "future_status",
+            "head_passed",
+            " planned ",
+        ] {
+            for has_receipt in [false, true] {
+                let temp = tempfile::tempdir()?;
+                let out = temp.path();
+                let mut task = if kind == "sensor" {
+                    sensor_task("alpha", "planned")
+                } else {
+                    proof_plan_task("proof-task-a")
+                };
+                task["kind"] = serde_json::json!(kind);
+                write_plan(out, vec![task.clone()])?;
+                write_proof_tasks(out, &[("proof-task-a", &["req-a"])])?;
+                let receipts = if has_receipt && kind != "sensor" {
+                    vec![proof_receipt("proof-task-a", &["req-a"], &["tests-oracle"])]
+                } else {
+                    Vec::new()
+                };
+                if has_receipt && kind == "sensor" {
+                    write_sensor_receipt(out, "alpha", "ok")?;
+                }
+                write_proof_receipt_artifacts(out, &receipts, None)?;
+                assert!(out.join(TERMINAL_QUEUE_FILE).is_file());
+                fs::write(out.join(TERMINAL_QUEUE_TMP_FILE), b"stale queue staging")?;
+                fs::write(out.join(TERMINAL_EVENTS_TMP_FILE), b"stale event staging")?;
+
+                task["status"] = serde_json::json!(plan_status);
+                write_plan(out, vec![task])?;
+                let error = write_proof_receipt_artifacts(out, &receipts, None)
+                    .err()
+                    .context("unsupported planner status was published as terminal truth")?;
+                let task_id = if kind == "sensor" {
+                    "sensor-alpha"
+                } else {
+                    "proof-task-a"
+                };
+                assert_eq!(
+                    error.to_string(),
+                    format!(
+                        "terminal queue {kind} task {task_id} has unsupported plan status {plan_status}"
+                    )
+                );
+                for name in [
+                    TERMINAL_QUEUE_FILE,
+                    TERMINAL_EVENTS_FILE,
+                    TERMINAL_QUEUE_TMP_FILE,
+                    TERMINAL_EVENTS_TMP_FILE,
+                ] {
+                    assert!(!out.join(name).exists(), "invalid plan retained {name}");
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn producer_plan_statuses_preserve_nonexecution_without_receipts() -> Result<()> {
+    for (kind, plan_status, terminal_status) in [
+        ("sensor", "planned", "missing_receipt"),
+        ("sensor", "skipped", "skipped"),
+        ("focused-test", "planned", "not_executed"),
+        ("focused-build", "planned", "not_executed"),
+        ("focused-test", "deferred_by_budget", "deferred_by_budget"),
+        ("focused-build", "deferred_by_budget", "deferred_by_budget"),
+    ] {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        let mut task = if kind == "sensor" {
+            sensor_task("alpha", plan_status)
+        } else {
+            proof_plan_task("proof-task-a")
+        };
+        task["kind"] = serde_json::json!(kind);
+        task["status"] = serde_json::json!(plan_status);
+        write_plan(out, vec![task.clone()])?;
+        write_proof_receipt_artifacts(out, &[], None)?;
+        let terminal: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join(TERMINAL_QUEUE_FILE))?)?;
+        let rows = terminal["tasks"]
+            .as_array()
+            .context("terminal tasks missing")?;
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["kind"], kind);
+        assert_eq!(rows[0]["plan_status"], plan_status);
+        assert_eq!(rows[0]["status"], terminal_status);
+        assert_eq!(rows[0]["plan_task"], task);
+        assert_eq!(rows[0]["receipt_ids"], serde_json::json!([]));
+        assert_eq!(terminal["source_receipts"], serde_json::json!([]));
+        let event_text = fs::read_to_string(out.join(TERMINAL_EVENTS_FILE))?;
+        let event: serde_json::Value = serde_json::from_str(event_text.trim())?;
+        assert_eq!(event["status"], terminal_status);
+        assert_eq!(event["task_id"], rows[0]["id"]);
+    }
+    Ok(())
+}

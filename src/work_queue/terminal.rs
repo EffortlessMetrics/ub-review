@@ -267,6 +267,17 @@ fn terminalize_planned_task(
     let kind = string_field(object, "kind")?;
     let source = string_field(object, "source")?;
     let plan_status = string_field(object, "status")?;
+    // Admit only states emitted by the sensor and focused-proof planners.
+    // A receipt result or an in-flight state cannot stand in for planner intent.
+    let permitted_statuses: &[&str] = match kind.as_str() {
+        "sensor" => &["planned", "skipped"],
+        "focused-test" | "focused-build" => &["planned", "deferred_by_budget"],
+        _ => anyhow::bail!("terminal queue plan task has unsupported kind {kind}"),
+    };
+    anyhow::ensure!(
+        permitted_statuses.contains(&plan_status.as_str()),
+        "terminal queue {kind} task {id} has unsupported plan status {plan_status}"
+    );
     let receipt_path = optional_string_field(object, "receipt_path");
     let task_path = optional_string_field(object, "task_path");
     let (status, reason, request_ids, receipt_ids) = match kind.as_str() {
