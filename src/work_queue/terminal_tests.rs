@@ -143,11 +143,11 @@ fn terminal_projection_preserves_plan_and_accounts_for_receipts() -> Result<()> 
     ];
 
     write_terminal_work_queue_artifacts(out, &receipts)?;
-    let first = fs::read(out.join("work_queue_terminal.json"))?;
+    let first = fs::read(out.join(TERMINAL_QUEUE_FILE))?;
     assert_eq!(fs::read(out.join("work_queue_plan.json"))?, plan_bytes);
     assert_eq!(fs::read(out.join("work_queue.json"))?, plan_bytes);
     write_terminal_work_queue_artifacts(out, &receipts)?;
-    assert_eq!(fs::read(out.join("work_queue_terminal.json"))?, first);
+    assert_eq!(fs::read(out.join(TERMINAL_QUEUE_FILE))?, first);
 
     let terminal: serde_json::Value = serde_json::from_slice(&first)?;
     assert_eq!(terminal["schema"], WORK_QUEUE_TERMINAL_SCHEMA);
@@ -192,11 +192,13 @@ fn terminal_projection_preserves_plan_and_accounts_for_receipts() -> Result<()> 
     assert_eq!(receipt_reference_count(rows, "proof-receipt-a"), 1);
     assert_eq!(receipt_reference_count(rows, "impact-receipt"), 1);
     assert_eq!(
-        fs::read_to_string(out.join("work_events_terminal.ndjson"))?
+        fs::read_to_string(out.join(TERMINAL_EVENTS_FILE))?
             .lines()
             .count(),
         rows.len()
     );
+    assert!(!out.join(TERMINAL_QUEUE_TMP_FILE).exists());
+    assert!(!out.join(TERMINAL_EVENTS_TMP_FILE).exists());
     Ok(())
 }
 
@@ -214,18 +216,62 @@ fn terminal_projection_joins_current_receipt_by_exact_task_identity() -> Result<
 
     write_terminal_work_queue_artifacts(out, &receipts)?;
     let terminal: serde_json::Value =
-        serde_json::from_slice(&fs::read(out.join("work_queue_terminal.json"))?)?;
+        serde_json::from_slice(&fs::read(out.join(TERMINAL_QUEUE_FILE))?)?;
     let rows = terminal["tasks"]
         .as_array()
         .context("terminal tasks missing")?;
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["id"], "proof-receipt-a");
     assert_eq!(rows[0]["status"], "head_passed");
-    assert_eq!(rows[0]["receipt_ids"], serde_json::json!(["proof-receipt-a"]));
+    assert_eq!(
+        rows[0]["receipt_ids"],
+        serde_json::json!(["proof-receipt-a"])
+    );
     assert!(rows[0]["reason"]
         .as_str()
         .is_some_and(|reason| reason.contains("join=task_identity")));
     assert_eq!(receipt_reference_count(rows, "proof-receipt-a"), 1);
+    Ok(())
+}
+
+#[test]
+fn terminal_projection_removes_stale_outputs_before_invalid_plan_fails() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let out = temp.path();
+    write_plan(out, vec![proof_plan_task("proof-task-a")])?;
+    write_proof_tasks(out, &[("proof-task-a", &["req-a"])])?;
+    let receipts = vec![proof_receipt(
+        "proof-receipt-a",
+        &["req-a"],
+        &["tests-oracle"],
+    )];
+    write_terminal_work_queue_artifacts(out, &receipts)?;
+    assert!(out.join(TERMINAL_QUEUE_FILE).is_file());
+    assert!(out.join(TERMINAL_EVENTS_FILE).is_file());
+    fs::write(out.join(TERMINAL_QUEUE_TMP_FILE), b"stale queue staging")?;
+    fs::write(out.join(TERMINAL_EVENTS_TMP_FILE), b"stale event staging")?;
+
+    let mut invalid = proof_plan_task("proof-task-a");
+    invalid["schema"] = serde_json::json!("ub-review.work_queue_task.invalid");
+    write_plan(out, vec![invalid])?;
+    let error = write_terminal_work_queue_artifacts(out, &receipts)
+        .err()
+        .context("invalid plan task schema unexpectedly succeeded")?;
+    assert!(
+        format!("{error:#}").contains("plan task has unsupported schema"),
+        "unexpected error: {error:#}"
+    );
+    for name in [
+        TERMINAL_QUEUE_FILE,
+        TERMINAL_EVENTS_FILE,
+        TERMINAL_QUEUE_TMP_FILE,
+        TERMINAL_EVENTS_TMP_FILE,
+    ] {
+        assert!(
+            !out.join(name).exists(),
+            "failed terminal projection retained stale artifact {name}"
+        );
+    }
     Ok(())
 }
 
