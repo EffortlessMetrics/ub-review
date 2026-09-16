@@ -32,6 +32,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # Temporary exact-byte retrieval for the oversized governed RIPR ledger.
+      # The final repair commit removes this step before PR completion.
+      - name: Retain RIPR suppression ledger for repair
+        uses: actions/upload-artifact@v7
+        with:
+          name: ripr-suppression-ledger
+          path: .ripr/suppressions.toml
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Verify task projection regressions
         timeout-minutes: 2
         run: python scripts/test-task-projections.py
