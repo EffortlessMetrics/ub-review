@@ -493,6 +493,11 @@ fn load_proof_task_request_ids(out: &Path) -> Result<BTreeMap<String, Vec<String
         let object = task
             .as_object()
             .context("proof task row is not an object")?;
+        anyhow::ensure!(
+            object.get("schema").and_then(serde_json::Value::as_str) == Some(PROOF_TASK_SCHEMA),
+            "proof task catalog line {} has unsupported schema",
+            index + 1
+        );
         let id = string_field(object, "id")?;
         let request_ids = string_list_field(object, "request_ids")?;
         anyhow::ensure!(
