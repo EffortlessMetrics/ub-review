@@ -1,6 +1,6 @@
 use super::*;
 
-#[path = "tests/helpers.rs"]
+#[path = "terminal_helpers_tests.rs"]
 mod helpers;
 
 #[path = "tests/projection.rs"]
