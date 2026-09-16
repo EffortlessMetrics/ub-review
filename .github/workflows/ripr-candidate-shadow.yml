@@ -23,8 +23,13 @@ jobs:
       SUBJECT_HEAD: 689eac7529c5bd887c4d32b3ff39bc16c14dca86
       RIPR_STABLE_VERSION: 0.10.0
       RIPR_CANDIDATE_SHA: 745402ab0ce9d379eb5742c8c7232e607811cbed
-      RIPR_PARTIAL_DIFF_FILE_BUDGET: 500
-      RIPR_PARTIAL_DIFF_LINE_BUDGET: 5000
+      # Evidence-only envelope for this exact 11-file / 2,003-line subject.
+      # Production defaults and UB Review's strict-zero gate are unchanged.
+      RIPR_MAX_DIFF_CHANGED_RUST_LINES: 2003
+      RIPR_PARTIAL_DIFF_FILE_BUDGET: 11
+      RIPR_PARTIAL_DIFF_LINE_BUDGET: 2003
+      EXPECTED_SUBJECT_TREE: 3e2afb32476b67af1d96224a13313562cc5b0cdb
+      EXPECTED_DIFF_SHA256: ac55ce9c0d2ab1d51ed50fd94882a12623d5199ddc77ebd3ef2cd9f7e35df62f
       MAX_RAW_BYTES: 536870912
       MAX_BADGE_BYTES: 16777216
       MAX_STDERR_BYTES: 16777216
@@ -64,6 +69,46 @@ jobs:
             --arg analyzer "$RIPR_CANDIDATE_SHA" --arg harness "$(git rev-parse HEAD)" \
             --arg run "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" \
             '{schema:"ub-review.ripr_frozen_input.v1",repository:"EffortlessMetrics/ub-review",base_commit:$base,head_commit:$head,head_tree:$tree,diff_sha256:$diff,candidate_source:$analyzer,harness_commit:$harness,run_id:$run,run_attempt:$attempt,authority:"shadow-only"}' > "$stage/frozen-input.json"
+      - name: Admit the reviewed exact-scope execution envelope
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, os, subprocess
+          from pathlib import Path
+          env = os.environ
+          with Path(env['SUBJECT_DIFF']).open('rb') as stream:
+              digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+          assert digest == env['EXPECTED_DIFF_SHA256'], 'frozen diff digest changed'
+          assert env['SUBJECT_TREE'] == env['EXPECTED_SUBJECT_TREE'], 'frozen tree changed'
+          stats = subprocess.run(
+              ['git', 'diff', '--numstat', '--no-renames', '--no-ext-diff',
+               env['SUBJECT_BASE'], env['SUBJECT_HEAD'], '--', '*.rs'],
+              check=True, capture_output=True, text=True, timeout=30,
+          ).stdout
+          rows = [row.split('\t', 2) for row in stats.splitlines()]
+          assert all(len(row) == 3 for row in rows), 'invalid Rust numstat row'
+          assert all(a.isdecimal() and d.isdecimal() for a, d, _ in rows), 'binary Rust diff'
+          files = [path for _, _, path in rows]
+          lines = sum(int(a) + int(d) for a, d, _ in rows)
+          assert len(files) == len(set(files)) == 11, 'frozen Rust file count changed'
+          assert lines == 2003, 'frozen changed-Rust-line count changed'
+          assert int(env['RIPR_MAX_DIFF_CHANGED_RUST_LINES']) == lines, 'hard guard drift'
+          assert int(env['RIPR_PARTIAL_DIFF_LINE_BUDGET']) == lines, 'partial line budget drift'
+          assert int(env['RIPR_PARTIAL_DIFF_FILE_BUDGET']) == len(files), 'partial file budget drift'
+          receipt = {
+              'schema': 'ub-review.ripr_execution_envelope.v1', 'authority': 'shadow-only',
+              'subject_base': env['SUBJECT_BASE'], 'subject_head': env['SUBJECT_HEAD'],
+              'subject_tree': env['SUBJECT_TREE'], 'diff_sha256': digest,
+              'changed_rust_files': files, 'changed_rust_lines': lines,
+              'hard_line_limit': lines, 'partial_line_budget': lines,
+              'partial_file_budget': len(files), 'default_guard_rejection_retained': True,
+              'prior_rejection_run': '35154661417', 'production_policy_changed': False,
+          }
+          (Path(env['STAGE_ROOT']) / 'execution-envelope.json').write_text(
+              json.dumps(receipt, sort_keys=True) + '\n')
+          print(json.dumps(receipt, sort_keys=True))
+          PY
       - name: Install fixed Rust toolchain
         uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772
         with:
