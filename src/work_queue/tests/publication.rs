@@ -130,3 +130,73 @@ fn proof_receipt_writer_replaces_terminal_marker_and_receipt_truth() -> Result<(
     );
     Ok(())
 }
+
+#[test]
+fn new_plan_invalidates_every_terminal_artifact_before_publication() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let out = temp.path();
+    let prior_plan = write_plan(out, vec![proof_plan_task("prior-task")])?;
+    write_terminal_work_queue_artifacts(out, &[])?;
+    fs::write(out.join(TERMINAL_QUEUE_TMP_FILE), b"stale queue staging")?;
+    fs::write(out.join(TERMINAL_EVENTS_TMP_FILE), b"stale event staging")?;
+
+    let plan = crate::tests::test_plan(Vec::new());
+    write_work_queue_artifacts(out, &plan, &[])?;
+    for name in [
+        TERMINAL_QUEUE_FILE,
+        TERMINAL_EVENTS_FILE,
+        TERMINAL_QUEUE_TMP_FILE,
+        TERMINAL_EVENTS_TMP_FILE,
+    ] {
+        assert!(!out.join(name).exists(), "new plan retained {name}");
+    }
+    let current_plan = fs::read(out.join("work_queue_plan.json"))?;
+    assert_ne!(current_plan, prior_plan);
+    assert_eq!(fs::read(out.join("work_queue.json"))?, current_plan);
+    assert_eq!(
+        fs::read(out.join("work_events_plan.ndjson"))?,
+        fs::read(out.join("work_events.ndjson"))?
+    );
+
+    write_terminal_work_queue_artifacts(out, &[])?;
+    let terminal: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join(TERMINAL_QUEUE_FILE))?)?;
+    assert_eq!(terminal["source_plan_sha256"], sha256_hex(&current_plan));
+    assert_eq!(terminal["tasks"], serde_json::json!([]));
+    Ok(())
+}
+
+#[test]
+fn new_plan_cleanup_failure_preserves_every_planner_artifact() -> Result<()> {
+    for blocked in [
+        TERMINAL_QUEUE_FILE,
+        TERMINAL_EVENTS_FILE,
+        TERMINAL_QUEUE_TMP_FILE,
+        TERMINAL_EVENTS_TMP_FILE,
+    ] {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        let planner_files = [
+            "work_queue.json",
+            "work_events.ndjson",
+            "work_queue_plan.json",
+            "work_events_plan.ndjson",
+        ];
+        for name in planner_files {
+            fs::write(out.join(name), b"previous planner bytes")?;
+        }
+        fs::create_dir(out.join(blocked))?;
+        let plan = crate::tests::test_plan(Vec::new());
+        let error = write_work_queue_artifacts(out, &plan, &[])
+            .err()
+            .with_context(|| format!("new plan ignored cleanup failure at {blocked}"))?;
+        let diagnostic = format!("{error:#}");
+        assert!(diagnostic.contains("remove stale terminal queue artifact"));
+        assert!(diagnostic.contains(blocked));
+        for name in planner_files {
+            assert_eq!(fs::read(out.join(name))?, b"previous planner bytes");
+        }
+        assert!(out.join(blocked).is_dir());
+    }
+    Ok(())
+}

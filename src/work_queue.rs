@@ -104,6 +104,10 @@ pub(crate) fn write_work_queue_artifacts(
     plan: &Plan,
     proof_tasks: &[ProofTaskArtifact],
 ) -> Result<()> {
+    // A reused output directory must not expose the previous run's terminal
+    // projection while any new planner artifact is being published.
+    terminal::remove_terminal_work_queue_artifacts(out)?;
+
     let mut tasks = plan
         .sensors
         .iter()

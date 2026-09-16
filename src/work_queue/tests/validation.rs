@@ -179,3 +179,90 @@ fn terminal_projection_validates_proof_task_catalog() -> Result<()> {
     assert!(format!("{error:#}").contains("read proof tasks"));
     Ok(())
 }
+
+#[test]
+fn unsupported_proof_schema_cannot_publish_a_terminal_queue() -> Result<()> {
+    for planned in [false, true] {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        let tasks = if planned {
+            vec![proof_plan_task("proof-task-a")]
+        } else {
+            Vec::new()
+        };
+        write_plan(out, tasks)?;
+        write_proof_tasks(out, &[("proof-task-a", &["req-a"])])?;
+        let receipt = proof_receipt("proof-receipt-a", &["req-a"], &["tests-oracle"]);
+        write_proof_receipt_artifacts(out, std::slice::from_ref(&receipt), None)?;
+        assert!(out.join(TERMINAL_QUEUE_FILE).is_file());
+        fs::write(out.join(TERMINAL_QUEUE_TMP_FILE), b"stale queue staging")?;
+        fs::write(out.join(TERMINAL_EVENTS_TMP_FILE), b"stale event staging")?;
+
+        let mut invalid = receipt;
+        invalid.schema = "ub-review.proof_receipt.invalid".to_owned();
+        let error = write_proof_receipt_artifacts(out, &[invalid], None)
+            .err()
+            .context("unsupported proof schema unexpectedly published terminal truth")?;
+        assert!(format!("{error:#}").contains("has unsupported schema"));
+        for name in [
+            TERMINAL_QUEUE_FILE,
+            TERMINAL_EVENTS_FILE,
+            TERMINAL_QUEUE_TMP_FILE,
+            TERMINAL_EVENTS_TMP_FILE,
+        ] {
+            assert!(!out.join(name).exists(), "invalid schema retained {name}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn unsupported_planner_kinds_never_fall_through_to_proof_projection() -> Result<()> {
+    for kind in ["focused-head", "unknown-task-kind"] {
+        for has_receipt in [false, true] {
+            let temp = tempfile::tempdir()?;
+            let out = temp.path();
+            write_plan(out, vec![proof_plan_task("proof-task-a")])?;
+            write_proof_tasks(out, &[("proof-task-a", &["req-a"])])?;
+            let receipts = if has_receipt {
+                vec![proof_receipt("proof-task-a", &["req-a"], &["tests-oracle"])]
+            } else {
+                Vec::new()
+            };
+            write_terminal_work_queue_artifacts(out, &receipts)?;
+            assert!(out.join(TERMINAL_QUEUE_FILE).is_file());
+
+            let mut invalid = proof_plan_task("proof-task-a");
+            invalid["kind"] = serde_json::json!(kind);
+            write_plan(out, vec![invalid])?;
+            let error = write_terminal_work_queue_artifacts(out, &receipts)
+                .err()
+                .with_context(|| format!("unsupported planner kind {kind} was accepted"))?;
+            let diagnostic = format!("{error:#}");
+            assert!(diagnostic.contains("plan task has unsupported kind"));
+            assert!(diagnostic.contains(kind));
+            assert!(!out.join(TERMINAL_QUEUE_FILE).exists());
+            assert!(!out.join(TERMINAL_EVENTS_FILE).exists());
+            assert!(!out.join(TERMINAL_QUEUE_TMP_FILE).exists());
+            assert!(!out.join(TERMINAL_EVENTS_TMP_FILE).exists());
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn supported_planner_proof_kinds_retain_unexecuted_truth() -> Result<()> {
+    for kind in ["focused-test", "focused-build"] {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        let mut task = proof_plan_task("proof-task-a");
+        task["kind"] = serde_json::json!(kind);
+        write_plan(out, vec![task])?;
+        write_terminal_work_queue_artifacts(out, &[])?;
+        let terminal: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join(TERMINAL_QUEUE_FILE))?)?;
+        assert_eq!(terminal["tasks"][0]["kind"], kind);
+        assert_eq!(terminal["tasks"][0]["status"], "not_executed");
+    }
+    Ok(())
+}
