@@ -179,4 +179,3 @@ fn terminal_projection_validates_proof_task_catalog() -> Result<()> {
     assert!(format!("{error:#}").contains("read proof tasks"));
     Ok(())
 }
-
