@@ -26,7 +26,10 @@ fn proof_receipt_writer_invalidates_commit_marker_before_replacing_receipts() ->
         format!("{error:#}").contains("remove stale terminal queue commit marker"),
         "unexpected error: {error:#}"
     );
-    assert_eq!(fs::read(review_dir.join("proof_receipts.json"))?, prior_json);
+    assert_eq!(
+        fs::read(review_dir.join("proof_receipts.json"))?,
+        prior_json
+    );
     assert_eq!(fs::read(out.join("proof_receipts.ndjson"))?, prior_ndjson);
     assert!(out.join(TERMINAL_QUEUE_FILE).is_dir());
     Ok(())
@@ -127,4 +130,3 @@ fn proof_receipt_writer_replaces_terminal_marker_and_receipt_truth() -> Result<(
     );
     Ok(())
 }
-
