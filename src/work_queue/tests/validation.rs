@@ -137,15 +137,15 @@ fn terminal_projection_validates_proof_task_catalog() -> Result<()> {
         ("{", "parse proof_tasks.ndjson line 1"),
         ("[]", "proof task row is not an object"),
         (
-            r#"{"id":"","request_ids":[]}"#,
+            r#"{"schema":"ub-review.proof_task.v1","id":"","request_ids":[]}"#,
             "terminal queue object has no nonempty id",
         ),
         (
-            r#"{"id":"proof-task-a","request_ids":"req-a"}"#,
+            r#"{"schema":"ub-review.proof_task.v1","id":"proof-task-a","request_ids":"req-a"}"#,
             "terminal queue object has no request_ids array",
         ),
         (
-            r#"{"id":"proof-task-a","request_ids":["req-a",7]}"#,
+            r#"{"schema":"ub-review.proof_task.v1","id":"proof-task-a","request_ids":["req-a",7]}"#,
             "request_ids contains a non-string identity",
         ),
     ] {
@@ -159,13 +159,7 @@ fn terminal_projection_validates_proof_task_catalog() -> Result<()> {
         );
     }
 
-    fs::write(
-        out.join("proof_tasks.ndjson"),
-        concat!(
-            "{\"id\":\"proof-task-a\",\"request_ids\":[]}\n",
-            "{\"id\":\"proof-task-a\",\"request_ids\":[]}\n"
-        ),
-    )?;
+    write_proof_tasks(out, &[("proof-task-a", &[]), ("proof-task-a", &[])])?;
     let error = write_terminal_work_queue_artifacts(out, &[])
         .err()
         .context("duplicate proof task catalog identity unexpectedly succeeded")?;

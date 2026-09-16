@@ -17,3 +17,6 @@ mod contracts;
 
 #[path = "terminal_status_tests.rs"]
 mod statuses;
+
+#[path = "terminal_catalog_schema_tests.rs"]
+mod catalog_schema;

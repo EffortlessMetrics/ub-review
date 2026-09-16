@@ -1,7 +1,7 @@
 name: ripr/candidate-shadow
 
 # Temporary evidence lane #1308 / #813. Never merge or promote this harness.
-# Owner: EffortlessSteven. Scope: frozen #1306 / upstream ripr#1713 comparison.
+# Owner: EffortlessSteven. Scope: frozen #1306 / upstream ripr-swarm#3755 comparison.
 on:
   pull_request:
     types: [opened, reopened, synchronize]
@@ -20,9 +20,9 @@ jobs:
     timeout-minutes: 45
     env:
       SUBJECT_BASE: f35a1342e346466f5caf12daf627dff13e49c39d
-      SUBJECT_HEAD: 517b8bc6482d8b449dcd5f142b1fd6a509ae5b12
+      SUBJECT_HEAD: 231123045fb0a97776ed35eda4552b757f8f8d32
       RIPR_STABLE_VERSION: 0.10.0
-      RIPR_CANDIDATE_SHA: b1b074170c66f4b5dcc02cccc1c7a52e940681b2
+      RIPR_CANDIDATE_SHA: 745402ab0ce9d379eb5742c8c7232e607811cbed
       RIPR_PARTIAL_DIFF_FILE_BUDGET: 500
       RIPR_PARTIAL_DIFF_LINE_BUDGET: 5000
       MAX_RAW_BYTES: 536870912
@@ -77,7 +77,7 @@ jobs:
           CARGO_TARGET_DIR="$RUNNER_TEMP/ripr-stable-target" cargo install --locked \
             --root "$RUNNER_TEMP/ripr-stable" --version "$RIPR_STABLE_VERSION" ripr
           CARGO_TARGET_DIR="$RUNNER_TEMP/ripr-candidate-target" cargo install --locked \
-            --root "$RUNNER_TEMP/ripr-candidate" --git https://github.com/EffortlessMetrics/ripr.git --rev "$RIPR_CANDIDATE_SHA" ripr
+            --root "$RUNNER_TEMP/ripr-candidate" --git https://github.com/EffortlessMetrics/ripr-swarm.git --rev "$RIPR_CANDIDATE_SHA" ripr
           for name in stable candidate; do
             "$RUNNER_TEMP/ripr-$name/bin/ripr" --version > "$STAGE_ROOT/$name.version.txt"
             sha256sum "$RUNNER_TEMP/ripr-$name/bin/ripr" | cut -d' ' -f1 > "$STAGE_ROOT/$name.binary.sha256"
@@ -149,7 +149,7 @@ jobs:
             --stable-version-file "$STAGE_ROOT/stable.version.txt" --candidate-version-file "$STAGE_ROOT/candidate.version.txt" \
             --stable-exit-file "$STAGE_ROOT/stable.json.exit.txt" --candidate-exit-file "$STAGE_ROOT/candidate.json.exit.txt" \
             --subject-base "$SUBJECT_BASE" --subject-head "$SUBJECT_HEAD" --subject-tree "$SUBJECT_TREE" --diff-sha256 "$DIFF_SHA256" \
-            --stable-source "crates.io:ripr@$RIPR_STABLE_VERSION" --candidate-source "git:ripr@$RIPR_CANDIDATE_SHA" --output-dir "$STAGE_ROOT"
+            --stable-source "crates.io:ripr@$RIPR_STABLE_VERSION" --candidate-source "git:EffortlessMetrics/ripr-swarm@$RIPR_CANDIDATE_SHA" --output-dir "$STAGE_ROOT"
       - name: Seal the validated bounded packet
         id: seal
         shell: bash

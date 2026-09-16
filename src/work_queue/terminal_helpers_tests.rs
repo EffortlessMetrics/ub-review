@@ -76,6 +76,7 @@ pub(super) fn write_proof_tasks(out: &Path, tasks: &[(&str, &[&str])]) -> Result
     let mut ndjson = String::new();
     for (id, request_ids) in tasks {
         ndjson.push_str(&serde_json::to_string(&serde_json::json!({
+            "schema": "ub-review.proof_task.v1",
             "id": id,
             "request_ids": request_ids
         }))?);
