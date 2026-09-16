@@ -1,0 +1,223 @@
+name: ripr/candidate-shadow
+
+# Evidence-only lane for #813. The released RIPR binary remains the required
+# authority; the exact-source candidate only measures compatibility on one
+# frozen input. This workflow has no PR/check write, OIDC, or secret authority.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ripr-candidate-shadow-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    name: frozen stable/candidate comparison
+    if: >-
+      github.event.pull_request.base.ref == 'fix/1305-terminal-work-queue' &&
+      github.event.pull_request.head.ref == 'evidence/1306-ripr-011-shadow'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SUBJECT_BASE: 62024014c57a81162da761babea2fd0d677f5f42
+      SUBJECT_HEAD: c6dbdf9c1798c1e94e4a136a008db6b077aff161
+      RIPR_STABLE_VERSION: 0.10.0
+      RIPR_CANDIDATE_SHA: bf39b6184c11fb1fabf6d1843cfec17e76a3349f
+      MAX_RAW_BYTES: 536870912
+      MAX_PUBLISH_BYTES: 201326592
+
+    steps:
+      - name: Check out evidence harness
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Freeze exact subject input
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin \
+            "+refs/heads/fix/1305-terminal-work-queue:refs/remotes/origin/fix/1305-terminal-work-queue"
+          observed="$(git rev-parse refs/remotes/origin/fix/1305-terminal-work-queue)"
+          if [[ "$observed" != "$SUBJECT_HEAD" ]]; then
+            echo "::error::subject branch advanced: expected $SUBJECT_HEAD, observed $observed"
+            exit 1
+          fi
+          git cat-file -e "$SUBJECT_BASE^{commit}"
+          git cat-file -e "$SUBJECT_HEAD^{commit}"
+          git merge-base --is-ancestor "$SUBJECT_BASE" "$SUBJECT_HEAD"
+
+          subject="$RUNNER_TEMP/ub-review-subject"
+          raw="$RUNNER_TEMP/ripr-shadow-raw"
+          out="$GITHUB_WORKSPACE/target/ripr-shadow"
+          diff="$RUNNER_TEMP/subject.diff"
+          rm -rf "$subject" "$raw" "$out"
+          mkdir -p "$raw" "$out"
+          git worktree add --detach "$subject" "$SUBJECT_HEAD"
+          git diff --binary --full-index --no-ext-diff \
+            "$SUBJECT_BASE" "$SUBJECT_HEAD" > "$diff"
+          test -s "$diff"
+
+          tree="$(git rev-parse "$SUBJECT_HEAD^{tree}")"
+          diff_sha="$(sha256sum "$diff" | cut -d' ' -f1)"
+          printf 'SUBJECT_ROOT=%s\n' "$subject" >> "$GITHUB_ENV"
+          printf 'RAW_ROOT=%s\n' "$raw" >> "$GITHUB_ENV"
+          printf 'PUBLISH_ROOT=%s\n' "$out" >> "$GITHUB_ENV"
+          printf 'SUBJECT_DIFF=%s\n' "$diff" >> "$GITHUB_ENV"
+          printf 'SUBJECT_TREE=%s\n' "$tree" >> "$GITHUB_ENV"
+          printf 'DIFF_SHA256=%s\n' "$diff_sha" >> "$GITHUB_ENV"
+
+          python scripts/compare-ripr-shadow.py --self-test
+          python -m py_compile scripts/compare-ripr-shadow.py
+          cat > "$out/frozen-input.json" <<JSON
+          {
+            "repository": "EffortlessMetrics/ub-review",
+            "base_commit": "$SUBJECT_BASE",
+            "head_commit": "$SUBJECT_HEAD",
+            "head_tree": "$tree",
+            "diff_sha256": "$diff_sha",
+            "stable_source": "crates.io:ripr@$RIPR_STABLE_VERSION",
+            "candidate_source": "https://github.com/EffortlessMetrics/ripr.git@$RIPR_CANDIDATE_SHA",
+            "authority": "shadow-only"
+          }
+          JSON
+
+      - name: Install exact Rust toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.95.0 --profile minimal
+          rustup default 1.95.0
+          rustc --version --verbose > "$PUBLISH_ROOT/rustc.version.txt"
+          cargo --version --verbose > "$PUBLISH_ROOT/cargo.version.txt"
+
+      - name: Install released stable RIPR
+        shell: bash
+        run: |
+          set -euo pipefail
+          CARGO_TARGET_DIR="$RUNNER_TEMP/ripr-stable-target" \
+            cargo install --locked \
+              --root "$RUNNER_TEMP/ripr-stable" \
+              --version "$RIPR_STABLE_VERSION" \
+              ripr
+          "$RUNNER_TEMP/ripr-stable/bin/ripr" --version \
+            > "$PUBLISH_ROOT/stable.version.txt"
+
+      - name: Install exact-source RIPR candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          CARGO_TARGET_DIR="$RUNNER_TEMP/ripr-candidate-target" \
+            cargo install --locked \
+              --root "$RUNNER_TEMP/ripr-candidate" \
+              --git https://github.com/EffortlessMetrics/ripr.git \
+              --rev "$RIPR_CANDIDATE_SHA" \
+              ripr
+          "$RUNNER_TEMP/ripr-candidate/bin/ripr" --version \
+            > "$PUBLISH_ROOT/candidate.version.txt"
+
+      - name: Run both analyzers on identical frozen input
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_ripr() {
+            local name="$1"
+            local binary="$2"
+            set +e
+            timeout --signal=TERM --kill-after=30s 900 \
+              "$binary" check \
+                --root "$SUBJECT_ROOT" \
+                --diff "$SUBJECT_DIFF" \
+                --mode ready \
+                --format json \
+              > "$RAW_ROOT/$name.json" \
+              2> "$RAW_ROOT/$name.stderr"
+            local code="$?"
+            set -e
+            printf '%s\n' "$code" > "$PUBLISH_ROOT/$name.exit.txt"
+            if [[ ! -s "$RAW_ROOT/$name.json" ]]; then
+              echo "::error::$name produced no JSON output (exit $code)"
+              exit 1
+            fi
+            local bytes
+            bytes="$(stat -c %s "$RAW_ROOT/$name.json")"
+            if (( bytes > MAX_RAW_BYTES )); then
+              echo "::error::$name output is $bytes bytes; maximum is $MAX_RAW_BYTES"
+              exit 1
+            fi
+            local stderr_bytes
+            stderr_bytes="$(stat -c %s "$RAW_ROOT/$name.stderr")"
+            if (( stderr_bytes > 16777216 )); then
+              echo "::error::$name stderr is $stderr_bytes bytes; maximum is 16777216"
+              exit 1
+            fi
+          }
+
+          run_ripr stable "$RUNNER_TEMP/ripr-stable/bin/ripr"
+          run_ripr candidate "$RUNNER_TEMP/ripr-candidate/bin/ripr"
+
+      - name: Build bounded compatibility receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/compare-ripr-shadow.py \
+            --stable-json "$RAW_ROOT/stable.json" \
+            --candidate-json "$RAW_ROOT/candidate.json" \
+            --stable-version-file "$PUBLISH_ROOT/stable.version.txt" \
+            --candidate-version-file "$PUBLISH_ROOT/candidate.version.txt" \
+            --stable-exit-file "$PUBLISH_ROOT/stable.exit.txt" \
+            --candidate-exit-file "$PUBLISH_ROOT/candidate.exit.txt" \
+            --subject-base "$SUBJECT_BASE" \
+            --subject-head "$SUBJECT_HEAD" \
+            --subject-tree "$SUBJECT_TREE" \
+            --diff-sha256 "$DIFF_SHA256" \
+            --stable-source "crates.io:ripr@$RIPR_STABLE_VERSION" \
+            --candidate-source "git:ripr@$RIPR_CANDIDATE_SHA" \
+            --output-dir "$PUBLISH_ROOT"
+
+          gzip -6 -c "$RAW_ROOT/stable.json" \
+            > "$PUBLISH_ROOT/stable.raw.json.gz"
+          gzip -6 -c "$RAW_ROOT/candidate.json" \
+            > "$PUBLISH_ROOT/candidate.raw.json.gz"
+          gzip -6 -c "$RAW_ROOT/stable.stderr" \
+            > "$PUBLISH_ROOT/stable.stderr.gz"
+          gzip -6 -c "$RAW_ROOT/candidate.stderr" \
+            > "$PUBLISH_ROOT/candidate.stderr.gz"
+          gzip -6 -c "$SUBJECT_DIFF" > "$PUBLISH_ROOT/subject.diff.gz"
+
+          if find "$PUBLISH_ROOT" -type l -print -quit | grep -q .; then
+            echo "::error::publish tree contains a symlink"
+            exit 1
+          fi
+          files="$(find "$PUBLISH_ROOT" -type f | wc -l)"
+          bytes="$(du -sb "$PUBLISH_ROOT" | cut -f1)"
+          if (( files > 32 )); then
+            echo "::error::publish tree contains $files files; maximum is 32"
+            exit 1
+          fi
+          if (( bytes > MAX_PUBLISH_BYTES )); then
+            echo "::error::publish tree is $bytes bytes; maximum is $MAX_PUBLISH_BYTES"
+            exit 1
+          fi
+
+          (
+            cd "$PUBLISH_ROOT"
+            find . -type f ! -name manifest.sha256 -print0 \
+              | sort -z \
+              | xargs -0 sha256sum > manifest.sha256
+          )
+          cat "$PUBLISH_ROOT/comparison.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload bounded shadow receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ripr-candidate-shadow-pr1306
+          path: target/ripr-shadow
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
