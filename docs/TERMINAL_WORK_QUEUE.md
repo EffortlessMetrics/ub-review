@@ -36,9 +36,12 @@ receipt-backed task. The terminal reason records `join=request_identity`,
 `join=task_identity`, or `join=request_and_task_identity` for auditability.
 
 Every planner task must retain the versioned `ub-review.work_queue_task.v1`
-schema. A malformed task schema, duplicate task identity, duplicate receipt
-identity, empty identity, or ambiguous join aborts projection rather than
-silently changing the queue.
+schema and one of the producer kinds `sensor`, `focused-test`, or
+`focused-build`. A proof receipt kind such as `focused-head` is not a planner
+kind. Every proof receipt must use `PROOF_RECEIPT_SCHEMA`, including receipts
+not joined to any planner task. An unsupported schema or planner kind,
+duplicate task or receipt identity, empty identity, or ambiguous join aborts
+projection rather than silently changing the queue.
 
 Sensor tasks retain their plan status separately and project the terminal
 status receipt as one of:
@@ -63,12 +66,20 @@ than being collapsed.
 
 ## Fail-closed publication
 
-A new projection first removes prior canonical and staging outputs. It builds
-and validates the complete queue and event stream in memory, stages both files,
-publishes the event stream, and publishes `work_queue_terminal.json` last as
-the commit marker. If validation, staging, or either rename fails, the producer
-removes any partial canonical output. A failed rerun therefore cannot leave an
-older terminal queue claiming to describe the newly written proof receipts.
+Before publishing any new planner artifact, the producer removes both canonical
+terminal files and both terminal staging files. Cleanup failure aborts plan
+publication before replacing either the legacy planner files or their explicit
+plan copies. Terminal artifacts remain absent until current receipts regenerate
+them; a new plan can never coexist with the previous plan's terminal marker.
+
+Proof receipt replacement separately invalidates the terminal queue commit
+marker before writing new receipt bytes. Terminal projection then removes all
+prior canonical and staging outputs, builds and validates the complete queue
+and event stream in memory, stages both files, publishes the event stream, and
+publishes `work_queue_terminal.json` last as the commit marker. If validation,
+staging, or either rename fails, the producer removes partial canonical output.
+A failed rerun therefore cannot leave an older terminal queue claiming to
+describe newly written proof receipts.
 
 Consumers must require `work_queue_terminal.json`; an event file without that
 commit marker is incomplete publication, not terminal truth. Repeating the same

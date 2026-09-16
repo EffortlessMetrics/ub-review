@@ -160,7 +160,7 @@ pub(super) fn write_terminal_work_queue_artifacts(
     publish_terminal_work_queue_artifacts(out, &queue_bytes, events.as_bytes())
 }
 
-fn remove_terminal_work_queue_artifacts(out: &Path) -> Result<()> {
+pub(super) fn remove_terminal_work_queue_artifacts(out: &Path) -> Result<()> {
     for name in [
         TERMINAL_QUEUE_FILE,
         TERMINAL_EVENTS_FILE,
@@ -218,6 +218,12 @@ fn validate_proof_receipts(receipts: &[ProofReceipt]) -> Result<BTreeMap<String,
     let mut result = BTreeMap::new();
     for receipt in receipts {
         anyhow::ensure!(
+            receipt.schema == PROOF_RECEIPT_SCHEMA,
+            "terminal queue proof receipt {} has unsupported schema {}",
+            receipt.id,
+            receipt.schema
+        );
+        anyhow::ensure!(
             !receipt.id.trim().is_empty(),
             "terminal queue proof receipt has empty identity"
         );
@@ -263,22 +269,22 @@ fn terminalize_planned_task(
     let plan_status = string_field(object, "status")?;
     let receipt_path = optional_string_field(object, "receipt_path");
     let task_path = optional_string_field(object, "task_path");
-    let (status, reason, request_ids, receipt_ids) = if kind == "sensor" {
-        terminalize_sensor(
+    let (status, reason, request_ids, receipt_ids) = match kind.as_str() {
+        "sensor" => terminalize_sensor(
             out,
             &id,
             &plan_status,
             receipt_path.as_deref(),
             source_receipts,
-        )?
-    } else {
-        terminalize_proof(
+        )?,
+        "focused-test" | "focused-build" => terminalize_proof(
             &id,
             &plan_status,
             proof_receipts,
             proof_request_ids,
             receipt_request_ids,
-        )?
+        )?,
+        _ => anyhow::bail!("terminal queue plan task has unsupported kind {kind}"),
     };
     Ok(TerminalTask {
         id,
