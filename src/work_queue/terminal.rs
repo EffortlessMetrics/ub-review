@@ -2,7 +2,7 @@
 
 use crate::*;
 
-const TERMINAL_QUEUE_FILE: &str = "work_queue_terminal.json";
+pub(super) const TERMINAL_QUEUE_FILE: &str = "work_queue_terminal.json";
 const TERMINAL_EVENTS_FILE: &str = "work_events_terminal.ndjson";
 const TERMINAL_QUEUE_TMP_FILE: &str = ".work_queue_terminal.json.tmp";
 const TERMINAL_EVENTS_TMP_FILE: &str = ".work_events_terminal.ndjson.tmp";

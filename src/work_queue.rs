@@ -331,7 +331,7 @@ pub(crate) fn focused_proof_task_purpose(plan: &FocusedProofPlan) -> String {
 }
 
 fn invalidate_terminal_queue_commit_marker(out: &Path) -> Result<()> {
-    let path = out.join("work_queue_terminal.json");
+    let path = out.join(terminal::TERMINAL_QUEUE_FILE);
     match fs::remove_file(&path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
