@@ -27,7 +27,14 @@ jobs:
       SUBJECT_HEAD: c6dbdf9c1798c1e94e4a136a008db6b077aff161
       RIPR_STABLE_VERSION: 0.10.0
       RIPR_CANDIDATE_SHA: bf39b6184c11fb1fabf6d1843cfec17e76a3349f
+      # The first run proved the candidate default 1,000-line partition was
+      # incomplete for this 1,912-line subject. Raise both documented bounds
+      # explicitly while retaining hard process/output limits below.
+      RIPR_PARTIAL_DIFF_FILE_BUDGET: 500
+      RIPR_PARTIAL_DIFF_LINE_BUDGET: 5000
       MAX_RAW_BYTES: 536870912
+      MAX_BADGE_BYTES: 16777216
+      MAX_STDERR_BYTES: 16777216
       MAX_PUBLISH_BYTES: 201326592
 
     steps:
@@ -83,6 +90,8 @@ jobs:
             "diff_sha256": "$diff_sha",
             "stable_source": "crates.io:ripr@$RIPR_STABLE_VERSION",
             "candidate_source": "https://github.com/EffortlessMetrics/ripr.git@$RIPR_CANDIDATE_SHA",
+            "candidate_file_budget": $RIPR_PARTIAL_DIFF_FILE_BUDGET,
+            "candidate_line_budget": $RIPR_PARTIAL_DIFF_LINE_BUDGET,
             "authority": "shadow-only"
           }
           JSON
@@ -128,66 +137,134 @@ jobs:
           run_ripr() {
             local name="$1"
             local binary="$2"
+            local format="$3"
+            local label="$4"
+            local maximum="$5"
+            local output="$RAW_ROOT/$name.$label.json"
+            local stderr="$RAW_ROOT/$name.$label.stderr"
             set +e
             timeout --signal=TERM --kill-after=30s 900 \
               "$binary" check \
                 --root "$SUBJECT_ROOT" \
                 --diff "$SUBJECT_DIFF" \
                 --mode ready \
-                --format json \
-              > "$RAW_ROOT/$name.json" \
-              2> "$RAW_ROOT/$name.stderr"
+                --format "$format" \
+              > "$output" \
+              2> "$stderr"
             local code="$?"
             set -e
-            printf '%s\n' "$code" > "$PUBLISH_ROOT/$name.exit.txt"
-            if [[ ! -s "$RAW_ROOT/$name.json" ]]; then
-              echo "::error::$name produced no JSON output (exit $code)"
+            printf '%s\n' "$code" > "$PUBLISH_ROOT/$name.$label.exit.txt"
+            if [[ ! -s "$output" ]]; then
+              echo "::error::$name/$format produced no JSON output (exit $code)"
               exit 1
             fi
             local bytes
-            bytes="$(stat -c %s "$RAW_ROOT/$name.json")"
-            if (( bytes > MAX_RAW_BYTES )); then
-              echo "::error::$name output is $bytes bytes; maximum is $MAX_RAW_BYTES"
+            bytes="$(stat -c %s "$output")"
+            if (( bytes > maximum )); then
+              echo "::error::$name/$format output is $bytes bytes; maximum is $maximum"
               exit 1
             fi
             local stderr_bytes
-            stderr_bytes="$(stat -c %s "$RAW_ROOT/$name.stderr")"
-            if (( stderr_bytes > 16777216 )); then
-              echo "::error::$name stderr is $stderr_bytes bytes; maximum is 16777216"
+            stderr_bytes="$(stat -c %s "$stderr")"
+            if (( stderr_bytes > MAX_STDERR_BYTES )); then
+              echo "::error::$name/$format stderr is $stderr_bytes bytes; maximum is $MAX_STDERR_BYTES"
               exit 1
             fi
           }
 
-          run_ripr stable "$RUNNER_TEMP/ripr-stable/bin/ripr"
-          run_ripr candidate "$RUNNER_TEMP/ripr-candidate/bin/ripr"
+          run_ripr stable "$RUNNER_TEMP/ripr-stable/bin/ripr" json json "$MAX_RAW_BYTES"
+          run_ripr candidate "$RUNNER_TEMP/ripr-candidate/bin/ripr" json json "$MAX_RAW_BYTES"
+          run_ripr stable "$RUNNER_TEMP/ripr-stable/bin/ripr" badge-json badge "$MAX_BADGE_BYTES"
+          run_ripr candidate "$RUNNER_TEMP/ripr-candidate/bin/ripr" badge-json badge "$MAX_BADGE_BYTES"
 
-      - name: Build bounded compatibility receipt
+      - name: Inspect candidate completeness
+        id: scope
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/compare-ripr-shadow.py \
-            --stable-json "$RAW_ROOT/stable.json" \
-            --candidate-json "$RAW_ROOT/candidate.json" \
-            --stable-version-file "$PUBLISH_ROOT/stable.version.txt" \
-            --candidate-version-file "$PUBLISH_ROOT/candidate.version.txt" \
-            --stable-exit-file "$PUBLISH_ROOT/stable.exit.txt" \
-            --candidate-exit-file "$PUBLISH_ROOT/candidate.exit.txt" \
-            --subject-base "$SUBJECT_BASE" \
-            --subject-head "$SUBJECT_HEAD" \
-            --subject-tree "$SUBJECT_TREE" \
-            --diff-sha256 "$DIFF_SHA256" \
-            --stable-source "crates.io:ripr@$RIPR_STABLE_VERSION" \
-            --candidate-source "git:ripr@$RIPR_CANDIDATE_SHA" \
-            --output-dir "$PUBLISH_ROOT"
+          python - "$RAW_ROOT/candidate.json.json" "$RAW_ROOT/candidate.badge.json" \
+            "$PUBLISH_ROOT/candidate-scope.json" "$GITHUB_OUTPUT" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
 
-          gzip -6 -c "$RAW_ROOT/stable.json" \
+          raw_path, badge_path, receipt_path, output_path = map(Path, sys.argv[1:])
+          raw = json.loads(raw_path.read_text())
+          badge = json.loads(badge_path.read_text())
+          outcome = raw.get("analysis_outcome")
+          scope = raw.get("analysis_scope")
+          limitations = []
+          complete = False
+          if isinstance(outcome, dict) and isinstance(scope, dict):
+              nested = outcome.get("outcome")
+              limitations = nested.get("limitations", []) if isinstance(nested, dict) else []
+              run_status = scope.get("run_status")
+              eligibility = scope.get("gate_eligibility")
+              complete = (
+                  outcome.get("analysis_complete") is True
+                  and isinstance(run_status, str)
+                  and "partial" not in run_status
+                  and "limited" not in run_status
+                  and eligibility != "ineligible"
+                  and limitations == []
+                  and badge.get("preview_skipped") is False
+              )
+          receipt = {
+              "schema": "ub-review.ripr_candidate_scope.v1",
+              "authority": "shadow-only",
+              "complete_for_comparison": complete,
+              "analysis_outcome": outcome,
+              "analysis_scope": scope,
+              "badge_status": badge.get("status"),
+              "badge_counts": badge.get("counts"),
+              "badge_preview_skipped": badge.get("preview_skipped"),
+              "limitations": limitations,
+          }
+          receipt_path.write_text(json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n")
+          with output_path.open("a") as stream:
+              stream.write(f"complete={'true' if complete else 'false'}\n")
+          PY
+
+      - name: Build bounded compatibility receipt
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.scope.outputs.complete }}" == "true" ]]; then
+            python scripts/compare-ripr-shadow.py \
+              --stable-json "$RAW_ROOT/stable.json.json" \
+              --candidate-json "$RAW_ROOT/candidate.json.json" \
+              --stable-version-file "$PUBLISH_ROOT/stable.version.txt" \
+              --candidate-version-file "$PUBLISH_ROOT/candidate.version.txt" \
+              --stable-exit-file "$PUBLISH_ROOT/stable.json.exit.txt" \
+              --candidate-exit-file "$PUBLISH_ROOT/candidate.json.exit.txt" \
+              --subject-base "$SUBJECT_BASE" \
+              --subject-head "$SUBJECT_HEAD" \
+              --subject-tree "$SUBJECT_TREE" \
+              --diff-sha256 "$DIFF_SHA256" \
+              --stable-source "crates.io:ripr@$RIPR_STABLE_VERSION" \
+              --candidate-source "git:ripr@$RIPR_CANDIDATE_SHA" \
+              --output-dir "$PUBLISH_ROOT"
+          else
+            cat > "$PUBLISH_ROOT/comparison.md" <<'MARKDOWN'
+          # RIPR candidate shadow comparison
+
+          Candidate analysis remained incomplete or gate-ineligible after the explicit bounded scope increase. No finding-count, gap-count, or promotion comparison is authorized. Inspect `candidate-scope.json` and the retained raw/badge outputs.
+          MARKDOWN
+          fi
+
+          cp "$RAW_ROOT/stable.badge.json" "$PUBLISH_ROOT/stable.badge.json"
+          cp "$RAW_ROOT/candidate.badge.json" "$PUBLISH_ROOT/candidate.badge.json"
+          gzip -6 -c "$RAW_ROOT/stable.json.json" \
             > "$PUBLISH_ROOT/stable.raw.json.gz"
-          gzip -6 -c "$RAW_ROOT/candidate.json" \
+          gzip -6 -c "$RAW_ROOT/candidate.json.json" \
             > "$PUBLISH_ROOT/candidate.raw.json.gz"
-          gzip -6 -c "$RAW_ROOT/stable.stderr" \
-            > "$PUBLISH_ROOT/stable.stderr.gz"
-          gzip -6 -c "$RAW_ROOT/candidate.stderr" \
-            > "$PUBLISH_ROOT/candidate.stderr.gz"
+          for name in stable candidate; do
+            for label in json badge; do
+              gzip -6 -c "$RAW_ROOT/$name.$label.stderr" \
+                > "$PUBLISH_ROOT/$name.$label.stderr.gz"
+            done
+          done
           gzip -6 -c "$SUBJECT_DIFF" > "$PUBLISH_ROOT/subject.diff.gz"
 
           if find "$PUBLISH_ROOT" -type l -print -quit | grep -q .; then
@@ -214,6 +291,7 @@ jobs:
           cat "$PUBLISH_ROOT/comparison.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload bounded shadow receipt
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ripr-candidate-shadow-pr1306
@@ -221,3 +299,10 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+
+      - name: Require complete candidate analysis for comparison
+        if: always() && steps.scope.outputs.complete != 'true'
+        shell: bash
+        run: |
+          echo "::error::candidate analyzer remained incomplete or gate-ineligible; no comparison is authorized"
+          exit 1
