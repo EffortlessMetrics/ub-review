@@ -1,167 +1,169 @@
-# Adopting ub-review as a non-blocking advisory reviewer (generic Rust repos)
+# Non-blocking advisory evaluation for a generic Rust repository
 
-This is the minimal, repo-agnostic path for adopting `ub-review` as a
-**non-blocking advisory reviewer** on a Rust repository that is **not** Bun
-(e.g. `perl-lsp-swarm`, `ripr-swarm`, `cargo-allow`). For the Bun preset, see
-[ACTION_CONSUMER_BUN.md](ACTION_CONSUMER_BUN.md) instead.
-
-Advisory means: `ub-review` runs the model-cohort review and posts **one grouped
-PR review** (neutral `COMMENT` event — never `REQUEST_CHANGES`), and the GitHub
-Actions check is **non-required** (`continue-on-error: true`, `fail-on-gate:
-'false'`). Findings never block merge; they surface as review comments and
-artifacts the human reviewer can read or ignore.
-
-> **The advisory mechanics already exist and work.** This guide only assembles
-> the minimal setup. There is no "advisory mode" feature to build — the
-> `COMMENT` event (`review_compiler.rs`) + `fail-on-gate: 'false'` gate
-> enforcement (`gate.rs`) are the advisory posture.
+**First run: model-off, artifact-only, non-required. Keep existing required CI.**
+This recipe is an engineering evaluation of the pinned source, not proof of
+production support, release-only installation, complete bounded output, or
+sole-gate readiness. [Product state](PRODUCT_STATE.md) owns earned capability;
+[Quickstart](QUICKSTART.md) covers identity selection and support diagnostics.
 
 ## What you need
 
-1. One org-level secret: `MINIMAX_API_KEY` (powers the MiniMax model cohort).
-2. Two files copied below: `.github/workflows/ub-review.yml` and
-   `policy/ub-review.toml`.
-3. Same-repo PRs only (org secrets are not safely exposed on fork PRs; this
-   workflow deliberately skips forks).
+Use a disposable repository or evaluation branch, GitHub-hosted Linux execution,
+a reviewed full Action commit SHA, and the two files below. No provider secret
+is needed. Start with same-repository PRs; this recipe deliberately skips forks
+rather than claiming fork coverage. The target's existing CI remains unchanged.
 
-## 1. The workflow
+Replace `<UB_REVIEW_FULL_COMMIT_SHA>` with the reviewed 40-character commit.
+The checkout and uploader pins below are the exact pins already used by this
+repository's protected-base independent baseline, not claims that they are the
+latest versions. Audit nested Action dependencies as part of tool selection.
 
-`.github/workflows/ub-review.yml`:
+## 1. Evaluation workflow
+
+`.github/workflows/ub-review-evaluation.yml`:
 
 ```yaml
-name: ub-review
+name: ub-review advisory evaluation
 
-# Advisory AI review: one grouped PR review, never blocks CI.
 on:
   pull_request:
     types: [opened, reopened, ready_for_review, synchronize]
 
-permissions:
-  contents: read
-  pull-requests: write
-  checks: write
+permissions: {}
 
 concurrency:
-  group: ub-review-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+  group: ub-review-evaluation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-  review:
-    # Skip fork PRs: they cannot safely access org secrets.
+  evidence:
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
-    continue-on-error: true   # advisory: a run failure never reds the PR check
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout exact candidate without persisted credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
-          fetch-depth: 0   # base/head resolution needs history
-      - name: Fail clearly if MINIMAX_API_KEY is missing
-        env:
-          _HAVE_MINIMAX: ${{ secrets.MINIMAX_API_KEY != '' && 'yes' || '' }}
-        run: |
-          if [ -z "${_HAVE_MINIMAX:-}" ]; then
-            echo "::error::MINIMAX_API_KEY is empty or missing; ub-review requires it for model review lanes."
-            exit 1
-          fi
-      - name: Run ub-review
-        uses: EffortlessMetrics/ub-review@<PIN>   # see "pinning" below
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Evaluate without model or publication credentials
+        uses: EffortlessMetrics/ub-review@<UB_REVIEW_FULL_COMMIT_SHA>
         with:
+          install-mode: source
+          review-mode: advisory
           profile: gh-runner
-          posting: review          # post one grouped PR review (neutral COMMENT)
-          fail-on-gate: 'false'    # advisory: the gate never reds this check
-          minimax-api-key: ${{ secrets.MINIMAX_API_KEY }}
-          base: origin/${{ github.base_ref }}
-          head: HEAD
-          out: target/ub-review
+          model-mode: off
+          posting: artifact-only
+          allow-heavy: 'false'
           config: policy/ub-review.toml
-      - name: Upload review artifacts
+          root: .
+          base: origin/${{ github.base_ref }}
+          head: ${{ github.event.pull_request.head.sha }}
+          pr-head-sha: ${{ github.event.pull_request.head.sha }}
+          out: target/ub-review
+      - name: Retain the evaluation packet
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: ub-review-artifacts
+          name: ub-review-evaluation-${{ github.event.pull_request.head.sha }}
           path: target/ub-review
-          if-no-files-found: warn
+          if-no-files-found: error
+          retention-days: 7
 ```
 
-## 2. The repo config
+Leave this job out of required-check settings. Non-required does not mean that
+an error must be hidden: installation, configuration, or upload failure may
+leave a red advisory check and should be investigated. The advisory preset
+sets `fail-on-gate: false`; it does not make its evidence complete or correct.
 
-`policy/ub-review.toml` (advisory posture, MiniMax-only cohort, core sensors
-non-required):
+The example source-builds the tool using its selected Action and toolchain.
+That is explicit development-source use, not a no-Cargo installation claim.
+`allow-heavy: false` leaves heavy witness classes unavailable unless separately
+authorized; their absence is not proof that the change is safe. A job timeout
+and seven-day retention do not implement process-stream or packet byte limits.
+[#1269](https://github.com/EffortlessMetrics/ub-review/issues/1269) owns output
+containment. Use disposable runners and inspect size before expanding a pilot.
+
+## 2. Evaluation config
+
+`policy/ub-review.toml`:
 
 ```toml
-# Advisory ub-review config. Findings are non-blocking review comments.
-review_profile = "gh-runner"
-repo.kind = "rust"
+profile = "gh-runner"
 
-[providers]
-policy = "minimax-only"   # one model cohort per run (cache-coherent)
+[repo]
+kind = "rust"
+ledger = ""
+base = "origin/main"
+head = "HEAD"
 
-[gate]
-# Advisory: never turn findings into a red required check. The workflow's
-# fail-on-gate: 'false' + continue-on-error already keep the job green;
-# this records the posture in the effective-config receipt.
-post_review_on = ["opened", "reopened", "ready_for_review", "synchronize"]
+[review_body]
+summary_only_body = "suppress"
 ```
 
-Sensors default to advisory (`required = false`) unless you opt a tool into
-required. To make a tool finding blocking later, add `[tools.<id>.gate]` and
-move the workflow to `fail-on-gate: 'true'` + a required check — see
-[POLICY_ALLOWLISTS.md](POLICY_ALLOWLISTS.md).
+The workflow's exact base/head arguments select the reviewed revision. Do not
+copy Bun-specific Required obligations or claim the generic profile replaces
+your repository's CI. Inspect the effective config and tool-selection receipts;
+missing tools remain missing evidence. Choose relevant sensors and explicit
+proof obligations only after reviewing the target repository's contract.
 
-## 3. Pinning
+## Inspect the first packet
 
-No public release archive exists yet (#343 tracks it). Until then, pin the
-action to a **merged main SHA** (every PR on `ub-review` passes its own
-self-gate before merge, so merged main SHAs are green-verified). Replace
-`<PIN>` with the short SHA of the version you want — for example `54d508a`,
-which includes the worker-safety / sensor-semantics / v2-proof fixes
-(#675–#683). Bump periodically to pick up fixes; the verifier pins in this
-repo catch drift.
+Record the exact Action SHA, candidate SHA, admitted revision identity, run and
+attempt, artifact digest, selected tools, terminal sensor/proof receipts, and
+missing evidence. Inspect `review/gate_outcome.json`, `review/calibration.json`,
+and the public payload or skip receipt; compare available task/publication
+shadow reports without treating them as production enforcement authority.
 
-```yaml
-uses: EffortlessMetrics/ub-review@54d508a   # example; pin to a current merged SHA
-```
+This recipe intentionally posts nothing and performs no model investigation.
+It therefore cannot prove review usefulness, provider reliability, or confirmed
+GitHub delivery. A missing packet is a failed evidence collection, not an
+expected-quiet review. Keep diagnostic failure separate from deterministic code
+failure, and retain successful Required evidence separately from review prose.
 
-> **Self-hosted / CX runners:** without a release archive, the action builds
-> `ub-review` from source, which needs Rust on the runner. GitHub-hosted
-> `ubuntu-latest` runners have Rust; Docker-only CX runners may not. Keep
-> advisory jobs on GitHub-hosted runners until #343 ships a release archive.
+## Move to model-on advisory review deliberately
 
-## What you get
+Model-on review is a separate, explicitly reviewed pilot. Its goal is one useful
+grouped neutral `COMMENT` review when material findings warrant it, not a lane
+roster or a comment on every run. It requires valid provider output and actual
+current-head delivery confirmation. Preparing a payload is not posting it.
 
-- One grouped PR review per run (neutral `COMMENT` event), with any
-  inline comments anchored to the diff.
-- A full artifact tree (`target/ub-review/`) uploaded for debugging:
-  `review/review.json`, `review/gate_outcome.json`, lane outputs, proof
-  receipts, sensor status.
-- A single MiniMax model cohort per run (cache-coherent prefix across all
-  specialist lanes).
-- Never a merge block: the check is non-required and `continue-on-error`.
+Do not simply add provider keys or a write token to the candidate-execution job
+above. Separate trusted reviewer/publisher execution from untrusted code and
+validate artifact identity, schema, size, and provenance at each handoff. A
+same-repository guard, masked logs, or passing a secret via `with:` is not that
+isolation boundary. `pull_request_target` is not a shortcut for obtaining keys.
+The stable coordinator and external proof remain tracked by
+[#658](https://github.com/EffortlessMetrics/ub-review/issues/658) and
+[#811](https://github.com/EffortlessMetrics/ub-review/issues/811).
 
-## Fork-PR safety
+For a reviewed model-on pilot, calibrate accepted/invalid/duplicate/missed
+findings, proof-changed conclusions, quiet-clean behavior, delivery failures,
+latency, provider cost, and artifact size. Keep existing CI and non-required
+review posture while collecting that evidence. Merely seeing no complaints or
+one acted-on comment does not authorize required-check promotion.
 
-This workflow runs `if: head.repo.full_name == github.repository`, so fork PRs
-are skipped silently. Forks cannot safely access `MINIMAX_API_KEY`, and
-`pull_request_target` on an untrusted checkout is avoided. If you need fork
-coverage, use a separate trusted-only dispatch.
+## Pinning, upgrades, and rollback
 
-## Next steps (when ready)
+Published archive history is in [the release runbook](RELEASE_RUNBOOK.md);
+archives do exist, but publication alone does not establish current support.
+Keep the Action source SHA distinct from the release version and exact archive
+digest. Strict release installation requires independently verified positive
+and negative asset/runtime tests, with no silent source fallback.
 
-- **Calibrate:** record a few runs in a `ub-review-calibration.jsonl`
-  (true-positive / expected-quiet / false-positive) before raising any
-  severity.
-- **Add a repo-specific profile:** replace `review_profile = "gh-runner"` with
-  a profile calibrated to your repo's real risk surfaces.
-- **Promote to blocking:** only after low-noise calibration — flip
-  `fail-on-gate` to `'true'`, add `[tools.<id>.gate]` thresholds, and make
-  `ub-review/gate` a required branch-protection check.
+For an upgrade, retain the previous verified immutable pin and compare the
+workflow, config, tool, and artifact identities. Re-run the same evaluation
+before expansion. If it regresses, restore that prior workflow/config/pin or
+remove the non-required evaluation workflow. Do not change existing required CI,
+move historical tags, overwrite release assets, or relabel old receipts.
 
 ## Related
 
-- [README.md](../README.md) — project overview and the Bun adoption path.
-- [POLICY_ALLOWLISTS.md](POLICY_ALLOWLISTS.md) — tool-gate thresholds and
-  required-vs-advisory policy.
-- [RUNTIME_PROFILES.md](RUNTIME_PROFILES.md) — runner-size profiles.
-- #343 — publish a release archive (removes the source-build pin requirement).
-- #678 — the cohort-orchestrator epic (same-model review-team topology).
+- [Quickstart and support evidence](QUICKSTART.md).
+- [Mode and promotion boundaries](ADOPTION_MODES.md).
+- [Runtime profiles](RUNTIME_PROFILES.md) and [tool policy](POLICY_ALLOWLISTS.md).
+- [GitHub secure use](https://docs.github.com/en/actions/reference/security/secure-use).
+- [GitHub privileged PR workflow guidance](https://docs.github.com/en/actions/reference/security/securely-using-pull_request_target).
