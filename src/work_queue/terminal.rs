@@ -441,6 +441,25 @@ fn terminal_proof_receipt_status(receipt: &ProofReceipt) -> Result<String> {
         "proof receipt {} has empty terminal result",
         receipt.id
     );
+    // These are the terminal results emitted by the current focused build
+    // and red/green brokers. Unknown or in-flight states are not evidence of
+    // completion, even when an otherwise valid receipt contains them.
+    anyhow::ensure!(
+        matches!(
+            receipt.result.as_str(),
+            "head_passed"
+                | "head_failed"
+                | "discriminating"
+                | "non_discriminating"
+                | "base_patch_failed"
+                | "timed_out"
+                | "skipped_budget"
+                | "skipped_profile"
+        ),
+        "proof receipt {} has unsupported terminal result {}",
+        receipt.id,
+        receipt.result
+    );
     Ok(receipt.result.clone())
 }
 
