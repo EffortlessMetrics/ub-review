@@ -4,7 +4,13 @@ use super::*;
 #[test]
 fn nonterminal_and_unknown_proof_results_cannot_commit_terminal_output() -> Result<()> {
     for joined in [false, true] {
-        for result in ["planned", "queued", "running", "future_result", " head_passed "] {
+        for result in [
+            "planned",
+            "queued",
+            "running",
+            "future_result",
+            " head_passed ",
+        ] {
             let temp = tempfile::tempdir()?;
             let out = temp.path();
             let tasks = if joined {
