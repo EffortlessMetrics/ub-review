@@ -97,7 +97,11 @@ pub(super) fn write_sensor_receipt(out: &Path, id: &str, status: &str) -> Result
     )
 }
 
-pub(super) fn write_sensor_receipt_value(out: &Path, id: &str, value: &serde_json::Value) -> Result<()> {
+pub(super) fn write_sensor_receipt_value(
+    out: &Path,
+    id: &str,
+    value: &serde_json::Value,
+) -> Result<()> {
     let path = out
         .join("sensors")
         .join(id)
@@ -114,4 +118,3 @@ pub(super) fn receipt_reference_count(rows: &[serde_json::Value], receipt_id: &s
         .filter(|value| value.as_str() == Some(receipt_id))
         .count()
 }
-
