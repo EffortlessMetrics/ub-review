@@ -11,3 +11,6 @@ mod publication;
 
 #[path = "tests/validation.rs"]
 mod validation;
+
+#[path = "terminal_contract_tests.rs"]
+mod contracts;
