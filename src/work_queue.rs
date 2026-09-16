@@ -326,11 +326,30 @@ pub(crate) fn focused_proof_task_purpose(plan: &FocusedProofPlan) -> String {
     }
 }
 
+fn invalidate_terminal_queue_commit_marker(out: &Path) -> Result<()> {
+    let path = out.join("work_queue_terminal.json");
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| {
+            format!(
+                "remove stale terminal queue commit marker {} before publishing proof receipts",
+                path.display()
+            )
+        }),
+    }
+}
+
 pub(crate) fn write_proof_receipt_artifacts(
     out: &Path,
     proof_receipts: &[ProofReceipt],
     revision: Option<&crate::RevisionRef>,
 ) -> Result<()> {
+    let terminal_projection = out.join("work_queue_plan.json").is_file();
+    if terminal_projection {
+        invalidate_terminal_queue_commit_marker(out)?;
+    }
+
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
     // A1.3 (#950): stamp every row with the admitted revision at write time,
@@ -354,7 +373,7 @@ pub(crate) fn write_proof_receipt_artifacts(
         ndjson.push('\n');
     }
     fs::write(out.join("proof_receipts.ndjson"), ndjson)?;
-    if out.join("work_queue_plan.json").is_file() {
+    if terminal_projection {
         terminal::write_terminal_work_queue_artifacts(out, &stamped)?;
     }
     Ok(())
