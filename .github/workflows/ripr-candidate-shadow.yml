@@ -193,31 +193,49 @@ jobs:
           badge = json.loads(badge_path.read_text())
           outcome = raw.get("analysis_outcome")
           scope = raw.get("analysis_scope")
-          limitations = []
-          complete = False
-          if isinstance(outcome, dict) and isinstance(scope, dict):
-              nested = outcome.get("outcome")
-              limitations = nested.get("limitations", []) if isinstance(nested, dict) else []
+          nested = outcome.get("outcome") if isinstance(outcome, dict) else None
+          limitations = nested.get("limitations", []) if isinstance(nested, dict) else []
+          kind = nested.get("kind") if isinstance(nested, dict) else None
+          complete_kinds = {
+              "no_scope",
+              "no_changed_lines",
+              "no_behavioral_candidates",
+              "complete_no_findings",
+              "complete_with_findings",
+          }
+          scope_limited = False
+          scope_valid = scope is None or isinstance(scope, dict)
+          if isinstance(scope, dict):
               run_status = scope.get("run_status")
               eligibility = scope.get("gate_eligibility")
-              complete = (
-                  outcome.get("analysis_complete") is True
-                  and isinstance(run_status, str)
-                  and "partial" not in run_status
-                  and "limited" not in run_status
-                  and eligibility != "ineligible"
-                  and limitations == []
-                  and badge.get("preview_skipped") is False
+              scope_limited = (
+                  (isinstance(run_status, str) and ("partial" in run_status or "limited" in run_status))
+                  or eligibility == "ineligible"
               )
+          preview_skipped = badge.get("preview_skipped")
+          preview_complete = isinstance(preview_skipped, list) and preview_skipped == []
+          complete = (
+              isinstance(outcome, dict)
+              and isinstance(nested, dict)
+              and outcome.get("analysis_complete") is True
+              and kind in complete_kinds
+              and limitations == []
+              and scope_valid
+              and not scope_limited
+              and preview_complete
+          )
           receipt = {
               "schema": "ub-review.ripr_candidate_scope.v1",
               "authority": "shadow-only",
+              "completeness_authority": "analysis_outcome",
               "complete_for_comparison": complete,
               "analysis_outcome": outcome,
+              "analysis_outcome_kind": kind,
               "analysis_scope": scope,
+              "analysis_scope_limited": scope_limited,
               "badge_status": badge.get("status"),
               "badge_counts": badge.get("counts"),
-              "badge_preview_skipped": badge.get("preview_skipped"),
+              "badge_preview_skipped": preview_skipped,
               "limitations": limitations,
           }
           receipt_path.write_text(json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n")
@@ -249,7 +267,7 @@ jobs:
             cat > "$PUBLISH_ROOT/comparison.md" <<'MARKDOWN'
           # RIPR candidate shadow comparison
 
-          Candidate analysis remained incomplete or gate-ineligible after the explicit bounded scope increase. No finding-count, gap-count, or promotion comparison is authorized. Inspect `candidate-scope.json` and the retained raw/badge outputs.
+          Candidate typed analysis outcome, optional scope metadata, or preview-skip signal did not establish complete diff analysis. No finding-count, gap-count, or promotion comparison is authorized. Inspect `candidate-scope.json` and the retained raw/badge outputs.
           MARKDOWN
           fi
 
@@ -304,5 +322,5 @@ jobs:
         if: always() && steps.scope.outputs.complete != 'true'
         shell: bash
         run: |
-          echo "::error::candidate analyzer remained incomplete or gate-ineligible; no comparison is authorized"
+          echo "::error::candidate typed analysis outcome did not establish complete comparable input; no comparison is authorized"
           exit 1
