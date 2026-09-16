@@ -20,3 +20,6 @@ mod statuses;
 
 #[path = "terminal_catalog_schema_tests.rs"]
 mod catalog_schema;
+
+#[path = "terminal_path_tests.rs"]
+mod paths;
