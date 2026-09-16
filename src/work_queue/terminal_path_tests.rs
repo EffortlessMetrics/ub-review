@@ -55,6 +55,8 @@ fn sensor_receipt_symlinks_cannot_borrow_another_packets_evidence() -> Result<()
         write_terminal_work_queue_artifacts(&out, &[])?;
         let external = temp.path().join("external");
         write_sensor_receipt(&external, "alpha", "ok")?;
+        let external_receipt = external.join("sensors/alpha/ub-review-sensor-status.json");
+        let external_bytes = fs::read(&external_receipt)?;
         let relative = match component {
             "leaf" => "sensors/alpha/ub-review-sensor-status.json",
             "sensor-directory" => "sensors/alpha",
@@ -71,13 +73,42 @@ fn sensor_receipt_symlinks_cannot_borrow_another_packets_evidence() -> Result<()
             .err()
             .with_context(|| format!("sensor receipt symlink was accepted: {component}"))?;
         assert!(format!("{error:#}").contains("sensor receipt path"));
+        for name in [
+            TERMINAL_QUEUE_FILE,
+            TERMINAL_EVENTS_FILE,
+            TERMINAL_QUEUE_TMP_FILE,
+            TERMINAL_EVENTS_TMP_FILE,
+        ] {
+            assert!(!out.join(name).exists(), "symlink retained {name}");
+        }
+        assert_eq!(fs::read(&external_receipt)?, external_bytes);
+    }
+    Ok(())
+}
+
+#[test]
+fn sensor_path_components_are_rejected_before_receipt_access() -> Result<()> {
+    for id in [
+        "",
+        ".",
+        "..",
+        "../alpha",
+        "nested/alpha",
+        "nested\\alpha",
+        "C:alpha",
+        "alpha\0",
+    ] {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        let plan = write_plan(out, vec![sensor_task(id, "planned")])?;
+        let error = write_terminal_work_queue_artifacts(out, &[])
+            .err()
+            .with_context(|| format!("unsafe sensor path component was accepted: {id:?}"))?;
+        assert!(format!("{error:#}").contains("sensor receipt path has invalid sensor identity"));
+        assert_eq!(fs::read(out.join("work_queue_plan.json"))?, plan);
+        assert!(!out.join("sensors").exists());
         assert!(!out.join(TERMINAL_QUEUE_FILE).exists());
         assert!(!out.join(TERMINAL_EVENTS_FILE).exists());
-        assert!(
-            external
-                .join("sensors/alpha/ub-review-sensor-status.json")
-                .is_file()
-        );
     }
     Ok(())
 }

@@ -328,7 +328,10 @@ fn terminalize_sensor(
         ));
     }
     let receipt_path = receipt_path.context("planned sensor has no receipt path")?;
-    let path = out.join(receipt_path);
+    let sensor_id = task_id
+        .strip_prefix("sensor-")
+        .context("sensor queue task identity lacks sensor- prefix")?;
+    let path = sensor_receipt_path(out, sensor_id, receipt_path)?;
     let bytes = match fs::read(&path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -345,9 +348,6 @@ fn terminalize_sensor(
     };
     let receipt: serde_json::Value = serde_json::from_slice(&bytes)
         .with_context(|| format!("parse sensor receipt {}", path.display()))?;
-    let sensor_id = task_id
-        .strip_prefix("sensor-")
-        .context("sensor queue task identity lacks sensor- prefix")?;
     anyhow::ensure!(
         receipt.get("sensor").and_then(serde_json::Value::as_str) == Some(sensor_id),
         "sensor receipt identity does not match terminal queue task {task_id}"
@@ -370,6 +370,38 @@ fn terminalize_sensor(
         .to_owned();
     source_receipts.insert(receipt_path.to_owned());
     Ok((status.to_owned(), reason, Vec::new(), Vec::new()))
+}
+
+fn sensor_receipt_path(out: &Path, sensor_id: &str, receipt_path: &str) -> Result<PathBuf> {
+    anyhow::ensure!(
+        !sensor_id.is_empty()
+            && !matches!(sensor_id, "." | "..")
+            && !sensor_id.contains(['/', '\\', ':', '\0']),
+        "sensor receipt path has invalid sensor identity {sensor_id}"
+    );
+    anyhow::ensure!(
+        receipt_path == format!("sensors/{sensor_id}/ub-review-sensor-status.json"),
+        "sensor receipt path does not match producer path for {sensor_id}"
+    );
+    // The output root is trusted and single-writer. Refuse existing redirects
+    // below it; this is not isolation against concurrent filesystem mutation.
+    let mut path = out.to_path_buf();
+    for component in ["sensors", sensor_id, "ub-review-sensor-status.json"] {
+        path.push(component);
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) => anyhow::ensure!(
+                !metadata.file_type().is_symlink(),
+                "sensor receipt path contains a symlink: {}",
+                path.display()
+            ),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("inspect sensor receipt path {}", path.display()));
+            }
+        }
+    }
+    Ok(path)
 }
 
 fn terminalize_proof(

@@ -73,6 +73,22 @@ receipt retains its producer result such as `head_passed`, `head_failed`, or
 `discriminating`. Multiple distinct receipt results remain explicit rather
 than being collapsed.
 
+## Sensor receipt path admission
+
+A selected sensor reads only its exact producer path:
+`sensors/<sensor-id>/ub-review-sensor-status.json`. Absolute, parent-relative,
+and unrelated packet-local paths are rejected before receipt content is read.
+Empty or dot-component identities and identities containing a slash, backslash,
+colon, or NUL cannot supply that path. Existing symlink components below the
+output root are rejected, including the receipt itself and both parent levels.
+
+The output root remains a trusted, single-writer directory. These checks reject
+existing redirects; they do not provide isolation against a process concurrently
+replacing filesystem entries. Intentionally skipped sensors still read no
+receipt. An absent canonical receipt still projects as `missing_receipt`, not
+success. A path rejection leaves no committed terminal generation and does not
+modify planner bytes or the external receipt.
+
 ## Fail-closed publication
 
 Before publishing any new planner artifact, the producer removes both canonical
