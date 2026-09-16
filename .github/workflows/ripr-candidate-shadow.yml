@@ -100,6 +100,22 @@ jobs:
               code=$?
               set -e
               printf '%s\n' "$code" > "$STAGE_ROOT/$name.$label.exit.txt"
+              # Retain a bounded diagnostic in the job log even when no packet
+              # may be published. JSON-escape stderr; never emit tool text as
+              # workflow-command lines or hide the actual producer exit.
+              python - "$name" "$label" "$code" "$maximum" <<'PY'
+          import hashlib, json, os, sys
+          from pathlib import Path
+          name, label, code, maximum = sys.argv[1:]
+          root = Path(os.environ['RAW_ROOT'])
+          output = root / f'{name}.{label}.json'
+          error = root / f'{name}.{label}.stderr'
+          with error.open('rb') as stream:
+              excerpt = stream.read(4096).decode('utf-8', errors='replace')
+          with output.open('rb') as stream:
+              digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+          print(json.dumps({'schema':'ub-review.ripr_invocation_diagnostic.v1','analyzer':name,'format':label,'exit_code':int(code),'stdout_bytes':output.stat().st_size,'stdout_sha256':digest,'stdout_limit':int(maximum),'stderr_bytes':error.stat().st_size,'stderr_limit':int(os.environ['MAX_STDERR_BYTES']),'stderr_excerpt':excerpt}, sort_keys=True, ensure_ascii=True))
+          PY
               # A truncated/killed/timed-out producer is not comparable evidence.
               test "$code" -eq 0 -o "$code" -eq 1
               test -s "$RAW_ROOT/$name.$label.json"
