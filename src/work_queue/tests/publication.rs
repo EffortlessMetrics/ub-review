@@ -200,3 +200,72 @@ fn new_plan_cleanup_failure_preserves_every_planner_artifact() -> Result<()> {
     }
     Ok(())
 }
+
+#[test]
+fn receipt_write_failure_invalidates_old_marker_before_terminal_rebuild() -> Result<()> {
+    for blocked in ["review/proof_receipts.json", "proof_receipts.ndjson"] {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        let plan_bytes = write_plan(out, vec![proof_plan_task("proof-task-a")])?;
+        write_proof_tasks(out, &[("proof-task-a", &["req-a"])])?;
+        let first = proof_receipt("proof-receipt-a", &["req-a"], &["tests-oracle"]);
+        write_proof_receipt_artifacts(out, &[first], None)?;
+        assert!(out.join(TERMINAL_QUEUE_FILE).is_file());
+        let prior_ndjson = fs::read(out.join("proof_receipts.ndjson"))?;
+        let blocked_path = out.join(blocked);
+        fs::remove_file(&blocked_path)?;
+        fs::create_dir(&blocked_path)?;
+        let replacement = proof_receipt("proof-receipt-b", &["req-a"], &["tests-oracle"]);
+
+        // Fail before terminal recomputation can remove the old marker again.
+        // Both the first write and the second write need this generation fence.
+        let error = write_proof_receipt_artifacts(out, std::slice::from_ref(&replacement), None)
+            .err()
+            .with_context(|| format!("receipt writer accepted directory at {blocked}"))?;
+        assert!(error.downcast_ref::<std::io::Error>().is_some());
+        assert!(blocked_path.is_dir());
+        assert!(
+            !out.join(TERMINAL_QUEUE_FILE).exists(),
+            "failed replacement retained the previous terminal marker at {blocked}"
+        );
+        assert_eq!(fs::read(out.join("work_queue_plan.json"))?, plan_bytes);
+        assert_eq!(fs::read(out.join("work_queue.json"))?, plan_bytes);
+        for name in [TERMINAL_QUEUE_TMP_FILE, TERMINAL_EVENTS_TMP_FILE] {
+            assert!(!out.join(name).exists(), "failed write left staging {name}");
+        }
+        if blocked == "review/proof_receipts.json" {
+            assert_eq!(fs::read(out.join("proof_receipts.ndjson"))?, prior_ndjson);
+        } else {
+            let partial: Vec<ProofReceipt> =
+                serde_json::from_slice(&fs::read(out.join("review/proof_receipts.json"))?)?;
+            assert_eq!(partial.len(), 1);
+            assert_eq!(partial[0].id, "proof-receipt-b");
+        }
+        // Existing terminal events alone are not a committed generation.
+        // After the obstruction is removed, a normal retry must publish only
+        // the replacement receipt, not recover the stale receipt identity.
+        fs::remove_dir(&blocked_path)?;
+        write_proof_receipt_artifacts(out, &[replacement], None)?;
+        let terminal: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join(TERMINAL_QUEUE_FILE))?)?;
+        let tasks = terminal["tasks"]
+            .as_array()
+            .context("terminal tasks missing")?;
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0]["id"], "proof-task-a");
+        assert_eq!(tasks[0]["receipt_ids"], serde_json::json!(["proof-receipt-b"]));
+        assert_eq!(terminal["source_plan_sha256"], sha256_hex(&plan_bytes));
+        let event_text = fs::read_to_string(out.join(TERMINAL_EVENTS_FILE))?;
+        let events = event_text
+            .lines()
+            .map(serde_json::from_str)
+            .collect::<serde_json::Result<Vec<serde_json::Value>>>()?;
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["task_id"], "proof-task-a");
+        assert_eq!(events[0]["receipt_ids"], serde_json::json!(["proof-receipt-b"]));
+        for name in [TERMINAL_QUEUE_TMP_FILE, TERMINAL_EVENTS_TMP_FILE] {
+            assert!(!out.join(name).exists(), "retry left staging {name}");
+        }
+    }
+    Ok(())
+}
