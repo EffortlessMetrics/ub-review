@@ -159,7 +159,8 @@ fn rollback_planner_artifacts(
         .iter()
         .zip(&previous[..marker_index])
     {
-        if let Err(error) = restore_optional_file(&out.join(artifact.destination), prior.as_deref()) {
+        if let Err(error) = restore_optional_file(&out.join(artifact.destination), prior.as_deref())
+        {
             failures.push(format!(
                 "restore prior planner artifact {}: {error:#}",
                 artifact.destination
@@ -393,7 +394,9 @@ mod tests {
                     if index == 3 {
                         fs::remove_file(out.join(blocked))?;
                         fs::create_dir(out.join(blocked))?;
-                        anyhow::bail!("injected publication failure with blocked restore {blocked}");
+                        anyhow::bail!(
+                            "injected publication failure with blocked restore {blocked}"
+                        );
                     }
                     Ok(())
                 },
@@ -409,7 +412,11 @@ mod tests {
             );
             for (name, bytes) in previous_artifacts() {
                 if name != blocked && name != WORK_QUEUE_PLAN_FILE {
-                    assert_eq!(fs::read(out.join(name))?, bytes, "unrestored sibling {name}");
+                    assert_eq!(
+                        fs::read(out.join(name))?,
+                        bytes,
+                        "unrestored sibling {name}"
+                    );
                 }
             }
             assert!(out.join(blocked).is_dir());
@@ -421,7 +428,10 @@ mod tests {
             assert_eq!(fs::read(out.join(WORK_QUEUE_FILE))?, b"retry queue");
             assert_eq!(fs::read(out.join(WORK_QUEUE_PLAN_FILE))?, b"retry queue");
             assert_eq!(fs::read(out.join(WORK_EVENTS_FILE))?, b"retry events\n");
-            assert_eq!(fs::read(out.join(WORK_EVENTS_PLAN_FILE))?, b"retry events\n");
+            assert_eq!(
+                fs::read(out.join(WORK_EVENTS_PLAN_FILE))?,
+                b"retry events\n"
+            );
         }
         Ok(())
     }
