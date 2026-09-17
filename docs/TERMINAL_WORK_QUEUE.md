@@ -109,14 +109,22 @@ On a handled replacement failure, rollback attempts every non-marker sibling
 rather than stopping at the first restoration error, and staging cleanup
 attempts every staging path rather than stopping at the first obstruction. The
 prior plan marker is restored only after every non-marker sibling is restored.
-If any sibling restore or cleanup remains incomplete, the marker stays absent
-and the caller receives both the original publication error and the retained
-rollback diagnostics. A complete rollback restores the entire prior planner set;
-when no prior set existed, it restores absence. An abrupt interruption during
-the canonical swaps likewise leaves the plan marker absent rather than
-advertising a mixed generation. The terminal generation remains invalidated
-after a failed planner publication; rollback never revives a terminal
-projection for the restored plan implicitly.
+An incomplete sibling restoration withholds the marker; a failed marker restore
+also attempts to remove any incomplete marker. The caller receives the original
+publication error together with rollback and cleanup diagnostics, including any
+failure to withhold the marker. A staging-cleanup failure alone can leave a
+coherent restored planner set, but still returns an error and names the residue.
+It is not reported as complete recovery or successful publication of new work.
+
+A complete rollback restores the prior planner set; when no prior set existed,
+it restores absence. Persistent filesystem obstructions must be resolved before
+retrying. Interruption during canonical replacement, before the final marker is
+published, leaves the plan marker absent rather than advertising a mixed set.
+The terminal generation remains invalidated after failed planner publication;
+rollback never implicitly revives a terminal projection for the restored plan.
+These are single-writer, process-level recovery guarantees, not concurrent-reader
+isolation or storage durability. The publisher does not synchronize files or
+directories to stable storage and does not claim power-loss atomicity.
 
 Proof receipt replacement separately invalidates the terminal queue commit
 marker before writing new receipt bytes. Terminal projection then removes all
