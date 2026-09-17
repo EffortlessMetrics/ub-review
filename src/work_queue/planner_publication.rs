@@ -83,10 +83,7 @@ fn publish_work_queue_plan_artifacts_with_hook(
     Ok(())
 }
 
-fn planner_artifacts<'a>(
-    queue_bytes: &'a [u8],
-    event_bytes: &'a [u8],
-) -> [PlannerArtifact<'a>; 4] {
+fn planner_artifacts<'a>(queue_bytes: &'a [u8], event_bytes: &'a [u8]) -> [PlannerArtifact<'a>; 4] {
     [
         PlannerArtifact {
             destination: WORK_QUEUE_FILE,
