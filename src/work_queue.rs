@@ -5,6 +5,9 @@
 use crate::test_parse::push_unique;
 use crate::*;
 
+mod planner_publication;
+mod terminal;
+
 pub(crate) fn proof_task_artifact(
     plan: FocusedProofPlan,
     budget: ProofBudget,
@@ -102,6 +105,10 @@ pub(crate) fn write_work_queue_artifacts(
     plan: &Plan,
     proof_tasks: &[ProofTaskArtifact],
 ) -> Result<()> {
+    // A reused output directory must not expose the previous run's terminal
+    // projection while any new planner artifact is being published.
+    terminal::remove_terminal_work_queue_artifacts(out)?;
+
     let mut tasks = plan
         .sensors
         .iter()
@@ -114,10 +121,7 @@ pub(crate) fn write_work_queue_artifacts(
         follow_up_deadline_sec: DEFAULT_FOLLOW_UP_PACKET_DEADLINE_SEC,
         tasks: &tasks,
     };
-    fs::write(
-        out.join("work_queue.json"),
-        serde_json::to_vec_pretty(&queue)?,
-    )?;
+    let queue_bytes = serde_json::to_vec_pretty(&queue)?;
 
     let mut ndjson = String::new();
     for task in &tasks {
@@ -138,8 +142,8 @@ pub(crate) fn write_work_queue_artifacts(
         ndjson.push_str(&serde_json::to_string(&event)?);
         ndjson.push('\n');
     }
-    fs::write(out.join("work_events.ndjson"), ndjson)?;
-    Ok(())
+
+    planner_publication::publish_work_queue_plan_artifacts(out, &queue_bytes, ndjson.as_bytes())
 }
 
 pub(crate) fn work_queue_task_from_sensor(
@@ -322,11 +326,30 @@ pub(crate) fn focused_proof_task_purpose(plan: &FocusedProofPlan) -> String {
     }
 }
 
+fn invalidate_terminal_queue_commit_marker(out: &Path) -> Result<()> {
+    let path = out.join(terminal::TERMINAL_QUEUE_FILE);
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| {
+            format!(
+                "remove stale terminal queue commit marker {} before publishing proof receipts",
+                path.display()
+            )
+        }),
+    }
+}
+
 pub(crate) fn write_proof_receipt_artifacts(
     out: &Path,
     proof_receipts: &[ProofReceipt],
     revision: Option<&crate::RevisionRef>,
 ) -> Result<()> {
+    let terminal_projection = out.join("work_queue_plan.json").is_file();
+    if terminal_projection {
+        invalidate_terminal_queue_commit_marker(out)?;
+    }
+
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
     // A1.3 (#950): stamp every row with the admitted revision at write time,
@@ -350,6 +373,9 @@ pub(crate) fn write_proof_receipt_artifacts(
         ndjson.push('\n');
     }
     fs::write(out.join("proof_receipts.ndjson"), ndjson)?;
+    if terminal_projection {
+        terminal::write_terminal_work_queue_artifacts(out, &stamped)?;
+    }
     Ok(())
 }
 
