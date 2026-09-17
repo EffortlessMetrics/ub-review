@@ -185,7 +185,18 @@ fn new_plan_cleanup_failure_preserves_every_planner_artifact() -> Result<()> {
         for name in planner_files {
             fs::write(out.join(name), b"previous planner bytes")?;
         }
-        fs::create_dir(out.join(blocked))?;
+        for name in [
+            TERMINAL_QUEUE_FILE,
+            TERMINAL_EVENTS_FILE,
+            TERMINAL_QUEUE_TMP_FILE,
+            TERMINAL_EVENTS_TMP_FILE,
+        ] {
+            if name == blocked {
+                fs::create_dir(out.join(name))?;
+            } else {
+                fs::write(out.join(name), b"stale terminal bytes")?;
+            }
+        }
         let plan = crate::tests::test_plan(Vec::new());
         let error = write_work_queue_artifacts(out, &plan, &[])
             .err()
@@ -197,6 +208,16 @@ fn new_plan_cleanup_failure_preserves_every_planner_artifact() -> Result<()> {
             assert_eq!(fs::read(out.join(name))?, b"previous planner bytes");
         }
         assert!(out.join(blocked).is_dir());
+        for name in [
+            TERMINAL_QUEUE_FILE,
+            TERMINAL_EVENTS_FILE,
+            TERMINAL_QUEUE_TMP_FILE,
+            TERMINAL_EVENTS_TMP_FILE,
+        ] {
+            if name != blocked {
+                assert!(!out.join(name).exists(), "cleanup skipped {name}");
+            }
+        }
     }
     Ok(())
 }
@@ -272,6 +293,95 @@ fn receipt_write_failure_invalidates_old_marker_before_terminal_rebuild() -> Res
         for name in [TERMINAL_QUEUE_TMP_FILE, TERMINAL_EVENTS_TMP_FILE] {
             assert!(!out.join(name).exists(), "retry left staging {name}");
         }
+    }
+    Ok(())
+}
+
+#[test]
+fn terminal_cleanup_attempts_all_paths_and_retains_each_failure() -> Result<()> {
+    let names = [
+        TERMINAL_QUEUE_FILE,
+        TERMINAL_EVENTS_FILE,
+        TERMINAL_QUEUE_TMP_FILE,
+        TERMINAL_EVENTS_TMP_FILE,
+    ];
+    for blocked_mask in 1..(1usize << names.len()) {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        for (index, name) in names.iter().enumerate() {
+            if blocked_mask & (1 << index) != 0 {
+                fs::create_dir(out.join(name))?;
+            } else {
+                fs::write(out.join(name), b"stale terminal bytes")?;
+            }
+        }
+        let error = remove_terminal_work_queue_artifacts(out)
+            .err()
+            .context("terminal cleanup accepted a blocked path")?;
+        assert!(error.downcast_ref::<std::io::Error>().is_some());
+        let diagnostic = format!("{error:#}");
+        for (index, name) in names.iter().enumerate() {
+            let path = out.join(name);
+            if blocked_mask & (1 << index) != 0 {
+                assert!(path.is_dir());
+                let expected = format!("remove stale terminal queue artifact {}", path.display());
+                assert!(diagnostic.contains(&expected), "lost error for {name}");
+                fs::remove_dir(&path)?;
+            } else {
+                assert!(!path.exists(), "cleanup skipped {name}");
+            }
+        }
+        remove_terminal_work_queue_artifacts(out)?;
+        assert!(fs::read_dir(out)?.next().is_none());
+    }
+    Ok(())
+}
+
+#[test]
+fn terminal_staging_failure_retains_cleanup_errors_and_allows_retry() -> Result<()> {
+    for (blocked, primary) in [
+        (TERMINAL_QUEUE_TMP_FILE, "stage terminal queue artifact"),
+        (TERMINAL_EVENTS_TMP_FILE, "stage terminal event artifact"),
+    ] {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        for name in [TERMINAL_QUEUE_TMP_FILE, TERMINAL_EVENTS_TMP_FILE] {
+            if name == blocked {
+                fs::create_dir(out.join(name))?;
+            } else {
+                fs::write(out.join(name), b"stale staging bytes")?;
+            }
+        }
+        let error = publish_terminal_work_queue_artifacts(out, b"queue", b"events\n")
+            .err()
+            .context("terminal publication accepted a blocked staging path")?;
+        assert!(error.downcast_ref::<std::io::Error>().is_some());
+        let diagnostic = format!("{error:#}");
+        assert!(diagnostic.contains(primary));
+        assert!(diagnostic.contains("terminal publication cleanup incomplete"));
+        let expected = format!(
+            "remove stale terminal queue artifact {}",
+            out.join(blocked).display()
+        );
+        assert!(diagnostic.contains(&expected));
+        for name in [
+            TERMINAL_QUEUE_FILE,
+            TERMINAL_EVENTS_FILE,
+            TERMINAL_QUEUE_TMP_FILE,
+            TERMINAL_EVENTS_TMP_FILE,
+        ] {
+            if name == blocked {
+                assert!(out.join(name).is_dir());
+            } else {
+                assert!(!out.join(name).exists(), "publication left {name}");
+            }
+        }
+        fs::remove_dir(out.join(blocked))?;
+        publish_terminal_work_queue_artifacts(out, b"retry queue", b"retry events\n")?;
+        assert_eq!(fs::read(out.join(TERMINAL_QUEUE_FILE))?, b"retry queue");
+        assert_eq!(fs::read(out.join(TERMINAL_EVENTS_FILE))?, b"retry events\n");
+        assert!(!out.join(TERMINAL_QUEUE_TMP_FILE).exists());
+        assert!(!out.join(TERMINAL_EVENTS_TMP_FILE).exists());
     }
     Ok(())
 }
