@@ -161,6 +161,7 @@ pub(super) fn write_terminal_work_queue_artifacts(
 }
 
 pub(super) fn remove_terminal_work_queue_artifacts(out: &Path) -> Result<()> {
+    let mut failure: Option<anyhow::Error> = None;
     for name in [
         TERMINAL_QUEUE_FILE,
         TERMINAL_EVENTS_FILE,
@@ -172,13 +173,21 @@ pub(super) fn remove_terminal_work_queue_artifacts(out: &Path) -> Result<()> {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => {
-                return Err(error).with_context(|| {
-                    format!("remove stale terminal queue artifact {}", path.display())
+                let error = anyhow::Error::new(error).context(format!(
+                    "remove stale terminal queue artifact {}",
+                    path.display()
+                ));
+                failure = Some(match failure {
+                    Some(first) => first.context(format!("cleanup also failed: {error:#}")),
+                    None => error,
                 });
             }
         }
     }
-    Ok(())
+    match failure {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
 }
 
 fn publish_terminal_work_queue_artifacts(
@@ -191,25 +200,25 @@ fn publish_terminal_work_queue_artifacts(
     let queue_tmp = out.join(TERMINAL_QUEUE_TMP_FILE);
     let events_tmp = out.join(TERMINAL_EVENTS_TMP_FILE);
 
-    fs::write(&queue_tmp, queue_bytes)
-        .with_context(|| format!("stage terminal queue artifact {}", queue_tmp.display()))?;
-    if let Err(error) = fs::write(&events_tmp, event_bytes) {
-        let _ = fs::remove_file(&queue_tmp);
-        let _ = fs::remove_file(&events_tmp);
-        return Err(error)
-            .with_context(|| format!("stage terminal event artifact {}", events_tmp.display()));
-    }
-    if let Err(error) = fs::rename(&events_tmp, &events_path) {
-        let _ = fs::remove_file(&queue_tmp);
-        let _ = fs::remove_file(&events_tmp);
-        return Err(error)
-            .with_context(|| format!("publish terminal event artifact {}", events_path.display()));
-    }
-    if let Err(error) = fs::rename(&queue_tmp, &queue_path) {
-        let _ = fs::remove_file(&queue_tmp);
-        let _ = fs::remove_file(&events_path);
-        return Err(error)
-            .with_context(|| format!("publish terminal queue artifact {}", queue_path.display()));
+    // Every write, including the first staging write, shares the same
+    // failure cleanup. The queue marker remains the final publication step.
+    let publication = (|| -> Result<()> {
+        fs::write(&queue_tmp, queue_bytes)
+            .with_context(|| format!("stage terminal queue artifact {}", queue_tmp.display()))?;
+        fs::write(&events_tmp, event_bytes)
+            .with_context(|| format!("stage terminal event artifact {}", events_tmp.display()))?;
+        fs::rename(&events_tmp, &events_path)
+            .with_context(|| format!("publish terminal event artifact {}", events_path.display()))?;
+        fs::rename(&queue_tmp, &queue_path)
+            .with_context(|| format!("publish terminal queue artifact {}", queue_path.display()))
+    })();
+    if let Err(error) = publication {
+        if let Err(cleanup_error) = remove_terminal_work_queue_artifacts(out) {
+            return Err(error.context(format!(
+                "terminal publication cleanup incomplete: {cleanup_error:#}"
+            )));
+        }
+        return Err(error);
     }
     Ok(())
 }
