@@ -143,11 +143,7 @@ pub(crate) fn write_work_queue_artifacts(
         ndjson.push('\n');
     }
 
-    planner_publication::publish_work_queue_plan_artifacts(
-        out,
-        &queue_bytes,
-        ndjson.as_bytes(),
-    )
+    planner_publication::publish_work_queue_plan_artifacts(out, &queue_bytes, ndjson.as_bytes())
 }
 
 pub(crate) fn work_queue_task_from_sensor(
