@@ -73,6 +73,22 @@ receipt retains its producer result such as `head_passed`, `head_failed`, or
 `discriminating`. Multiple distinct receipt results remain explicit rather
 than being collapsed.
 
+## Sensor receipt path admission
+
+A selected sensor reads only its exact producer path:
+`sensors/<sensor-id>/ub-review-sensor-status.json`. Absolute, parent-relative,
+and unrelated packet-local paths are rejected before receipt content is read.
+Empty or dot-component identities and identities containing a slash, backslash,
+colon, or NUL cannot supply that path. Existing symlink components below the
+output root are rejected, including the receipt itself and both parent levels.
+
+The output root remains a trusted, single-writer directory. These checks reject
+existing redirects; they do not provide isolation against a process concurrently
+replacing filesystem entries. Intentionally skipped sensors still read no
+receipt. An absent canonical receipt still projects as `missing_receipt`, not
+success. A path rejection leaves no committed terminal generation and does not
+modify planner bytes or the external receipt.
+
 ## Fail-closed publication
 
 Before publishing any new planner artifact, the producer removes both canonical
@@ -81,14 +97,54 @@ publication before replacing either the legacy planner files or their explicit
 plan copies. Terminal artifacts remain absent until current receipts regenerate
 them; a new plan can never coexist with the previous plan's terminal marker.
 
+The four planner artifacts are then staged in their destination directory and
+published as one recoverable set. The producer snapshots the prior bytes and,
+after every replacement is ready, removes the previous `work_queue_plan.json`
+commit marker before changing any canonical sibling. It publishes the legacy
+queue and events followed by explicit plan events, then publishes
+`work_queue_plan.json` last because its presence enables terminal receipt
+projection.
+
+On a handled replacement failure, rollback attempts every non-marker sibling
+rather than stopping at the first restoration error, and staging cleanup
+attempts every staging path rather than stopping at the first obstruction. The
+prior plan marker is restored only after every non-marker sibling is restored.
+An incomplete sibling restoration withholds the marker; a failed marker restore
+also attempts to remove any incomplete marker. The caller receives the original
+publication error together with rollback and cleanup diagnostics, including any
+failure to withhold the marker. A staging-cleanup failure alone can leave a
+coherent restored planner set, but still returns an error and names the residue.
+It is not reported as complete recovery or successful publication of new work.
+
+A complete rollback restores the prior planner set; when no prior set existed,
+it restores absence. Persistent filesystem obstructions must be resolved before
+retrying. Interruption during canonical replacement, before the final marker is
+published, leaves the plan marker absent rather than advertising a mixed set.
+The terminal generation remains invalidated after failed planner publication;
+rollback never implicitly revives a terminal projection for the restored plan.
+These are single-writer, process-level recovery guarantees, not concurrent-reader
+isolation or storage durability. The publisher does not synchronize files or
+directories to stable storage and does not claim power-loss atomicity.
+
 Proof receipt replacement separately invalidates the terminal queue commit
 marker before writing new receipt bytes. Terminal projection then removes all
 prior canonical and staging outputs, builds and validates the complete queue
 and event stream in memory, stages both files, publishes the event stream, and
 publishes `work_queue_terminal.json` last as the commit marker. If validation,
-staging, or either rename fails, the producer removes partial canonical output.
-A failed rerun therefore cannot leave an older terminal queue claiming to
-describe newly written proof receipts.
+staging, or either rename fails, publication is rejected rather than accepted
+as a new terminal generation. Every staging write, including the first one,
+shares the same failure cleanup over both canonical and both staging paths.
+Cleanup attempts every path even when an earlier removal fails. Diagnostics
+retain the original publication error and every cleanup failure; the original
+I/O error remains available to callers. An obstructing directory is never
+removed recursively. A cleanup failure still prevents any new planner write.
+
+Successful cleanup removes partial terminal output. Persistent filesystem
+obstructions can prevent removal, including removal of a commit marker, and
+must be resolved before retrying; an error does not certify physical absence.
+After those obstructions are removed, a normal retry may publish a complete
+terminal generation. These are process-level recovery guarantees, not storage
+durability or isolation against concurrent filesystem changes.
 
 Consumers must require `work_queue_terminal.json`; an event file without that
 commit marker is incomplete publication, not terminal truth. Repeating the same
