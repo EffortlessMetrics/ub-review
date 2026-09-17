@@ -45,9 +45,12 @@ fn publish_work_queue_plan_artifacts_with_hook(
         if let Err(error) = fs::write(&staged, artifact.bytes)
             .with_context(|| format!("stage planner artifact {}", staged.display()))
         {
-            cleanup_staged_artifacts(out, &artifacts)
-                .context("clean planner staging after staging failure")?;
-            return Err(error);
+            return match cleanup_staged_artifacts(out, &artifacts) {
+                Ok(()) => Err(error),
+                Err(cleanup_error) => Err(anyhow::anyhow!(
+                    "{error:#}; planner staging cleanup after write failure was incomplete: {cleanup_error:#}"
+                )),
+            };
         }
     }
 
@@ -57,9 +60,12 @@ fn publish_work_queue_plan_artifacts_with_hook(
     if let Err(error) = remove_file_if_present(&out.join(WORK_QUEUE_PLAN_FILE))
         .context("invalidate prior work-queue plan commit marker")
     {
-        cleanup_staged_artifacts(out, &artifacts)
-            .context("clean planner staging after marker invalidation failure")?;
-        return Err(error);
+        return match cleanup_staged_artifacts(out, &artifacts) {
+            Ok(()) => Err(error),
+            Err(cleanup_error) => Err(anyhow::anyhow!(
+                "{error:#}; planner staging cleanup after marker invalidation failure was incomplete: {cleanup_error:#}"
+            )),
+        };
     }
 
     let mut publication_error = None;
@@ -75,19 +81,12 @@ fn publish_work_queue_plan_artifacts_with_hook(
     }
 
     if let Some(error) = publication_error {
-        for (artifact, prior) in artifacts.iter().zip(&previous) {
-            restore_optional_file(&out.join(artifact.destination), prior.as_deref()).with_context(
-                || {
-                    format!(
-                        "restore prior planner artifact {} after publication failure: {error:#}",
-                        artifact.destination
-                    )
-                },
-            )?;
-        }
-        cleanup_staged_artifacts(out, &artifacts)
-            .context("clean planner staging after publication failure")?;
-        return Err(error).context("publish work-queue planner artifact set");
+        return match rollback_planner_artifacts(out, &artifacts, &previous) {
+            Ok(()) => Err(error).context("publish work-queue planner artifact set"),
+            Err(rollback_error) => Err(anyhow::anyhow!(
+                "publish work-queue planner artifact set failed: {error:#}; planner rollback incomplete: {rollback_error:#}"
+            )),
+        };
     }
 
     cleanup_staged_artifacts(out, &artifacts)?;
@@ -121,10 +120,84 @@ fn planner_artifacts<'a>(queue_bytes: &'a [u8], event_bytes: &'a [u8]) -> [Plann
 }
 
 fn cleanup_staged_artifacts(out: &Path, artifacts: &[PlannerArtifact<'_>]) -> Result<()> {
+    let mut failures = Vec::new();
     for artifact in artifacts {
-        remove_file_if_present(&out.join(artifact.staging))?;
+        if let Err(error) = remove_file_if_present(&out.join(artifact.staging)) {
+            failures.push(format!("{}: {error:#}", artifact.staging));
+        }
     }
-    Ok(())
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        anyhow::bail!(
+            "planner staging cleanup incomplete: {}",
+            failures.join("; ")
+        )
+    }
+}
+
+fn rollback_planner_artifacts(
+    out: &Path,
+    artifacts: &[PlannerArtifact<'_>],
+    previous: &[Option<Vec<u8>>],
+) -> Result<()> {
+    anyhow::ensure!(
+        artifacts.len() == previous.len(),
+        "planner rollback input length mismatch"
+    );
+    let marker_index = artifacts
+        .iter()
+        .position(|artifact| artifact.destination == WORK_QUEUE_PLAN_FILE)
+        .context("planner rollback has no plan commit marker")?;
+    anyhow::ensure!(
+        marker_index + 1 == artifacts.len(),
+        "planner rollback commit marker is not last"
+    );
+
+    let mut failures = Vec::new();
+    for (artifact, prior) in artifacts[..marker_index]
+        .iter()
+        .zip(&previous[..marker_index])
+    {
+        if let Err(error) = restore_optional_file(&out.join(artifact.destination), prior.as_deref()) {
+            failures.push(format!(
+                "restore prior planner artifact {}: {error:#}",
+                artifact.destination
+            ));
+        }
+    }
+
+    let marker = &artifacts[marker_index];
+    let marker_path = out.join(marker.destination);
+    if failures.is_empty() {
+        if let Err(error) = restore_optional_file(&marker_path, previous[marker_index].as_deref()) {
+            failures.push(format!(
+                "restore prior planner commit marker {}: {error:#}",
+                marker.destination
+            ));
+            if let Err(withhold_error) = remove_file_if_present(&marker_path) {
+                failures.push(format!(
+                    "withhold incomplete planner commit marker {}: {withhold_error:#}",
+                    marker.destination
+                ));
+            }
+        }
+    } else if let Err(error) = remove_file_if_present(&marker_path) {
+        failures.push(format!(
+            "withhold incomplete planner commit marker {}: {error:#}",
+            marker.destination
+        ));
+    }
+
+    if let Err(error) = cleanup_staged_artifacts(out, artifacts) {
+        failures.push(format!("clean planner staging after rollback: {error:#}"));
+    }
+
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        anyhow::bail!(failures.join("; "))
+    }
 }
 
 fn read_optional_file(path: &Path) -> Result<Option<Vec<u8>>> {
