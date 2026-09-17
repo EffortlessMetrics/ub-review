@@ -68,6 +68,14 @@ jobs:
           tree="$(git rev-parse "$SUBJECT_HEAD^{tree}")"
           diff_sha="$(sha256sum "$diff" | cut -d' ' -f1)"
           test "$tree" = "$EXPECTED_SUBJECT_TREE"
+
+          export SUBJECT_ROOT="$subject"
+          export RAW_ROOT="$raw"
+          export STAGE_ROOT="$stage"
+          export PUBLISH_ROOT="$publish"
+          export SUBJECT_DIFF="$diff"
+          export SUBJECT_TREE="$tree"
+          export DIFF_SHA256="$diff_sha"
           printf 'SUBJECT_ROOT=%s\nRAW_ROOT=%s\nSTAGE_ROOT=%s\nPUBLISH_ROOT=%s\nSUBJECT_DIFF=%s\nSUBJECT_TREE=%s\nDIFF_SHA256=%s\n' \
             "$subject" "$raw" "$stage" "$publish" "$diff" "$tree" "$diff_sha" >> "$GITHUB_ENV"
 
