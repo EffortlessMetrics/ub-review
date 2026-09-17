@@ -5,6 +5,7 @@
 use crate::test_parse::push_unique;
 use crate::*;
 
+mod planner_publication;
 mod terminal;
 
 pub(crate) fn proof_task_artifact(
@@ -121,7 +122,6 @@ pub(crate) fn write_work_queue_artifacts(
         tasks: &tasks,
     };
     let queue_bytes = serde_json::to_vec_pretty(&queue)?;
-    fs::write(out.join("work_queue.json"), &queue_bytes)?;
 
     let mut ndjson = String::new();
     for task in &tasks {
@@ -142,12 +142,12 @@ pub(crate) fn write_work_queue_artifacts(
         ndjson.push_str(&serde_json::to_string(&event)?);
         ndjson.push('\n');
     }
-    fs::write(out.join("work_events.ndjson"), &ndjson)?;
 
-    // Preserve planner intent byte-for-byte before terminal receipts exist.
-    fs::write(out.join("work_queue_plan.json"), queue_bytes)?;
-    fs::write(out.join("work_events_plan.ndjson"), ndjson)?;
-    Ok(())
+    planner_publication::publish_work_queue_plan_artifacts(
+        out,
+        &queue_bytes,
+        ndjson.as_bytes(),
+    )
 }
 
 pub(crate) fn work_queue_task_from_sensor(
