@@ -207,8 +207,9 @@ fn publish_terminal_work_queue_artifacts(
             .with_context(|| format!("stage terminal queue artifact {}", queue_tmp.display()))?;
         fs::write(&events_tmp, event_bytes)
             .with_context(|| format!("stage terminal event artifact {}", events_tmp.display()))?;
-        fs::rename(&events_tmp, &events_path)
-            .with_context(|| format!("publish terminal event artifact {}", events_path.display()))?;
+        fs::rename(&events_tmp, &events_path).with_context(|| {
+            format!("publish terminal event artifact {}", events_path.display())
+        })?;
         fs::rename(&queue_tmp, &queue_path)
             .with_context(|| format!("publish terminal queue artifact {}", queue_path.display()))
     })();
