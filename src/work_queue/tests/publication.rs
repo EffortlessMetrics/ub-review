@@ -253,7 +253,10 @@ fn receipt_write_failure_invalidates_old_marker_before_terminal_rebuild() -> Res
             .context("terminal tasks missing")?;
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0]["id"], "proof-task-a");
-        assert_eq!(tasks[0]["receipt_ids"], serde_json::json!(["proof-receipt-b"]));
+        assert_eq!(
+            tasks[0]["receipt_ids"],
+            serde_json::json!(["proof-receipt-b"])
+        );
         assert_eq!(terminal["source_plan_sha256"], sha256_hex(&plan_bytes));
         let event_text = fs::read_to_string(out.join(TERMINAL_EVENTS_FILE))?;
         let events = event_text
@@ -262,7 +265,10 @@ fn receipt_write_failure_invalidates_old_marker_before_terminal_rebuild() -> Res
             .collect::<serde_json::Result<Vec<serde_json::Value>>>()?;
         assert_eq!(events.len(), 1);
         assert_eq!(events[0]["task_id"], "proof-task-a");
-        assert_eq!(events[0]["receipt_ids"], serde_json::json!(["proof-receipt-b"]));
+        assert_eq!(
+            events[0]["receipt_ids"],
+            serde_json::json!(["proof-receipt-b"])
+        );
         for name in [TERMINAL_QUEUE_TMP_FILE, TERMINAL_EVENTS_TMP_FILE] {
             assert!(!out.join(name).exists(), "retry left staging {name}");
         }
