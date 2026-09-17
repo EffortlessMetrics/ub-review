@@ -51,6 +51,17 @@ fn publish_work_queue_plan_artifacts_with_hook(
         }
     }
 
+    // The explicit plan queue is the planner-generation commit marker used by
+    // the proof-receipt writer. Remove the previous marker before replacing
+    // any sibling so interruption cannot expose a mixed generation as current.
+    if let Err(error) = remove_file_if_present(&out.join(WORK_QUEUE_PLAN_FILE))
+        .context("invalidate prior work-queue plan commit marker")
+    {
+        cleanup_staged_artifacts(out, &artifacts)
+            .context("clean planner staging after marker invalidation failure")?;
+        return Err(error);
+    }
+
     let mut publication_error = None;
     for (index, artifact) in artifacts.iter().enumerate() {
         let staged = out.join(artifact.staging);
@@ -100,8 +111,7 @@ fn planner_artifacts<'a>(queue_bytes: &'a [u8], event_bytes: &'a [u8]) -> [Plann
             staging: WORK_EVENTS_PLAN_STAGE_FILE,
             bytes: event_bytes,
         },
-        // The explicit plan queue is the existence guard used by the receipt
-        // writer, so publish it last after every sibling artifact is durable.
+        // Publish the commit marker last after every sibling artifact is durable.
         PlannerArtifact {
             destination: WORK_QUEUE_PLAN_FILE,
             staging: WORK_QUEUE_PLAN_STAGE_FILE,
@@ -175,6 +185,10 @@ mod tests {
                 b"replacement queue",
                 b"replacement events\n",
                 |index, destination| {
+                    anyhow::ensure!(
+                        !out.join(WORK_QUEUE_PLAN_FILE).exists(),
+                        "planner commit marker remained visible before replacement {index}"
+                    );
                     if index == failure_index {
                         anyhow::bail!(
                             "injected planner replacement failure at {}",
@@ -219,6 +233,7 @@ mod tests {
             b"replacement queue",
             b"replacement events\n",
             |index, destination| {
+                assert!(!out.join(WORK_QUEUE_PLAN_FILE).exists());
                 if index == 3 {
                     anyhow::bail!(
                         "injected final planner replacement failure at {}",
@@ -242,12 +257,14 @@ mod tests {
     fn planner_publication_commits_plan_queue_last_and_leaves_no_staging() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path();
+        fs::write(out.join(WORK_QUEUE_PLAN_FILE), b"previous plan queue")?;
         let mut order = Vec::new();
         publish_work_queue_plan_artifacts_with_hook(
             out,
             b"replacement queue",
             b"replacement events\n",
             |_, destination| {
+                assert!(!out.join(WORK_QUEUE_PLAN_FILE).exists());
                 order.push(
                     destination
                         .file_name()
