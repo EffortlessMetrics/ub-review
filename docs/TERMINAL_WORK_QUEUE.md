@@ -97,6 +97,16 @@ publication before replacing either the legacy planner files or their explicit
 plan copies. Terminal artifacts remain absent until current receipts regenerate
 them; a new plan can never coexist with the previous plan's terminal marker.
 
+The four planner artifacts are then staged in their destination directory and
+published as one recoverable set. The producer snapshots the prior bytes,
+publishes the legacy queue and events followed by explicit plan events, and
+publishes `work_queue_plan.json` last because its presence enables terminal
+receipt projection. A failure at any replacement boundary restores the entire
+prior planner set and removes every staging file. When no prior set existed,
+rollback restores absence. The terminal generation remains invalidated after a
+failed planner publication; rollback never revives a terminal projection for
+the restored plan implicitly.
+
 Proof receipt replacement separately invalidates the terminal queue commit
 marker before writing new receipt bytes. Terminal projection then removes all
 prior canonical and staging outputs, builds and validates the complete queue
