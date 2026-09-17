@@ -103,12 +103,20 @@ after every replacement is ready, removes the previous `work_queue_plan.json`
 commit marker before changing any canonical sibling. It publishes the legacy
 queue and events followed by explicit plan events, then publishes
 `work_queue_plan.json` last because its presence enables terminal receipt
-projection. A normal error at any replacement boundary restores the entire
-prior planner set and removes every staging file. When no prior set existed,
-rollback restores absence. An abrupt interruption during the canonical swaps
-leaves the plan marker absent rather than advertising a mixed generation. The
-terminal generation remains invalidated after a failed planner publication;
-rollback never revives a terminal projection for the restored plan implicitly.
+projection.
+
+On a handled replacement failure, rollback attempts every non-marker sibling
+rather than stopping at the first restoration error, and staging cleanup
+attempts every staging path rather than stopping at the first obstruction. The
+prior plan marker is restored only after every non-marker sibling is restored.
+If any sibling restore or cleanup remains incomplete, the marker stays absent
+and the caller receives both the original publication error and the retained
+rollback diagnostics. A complete rollback restores the entire prior planner set;
+when no prior set existed, it restores absence. An abrupt interruption during
+the canonical swaps likewise leaves the plan marker absent rather than
+advertising a mixed generation. The terminal generation remains invalidated
+after a failed planner publication; rollback never revives a terminal
+projection for the restored plan implicitly.
 
 Proof receipt replacement separately invalidates the terminal queue commit
 marker before writing new receipt bytes. Terminal projection then removes all
