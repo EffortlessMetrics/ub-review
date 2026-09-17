@@ -131,9 +131,20 @@ marker before writing new receipt bytes. Terminal projection then removes all
 prior canonical and staging outputs, builds and validates the complete queue
 and event stream in memory, stages both files, publishes the event stream, and
 publishes `work_queue_terminal.json` last as the commit marker. If validation,
-staging, or either rename fails, the producer removes partial canonical output.
-A failed rerun therefore cannot leave an older terminal queue claiming to
-describe newly written proof receipts.
+staging, or either rename fails, publication is rejected rather than accepted
+as a new terminal generation. Every staging write, including the first one,
+shares the same failure cleanup over both canonical and both staging paths.
+Cleanup attempts every path even when an earlier removal fails. Diagnostics
+retain the original publication error and every cleanup failure; the original
+I/O error remains available to callers. An obstructing directory is never
+removed recursively. A cleanup failure still prevents any new planner write.
+
+Successful cleanup removes partial terminal output. Persistent filesystem
+obstructions can prevent removal, including removal of a commit marker, and
+must be resolved before retrying; an error does not certify physical absence.
+After those obstructions are removed, a normal retry may publish a complete
+terminal generation. These are process-level recovery guarantees, not storage
+durability or isolation against concurrent filesystem changes.
 
 Consumers must require `work_queue_terminal.json`; an event file without that
 commit marker is incomplete publication, not terminal truth. Repeating the same
