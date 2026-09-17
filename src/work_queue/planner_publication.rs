@@ -303,4 +303,78 @@ mod tests {
         }
         Ok(())
     }
+
+    #[test]
+    fn planner_rollback_failure_withholds_marker_and_restores_other_siblings() -> Result<()> {
+        for blocked in [WORK_QUEUE_FILE, WORK_EVENTS_FILE, WORK_EVENTS_PLAN_FILE] {
+            let temp = tempfile::tempdir()?;
+            let out = temp.path();
+            for (name, bytes) in previous_artifacts() {
+                fs::write(out.join(name), bytes)?;
+            }
+            let error = publish_work_queue_plan_artifacts_with_hook(
+                out,
+                b"replacement queue",
+                b"replacement events\n",
+                |index, _| {
+                    if index == 3 {
+                        fs::remove_file(out.join(blocked))?;
+                        fs::create_dir(out.join(blocked))?;
+                        anyhow::bail!("injected publication failure with blocked restore {blocked}");
+                    }
+                    Ok(())
+                },
+            )
+            .err()
+            .context("blocked rollback unexpectedly succeeded")?;
+            let diagnostic = format!("{error:#}");
+            assert!(diagnostic.contains("injected publication failure"));
+            assert!(diagnostic.contains(blocked));
+            assert!(
+                !out.join(WORK_QUEUE_PLAN_FILE).exists(),
+                "incomplete rollback left an accepted plan marker for {blocked}"
+            );
+            for (name, bytes) in previous_artifacts() {
+                if name != blocked && name != WORK_QUEUE_PLAN_FILE {
+                    assert_eq!(fs::read(out.join(name))?, bytes, "unrestored sibling {name}");
+                }
+            }
+            assert!(out.join(blocked).is_dir());
+            for artifact in planner_artifacts(b"", b"") {
+                assert!(!out.join(artifact.staging).exists());
+            }
+            fs::remove_dir(out.join(blocked))?;
+            publish_work_queue_plan_artifacts(out, b"retry queue", b"retry events\n")?;
+            assert_eq!(fs::read(out.join(WORK_QUEUE_FILE))?, b"retry queue");
+            assert_eq!(fs::read(out.join(WORK_QUEUE_PLAN_FILE))?, b"retry queue");
+            assert_eq!(fs::read(out.join(WORK_EVENTS_FILE))?, b"retry events\n");
+            assert_eq!(fs::read(out.join(WORK_EVENTS_PLAN_FILE))?, b"retry events\n");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn planner_staging_cleanup_attempts_every_path_after_one_failure() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        let artifacts = planner_artifacts(b"", b"");
+        for artifact in &artifacts {
+            fs::write(out.join(artifact.staging), b"stale staging")?;
+        }
+        fs::remove_file(out.join(WORK_QUEUE_STAGE_FILE))?;
+        fs::create_dir(out.join(WORK_QUEUE_STAGE_FILE))?;
+        let error = cleanup_staged_artifacts(out, &artifacts)
+            .err()
+            .context("blocked staging cleanup unexpectedly succeeded")?;
+        assert!(format!("{error:#}").contains(WORK_QUEUE_STAGE_FILE));
+        assert!(out.join(WORK_QUEUE_STAGE_FILE).is_dir());
+        for artifact in &artifacts[1..] {
+            assert!(
+                !out.join(artifact.staging).exists(),
+                "cleanup skipped {} after an earlier failure",
+                artifact.staging
+            );
+        }
+        Ok(())
+    }
 }
