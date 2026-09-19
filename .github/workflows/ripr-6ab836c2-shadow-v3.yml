@@ -27,6 +27,9 @@ jobs:
       EXPECTED_SUBJECT_TREE: efa420905c329b27abf874b3094b24524f50aaaf
       EXPECTED_RUST_FILES: 13
       EXPECTED_RUST_LINES: 2808
+      # Shadow-only scope admission: exactly the already-frozen 2,808-line subject.
+      # This does not change either analyzer's repository or product defaults.
+      RIPR_MAX_DIFF_CHANGED_RUST_LINES: 2808
       RIPR_STABLE_VERSION: 0.10.0
       RIPR_CANDIDATE_SHA: 6ab836c2e4d8497aed3dabdf59469fb6ed67bdd2
       MAX_RAW_BYTES: 536870912
@@ -113,6 +116,7 @@ jobs:
           assert files == expected, f'Rust path inventory changed: {files!r}'
           assert len(files) == int(env['EXPECTED_RUST_FILES'])
           assert lines == int(env['EXPECTED_RUST_LINES'])
+          assert lines == int(env['RIPR_MAX_DIFF_CHANGED_RUST_LINES'])
           with Path(env['SUBJECT_DIFF']).open('rb') as stream:
               observed_diff_sha = hashlib.file_digest(stream, 'sha256').hexdigest()
           assert observed_diff_sha == env['DIFF_SHA256']
@@ -126,6 +130,7 @@ jobs:
               'head_tree': env['SUBJECT_TREE'],
               'diff_sha256': observed_diff_sha,
               'candidate_source': env['RIPR_CANDIDATE_SHA'],
+              'diff_changed_rust_line_limit': int(env['RIPR_MAX_DIFF_CHANGED_RUST_LINES']),
               'harness_commit': subprocess.run(
                   ['git', 'rev-parse', 'HEAD'], check=True, capture_output=True,
                   text=True, timeout=10).stdout.strip(),
@@ -141,6 +146,7 @@ jobs:
               'diff_sha256': observed_diff_sha,
               'changed_rust_files': files,
               'changed_rust_lines': lines,
+              'diff_changed_rust_line_limit': int(env['RIPR_MAX_DIFF_CHANGED_RUST_LINES']),
               'production_policy_changed': False,
           }
           for name, value in [('frozen-input.json', frozen), ('execution-envelope.json', envelope)]:
@@ -230,6 +236,9 @@ jobs:
               'stdout_limit': int(os.environ['MAX_RAW_BYTES']),
               'stderr_bytes': int(stderr_bytes),
               'stderr_limit': int(os.environ['MAX_STDERR_BYTES']),
+              'diff_changed_rust_line_limit': int(
+                  os.environ['RIPR_MAX_DIFF_CHANGED_RUST_LINES']
+              ),
               'accepted': accepted == 'true',
           }
           (Path(os.environ['STAGE_ROOT']) / f'{name}.invocation.json').write_text(
