@@ -1,0 +1,340 @@
+name: ripr/current-swarm-shadow
+
+# Evidence-only replay for the exact live #1306 subject.
+# This workflow never changes the required analyzer, threshold, suppressions, or gate authority.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ripr-current-swarm-shadow-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    name: released versus merged-swarm comparison
+    if: >-
+      github.event.pull_request.base.ref == 'fix/1305-terminal-work-queue' &&
+      github.event.pull_request.head.ref == 'evidence/1306-ripr-swarm-6edc2782'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      SUBJECT_BASE: f35a1342e346466f5caf12daf627dff13e49c39d
+      SUBJECT_HEAD: 38b1b9faae5e2c35badb53deb22e7ec057bf0d5b
+      EXPECTED_SUBJECT_TREE: efa420905c329b27abf874b3094b24524f50aaaf
+      EXPECTED_RUST_FILES: 13
+      EXPECTED_RUST_LINES: 2808
+      RIPR_STABLE_VERSION: 0.10.0
+      RIPR_CANDIDATE_SHA: 6edc2782e63d751adbc85a789bf2066f545baca3
+      RIPR_MAX_DIFF_CHANGED_RUST_LINES: 2808
+      RIPR_PARTIAL_DIFF_FILE_BUDGET: 13
+      RIPR_PARTIAL_DIFF_LINE_BUDGET: 2808
+      MAX_RAW_BYTES: 536870912
+      MAX_STDERR_BYTES: 16777216
+      MAX_PUBLISH_BYTES: 201326592
+
+    steps:
+      - name: Checkout exact evidence harness without credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Admit exact subject and execution envelope
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/fix/1305-terminal-work-queue:refs/remotes/origin/fix/1305-terminal-work-queue"
+          observed="$(git rev-parse refs/remotes/origin/fix/1305-terminal-work-queue)"
+          test "$observed" = "$SUBJECT_HEAD"
+          git merge-base --is-ancestor "$SUBJECT_BASE" "$SUBJECT_HEAD"
+
+          subject="$RUNNER_TEMP/ub-review-subject"
+          raw="$RUNNER_TEMP/ripr-shadow-raw"
+          stage="$GITHUB_WORKSPACE/target/ripr-shadow-staging"
+          publish="$GITHUB_WORKSPACE/target/ripr-shadow"
+          diff="$RUNNER_TEMP/subject.diff"
+          test ! -e "$subject" && test ! -e "$raw"
+          test ! -e "$stage" && test ! -e "$publish"
+          mkdir -p "$raw" "$stage"
+          git worktree add --detach "$subject" "$SUBJECT_HEAD"
+          git diff --binary --full-index --no-ext-diff "$SUBJECT_BASE" "$SUBJECT_HEAD" > "$diff"
+          test -s "$diff"
+
+          tree="$(git rev-parse "$SUBJECT_HEAD^{tree}")"
+          diff_sha="$(sha256sum "$diff" | cut -d' ' -f1)"
+          test "$tree" = "$EXPECTED_SUBJECT_TREE"
+
+          export SUBJECT_ROOT="$subject"
+          export RAW_ROOT="$raw"
+          export STAGE_ROOT="$stage"
+          export PUBLISH_ROOT="$publish"
+          export SUBJECT_DIFF="$diff"
+          export SUBJECT_TREE="$tree"
+          export DIFF_SHA256="$diff_sha"
+          printf 'SUBJECT_ROOT=%s\nRAW_ROOT=%s\nSTAGE_ROOT=%s\nPUBLISH_ROOT=%s\nSUBJECT_DIFF=%s\nSUBJECT_TREE=%s\nDIFF_SHA256=%s\n' \
+            "$subject" "$raw" "$stage" "$publish" "$diff" "$tree" "$diff_sha" >> "$GITHUB_ENV"
+
+          python scripts/compare-ripr-shadow.py --self-test
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          env = os.environ
+          expected = sorted([
+              'src/artifacts.rs',
+              'src/work_queue.rs',
+              'src/work_queue/planner_publication.rs',
+              'src/work_queue/terminal.rs',
+              'src/work_queue/terminal_catalog_schema_tests.rs',
+              'src/work_queue/terminal_contract_tests.rs',
+              'src/work_queue/terminal_helpers_tests.rs',
+              'src/work_queue/terminal_path_tests.rs',
+              'src/work_queue/terminal_status_tests.rs',
+              'src/work_queue/terminal_tests.rs',
+              'src/work_queue/tests/projection.rs',
+              'src/work_queue/tests/publication.rs',
+              'src/work_queue/tests/validation.rs',
+          ])
+          stats = subprocess.run(
+              ['git', 'diff', '--numstat', '--no-renames', '--no-ext-diff',
+               env['SUBJECT_BASE'], env['SUBJECT_HEAD'], '--', '*.rs'],
+              check=True, capture_output=True, text=True, timeout=30,
+          ).stdout
+          rows = [row.split('\t', 2) for row in stats.splitlines()]
+          assert all(len(row) == 3 for row in rows), 'invalid Rust numstat row'
+          assert all(a.isdecimal() and d.isdecimal() for a, d, _ in rows), 'binary Rust diff'
+          files = sorted(path for _, _, path in rows)
+          lines = sum(int(a) + int(d) for a, d, _ in rows)
+          assert files == expected, f'Rust path inventory changed: {files!r}'
+          assert len(files) == int(env['EXPECTED_RUST_FILES'])
+          assert lines == int(env['EXPECTED_RUST_LINES'])
+          assert int(env['RIPR_MAX_DIFF_CHANGED_RUST_LINES']) == lines
+          assert int(env['RIPR_PARTIAL_DIFF_LINE_BUDGET']) == lines
+          assert int(env['RIPR_PARTIAL_DIFF_FILE_BUDGET']) == len(files)
+          with Path(env['SUBJECT_DIFF']).open('rb') as stream:
+              diff_sha = hashlib.file_digest(stream, 'sha256').hexdigest()
+          assert diff_sha == env['DIFF_SHA256']
+          stage = Path(env['STAGE_ROOT'])
+          frozen = {
+              'schema': 'ub-review.ripr_frozen_input.v2',
+              'authority': 'shadow-only',
+              'repository': 'EffortlessMetrics/ub-review',
+              'base_commit': env['SUBJECT_BASE'],
+              'head_commit': env['SUBJECT_HEAD'],
+              'head_tree': env['SUBJECT_TREE'],
+              'diff_sha256': diff_sha,
+              'candidate_source': env['RIPR_CANDIDATE_SHA'],
+              'harness_commit': subprocess.run(
+                  ['git', 'rev-parse', 'HEAD'], check=True, capture_output=True,
+                  text=True, timeout=10).stdout.strip(),
+              'run_id': env['GITHUB_RUN_ID'],
+              'run_attempt': env['GITHUB_RUN_ATTEMPT'],
+          }
+          envelope = {
+              'schema': 'ub-review.ripr_execution_envelope.v2',
+              'authority': 'shadow-only',
+              'subject_base': env['SUBJECT_BASE'],
+              'subject_head': env['SUBJECT_HEAD'],
+              'subject_tree': env['SUBJECT_TREE'],
+              'diff_sha256': diff_sha,
+              'changed_rust_files': files,
+              'changed_rust_lines': lines,
+              'hard_line_limit': lines,
+              'partial_line_budget': lines,
+              'partial_file_budget': len(files),
+              'production_policy_changed': False,
+          }
+          for name, value in [('frozen-input.json', frozen), ('execution-envelope.json', envelope)]:
+              (stage / name).write_text(json.dumps(value, sort_keys=True) + '\n')
+          print(json.dumps(envelope, sort_keys=True))
+          PY
+
+      - name: Install fixed Rust toolchain
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772
+        with:
+          toolchain: 1.95.0
+
+      - name: Build released and exact merged-swarm analyzers
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --version --verbose > "$STAGE_ROOT/rustc.version.txt"
+          cargo --version --verbose > "$STAGE_ROOT/cargo.version.txt"
+          CARGO_TARGET_DIR="$RUNNER_TEMP/ripr-stable-target" cargo install --locked \
+            --root "$RUNNER_TEMP/ripr-stable" --version "$RIPR_STABLE_VERSION" ripr
+          CARGO_TARGET_DIR="$RUNNER_TEMP/ripr-candidate-target" cargo install --locked \
+            --root "$RUNNER_TEMP/ripr-candidate" \
+            --git https://github.com/EffortlessMetrics/ripr-swarm.git \
+            --rev "$RIPR_CANDIDATE_SHA" ripr
+          for name in stable candidate; do
+            "$RUNNER_TEMP/ripr-$name/bin/ripr" --version > "$STAGE_ROOT/$name.version.txt"
+            sha256sum "$RUNNER_TEMP/ripr-$name/bin/ripr" | cut -d' ' -f1 > "$STAGE_ROOT/$name.binary.sha256"
+          done
+
+      - name: Execute both analyzers on the identical frozen diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in stable candidate; do
+            set +e
+            timeout --signal=TERM --kill-after=30s 900 \
+              prlimit --fsize="$MAX_RAW_BYTES:$MAX_RAW_BYTES" -- \
+              "$RUNNER_TEMP/ripr-$name/bin/ripr" check \
+                --root "$SUBJECT_ROOT" --diff "$SUBJECT_DIFF" \
+                --mode ready --format json \
+                > "$RAW_ROOT/$name.json" 2> "$RAW_ROOT/$name.stderr"
+            code=$?
+            set -e
+            printf '%s\n' "$code" > "$STAGE_ROOT/$name.exit.txt"
+            test "$code" -eq 0 -o "$code" -eq 1
+            test -s "$RAW_ROOT/$name.json"
+            test "$(stat -c %s "$RAW_ROOT/$name.json")" -le "$MAX_RAW_BYTES"
+            test "$(stat -c %s "$RAW_ROOT/$name.stderr")" -le "$MAX_STDERR_BYTES"
+            python - "$name" "$code" <<'PY'
+          import hashlib
+          import json
+          import os
+          import sys
+          from pathlib import Path
+          name, code = sys.argv[1:]
+          root = Path(os.environ['RAW_ROOT'])
+          output = root / f'{name}.json'
+          error = root / f'{name}.stderr'
+          with output.open('rb') as stream:
+              digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+          receipt = {
+              'schema': 'ub-review.ripr_invocation.v1',
+              'analyzer': name,
+              'exit_code': int(code),
+              'stdout_bytes': output.stat().st_size,
+              'stdout_sha256': digest,
+              'stdout_limit': int(os.environ['MAX_RAW_BYTES']),
+              'stderr_bytes': error.stat().st_size,
+              'stderr_limit': int(os.environ['MAX_STDERR_BYTES']),
+          }
+          (Path(os.environ['STAGE_ROOT']) / f'{name}.invocation.json').write_text(
+              json.dumps(receipt, sort_keys=True) + '\n')
+          print(json.dumps(receipt, sort_keys=True))
+          PY
+          done
+
+      - name: Validate candidate completeness and build comparison
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          root = Path(os.environ['RAW_ROOT'])
+          allowed = {
+              'exposed', 'weakly_exposed', 'reachable_unrevealed',
+              'no_static_path', 'infection_unknown', 'propagation_unknown',
+              'static_unknown'
+          }
+          for name in ('stable', 'candidate'):
+              value = json.loads((root / f'{name}.json').read_text())
+              assert value['tool'] == 'ripr' and value['mode'] == 'ready'
+              assert value['summary']['findings'] == len(value['findings'])
+              assert all(row['classification'] in allowed for row in value['findings'])
+          candidate = json.loads((root / 'candidate.json').read_text())
+          outcome = candidate.get('analysis_outcome')
+          assert isinstance(outcome, dict) and outcome.get('analysis_complete') is True
+          nested = outcome.get('outcome')
+          assert isinstance(nested, dict)
+          assert nested.get('kind') in {
+              'complete_with_findings', 'complete_no_findings', 'no_scope',
+              'no_changed_lines', 'no_behavioral_candidates'
+          }
+          assert nested.get('limitations', []) == []
+          scope = candidate.get('analysis_scope')
+          assert scope is None or isinstance(scope, dict)
+          if scope is not None:
+              assert scope.get('gate_eligibility') != 'ineligible'
+              status = scope.get('run_status')
+              assert status is None or isinstance(status, str)
+              assert not status or ('partial' not in status and 'limited' not in status)
+          receipt = {
+              'schema': 'ub-review.ripr_candidate_scope.v2',
+              'authority': 'shadow-only',
+              'complete_for_comparison': True,
+              'analysis_outcome': outcome,
+              'analysis_scope': scope,
+          }
+          (Path(os.environ['STAGE_ROOT']) / 'candidate-scope.json').write_text(
+              json.dumps(receipt, sort_keys=True) + '\n')
+          PY
+          python scripts/compare-ripr-shadow.py \
+            --stable-json "$RAW_ROOT/stable.json" \
+            --candidate-json "$RAW_ROOT/candidate.json" \
+            --stable-version-file "$STAGE_ROOT/stable.version.txt" \
+            --candidate-version-file "$STAGE_ROOT/candidate.version.txt" \
+            --stable-exit-file "$STAGE_ROOT/stable.exit.txt" \
+            --candidate-exit-file "$STAGE_ROOT/candidate.exit.txt" \
+            --subject-base "$SUBJECT_BASE" --subject-head "$SUBJECT_HEAD" \
+            --subject-tree "$SUBJECT_TREE" --diff-sha256 "$DIFF_SHA256" \
+            --stable-source "crates.io:ripr@$RIPR_STABLE_VERSION" \
+            --candidate-source "git:EffortlessMetrics/ripr-swarm@$RIPR_CANDIDATE_SHA" \
+            --output-dir "$STAGE_ROOT"
+
+      - name: Seal bounded comparison packet
+        id: seal
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in stable candidate; do
+            gzip -n -6 -c "$RAW_ROOT/$name.json" > "$STAGE_ROOT/$name.raw.json.gz"
+            gzip -n -6 -c "$RAW_ROOT/$name.stderr" > "$STAGE_ROOT/$name.stderr.gz"
+          done
+          gzip -n -6 -c "$SUBJECT_DIFF" > "$STAGE_ROOT/subject.diff.gz"
+          python - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+          stage = Path(os.environ['STAGE_ROOT'])
+          entries = sorted(stage.iterdir(), key=lambda path: path.name)
+          assert all(path.is_file() and not path.is_symlink() for path in entries)
+          rows = []
+          for path in entries:
+              with path.open('rb') as stream:
+                  digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+              rows.append(f'{digest}  {path.name}\n')
+          (stage / 'manifest.sha256').write_text(''.join(rows))
+          entries = list(stage.iterdir())
+          assert len(entries) <= 32
+          assert sum(path.stat().st_size for path in entries) <= int(os.environ['MAX_PUBLISH_BYTES'])
+          publish = Path(os.environ['PUBLISH_ROOT'])
+          assert not publish.exists()
+          os.rename(stage, publish)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('publish=true\n')
+          PY
+          cat "$PUBLISH_ROOT/comparison.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload only sealed comparison evidence
+        if: success() && steps.seal.outputs.publish == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ripr-swarm-6edc2782-shadow-pr1306
+          path: target/ripr-shadow
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Clean evidence worktrees and temporary output
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if [[ -n "${SUBJECT_ROOT:-}" && -d "$SUBJECT_ROOT" ]]; then
+            git worktree remove --force "$SUBJECT_ROOT"
+          fi
+          rm -rf "${RAW_ROOT:-}" "${STAGE_ROOT:-}"
