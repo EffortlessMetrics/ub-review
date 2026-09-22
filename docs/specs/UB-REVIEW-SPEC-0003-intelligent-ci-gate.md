@@ -175,6 +175,8 @@ publication_result        "posted" | "not_needed" | "failed" | "not_proven"
 gate_result               "pass" | "finding" | "not_proven"
 reasons[]                 {kind, id, detail, receipt, next_action?}
 required_proof            {matched, passed, failed, skipped}
+planner_required_proofs {denominator, gate_required_requests, total,   // #4271, omitted when no readable portfolio
+                          proven, unproven, unproven_tasks[]}
 tool_gates                {evaluated, passed, failed}
 evidence_gaps_blocking    count
 evidence_gaps_advisory    count
@@ -227,11 +229,38 @@ always equals `failed + timed_out + skipped`. `model_coverage.budget_exhausted`
 is explicit but never blocking on its own. `not_proven_reasons` is non-empty
 whenever any result is `not_proven`, and each entry leads with one of
 `terminal-state:`, `required-sensor-coverage:`, `required-proof:`,
-`model-coverage:`, `instrument-coverage:`, `publication:`, `gate-conclusion:`
+`required-planner-proof:`, `model-coverage:`, `instrument-coverage:`,
+`publication:`, `gate-conclusion:`
 so a workflow branches on tokens rather than prose. `action.yml` exposes
 `gate-conclusion`, `analysis-result`, `publication-result`, `gate-result`,
 `not-proven-reasons` (JSON array) and `sensor-coverage` (JSON object) as step
 outputs.
+
+### Retained planner-required proofs (#4271)
+
+`required_proof` counts only policy-configured `[[proof.required]]` requests,
+so a required planner/broker portfolio task deferred by safe wind-down used to
+vanish from the gate summary. `planner_required_proofs` retains that second,
+distinct denominator next to it: `denominator` names the portfolio-task
+denominator, `gate_required_requests` copies `required_proof.matched` so both
+appear side by side, `total`/`proven`/`unproven` count required portfolio
+tasks, and `unproven_tasks[]` carries one record per required task with no
+satisfying receipt (`task_id`, `kind`, `status`, verbatim `reason`,
+`request_ids`, `receipt_ids`, `receipts_present`). A task is proven only by
+a receipt stamped with the current revision digest, carrying a successful
+result class (`head_passed` or `discriminating`), with a non-head-only
+proof kind, that shares a request id with the task; failed, skipped,
+timed-out, stale-revision, head-only, and unrelated receipts never satisfy
+it. Any unproven required task pushes a `required-planner-proof:`
+reason, which may move `analysis_result`/`gate_result` to `not_proven` while
+`conclusion` stays `pass` — advisory only, never a blocking reason, and proof
+budgets are unchanged. Optional deferrals never enter the accounting. The
+section is omitted when no readable `review/proof_portfolio.json` exists, and
+the artifact schema stays `ub-review.gate_outcome.v1`. The step summary
+renders every copied planner field sanitized (inline-code fields via
+`init_markdown_inline_code`, the reason with line breaks collapsed and
+Markdown-significant punctuation backslash-escaped), so portfolio text can
+never forge summary output.
 
 Reason kinds (src/gate.rs gate outcome construction; docs/adr/0002):
 
