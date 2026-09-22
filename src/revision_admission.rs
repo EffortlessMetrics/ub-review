@@ -673,53 +673,75 @@ mod tests {
 
     #[test]
     fn trusted_diff_admits_unresolved_head_without_loading_candidate_surfaces() -> Result<()> {
-        let repo = init_repo()?;
-        let fixture = trusted_fixture(&repo)?;
-        let inputs = fixture.inputs();
+        for (autocrlf, newline) in [("false", "\n"), ("true", "\r\n")] {
+            let repo = init_repo()?;
+            git(&repo, &["config", "core.autocrlf", autocrlf])?;
+            git(&repo, &["config", "core.eol", "lf"])?;
+            let fixture = trusted_fixture(&repo)?;
+            let inputs = fixture.inputs();
 
-        let (diff, admission) = admit_trusted_diff(repo.root(), &inputs)?;
+            // Git restoration may convert checkout bytes. Capture that exact
+            // trusted state before admission, without normalizing evidence.
+            let trusted_config = fs::read(repo.root().join(".ub-review.toml"))?;
+            let trusted_script = fs::read(repo.root().join("scripts/reviewer.sh"))?;
+            anyhow::ensure!(
+                trusted_config == format!("review_profile = \"safe\"{newline}").as_bytes()
+                    && trusted_script == format!("echo safe{newline}").as_bytes(),
+                "trusted fixture must exercise core.autocrlf={autocrlf} checkout bytes"
+            );
 
-        assert_eq!(diff.base, fixture.base_tree);
-        assert_eq!(diff.head, fixture.head_sha);
-        assert_eq!(
-            diff.changed_files,
-            vec![
-                ".ub-review.toml".to_owned(),
-                "scripts/reviewer.sh".to_owned(),
-                "src/a.rs".to_owned()
-            ]
-        );
-        assert!(diff.patch.contains("candidate-script-must-not-run"));
-        assert_eq!(admission.reviewed_commit_oid, fixture.head_sha);
-        assert_eq!(admission.semantics, "candidate_head");
-        assert!(admission.identity_canonical.contains(&fixture.base_tree));
-        assert!(admission.identity_canonical.contains(&fixture.head_sha));
-        assert_eq!(
-            fs::read_to_string(repo.root().join(".ub-review.toml"))?,
-            "review_profile = \"safe\"\n"
-        );
-        assert_eq!(
-            fs::read_to_string(repo.root().join("scripts/reviewer.sh"))?,
-            "echo safe\n"
-        );
-        let head_tree = admission
-            .identity_canonical
-            .lines()
-            .find_map(|line| {
-                line.strip_prefix("head=")
-                    .and_then(|pair| pair.split_once(' '))
-            })
-            .map(|(_, tree)| tree)
-            .ok_or_else(|| anyhow::anyhow!("admission identity omitted head tree"))?;
-        let object_status = ProcessCommand::new("git")
-            .arg("-C")
-            .arg(repo.root())
-            .args(["cat-file", "-e", &format!("{head_tree}^{{tree}}")])
-            .output()?;
-        assert!(
-            !object_status.status.success(),
-            "derived candidate tree must remain outside the repository object database"
-        );
+            let (diff, admission) = admit_trusted_diff(repo.root(), &inputs)?;
+
+            anyhow::ensure!(diff.base == fixture.base_tree, "trusted base tree changed");
+            anyhow::ensure!(diff.head == fixture.head_sha, "candidate head changed");
+            anyhow::ensure!(
+                diff.changed_files == [".ub-review.toml", "scripts/reviewer.sh", "src/a.rs"],
+                "admission must preserve the candidate changed-file inventory"
+            );
+            anyhow::ensure!(
+                diff.patch.contains("candidate-script-must-not-run")
+                    && diff
+                        .patch
+                        .contains("this is hostile candidate config, not TOML"),
+                "admission must retain hostile candidate content only as patch evidence"
+            );
+            anyhow::ensure!(
+                admission.reviewed_commit_oid == fixture.head_sha
+                    && admission.semantics == "candidate_head",
+                "admission must retain the candidate revision and semantics"
+            );
+            anyhow::ensure!(
+                admission.identity_canonical.contains(&fixture.base_tree)
+                    && admission.identity_canonical.contains(&fixture.head_sha),
+                "canonical identity must bind the trusted base and candidate head"
+            );
+            anyhow::ensure!(
+                fs::read(repo.root().join(".ub-review.toml"))? == trusted_config,
+                "admission changed trusted config bytes with core.autocrlf={autocrlf}"
+            );
+            anyhow::ensure!(
+                fs::read(repo.root().join("scripts/reviewer.sh"))? == trusted_script,
+                "admission changed trusted script bytes with core.autocrlf={autocrlf}"
+            );
+            let head_tree = admission
+                .identity_canonical
+                .lines()
+                .find_map(|line| {
+                    line.strip_prefix("head=")
+                        .and_then(|pair| pair.split_once(' '))
+                })
+                .map(|(_, tree)| tree)
+                .ok_or_else(|| anyhow::anyhow!("admission identity omitted head tree"))?;
+            let object_status = ProcessCommand::new("git")
+                .arg("-C")
+                .arg(repo.root())
+                .args(["cat-file", "-e", &format!("{head_tree}^{{tree}}")])
+                .output()?;
+            anyhow::ensure!(
+                !object_status.status.success(),
+                "derived candidate tree must remain outside the repository object database"
+            );
+        }
         Ok(())
     }
 

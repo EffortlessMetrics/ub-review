@@ -1,16 +1,21 @@
 # UB-REVIEW-SPEC-0010 - release binary and Action install surface
 
-Status: authored 2026-06-06 (release surface spec wave, docs-only).
+Status: authored 2026-06-06; release-state passages reconciled 2026-09-08
+against source and live GitHub metadata (#1293).
 Child of UB-REVIEW-SPEC-0001. Documents how ub-review gets onto a runner or
-a dev box today; intent is marked as intent. Maturity, stated precisely: the
-install machinery is production through the source-build path (the live Bun
-pin is a commit SHA, which always builds from source), and the release-asset
-fast path is implemented but unexercised - the repository has published zero
-GitHub releases as of this writing. Tags `v0` and `v0.1` predate the release
-workflow (added in PR #90, .github/workflows/release-binary.yml) and never
-triggered it; no `v*` tag has been pushed since. The umbrella maturity row
-therefore marks this surface partial: the fallback is the proven path, while
-the release binary remains the unpublished fast path.
+a dev box today; intent is marked as intent. Source builds and strict
+release-asset installation are implemented. GitHub published `v0.1.0` on
+2026-07-18 and `v0.1.1` on 2026-08-22, each with a Linux x64 archive and
+checksum sibling. The source package is `0.1.2`; no `v0.1.2` tag or release
+exists in this snapshot. The earlier `v0` and `v0.1` tags have no release
+archives.
+
+The [release runbook](../RELEASE_RUNBOOK.md) records publication evidence,
+the failed historical `v0.1.0` tag run, and the next-cut procedure. Existing
+assets do not complete the release-only portability, stable-tool, product,
+provider, or candidate acceptance in #805/#815/#816/#817. In particular,
+active PR #1265's historical `v0.1.0` proof is bounded to its recorded
+platforms and does not certify the next release or general Linux support.
 
 ## Purpose
 
@@ -29,12 +34,17 @@ differences (action.yml "Resolve ub-review runner").
 How do I install this without rebuilding the world?
 ```
 
-Honest current answer: on a tagged action ref you would skip the build, but
-no release asset exists yet, so today every fresh runner builds ub-review
-from the action source (a `cargo build --locked --release` of this crate).
-The world being rebuilt is bounded - one binary crate, cacheable via
-`~/.cargo` and `CARGO_TARGET_DIR` (README "Bootstrap note") - and the
-machinery to skip it is in place, waiting on the first published release.
+Select and verify the Action ref independently from `release-version`.
+The behavior below describes the current source Action; old Action tags
+retain their own installer behavior. Use an explicitly selected published
+release and a supported Linux x64 environment for the prebuilt path. Current
+explicit `install-mode: release` validates the archive/checksum and exact
+binary version and fails if installation is unavailable. With `auto`, an
+existing PATH binary takes precedence. A commit-SHA Action ref reaches source
+fallback only when PATH reuse and any explicitly selected release source do
+not provide a binary. Thus `auto` success alone does not prove a release-only
+installation. A complete no-host-Cargo support claim still requires the
+platform and installation receipts owned by #815/#816.
 
 ## Lifecycle moment
 
@@ -187,7 +197,7 @@ Cargo.toml). Registry publication is unstated intent, not a plan.
   `release-dir` when the download succeeded or `source-dir` when the source
   build ran (action.yml). Workflow log annotations state which path was
   taken and why a fallback happened.
-- Release assets, once a `v*` tag is pushed
+- Release assets from the tag-push workflow
   (.github/workflows/release-binary.yml): `ub-review-x86_64-unknown-linux-gnu.tar.gz`
   containing the single `ub-review` executable, plus a sibling `.sha256`
   receipt, uploaded to the GitHub release (created with `--verify-tag`) and
@@ -339,7 +349,7 @@ Advisory:    sensor installs, setup-rust on an existing toolchain, doctor
              without --require-core-tools, cache warm.
 PR-visible:  nothing. Install activity is workflow-log annotations only.
 Artifact:    runner step outputs, cache warm manifests, doctor stdout,
-             release assets and .sha256 receipts (once published).
+             release assets and .sha256 receipts for published versions.
 Ten minutes: paste the README workflow with the pinned SHA; the first run
              rustups 1.95.0, builds ub-review from the action source
              (cacheable), best-effort installs six sensors, and produces a
@@ -366,19 +376,35 @@ actionlint .github/workflows/release-binary.yml
 
 Packaging validation can run without publishing by manually dispatching
 `.github/workflows/release-binary.yml`; it builds the Linux x64 archive,
-writes the sibling `.sha256`, and uploads both as workflow artifacts. Full
-release-path validation still requires pushing a `v*` tag and observing a
-consumer run with `install-mode: release` (first slice below).
+writes the sibling `.sha256` and `release-candidate.json`, and uploads them
+as workflow artifacts with 14-day retention. The candidate receipt binds
+the actual run SHA/ref/tag, toolchain, asset names, and archive digest.
+Retain it before expiry. It is not a complete #816 acceptance packet, a
+published Release asset, or authorization to publish.
+
+The [runbook](../RELEASE_RUNBOOK.md) owns exact candidate checks, unused-tag
+admission, #817 authorization, and independent published-asset verification.
+A tag push rebuilds the archive; it does not promote the dispatch artifact.
+Fresh archive timestamps prevent assuming reproducible bytes. Before any
+new tag/publication, #816/#817 require
+[#1300](https://github.com/EffortlessMetrics/ub-review/issues/1300)'s reviewed
+path that promotes the
+authorized bytes or verifies reproducible rebuilt bytes against the
+authorized digest before exposure. This remains an open prerequisite;
+post-publication comparison does not repair it. Preserve actual identities
+and digests rather than relabeling older proof. Run fresh consumer proof for
+the selected published artifact;
+historical publication or a source-build smoke does not supply it.
 
 ## Implementation PR slices
 
 This spec is docs-only; it routes open work:
 
-1. Publish the first real release: push a `v*` tag, confirm
-   release-binary.yml publishes the asset plus `.sha256`, and prove
-   `install-mode: release` and tagged `auto` end to end on a consumer run.
-   Until this lands, the release path is implemented-but-unexercised and
-   release notes must not claim a prebuilt install. No issue yet.
+1. Publication now exists: `v0.1.0` and `v0.1.1` have archives and checksum
+   siblings. The next work is #815's bounded release-only installation proof,
+   #816's next unused-version candidate after its unmet prerequisites, and
+   #817's exact-SHA authorization/publication/independent verification. Do not
+   recreate `v0.1.1` or close those broader obligations from metadata alone.
 2. DONE: Verify the `.sha256` receipt in the action's download path before
    accepting the asset.
 2a. DONE: Add a `workflow_dispatch` dry-run to release-binary.yml so
@@ -406,6 +432,12 @@ every gap recorded as missing evidence, and doctor verifies the runner
 image without printing a single secret value.
 ```
 
-The claim "prebuilt release binaries skip the build on tagged refs" is
-machinery-true but unproven; it may not appear in release notes until
-slice 1 publishes and exercises the first asset.
+Published Linux x64 archives exist. A claim that a particular installation
+skipped the source build must cite that exact artifact, platform, Action ref,
+and the harness-owned `source_build_used=false` assertion required by
+#815/#816. This is not a current Action output or existing installer-receipt
+field: the proof owner must identify the actual schema/field mapping and
+retained resolver, binary, environment, and negative-control observations.
+Missing evidence stays not proven. Do not promote publication metadata,
+`auto` success, or the source package version into proof of no-host-Cargo,
+provider, portability, stable-coordinator, or next-candidate readiness.

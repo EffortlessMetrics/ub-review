@@ -1,6 +1,12 @@
 # Issue ledger
 
-Triage of every open issue against receipts in the tree (main @ 26bd360,
+This is a historical triage ledger, not the live issue board or current work
+queue. Its counts and dispositions describe the passes recorded below.
+[Issue #945](https://github.com/EffortlessMetrics/ub-review/issues/945) owns
+current execution order; [Product state](PRODUCT_STATE.md) owns earned-state
+reporting. Recheck current source, receipts, and GitHub before reviving a lane.
+
+Historical triage of open issues against receipts in the tree (main @ 26bd360,
 2026-06-07). Discipline: an issue is `closed` only with a concrete receipt
 (merged PR, named test, artifact); `narrowed` issues carry the exact
 remaining delta as a comment on the issue; everything else is `keep` with a

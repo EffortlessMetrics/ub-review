@@ -1,5 +1,11 @@
 # Requirements
 
+These requirements retain the original scaffold and later gate-design intent.
+They are not evidence that the released action has earned sole-gate authority.
+Use [Product state](PRODUCT_STATE.md) for current maturity and
+[issue #945](https://github.com/EffortlessMetrics/ub-review/issues/945) for
+implementation order; repository-owner promotion remains a separate decision.
+
 ## Product
 
 - Evidence-first PR packet builder.

@@ -13,8 +13,8 @@ ub-review/gate
 Do not require individual matrix leaves such as macOS, Windows, coverage,
 mutation, `ripr`, Docker, GPU, or feature-matrix jobs. Optional and expensive
 jobs can be skipped by policy, and skipped optional jobs should not strand a
-required check. Until `PR Gate Success` exists, keep the existing GitHub checks
-as the source of truth and treat this document as the target contract.
+required check. Current repository settings and GitHub check runs remain the
+source of truth; documentation changes do not configure branch protection.
 
 The summary check should distinguish:
 

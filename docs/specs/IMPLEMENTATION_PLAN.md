@@ -1,11 +1,16 @@
 # Release surface implementation plan
 
-Status: authored 2026-06-06, closing the release surface spec wave (PR 8).
-This document routes every piece of open release work through the specs
+Historical plan: authored 2026-06-06, closing the release surface spec wave
+(PR 8). Current execution order belongs to
+[issue #945](https://github.com/EffortlessMetrics/ub-review/issues/945), and
+[Product state](../PRODUCT_STATE.md) records current earned capability.
+Recheck live issues and source before treating an old slice as unfinished.
+
+This document routed that wave's open release work through the specs
 (UB-REVIEW-SPEC-0001 through 0010). It adds no implementation; each slice is
 one PR-sized unit with its governing spec, its issue, and its proof
-obligation. Work not listed here and not an emergency should not start until
-it is routed here.
+obligation. Its routing and sequencing rules apply to that historical wave,
+not to all current repository work.
 
 ## Routing table
 
