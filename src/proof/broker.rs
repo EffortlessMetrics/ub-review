@@ -966,9 +966,13 @@ fn should_write_follow_up_portfolio(out: &Path, proof_requests: &[ProofRequest])
 
 /// Read view of a previously written portfolio artifact for run-wide
 /// merging (#4271 round 2). Unknown fields are ignored and every retained
-/// field defaults, so a foreign or partial file degrades to empty.
+/// field defaults, so a foreign or partial file degrades to empty. `head`
+/// guards against merging stale decisions from another run that reused the
+/// output directory (round 2b): a head mismatch starts a new portfolio.
 #[derive(Debug, serde::Deserialize)]
 struct ProofPortfolioDiskView {
+    #[serde(default)]
+    head: String,
     #[serde(default)]
     candidate_tasks: Vec<ProofPortfolioCandidateTask>,
     #[serde(default)]
@@ -996,14 +1000,56 @@ fn merge_proof_portfolio_entries<T>(
     merged
 }
 
+/// Merge same-id portfolio decisions field-aware (round 2b): task ids
+/// omit request ids, so an optional follow-up request mapping to an
+/// already-recorded task id must not clear the earlier obligation.
+/// `required` ORs together, request and receipt ids union (existing order
+/// first, then fresh-only), and kind/status/reason come from the fresh
+/// decision because fresh broker state supersedes.
+fn merge_proof_portfolio_decisions(
+    existing: Vec<ProofPortfolioDecision>,
+    fresh: Vec<ProofPortfolioDecision>,
+) -> Vec<ProofPortfolioDecision> {
+    let mut merged = existing;
+    for decision in fresh {
+        if let Some(slot) = merged
+            .iter_mut()
+            .find(|kept| kept.task_id == decision.task_id)
+        {
+            slot.required = slot.required || decision.required;
+            for request_id in &decision.request_ids {
+                if !slot.request_ids.contains(request_id) {
+                    slot.request_ids.push(request_id.clone());
+                }
+            }
+            for receipt_id in &decision.receipt_ids {
+                if !slot.receipt_ids.contains(receipt_id) {
+                    slot.receipt_ids.push(receipt_id.clone());
+                }
+            }
+            slot.kind = decision.kind.clone();
+            slot.status = decision.status.clone();
+            slot.reason = decision.reason.clone();
+        } else {
+            merged.push(decision);
+        }
+    }
+    merged
+}
+
 /// Merge a fresh portfolio write with the artifact already on disk (#4271
 /// round 2): the follow-up broker writes follow-up-only decisions, which
-/// must not erase the primary broker's required obligations. Fresh
-/// decisions and catalog entries supersede same-id disk entries; disk
-/// entries for unseen tasks are retained. Scalars (budget, remaining,
-/// runtime, head, phase) always come from the fresh write.
+/// must not erase the primary broker's required obligations. Fresh catalog
+/// entries supersede same-id disk entries; disk entries for unseen tasks
+/// are retained; decisions merge field-aware via
+/// `merge_proof_portfolio_decisions`. Scalars (budget, remaining, runtime,
+/// head, phase) always come from the fresh write. Merge applies only when
+/// the stored head equals the current head (round 2b); a reused output
+/// directory under a different head starts a new portfolio instead of
+/// absorbing stale decisions.
 fn merge_proof_portfolio_with_disk(
     review_dir: &Path,
+    head: &str,
     candidate_tasks: Vec<ProofPortfolioCandidateTask>,
     selected_task_ids: Vec<String>,
     decisions: Vec<ProofPortfolioDecision>,
@@ -1019,6 +1065,9 @@ fn merge_proof_portfolio_with_disk(
     let Some(existing) = existing else {
         return (candidate_tasks, selected_task_ids, decisions);
     };
+    if existing.head != head {
+        return (candidate_tasks, selected_task_ids, decisions);
+    }
     (
         merge_proof_portfolio_entries(existing.candidate_tasks, candidate_tasks, |task| {
             task.id.as_str()
@@ -1026,9 +1075,7 @@ fn merge_proof_portfolio_with_disk(
         merge_proof_portfolio_entries(existing.selected_task_ids, selected_task_ids, |id| {
             id.as_str()
         }),
-        merge_proof_portfolio_entries(existing.decisions, decisions, |decision| {
-            decision.task_id.as_str()
-        }),
+        merge_proof_portfolio_decisions(existing.decisions, decisions),
     )
 }
 
@@ -1053,6 +1100,7 @@ fn write_proof_portfolio_selection_artifact(
         portfolio_candidate_tasks(test_candidates, build_candidates, budget, proof_requests);
     let (candidate_tasks, selected_task_ids, decisions) = merge_proof_portfolio_with_disk(
         &review_dir,
+        &diff.head,
         candidate_tasks,
         selected_task_ids,
         selection.decisions,
@@ -2515,6 +2563,148 @@ mod tests {
         );
         ensure!(summary.contains("receipts: none"), "{summary}");
         ensure!(summary.contains("merge-test-digest"), "{summary}");
+        Ok(())
+    }
+
+    /// Round 2b (CodeRabbit 4067904921): task ids omit request ids, so an
+    /// optional follow-up request mapping to the SAME task id must not
+    /// overwrite the earlier required obligation. The merged decision stays
+    /// required with both request ids, the accounting still counts it, and
+    /// the summary mentions it.
+    #[test]
+    fn follow_up_write_preserves_required_flag_on_shared_task_id() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let diff = test_diff();
+        let write_one =
+            |task: &FocusedTestTask, requests: &[ProofRequest], out: &std::path::Path| {
+                let selection = select_proof_portfolio(ProofPortfolioInput {
+                    test_tasks: std::slice::from_ref(task),
+                    build_tasks: &[],
+                    proof_requests: requests,
+                    proof_receipts: &[],
+                    head: &diff.head,
+                    budget: proof_budget_for_test(0, 300),
+                    runtime: portfolio_runtime_for_test(300, 4, Some(8_192), Some(20_000)),
+                });
+                write_proof_portfolio_selection_artifact(
+                    out,
+                    &diff,
+                    proof_budget_for_test(0, 300),
+                    std::slice::from_ref(task),
+                    &[],
+                    requests,
+                    selection,
+                )
+            };
+        let task_a = focused_test_task("task-same", vec!["req-a".to_owned()], 600);
+        write_one(&task_a, &[proof_request("req-a", true)], &out)?;
+        let task_b = focused_test_task("task-same", vec!["req-b".to_owned()], 300);
+        write_one(&task_b, &[proof_request("req-b", false)], &out)?;
+        let text = fs::read_to_string(out.join("review/proof_portfolio.json"))?;
+        let snapshot: crate::gate::PlannerPortfolioSnapshot = serde_json::from_str(&text)?;
+        ensure!(
+            snapshot.decisions.len() == 1,
+            "{}",
+            snapshot.decisions.len()
+        );
+        let merged = &snapshot.decisions[0];
+        ensure!(merged.task_id == "task-same");
+        ensure!(merged.required);
+        ensure!(
+            merged.request_ids == vec!["req-a".to_owned(), "req-b".to_owned()],
+            "{:?}",
+            merged.request_ids
+        );
+        let accounting = crate::gate::build_planner_required_proof_accounting(
+            &snapshot,
+            &[],
+            0,
+            Some("shared-id-digest"),
+        );
+        ensure!(accounting.total == 1);
+        ensure!(accounting.unproven == 1);
+        ensure!(accounting.unproven_tasks[0].task_id == "task-same");
+        fs::write(out.join("review/metrics.json"), "{}")?;
+        let gate = serde_json::json!({
+            "schema": "ub-review.gate_outcome.v1",
+            "conclusion": "pass",
+            "reasons": [],
+            "planner_required_proofs": serde_json::to_value(&accounting)?,
+            "revision": {"digest": "shared-id-digest", "semantics": "merge_result", "reviewed_commit": "c"},
+        });
+        fs::write(
+            out.join("review/gate_outcome.json"),
+            serde_json::to_vec_pretty(&gate)?,
+        )?;
+        let mut summary = String::new();
+        crate::render_review_efficiency_section(&mut summary, &out);
+        ensure!(summary.contains("task-same"), "{summary}");
+        ensure!(summary.contains("req-a"), "{summary}");
+        ensure!(summary.contains("req-b"), "{summary}");
+        Ok(())
+    }
+
+    /// Round 2b (CodeRabbit 4067904925): a reused output directory under a
+    /// different head must not absorb stale decisions. The second head's
+    /// write contains only its own decisions.
+    #[test]
+    fn portfolio_write_under_new_head_discards_stale_decisions() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let diff = test_diff();
+        let task_a = focused_test_task("task-a", vec!["req-a".to_owned()], 600);
+        let requests_a = vec![proof_request("req-a", true)];
+        let selection_a = select_proof_portfolio(ProofPortfolioInput {
+            test_tasks: std::slice::from_ref(&task_a),
+            build_tasks: &[],
+            proof_requests: &requests_a,
+            proof_receipts: &[],
+            head: &diff.head,
+            budget: proof_budget_for_test(0, 300),
+            runtime: portfolio_runtime_for_test(300, 4, Some(8_192), Some(20_000)),
+        });
+        write_proof_portfolio_selection_artifact(
+            &out,
+            &diff,
+            proof_budget_for_test(0, 300),
+            std::slice::from_ref(&task_a),
+            &[],
+            &requests_a,
+            selection_a,
+        )?;
+        let mut other_diff = test_diff();
+        other_diff.head = "other-head".to_owned();
+        let task_b = focused_test_task("task-b", vec!["req-b".to_owned()], 300);
+        let requests_b = vec![proof_request("req-b", false)];
+        let selection_b = select_proof_portfolio(ProofPortfolioInput {
+            test_tasks: std::slice::from_ref(&task_b),
+            build_tasks: &[],
+            proof_requests: &requests_b,
+            proof_receipts: &[],
+            head: &other_diff.head,
+            budget: proof_budget_for_test(0, 300),
+            runtime: portfolio_runtime_for_test(300, 4, Some(8_192), Some(20_000)),
+        });
+        write_proof_portfolio_selection_artifact(
+            &out,
+            &other_diff,
+            proof_budget_for_test(0, 300),
+            std::slice::from_ref(&task_b),
+            &[],
+            &requests_b,
+            selection_b,
+        )?;
+        let text = fs::read_to_string(out.join("review/proof_portfolio.json"))?;
+        let snapshot: crate::gate::PlannerPortfolioSnapshot = serde_json::from_str(&text)?;
+        ensure!(
+            snapshot.decisions.len() == 1,
+            "{}",
+            snapshot.decisions.len()
+        );
+        ensure!(snapshot.decisions[0].task_id == "task-b");
+        let artifact: serde_json::Value = serde_json::from_str(&text)?;
+        ensure!(artifact.get("head").and_then(|head| head.as_str()) == Some("other-head"));
         Ok(())
     }
 

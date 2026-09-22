@@ -34197,3 +34197,37 @@ kind = "exposure_gap"
 finding_id = "probe:src_summary_render.rs:call_deletion:e962986e.2"
 owner = "ub-review/core"
 reason = "RIPR discriminate false-negative on #4271 the per-task line push in render_planner_required_proofs: deferred_required_planner_proof_reaches_summary_with_digest and hostile_planner_fields_render_escaped_not_live pins task id, reason, receipt absence, and digest in the rendered line; ripr's assertion linker misses it because assertions address rendered line text rather than the push-call text. Re-verify after any edit to render_planner_required_proofs."
+
+# Lane #4271 round 2b (CodeRabbit 4067904921/4067904925 follow-ups) - 5
+# dispositions for field-aware decision merge and the head guard. Same
+# families as the round-2 block above; hash-keyed ids are content-stable.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:b08564b6"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 round-2b shape definition (ProofPortfolioDiskView head guard field): declarations carry no behavior; the guard is pinned by portfolio_write_under_new_head_discards_stale_decisions, and a shape mutation fails compilation rather than tests. Re-verify after any edit to proof/broker.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:859c91d4"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 round-2b the merge_proof_portfolio_decisions fresh parameter: follow_up_write_preserves_required_flag_on_shared_task_id drives the supersede arm and nonempty_follow_up_write_merges_primary_required_decisions drives the append arm, each with exact merged-content assertions; ripr's assertion linker misses parameter bindings. Re-verify after any edit to proof/broker.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:d5173dbd"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 round-2b the supersede-or-append branch in merge_proof_portfolio_decisions: the shared-id fixture pins the Some arm (required stays true, request ids union to req-a then req-b) and the merge fixture pins the None arm (both decisions retained); assertions address merged membership rather than the branch text. Re-verify after any edit to proof/broker.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:return_value:d3fcfdec"
+owner = "ub-review/core"
+reason = "Twin of the supersede-or-append branch probe above (same if-let in merge_proof_portfolio_decisions): the shared-id and merge fixtures pin both arms with exact merged-content assertions; assertions address outcomes rather than the branch text. Re-verify after any edit to proof/broker.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:41f1e390"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 round-2b the iter_mut scan in merge_proof_portfolio_decisions: a key change would lose task-a/task-b identity and fail every downstream assertion in both merge fixtures; assertions address merged identity outcomes rather than the scan text. Re-verify after any edit to proof/broker.rs."
