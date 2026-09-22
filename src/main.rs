@@ -5322,6 +5322,10 @@ fn write_review_artifacts(
     // policy. Only affects the gate when config.gate.review_forward == true.
     // Same resolution object as the compiler — no second latest-turn search.
     let reporter_gate = reporter_resolution.gate_input();
+    // #4271: the broker-final portfolio is on disk by now (the broker wrote
+    // it before the compiler ran); absence or parse failure degrades to
+    // `None` and the gate omits the planner-required section without failing.
+    let planner_portfolio = read_planner_portfolio_snapshot(out);
     let mut gate_outcome = build_gate_outcome(GateOutcomeInput {
         args,
         config,
@@ -5333,6 +5337,7 @@ fn write_review_artifacts(
         missing_or_failed_sensor_evidence: &review.missing_or_failed_sensor_evidence,
         missing_or_failed_model_evidence: &review.missing_or_failed_model_evidence,
         reporter_gate,
+        planner_portfolio,
     });
     gate_outcome.revision = revision.cloned();
     if (gate_outcome.conclusion == "fail" || gate_outcome.conclusion == "inconclusive")
@@ -15191,6 +15196,7 @@ required_proof_unprooven = true
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
             reporter_gate: outcome.resolution.gate_input(),
+            planner_portfolio: None,
         });
         assert_eq!(gate.conclusion, "inconclusive");
         assert_eq!(gate.reasons.len(), 1);
@@ -15277,6 +15283,7 @@ required_proof_unprooven = true
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
             reporter_gate: outcome.resolution.gate_input(),
+            planner_portfolio: None,
         });
         assert_eq!(gate.conclusion, "inconclusive");
         assert_eq!(gate.reasons.len(), 1);
@@ -18810,6 +18817,7 @@ index 1111111..2222222 100644
             model_coverage: super::gate_truth::GateModelCoverage::default(),
             not_proven_reasons: Vec::new(),
             revision: None,
+            planner_required_proofs: None,
         };
 
         let ledger = super::build_fill_ledger(super::FillLedgerInput {

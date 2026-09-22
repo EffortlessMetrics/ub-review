@@ -21,7 +21,7 @@
 
 use serde::Serialize;
 
-use crate::gate::{GateReason, GateRequiredProofCounts};
+use crate::gate::{GateReason, GateRequiredProofCounts, PlannerRequiredProofAccounting};
 use crate::{ModelEvidenceIssue, Plan, ReviewTerminalState, SensorEvidenceIssue};
 
 /// Structured instrument coverage, so a consumer never has to parse prose to
@@ -86,7 +86,8 @@ pub(crate) struct GateTruth {
     pub(crate) model_coverage: GateModelCoverage,
     /// Every reason some part of the run was not proven, each prefixed with a
     /// stable machine-readable token (`terminal-state:`,
-    /// `required-sensor-coverage:`, `required-proof:`, `model-coverage:`,
+    /// `required-sensor-coverage:`, `required-proof:`,
+    /// `required-planner-proof:`, `model-coverage:`,
     /// `instrument-coverage:`, `publication:`, `gate-conclusion:`) so a
     /// workflow can branch without
     /// parsing prose. Non-empty whenever any of the three results is
@@ -103,6 +104,12 @@ pub(crate) struct GateTruthInput<'a> {
     pub(crate) model_issues: &'a [ModelEvidenceIssue],
     pub(crate) reasons: &'a [GateReason],
     pub(crate) required_proof: GateRequiredProofCounts,
+    /// Retained planner-required portfolio accounting (#4271). `None` when
+    /// the run had no readable portfolio artifact; unproven required
+    /// portfolio tasks push a `required-planner-proof:` reason. This moves
+    /// only the separated results — never `conclusion`, never a blocking
+    /// reason — so advisory enforcement posture is unchanged.
+    pub(crate) planner_required_proofs: Option<&'a PlannerRequiredProofAccounting>,
     /// The legacy verdict, whose meaning is unchanged: `pass | fail |
     /// inconclusive`. `gate_result` corrects it for truth without moving it.
     pub(crate) conclusion: &'a str,
@@ -262,6 +269,21 @@ pub(crate) fn build_gate_truth(input: GateTruthInput<'_>) -> GateTruth {
         not_proven_reasons.push(format!(
             "required-proof: {} of {} required proof requests produced no passing receipt",
             input.required_proof.skipped, input.required_proof.matched
+        ));
+    }
+    // And likewise for the planner-required portfolio denominator (#4271): a
+    // required portfolio task with no satisfying receipt leaves a
+    // planner/broker obligation unproven. Optional deferrals never enter the
+    // accounting, so they can never produce this reason. Advisory only: this
+    // moves the separated results while `conclusion` stays `pass`.
+    if let Some(accounting) = input.planner_required_proofs
+        && accounting.unproven > 0
+    {
+        not_proven_reasons.push(format!(
+            "required-planner-proof: {} of {} required planner proof tasks ended without a \
+             receipt (safe wind-down/deferral); see review/proof_portfolio.json and \
+             review/gate_outcome.json",
+            accounting.unproven, accounting.total
         ));
     }
     // A model fleet that was launched and produced nothing usable proves
@@ -432,6 +454,7 @@ mod tests {
             model_issues,
             reasons,
             required_proof: GateRequiredProofCounts::default(),
+            planner_required_proofs: None,
             conclusion,
         })
     }
@@ -818,5 +841,80 @@ mod tests {
             coverage.lost(),
             "coverage loss must equal the bucketed issue count"
         );
+    }
+
+    /// #4271: an unproven required planner portfolio task records a
+    /// `required-planner-proof:` reason and moves the separated results,
+    /// while the legacy verdict stays `pass` and no blocking reason exists.
+    #[test]
+    fn deferred_required_planner_proof_is_not_proven_but_not_blocking() {
+        let plan = test_plan(vec![]);
+        let terminal_state = test_terminal_state("sufficient");
+        let reasons: Vec<GateReason> = Vec::new();
+        let accounting = PlannerRequiredProofAccounting {
+            denominator: crate::gate::PLANNER_REQUIRED_PROOF_DENOMINATOR.to_owned(),
+            gate_required_requests: 0,
+            total: 1,
+            proven: 0,
+            unproven: 1,
+            unproven_tasks: Vec::new(),
+        };
+        let truth = build_gate_truth(GateTruthInput {
+            plan: &plan,
+            terminal_state: &terminal_state,
+            sensor_issues: &[],
+            model_issues: &[],
+            reasons: &reasons,
+            required_proof: GateRequiredProofCounts::default(),
+            planner_required_proofs: Some(&accounting),
+            conclusion: "pass",
+        });
+        assert!(
+            truth
+                .not_proven_reasons
+                .iter()
+                .any(|reason| reason.starts_with("required-planner-proof:")),
+            "{:?}",
+            truth.not_proven_reasons
+        );
+        assert_eq!(truth.analysis_result, "not_proven");
+        assert_eq!(truth.gate_result, "not_proven");
+    }
+
+    /// #4271: a fully proven planner denominator (or no portfolio at all)
+    /// records no `required-planner-proof:` reason.
+    #[test]
+    fn proven_planner_portfolio_records_no_planner_reason() {
+        let plan = test_plan(vec![]);
+        let terminal_state = test_terminal_state("sufficient");
+        let reasons: Vec<GateReason> = Vec::new();
+        let accounting = PlannerRequiredProofAccounting {
+            denominator: crate::gate::PLANNER_REQUIRED_PROOF_DENOMINATOR.to_owned(),
+            gate_required_requests: 0,
+            total: 1,
+            proven: 1,
+            unproven: 0,
+            unproven_tasks: Vec::new(),
+        };
+        for planner in [Some(&accounting), None] {
+            let truth = build_gate_truth(GateTruthInput {
+                plan: &plan,
+                terminal_state: &terminal_state,
+                sensor_issues: &[],
+                model_issues: &[],
+                reasons: &reasons,
+                required_proof: GateRequiredProofCounts::default(),
+                planner_required_proofs: planner,
+                conclusion: "pass",
+            });
+            assert!(
+                truth
+                    .not_proven_reasons
+                    .iter()
+                    .all(|reason| !reason.starts_with("required-planner-proof:")),
+                "{:?}",
+                truth.not_proven_reasons
+            );
+        }
     }
 }

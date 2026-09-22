@@ -310,6 +310,7 @@ pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
         text.push_str(&format!(
             "- Gate: `{conclusion}` with `{blocking_reasons}` blocking reasons (`review/gate_outcome.json`)\n"
         ));
+        render_planner_required_proofs(text, &gate);
     }
     text.push_str(&format!(
         "- Model lanes: `{usable_lanes}/{total_lanes}` usable (`{ok_lanes}` ok, `{degraded_lanes}` degraded)\n"
@@ -462,6 +463,73 @@ pub(crate) fn format_json_status_counts(
 pub(crate) fn read_review_metrics(out: &Path) -> Option<serde_json::Value> {
     let text = fs::read_to_string(out.join("review/metrics.json")).ok()?;
     serde_json::from_str(&text).ok()
+}
+
+/// Retained planner-required proof obligations (#4271): the
+/// `planner_required_proofs` accounting from `review/gate_outcome.json`,
+/// rendered right after the Gate line so a deferred required portfolio task
+/// (task/request ids, verbatim deferral reason, receipt absence, revision
+/// digest) is reachable from the final summary text. Only unproven tasks
+/// render per-task lines; nothing here ever claims a task is satisfied.
+fn render_planner_required_proofs(text: &mut String, gate: &serde_json::Value) {
+    let Some(accounting) = gate.get("planner_required_proofs") else {
+        return;
+    };
+    let total = accounting
+        .get("total")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let proven = accounting
+        .get("proven")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let unproven = accounting
+        .get("unproven")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    text.push_str(&format!(
+        "- Required planner proofs: `{proven}/{total}` proven (`{unproven}` unproven; planner/broker denominator from `review/proof_portfolio.json`, distinct from gate-required `[[proof.required]]` requests)\n"
+    ));
+    let digest = gate
+        .get("revision")
+        .and_then(|revision| revision.get("digest"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
+    let tasks = accounting
+        .get("unproven_tasks")
+        .and_then(serde_json::Value::as_array);
+    let Some(tasks) = tasks else { return };
+    for task in tasks {
+        let task_id = task
+            .get("task_id")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("unknown");
+        let kind = task
+            .get("kind")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("unknown");
+        let status = task
+            .get("status")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("unknown");
+        let reason = task
+            .get("reason")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("unknown");
+        let request_ids = task
+            .get("request_ids")
+            .and_then(serde_json::Value::as_array)
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_else(|| "unknown".to_owned());
+        text.push_str(&format!(
+            "- Required planner proof unproven: `{task_id}` ({kind}, {status}): {reason}; requests: {request_ids}; receipts: none; revision `{digest}` (`review/proof_portfolio.json`, `review/gate_outcome.json`)\n"
+        ));
+    }
 }
 
 pub(crate) fn read_gate_outcome(out: &Path) -> Option<serde_json::Value> {
@@ -646,6 +714,62 @@ mod tests {
     fn lane_packet_model_display_returns_none_for_missing_packet() -> Result<()> {
         let temp = tempfile::tempdir()?;
         assert_eq!(lane_packet_model_display(temp.path(), "missing/lane"), None);
+        Ok(())
+    }
+
+    /// F5 portfolio-to-summary consistency: the rendered summary retains
+    /// the deferred required task's identities, verbatim reason, receipt
+    /// absence, and the exact revision digest from the gate artifact.
+    #[test]
+    fn deferred_required_planner_proof_reaches_summary_with_digest() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        fs::create_dir_all(out.join("review"))?;
+        fs::write(out.join("review/metrics.json"), "{}")?;
+        let digest = "66e7daf76a735dc2678f4889523cd86d3dd41b1cca9976c83053c2d032322ed3";
+        let gate = serde_json::json!({
+            "schema": "ub-review.gate_outcome.v1",
+            "conclusion": "pass",
+            "reasons": [],
+            "required_proof": {"matched": 0, "passed": 0, "failed": 0, "skipped": 0},
+            "planner_required_proofs": {
+                "denominator": "required planner proof portfolio tasks",
+                "gate_required_requests": 0,
+                "total": 1,
+                "proven": 0,
+                "unproven": 1,
+                "unproven_tasks": [{
+                    "task_id": "proof-red-green-b27777653387",
+                    "kind": "focused-red-green",
+                    "status": "deferred_by_safe_wind_down",
+                    "reason": "required floor could not fit inside the remaining safe proof budget",
+                    "request_ids": [
+                        "proof-intent-c763f38728d999cd",
+                        "proof-intent-48940c2f9ea4a58c"
+                    ],
+                    "receipt_ids": [],
+                    "receipts_present": false
+                }]
+            },
+            "revision": {"digest": digest, "semantics": "merge_result", "reviewed_commit": "5137d8e5"}
+        });
+        fs::write(
+            out.join("review/gate_outcome.json"),
+            serde_json::to_vec_pretty(&gate)?,
+        )?;
+        let mut summary = String::new();
+        render_review_efficiency_section(&mut summary, out);
+        for needle in [
+            "proof-red-green-b27777653387",
+            "proof-intent-c763f38728d999cd",
+            "proof-intent-48940c2f9ea4a58c",
+            "required floor could not fit inside the remaining safe proof budget",
+            "receipts: none",
+            digest,
+        ] {
+            assert!(summary.contains(needle), "missing {needle}:\n{summary}");
+        }
+        assert!(!summary.contains("satisfied"), "{summary}");
         Ok(())
     }
 }
