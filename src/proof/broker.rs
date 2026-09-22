@@ -1020,6 +1020,34 @@ fn merge_proof_portfolio_entries<T>(
     merged
 }
 
+/// Merge same-id candidate catalog entries field-aware (round 4): task ids
+/// omit request ids, so a follow-up write carrying a narrower request set
+/// must not clear the earlier obligation from the published catalog the
+/// way a fresh-supersedes merge would. `required` ORs together, request
+/// ids union (existing order first, then fresh-only), and kind/estimated
+/// cost come from the fresh entry because fresh broker state supersedes.
+fn merge_proof_portfolio_candidate_tasks(
+    existing: Vec<ProofPortfolioCandidateTask>,
+    fresh: Vec<ProofPortfolioCandidateTask>,
+) -> Vec<ProofPortfolioCandidateTask> {
+    let mut merged = existing;
+    for task in fresh {
+        if let Some(slot) = merged.iter_mut().find(|kept| kept.id == task.id) {
+            slot.required = slot.required || task.required;
+            for request_id in &task.request_ids {
+                if !slot.request_ids.contains(request_id) {
+                    slot.request_ids.push(request_id.clone());
+                }
+            }
+            slot.kind = task.kind.clone();
+            slot.estimated_cost_sec = task.estimated_cost_sec;
+        } else {
+            merged.push(task);
+        }
+    }
+    merged
+}
+
 /// Merge same-id portfolio decisions field-aware (round 2b): task ids
 /// omit request ids, so an optional follow-up request mapping to an
 /// already-recorded task id must not clear the earlier obligation.
@@ -1059,11 +1087,13 @@ fn merge_proof_portfolio_decisions(
 
 /// Merge a fresh portfolio write with the artifact already on disk (#4271
 /// round 2): the follow-up broker writes follow-up-only decisions, which
-/// must not erase the primary broker's required obligations. Fresh catalog
-/// entries supersede same-id disk entries; disk entries for unseen tasks
-/// are retained; decisions merge field-aware via
-/// `merge_proof_portfolio_decisions`. Scalars (budget, remaining, runtime,
-/// head, phase) always come from the fresh write. Merge applies only when
+/// must not erase the primary broker's required obligations. Catalog
+/// entries merge field-aware via `merge_proof_portfolio_candidate_tasks`
+/// (round 4) so a narrower follow-up request set cannot clear an earlier
+/// task obligation; disk entries for unseen tasks are retained; decisions
+/// merge field-aware via `merge_proof_portfolio_decisions`. Scalars
+/// (budget, remaining, runtime, head, phase) always come from the fresh
+/// write. Merge applies only when
 /// the stored head equals the current head (round 2b); a reused output
 /// directory under a different head starts a new portfolio instead of
 /// absorbing stale decisions.
@@ -1089,9 +1119,7 @@ fn merge_proof_portfolio_with_disk(
         return (candidate_tasks, selected_task_ids, decisions);
     }
     (
-        merge_proof_portfolio_entries(existing.candidate_tasks, candidate_tasks, |task| {
-            task.id.as_str()
-        }),
+        merge_proof_portfolio_candidate_tasks(existing.candidate_tasks, candidate_tasks),
         merge_proof_portfolio_entries(existing.selected_task_ids, selected_task_ids, |id| {
             id.as_str()
         }),
@@ -2707,6 +2735,22 @@ mod tests {
             merged.request_ids == vec!["req-a".to_owned(), "req-b".to_owned()],
             "{:?}",
             merged.request_ids
+        );
+        let catalog: serde_json::Value = serde_json::from_str(&text)?;
+        let candidate = catalog["candidate_tasks"]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("missing portfolio candidate catalog"))?
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("empty portfolio candidate catalog"))?
+            .clone();
+        ensure!(candidate["id"] == "task-same", "{candidate}");
+        ensure!(
+            candidate["required"] == serde_json::to_value(merged.required)?,
+            "{candidate}"
+        );
+        ensure!(
+            candidate["request_ids"] == serde_json::to_value(&merged.request_ids)?,
+            "{candidate}"
         );
         let accounting = crate::gate::build_planner_required_proof_accounting(
             &snapshot,
