@@ -34454,3 +34454,9 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_broker.rs:call_deletion:41f1e390"
 owner = "ub-review/core"
 reason = "RIPR discriminate false-negative on #4271 round-2b the iter_mut scan in merge_proof_portfolio_decisions: a key change would lose task-a/task-b identity and fail every downstream assertion in both merge fixtures; assertions address merged identity outcomes rather than the scan text. Re-verify after any edit to proof/broker.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:b7c7aae0"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 round-4 the fresh parameter binding in merge_proof_portfolio_candidate_tasks (twin of the round-2b decisions-merge parameter probe 859c91d4): the extended follow_up_write_preserves_required_flag_on_shared_task_id drives both merge arms and asserts the merged candidate record's required flag and request_ids equal the merged decision record exactly, so the construction outcome is pinned; ripr's assertion linker misses parameter bindings. Re-verify after any edit to proof/broker.rs."
