@@ -413,28 +413,55 @@ pub(crate) struct PlannerRequiredProofAccounting {
 /// denominator counted in `required_proof`.
 pub(crate) const PLANNER_REQUIRED_PROOF_DENOMINATOR: &str = "required planner proof portfolio tasks from review/proof_portfolio.json (planner/broker obligations; distinct from the gate-required [[proof.required]] policy-request denominator counted in required_proof)";
 
+/// A run receipt proves a required planner portfolio task only when it (i)
+/// belongs to the currently reviewed revision (matching revision digest),
+/// (ii) carries a successful result class (the same
+/// `required_proof_receipt_class` pass notion the gate uses: `head_passed`
+/// or `discriminating`), (iii) is not a head-only receipt
+/// (`test_patch_mode != "head-only"`), and (iv) shares a request id with
+/// the task (the broker's shared intersection, via
+/// `receipt_shares_proof_request`). Failed, skipped, timed-out,
+/// stale-revision, and head-only receipts therefore never satisfy a
+/// required red/green obligation, no matter the request-id overlap.
+pub(crate) fn planner_receipt_proves_task(
+    receipt: &ProofReceipt,
+    task: &PlannerPortfolioTask,
+    revision_digest: Option<&str>,
+) -> bool {
+    let Some(digest) = revision_digest else {
+        return false;
+    };
+    receipt
+        .revision
+        .as_ref()
+        .is_some_and(|revision| revision.digest == digest)
+        && required_proof_receipt_class(receipt) == RequiredProofClass::Passed
+        && receipt.test_patch_mode != "head-only"
+        && crate::proof::broker::receipt_shares_proof_request(receipt, &task.request_ids)
+}
+
 /// Derive the planner-required accounting from the broker-final portfolio
 /// decisions and the run's proof receipts. A required task is proven if and
-/// only if some run receipt shares a request id with the task (the same
-/// request-to-receipt intersection the gate uses); no HEAD or command
-/// comparison is introduced here. An unrelated passing receipt whose request
-/// ids are disjoint from the task therefore never marks it proven.
+/// only if some run receipt proves it under `planner_receipt_proves_task`
+/// (current revision, successful result, non-head-only kind, shared request
+/// id). An unrelated passing receipt whose request ids are disjoint from
+/// the task therefore never marks it proven — and neither does a failed,
+/// skipped, timed-out, stale, or head-only receipt that happens to share
+/// request ids.
 pub(crate) fn build_planner_required_proof_accounting(
     portfolio: &PlannerPortfolioSnapshot,
     proof_receipts: &[ProofReceipt],
     gate_required_requests: usize,
+    revision_digest: Option<&str>,
 ) -> PlannerRequiredProofAccounting {
     let mut proven = 0_usize;
     let mut unproven_tasks = Vec::new();
     let mut total = 0_usize;
     for task in portfolio.decisions.iter().filter(|task| task.required) {
         total += 1;
-        let satisfied = proof_receipts.iter().any(|receipt| {
-            receipt
-                .request_ids
-                .iter()
-                .any(|request_id| task.request_ids.iter().any(|id| id == request_id))
-        });
+        let satisfied = proof_receipts
+            .iter()
+            .any(|receipt| planner_receipt_proves_task(receipt, task, revision_digest));
         if satisfied {
             proven += 1;
         } else {
@@ -511,6 +538,11 @@ pub(crate) struct GateOutcomeInput<'a> {
     /// `None` when the artifact is absent or unparseable; the gate then
     /// omits the planner-required section without failing.
     pub(crate) planner_portfolio: Option<PlannerPortfolioSnapshot>,
+    /// Digest of the currently reviewed revision (#4271 round 2): a required
+    /// portfolio task is proven only by a receipt stamped with this digest.
+    /// `None` when no revision was admitted; every required task then stays
+    /// unproven rather than matching receipts from an unknown revision.
+    pub(crate) revision_digest: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -802,6 +834,7 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
             portfolio,
             input.proof_receipts,
             required_proof.matched,
+            input.revision_digest.as_deref(),
         )
     });
 
@@ -1277,6 +1310,7 @@ mod tests {
                 missing_or_failed_model_evidence: &[],
                 reporter_gate: crate::ReporterGateInput::Absent,
                 planner_portfolio: None,
+                revision_digest: None,
             });
 
             assert_eq!(gate.schema, "ub-review.gate_outcome.v1");
@@ -1317,6 +1351,7 @@ mod tests {
             missing_or_failed_model_evidence: &model_issues,
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -1356,6 +1391,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -1395,6 +1431,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -1442,6 +1479,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -1500,6 +1538,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -1534,6 +1573,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -1567,6 +1607,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         assert_eq!(gate.conclusion, "inconclusive");
@@ -1594,6 +1635,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         assert_eq!(review_byok_gate.conclusion, "pass");
@@ -1630,6 +1672,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
         assert_eq!(
             gate.conclusion, "inconclusive",
@@ -1663,6 +1706,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         assert_eq!(gate.conclusion, "inconclusive");
@@ -1703,6 +1747,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         assert_eq!(gate.conclusion, "inconclusive");
@@ -1751,6 +1796,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         assert_eq!(gate.reasons.len(), 1);
@@ -1796,6 +1842,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         assert_eq!(gate.reasons.len(), 1);
@@ -1852,6 +1899,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         assert_eq!(gate.reasons.len(), 1);
@@ -1905,6 +1953,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         // Two reasons: one evidence-gap (missing), one finding (failed).
@@ -1957,6 +2006,7 @@ mod tests {
             missing_or_failed_model_evidence: &model_issues,
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -1994,6 +2044,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -2071,6 +2122,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -2126,6 +2178,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -2159,6 +2212,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         // Only the required tool blocks; the non-required gap stays advisory
@@ -2279,6 +2333,7 @@ mod tests {
                 missing_or_failed_model_evidence: &[],
                 reporter_gate: crate::ReporterGateInput::Absent,
                 planner_portfolio: None,
+                revision_digest: None,
             });
             assert_eq!(gate.conclusion, "pass");
             assert_eq!(gate.tool_gates.failed, 0);
@@ -2306,6 +2361,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
         assert_eq!(default_gate.conclusion, "pass");
         assert!(default_gate.reasons.is_empty());
@@ -2321,6 +2377,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
         assert_eq!(opted_in_gate.conclusion, "fail");
         assert_eq!(opted_in_gate.reasons.len(), 1);
@@ -2372,6 +2429,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
         assert_eq!(gate.conclusion, "fail");
         assert_eq!(gate.tool_gates.failed, 1);
@@ -2419,6 +2477,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         anyhow::ensure!(gate.conclusion == "fail");
@@ -2465,6 +2524,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -2508,6 +2568,7 @@ mod tests {
                 receipt: "review/threads/reporter/turn-001.json".to_owned(),
             },
             planner_portfolio: None,
+            revision_digest: None,
         });
         assert_eq!(gate.conclusion, "fail");
         assert_eq!(gate.reasons.len(), 1);
@@ -2565,6 +2626,7 @@ mod tests {
                     receipt: receipt.to_owned(),
                 },
                 planner_portfolio: None,
+                revision_digest: None,
             });
             assert_eq!(gate.conclusion, expected_conclusion);
             match expected_reason {
@@ -2592,6 +2654,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
+            revision_digest: None,
         });
         assert_eq!(absent.conclusion, "inconclusive");
         assert_eq!(absent.reasons.len(), 1);
@@ -2624,6 +2687,7 @@ mod tests {
                 receipt: "review/threads/reporter/turn-001.json".to_owned(),
             },
             planner_portfolio: None,
+            revision_digest: None,
         });
         assert_eq!(gate.conclusion, "inconclusive");
         assert_eq!(gate.reasons.len(), 1);
@@ -2661,6 +2725,7 @@ mod tests {
                 receipt: receipt.to_owned(),
             },
             planner_portfolio: None,
+            revision_digest: None,
         });
 
         assert_eq!(gate.conclusion, "inconclusive");
@@ -2688,9 +2753,32 @@ mod tests {
         }
     }
 
+    /// Digest standing in for the currently reviewed revision in the
+    /// planner fixtures. Receipts stamped with it are current; receipts
+    /// stamped with any other digest are stale.
+    const PLANNER_TEST_DIGEST: &str = "planner-test-digest-current";
+    const PLANNER_STALE_DIGEST: &str = "planner-test-digest-stale";
+
+    fn planner_revision(digest: &str) -> crate::RevisionRef {
+        crate::RevisionRef {
+            digest: digest.to_owned(),
+            semantics: "merge_result".to_owned(),
+            reviewed_commit: "planner-test-commit".to_owned(),
+        }
+    }
+
+    /// A run receipt sharing the required task's request id. The caller
+    /// stamps the revision and patch mode to select the eligibility leg.
+    fn planner_task_receipt(result: &str, command_status: &str) -> ProofReceipt {
+        let mut receipt = test_proof_receipt(result, command_status);
+        receipt.request_ids = vec!["proof-intent-48940c2f9ea4a58c".to_owned()];
+        receipt
+    }
+
     fn planner_gate(
         portfolio: Option<PlannerPortfolioSnapshot>,
         proof_receipts: &[ProofReceipt],
+        revision_digest: Option<&str>,
     ) -> GateOutcome {
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
         let plan = test_plan(Vec::new());
@@ -2707,6 +2795,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: portfolio,
+            revision_digest: revision_digest.map(str::to_owned),
         })
     }
 
@@ -2722,7 +2811,7 @@ mod tests {
     /// reasons) under default policy.
     #[test]
     fn deferred_required_planner_proof_is_retained_advisory() -> Result<()> {
-        let gate = planner_gate(Some(required_portfolio()), &[]);
+        let gate = planner_gate(Some(required_portfolio()), &[], Some(PLANNER_TEST_DIGEST));
         let accounting = gate
             .planner_required_proofs
             .as_ref()
@@ -2777,12 +2866,13 @@ mod tests {
         let portfolio = PlannerPortfolioSnapshot {
             decisions: vec![deferred_required_portfolio_task(false)],
         };
-        let accounting = build_planner_required_proof_accounting(&portfolio, &[], 0);
+        let accounting =
+            build_planner_required_proof_accounting(&portfolio, &[], 0, Some(PLANNER_TEST_DIGEST));
         assert_eq!(accounting.total, 0);
         assert_eq!(accounting.proven, 0);
         assert_eq!(accounting.unproven, 0);
         assert!(accounting.unproven_tasks.is_empty());
-        let gate = planner_gate(Some(portfolio), &[]);
+        let gate = planner_gate(Some(portfolio), &[], Some(PLANNER_TEST_DIGEST));
         assert!(
             gate.not_proven_reasons
                 .iter()
@@ -2798,9 +2888,14 @@ mod tests {
     /// not_proven reason is recorded.
     #[test]
     fn required_planner_proof_with_matching_receipt_is_proven() -> Result<()> {
-        let mut receipt = test_proof_receipt("head_passed", "passed");
-        receipt.request_ids = vec!["proof-intent-48940c2f9ea4a58c".to_owned()];
-        let gate = planner_gate(Some(required_portfolio()), std::slice::from_ref(&receipt));
+        let mut receipt = planner_task_receipt("head_passed", "passed");
+        receipt.revision = Some(planner_revision(PLANNER_TEST_DIGEST));
+        receipt.test_patch_mode = "base-plus-tests".to_owned();
+        let gate = planner_gate(
+            Some(required_portfolio()),
+            std::slice::from_ref(&receipt),
+            Some(PLANNER_TEST_DIGEST),
+        );
         let accounting = gate
             .planner_required_proofs
             .as_ref()
@@ -2827,7 +2922,13 @@ mod tests {
     fn disjoint_passing_receipt_never_satisfies_required_planner_proof() -> Result<()> {
         let mut receipt = test_proof_receipt("head_passed", "passed");
         receipt.request_ids = vec!["proof-head-0ba40f9b6328".to_owned()];
-        let gate = planner_gate(Some(required_portfolio()), std::slice::from_ref(&receipt));
+        receipt.revision = Some(planner_revision(PLANNER_TEST_DIGEST));
+        receipt.test_patch_mode = "base-plus-tests".to_owned();
+        let gate = planner_gate(
+            Some(required_portfolio()),
+            std::slice::from_ref(&receipt),
+            Some(PLANNER_TEST_DIGEST),
+        );
         let accounting = gate
             .planner_required_proofs
             .as_ref()
@@ -2852,6 +2953,109 @@ mod tests {
         );
         assert!(summary.contains("receipts: none"), "{summary}");
         assert!(!summary.contains("satisfied"), "{summary}");
+        Ok(())
+    }
+
+    /// Assert the required task stays unproven with its reason for a
+    /// receipt that shares the request id but fails one eligibility leg.
+    fn assert_planner_receipt_ineligible(receipt: ProofReceipt) -> Result<()> {
+        let gate = planner_gate(
+            Some(required_portfolio()),
+            std::slice::from_ref(&receipt),
+            Some(PLANNER_TEST_DIGEST),
+        );
+        let accounting = gate
+            .planner_required_proofs
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("expected planner_required_proofs"))?;
+        assert_eq!(accounting.total, 1);
+        assert_eq!(accounting.proven, 0);
+        assert_eq!(accounting.unproven, 1);
+        let unproven = &accounting.unproven_tasks[0];
+        assert_eq!(unproven.task_id, "proof-red-green-b27777653387");
+        assert_eq!(
+            unproven.reason,
+            "required floor could not fit inside the remaining safe proof budget"
+        );
+        assert!(!unproven.receipts_present);
+        assert!(
+            gate.not_proven_reasons
+                .iter()
+                .any(|reason| reason.starts_with("required-planner-proof:")),
+            "{:?}",
+            gate.not_proven_reasons
+        );
+        assert_eq!(gate.conclusion, "pass");
+        assert!(gate.reasons.is_empty());
+        Ok(())
+    }
+
+    /// A failed receipt sharing the request id never satisfies a required
+    /// red/green obligation.
+    #[test]
+    fn failed_receipt_never_satisfies_required_planner_proof() -> Result<()> {
+        let mut receipt = planner_task_receipt("head_failed", "failed");
+        receipt.revision = Some(planner_revision(PLANNER_TEST_DIGEST));
+        receipt.test_patch_mode = "base-plus-tests".to_owned();
+        assert_planner_receipt_ineligible(receipt)
+    }
+
+    /// A skipped receipt sharing the request id never satisfies a required
+    /// red/green obligation.
+    #[test]
+    fn skipped_receipt_never_satisfies_required_planner_proof() -> Result<()> {
+        let mut receipt = planner_task_receipt("skipped_budget", "skipped");
+        receipt.revision = Some(planner_revision(PLANNER_TEST_DIGEST));
+        receipt.test_patch_mode = "base-plus-tests".to_owned();
+        assert_planner_receipt_ineligible(receipt)
+    }
+
+    /// A successful receipt stamped with a stale revision digest never
+    /// satisfies the current obligation.
+    #[test]
+    fn stale_revision_receipt_never_satisfies_required_planner_proof() -> Result<()> {
+        let mut receipt = planner_task_receipt("head_passed", "passed");
+        receipt.revision = Some(planner_revision(PLANNER_STALE_DIGEST));
+        receipt.test_patch_mode = "base-plus-tests".to_owned();
+        assert_planner_receipt_ineligible(receipt)
+    }
+
+    /// A successful current-revision head-only receipt never satisfies a
+    /// required red/green obligation.
+    #[test]
+    fn head_only_receipt_never_satisfies_required_planner_proof() -> Result<()> {
+        let mut receipt = planner_task_receipt("head_passed", "passed");
+        receipt.revision = Some(planner_revision(PLANNER_TEST_DIGEST));
+        receipt.test_patch_mode = "head-only".to_owned();
+        assert_planner_receipt_ineligible(receipt)
+    }
+
+    /// A receipt without a revision stamp never satisfies, even when it
+    /// shares the request id: with no stamp there is no revision to match.
+    #[test]
+    fn unstamped_receipt_never_satisfies_required_planner_proof() -> Result<()> {
+        let mut receipt = planner_task_receipt("head_passed", "passed");
+        receipt.test_patch_mode = "base-plus-tests".to_owned();
+        assert_planner_receipt_ineligible(receipt)
+    }
+
+    /// The portfolio reader degrades to `None` for a missing or malformed
+    /// artifact and parses the decision records it needs otherwise.
+    #[test]
+    fn planner_snapshot_reader_tolerates_missing_and_malformed_portfolios() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        assert!(read_planner_portfolio_snapshot(temp.path()).is_none());
+        std::fs::create_dir_all(temp.path().join("review"))?;
+        std::fs::write(temp.path().join("review/proof_portfolio.json"), "not json")?;
+        assert!(read_planner_portfolio_snapshot(temp.path()).is_none());
+        std::fs::write(
+            temp.path().join("review/proof_portfolio.json"),
+            r#"{"decisions":[{"task_id":"t","required":true}]}"#,
+        )?;
+        let snapshot = read_planner_portfolio_snapshot(temp.path())
+            .ok_or_else(|| anyhow::anyhow!("expected a parsed snapshot"))?;
+        assert_eq!(snapshot.decisions.len(), 1);
+        assert!(snapshot.decisions[0].required);
         Ok(())
     }
 }

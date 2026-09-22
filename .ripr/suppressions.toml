@@ -33502,3 +33502,698 @@ kind = "exposure_gap"
 finding_id = "probe:src_sensors_ripr.rs:return_value:e6fc8d57"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 cannot statically link RIPR detail-runner observation and unconfirmed-completion propagation to the 4 focused RIPR detail tests (ripr-swarm#1054/#1055). Re-verify after semantic edits to src/sensors/ripr.rs."
+# Lane #4271 round 2 (deferred required planner proof retention) - exposure-gap
+# dispositions for the run-wide portfolio merge, revision-scoped receipt eligibility,
+# and summary sanitization. Hash-keyed ids are content-stable; re-verify the named
+# fixture after any edit to the cited function. Remove entries only when ripr
+# reclassifies the probe to exposed on a fresh run.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:5fcb4e84"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:1802d9ae"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:6b9b88b2"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:06dc8372"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:2020bda4"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:ee860690"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:98a38036"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:d85663f4"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:0d58dadd"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:1f8a5bff"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:3f87eb6b"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:1eb8d323"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:f7f12faa"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:0111a80a"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:dfdc0ff3"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:7f99884b"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:73b36fd0"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:e8da1d31"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:bf5b3ebc"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:5772fd81"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:9839b191"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:06dc8372.2"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:2020bda4.2"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:ee860690.2"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:98a38036.2"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:d85663f4.2"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:0d58dadd.2"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:1f8a5bff.2"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:3f87eb6b.2"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:0111a80a.2"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:dfdc0ff3.2"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:7f99884b.2"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:73b36fd0.2"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:4b44bfd1"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:fa526f46"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:4d8c6b06"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:3a867fac"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:94956589"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:8e65343a"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:da0f8f5c"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:d4c61ad9"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:0ecc5444"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:9986bcc7"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:e967e401"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:4f296077"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:9ec928c3"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:e9122c72"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:14fe7a1d"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:c18e73b0"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:4569945e"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:69cad445"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the early-false revision guard in planner_receipt_proves_task: unstamped_receipt_never_satisfies_required_planner_proof (None stamp) and stale_revision_receipt_never_satisfies_required_planner_proof (mismatched digest) pins unproven plus the required-planner-proof reason on each leg; ripr's assertion linker misses it because the oracles assert derived counts and reason tokens rather than the guard expression text. Re-verify after any edit to planner_receipt_proves_task."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:d35774a0"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:8cd0f9e2"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:call_deletion:505a1ea5"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:f5ef3585"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate.rs PlannerPortfolioTask/PlannerPortfolioSnapshot/DeferredPlannerProof/PlannerRequiredProofAccounting/GateOutcomeInput shape): declarations carry no behavior; construction is pinned by deferred_required_portfolio_task, required_portfolio, and planner_gate, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:88b0eeba"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the planner accounting call in build_gate_outcome: deferred_required_planner_proof_is_retained_advisory pins total/proven/unproven plus the verbatim reason, failing closed when the section is absent; ripr's assertion linker misses it because presence flows through Result plumbing and derived counts rather than the call expression text. Re-verify after any edit to build_gate_outcome."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:d4f6ab3c"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the GateOutcome planner_required_proofs field move in build_gate_outcome: deferred_required_planner_proof_is_retained_advisory pins section presence, counts, denominator token, and the verbatim unproven record; ripr's assertion linker misses it because assertions address the moved value through derived counts rather than the field-move expression text. Re-verify after any edit to build_gate_outcome."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:0b600340"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the GateOutcome planner_required_proofs field move in build_gate_outcome: deferred_required_planner_proof_is_retained_advisory pins section presence, counts, denominator token, and the verbatim unproven record; ripr's assertion linker misses it because assertions address the moved value through derived counts rather than the field-move expression text. Re-verify after any edit to build_gate_outcome."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:35f9e530"
+owner = "ub-review/core"
+reason = "Probe fires on #[cfg(test)] code (ripr-swarm#1055): the evidence-list literal closing bracket in gate.rs planner_gate helper. A test's own setup firing IS the test failing; no further oracle can discriminate it. Re-verify after any edit to gate.rs planner_gate helper."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:d27b07a7"
+owner = "ub-review/core"
+reason = "Probe fires on #[cfg(test)] code (ripr-swarm#1055): the PLANNER_TEST_DIGEST const initializer in gate.rs planner fixtures. A test's own setup firing IS the test failing; no further oracle can discriminate it. Re-verify after any edit to gate.rs planner fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:77c65416"
+owner = "ub-review/core"
+reason = "Probe fires on #[cfg(test)] code (ripr-swarm#1055): the PLANNER_STALE_DIGEST const initializer in gate.rs planner fixtures. A test's own setup firing IS the test failing; no further oracle can discriminate it. Re-verify after any edit to gate.rs planner fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:95ea5252"
+owner = "ub-review/core"
+reason = "Probe fires on #[cfg(test)] code (ripr-swarm#1055): the build_gate_outcome call whose conclusion/reasons/counts every planner fixture asserts exactly in gate.rs planner_gate helper. A test's own setup firing IS the test failing; no further oracle can discriminate it. Re-verify after any edit to gate.rs planner_gate helper."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:b15c826a"
+owner = "ub-review/core"
+reason = "Probe fires on #[cfg(test)] code (ripr-swarm#1055): the empty tool_gate_outcomes fixture input in gate.rs planner_gate helper. A test's own setup firing IS the test failing; no further oracle can discriminate it. Re-verify after any edit to gate.rs planner_gate helper."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:477c6a0a"
+owner = "ub-review/core"
+reason = "Probe fires on #[cfg(test)] code (ripr-swarm#1055): the empty sensor-evidence fixture input in gate.rs planner_gate helper. A test's own setup firing IS the test failing; no further oracle can discriminate it. Re-verify after any edit to gate.rs planner_gate helper."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:220de693"
+owner = "ub-review/core"
+reason = "Probe fires on #[cfg(test)] code (ripr-swarm#1055): the empty model-evidence fixture input in gate.rs planner_gate helper. A test's own setup firing IS the test failing; no further oracle can discriminate it. Re-verify after any edit to gate.rs planner_gate helper."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:31524b58"
+owner = "ub-review/core"
+reason = "Probe fires on #[cfg(test)] code (ripr-swarm#1055): the required decision vector whose total/unproven/reason deferred_required_planner_proof_is_retained_advisory pins exactly in gate.rs required_portfolio helper. A test's own setup firing IS the test failing; no further oracle can discriminate it. Re-verify after any edit to gate.rs required_portfolio helper."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:f32b1612"
+owner = "ub-review/core"
+reason = "Probe fires on #[cfg(test)] code (ripr-swarm#1055): the required decision vector whose total/unproven/reason deferred_required_planner_proof_is_retained_advisory pins exactly in gate.rs required_portfolio helper. A test's own setup firing IS the test failing; no further oracle can discriminate it. Re-verify after any edit to gate.rs required_portfolio helper."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:aeeaa7d5"
+owner = "ub-review/core"
+reason = "Probe fires on #[cfg(test)] code (ripr-swarm#1055): the Some(required_portfolio()) input whose presence every planner fixture asserts through the accounting in gate.rs planner fixtures. A test's own setup firing IS the test failing; no further oracle can discriminate it. Re-verify after any edit to gate.rs planner fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:5f9b0de5"
+owner = "ub-review/core"
+reason = "Probe fires on #[cfg(test)] code (ripr-swarm#1055): the Some(PLANNER_TEST_DIGEST) input that F3 asserts proves the obligation (proven=1) in gate.rs planner fixtures. A test's own setup firing IS the test failing; no further oracle can discriminate it. Re-verify after any edit to gate.rs planner fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:95850bf3"
+owner = "ub-review/core"
+reason = "Probe fires on #[cfg(test)] code (ripr-swarm#1055): the planner_gate call boundary whose every output field the F-series asserts in gate.rs planner fixtures. A test's own setup firing IS the test failing; no further oracle can discriminate it. Re-verify after any edit to gate.rs planner fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:8ccc395f"
+owner = "ub-review/core"
+reason = "Probe fires on #[cfg(test)] code (ripr-swarm#1055): the debug-format assertion message argument, not an oracle value in gate.rs planner fixtures. A test's own setup firing IS the test failing; no further oracle can discriminate it. Re-verify after any edit to gate.rs planner fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:d31fe34d"
+owner = "ub-review/core"
+reason = "Probe fires on #[cfg(test)] code (ripr-swarm#1055): the test's own Ok(()) return in gate.rs planner fixtures. A test's own setup firing IS the test failing; no further oracle can discriminate it. Re-verify after any edit to gate.rs planner fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:call_deletion:6aaae01f"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate_truth.rs GateTruthInput the planner_required_proofs input field): declarations carry no behavior; construction is pinned by deferred_required_planner_proof_is_not_proven_but_not_blocking and proven_planner_portfolio_records_no_planner_reason, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate_truth.rs GateTruthInput."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:b6aff50c"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (gate_truth.rs GateTruthInput the planner_required_proof input field): declarations carry no behavior; construction is pinned by deferred_required_planner_proof_is_not_proven_but_not_blocking and proven_planner_portfolio_records_no_planner_reason, and a shape mutation fails compilation rather than tests. Re-verify after any edit to gate_truth.rs GateTruthInput."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:field_construction:98bbcc46"
+owner = "ub-review/core"
+reason = "Probe fires on #[cfg(test)] code (ripr-swarm#1055): the planner_required_proofs: None default in gate_truth.rs truth() helper. every gate_truth test using truth() asserts exact not_proven_reasons, so a stray Some would fail them; the helper literal itself admits no further oracle Re-verify after any edit to gate_truth.rs truth() helper."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_truth.rs:return_value:5cffda6a"
+owner = "ub-review/core"
+reason = "Probe fires on #[cfg(test)] code (ripr-swarm#1055): the planner_required_proofs: None default in gate_truth.rs truth() helper. every gate_truth test using truth() asserts exact not_proven_reasons, so a stray Some would fail them; the helper literal itself admits no further oracle Re-verify after any edit to gate_truth.rs truth() helper."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:4e358beb"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the planner_portfolio input wiring in write_review_artifacts gate site: planner_snapshot_reader_tolerates_missing_and_malformed_portfolios pins the reader contract (None on absent/malformed, parsed decisions otherwise); ripr's assertion linker misses it because the wiring is a direct move with no full run-to-gate unit test. Re-verify after any edit to write_review_artifacts gate site."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:861347b6"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (proof/broker.rs ProofPortfolioDiskView the merge read-view fields): declarations carry no behavior; construction is pinned by nonempty_follow_up_write_merges_primary_required_decisions, which round-trips both decisions through disk and gate accounting, and a shape mutation fails compilation rather than tests. Re-verify after any edit to proof/broker.rs ProofPortfolioDiskView."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:e7aefc49"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (proof/broker.rs ProofPortfolioDiskView the merge read-view fields): declarations carry no behavior; construction is pinned by nonempty_follow_up_write_merges_primary_required_decisions, which round-trips both decisions through disk and gate accounting, and a shape mutation fails compilation rather than tests. Re-verify after any edit to proof/broker.rs ProofPortfolioDiskView."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:f83c289d"
+owner = "ub-review/core"
+reason = "RIPR no-static-path on #4271 shape definition (proof/broker.rs ProofPortfolioDiskView the merge read-view fields): declarations carry no behavior; construction is pinned by nonempty_follow_up_write_merges_primary_required_decisions, which round-trips both decisions through disk and gate accounting, and a shape mutation fails compilation rather than tests. Re-verify after any edit to proof/broker.rs ProofPortfolioDiskView."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:00142f93"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the generic fresh parameter in merge_proof_portfolio_entries: nonempty_follow_up_write_merges_primary_required_decisions pins both decisions surviving with required flags, reasons, counts, and summary text; ripr's assertion linker misses it because assertions address merged artifact content rather than the parameter binding text. Re-verify after any edit to merge_proof_portfolio_entries."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:8ab24155"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the id_of key function in merge_proof_portfolio_entries: nonempty_follow_up_write_merges_primary_required_decisions pins task-a/task-b identity surviving intact; ripr's assertion linker misses it because assertions address merged identity outcomes rather than the closure binding text. Re-verify after any edit to merge_proof_portfolio_entries."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:1395bc2f"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the review_dir parameter in merge_proof_portfolio_with_disk: nonempty_follow_up_write_merges_primary_required_decisions pins the merged catalog, selection, decisions, accounting, and summary; ripr's assertion linker misses it because assertions address merged artifact content rather than the parameter binding text. Re-verify after any edit to merge_proof_portfolio_with_disk."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:c060c926"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the candidate_tasks parameter in merge_proof_portfolio_with_disk: nonempty_follow_up_write_merges_primary_required_decisions pins the merged catalog, selection, decisions, accounting, and summary; ripr's assertion linker misses it because assertions address merged artifact content rather than the parameter binding text. Re-verify after any edit to merge_proof_portfolio_with_disk."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:abc69190"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the selected_task_ids parameter in merge_proof_portfolio_with_disk: nonempty_follow_up_write_merges_primary_required_decisions pins the merged catalog, selection, decisions, accounting, and summary; ripr's assertion linker misses it because assertions address merged artifact content rather than the parameter binding text. Re-verify after any edit to merge_proof_portfolio_with_disk."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:67cf3396"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the decisions parameter in merge_proof_portfolio_with_disk: nonempty_follow_up_write_merges_primary_required_decisions pins the merged catalog, selection, decisions, accounting, and summary; ripr's assertion linker misses it because assertions address merged artifact content rather than the parameter binding text. Re-verify after any edit to merge_proof_portfolio_with_disk."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:d0af8165"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the merged-tuple return boundary in merge_proof_portfolio_with_disk: nonempty_follow_up_write_merges_primary_required_decisions pins every tuple element downstream (catalog union, retained decisions, counts, summary); ripr's assertion linker misses it because assertions address the consumed tuple elements rather than the return-boundary text. Re-verify after any edit to merge_proof_portfolio_with_disk."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:bd8e5c67"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the tolerant disk-read/parse chain in merge_proof_portfolio_with_disk: the merge test two-write round-trip pins passthrough on first write and merged content on second; ripr's assertion linker misses it because absence and parse outcomes are asserted through artifact outcomes rather than the combinator text. Re-verify after any edit to merge_proof_portfolio_with_disk."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:return_value:4b3a7987"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the no-disk early-return tuple in merge_proof_portfolio_with_disk: the first write of nonempty_follow_up_write_merges_primary_required_decisions and empty_follow_up_broker_preserves_existing_portfolio_artifact pins first-write passthrough; ripr's assertion linker misses it because assertions address written artifact content rather than the return-tuple text. Re-verify after any edit to merge_proof_portfolio_with_disk."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:e213e5ac"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the supersede-or-append closure boundary in merge_proof_portfolio_entries: nonempty_follow_up_write_merges_primary_required_decisions pins retained primary decisions alongside follow-up ones (append arm) with exact reasons; ripr's assertion linker misses it because assertions address merged membership rather than the closure-boundary text. Re-verify after any edit to merge_proof_portfolio_entries."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:0c9999f9"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the catalog key selector in merge_proof_portfolio_with_disk: nonempty_follow_up_write_merges_primary_required_decisions pins the merged catalog keeping task-a and task-b; ripr's assertion linker misses it because assertions address catalog membership rather than the selector text. Re-verify after any edit to merge_proof_portfolio_with_disk."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:return_value:b498316a"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the catalog key selector in merge_proof_portfolio_with_disk: nonempty_follow_up_write_merges_primary_required_decisions pins the merged catalog keeping task-a and task-b; ripr's assertion linker misses it because assertions address catalog membership rather than the selector text. Re-verify after any edit to merge_proof_portfolio_with_disk."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:e213e5ac.2"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the supersede-or-append closure boundary in merge_proof_portfolio_entries: nonempty_follow_up_write_merges_primary_required_decisions pins retained primary decisions alongside follow-up ones (append arm) with exact reasons; ripr's assertion linker misses it because assertions address merged membership rather than the closure-boundary text. Re-verify after any edit to merge_proof_portfolio_entries."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:e213e5ac.3"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the supersede-or-append closure boundary in merge_proof_portfolio_entries: nonempty_follow_up_write_merges_primary_required_decisions pins retained primary decisions alongside follow-up ones (append arm) with exact reasons; ripr's assertion linker misses it because assertions address merged membership rather than the closure-boundary text. Re-verify after any edit to merge_proof_portfolio_entries."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:c261074c"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the merge call-site plumbing in write_proof_portfolio_selection_artifact: nonempty_follow_up_write_merges_primary_required_decisions pins two real writer calls with merged artifact, accounting, and summary assertions; ripr's assertion linker misses it because assertions address written artifact content rather than the call-site argument text. Re-verify after any edit to write_proof_portfolio_selection_artifact."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:4ad044f2"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the merge call-site plumbing in write_proof_portfolio_selection_artifact: nonempty_follow_up_write_merges_primary_required_decisions pins two real writer calls with merged artifact, accounting, and summary assertions; ripr's assertion linker misses it because assertions address written artifact content rather than the call-site argument text. Re-verify after any edit to write_proof_portfolio_selection_artifact."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:91e4408b"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the merge call-site plumbing in write_proof_portfolio_selection_artifact: nonempty_follow_up_write_merges_primary_required_decisions pins two real writer calls with merged artifact, accounting, and summary assertions; ripr's assertion linker misses it because assertions address written artifact content rather than the call-site argument text. Re-verify after any edit to write_proof_portfolio_selection_artifact."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:20a3c731"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the merge call-site plumbing in write_proof_portfolio_selection_artifact: nonempty_follow_up_write_merges_primary_required_decisions pins two real writer calls with merged artifact, accounting, and summary assertions; ripr's assertion linker misses it because assertions address written artifact content rather than the call-site argument text. Re-verify after any edit to write_proof_portfolio_selection_artifact."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:call_deletion:97132ec8"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the merge call-site plumbing in write_proof_portfolio_selection_artifact: nonempty_follow_up_write_merges_primary_required_decisions pins two real writer calls with merged artifact, accounting, and summary assertions; ripr's assertion linker misses it because assertions address written artifact content rather than the call-site argument text. Re-verify after any edit to write_proof_portfolio_selection_artifact."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:field_construction:d95f98b6"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the merged decisions move into the artifact in write_proof_portfolio_selection_artifact: nonempty_follow_up_write_merges_primary_required_decisions pins both decisions landing in the artifact with exact reasons; ripr's assertion linker misses it because assertions address artifact decisions rather than the field-move text. Re-verify after any edit to write_proof_portfolio_selection_artifact."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:match_arm:a82e1df7"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the escape match arms in sanitize_planner_summary_text: hostile_planner_fields_render_escaped_not_live pins every arm output (newline collapse, backslash/star/underscore/hash/tilde/angle escapes, raw passthrough); ripr's assertion linker misses it because assertions address rendered escape output rather than the arm text. Re-verify after any edit to sanitize_planner_summary_text."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:match_arm:4bc73138"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the escape match arms in sanitize_planner_summary_text: hostile_planner_fields_render_escaped_not_live pins every arm output (newline collapse, backslash/star/underscore/hash/tilde/angle escapes, raw passthrough); ripr's assertion linker misses it because assertions address rendered escape output rather than the arm text. Re-verify after any edit to sanitize_planner_summary_text."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:match_arm:2ae0f62f"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the escape match arms in sanitize_planner_summary_text: hostile_planner_fields_render_escaped_not_live pins every arm output (newline collapse, backslash/star/underscore/hash/tilde/angle escapes, raw passthrough); ripr's assertion linker misses it because assertions address rendered escape output rather than the arm text. Re-verify after any edit to sanitize_planner_summary_text."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:match_arm:dc6f167c"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the escape match arms in sanitize_planner_summary_text: hostile_planner_fields_render_escaped_not_live pins every arm output (newline collapse, backslash/star/underscore/hash/tilde/angle escapes, raw passthrough); ripr's assertion linker misses it because assertions address rendered escape output rather than the arm text. Re-verify after any edit to sanitize_planner_summary_text."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:call_deletion:3257f95b"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the counter defaults in render_planner_required_proofs: planner_accounting_defaults_render_as_zero pins the exact zero text from a keyless accounting; ripr's assertion linker misses it because assertions address rendered default text rather than the combinator text. Re-verify after any edit to render_planner_required_proofs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:call_deletion:3257f95b.2"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the counter defaults in render_planner_required_proofs: planner_accounting_defaults_render_as_zero pins the exact zero text from a keyless accounting; ripr's assertion linker misses it because assertions address rendered default text rather than the combinator text. Re-verify after any edit to render_planner_required_proofs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:call_deletion:3257f95b.3"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the counter defaults in render_planner_required_proofs: planner_accounting_defaults_render_as_zero pins the exact zero text from a keyless accounting; ripr's assertion linker misses it because assertions address rendered default text rather than the combinator text. Re-verify after any edit to render_planner_required_proofs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:call_deletion:e962986e"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the aggregate line push in render_planner_required_proofs: deferred_required_planner_proof_reaches_summary_with_digest and planner_accounting_defaults_render_as_zero pins the exact aggregate text; ripr's assertion linker misses it because assertions address rendered line text rather than the push-call text. Re-verify after any edit to render_planner_required_proofs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:call_deletion:a41dc763"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the sanitize/inline-code call wrappers in render_planner_required_proofs: hostile_planner_fields_render_escaped_not_live pins every wrapper exact escaped output with raw constructs rejected; ripr's assertion linker misses it because assertions address rendered escape output rather than the call-wrapper text. Re-verify after any edit to render_planner_required_proofs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:call_deletion:a41dc763.2"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the sanitize/inline-code call wrappers in render_planner_required_proofs: hostile_planner_fields_render_escaped_not_live pins every wrapper exact escaped output with raw constructs rejected; ripr's assertion linker misses it because assertions address rendered escape output rather than the call-wrapper text. Re-verify after any edit to render_planner_required_proofs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:call_deletion:a41dc763.3"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the sanitize/inline-code call wrappers in render_planner_required_proofs: hostile_planner_fields_render_escaped_not_live pins every wrapper exact escaped output with raw constructs rejected; ripr's assertion linker misses it because assertions address rendered escape output rather than the call-wrapper text. Re-verify after any edit to render_planner_required_proofs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:call_deletion:a41dc763.4"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the sanitize/inline-code call wrappers in render_planner_required_proofs: hostile_planner_fields_render_escaped_not_live pins every wrapper exact escaped output with raw constructs rejected; ripr's assertion linker misses it because assertions address rendered escape output rather than the call-wrapper text. Re-verify after any edit to render_planner_required_proofs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:call_deletion:a41dc763.5"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the sanitize/inline-code call wrappers in render_planner_required_proofs: hostile_planner_fields_render_escaped_not_live pins every wrapper exact escaped output with raw constructs rejected; ripr's assertion linker misses it because assertions address rendered escape output rather than the call-wrapper text. Re-verify after any edit to render_planner_required_proofs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:call_deletion:e3a24c21"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the request-id join closure in render_planner_required_proofs: deferred_required_planner_proof_reaches_summary_with_digest pins both request ids verbatim in the rendered line; ripr's assertion linker misses it because assertions address rendered id text rather than the closure text. Re-verify after any edit to render_planner_required_proofs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:call_deletion:e962986e.2"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on #4271 the per-task line push in render_planner_required_proofs: deferred_required_planner_proof_reaches_summary_with_digest and hostile_planner_fields_render_escaped_not_live pins task id, reason, receipt absence, and digest in the rendered line; ripr's assertion linker misses it because assertions address rendered line text rather than the push-call text. Re-verify after any edit to render_planner_required_proofs."

@@ -88,7 +88,7 @@ pub(crate) struct ProofIntent {
 /// The deterministic broker's answer for one executable proof candidate.
 /// This is deliberately separate from public review prose: it records why a
 /// candidate was selected, answered by a receipt, or safely left unexecuted.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct ProofPortfolioDecision {
     pub(crate) task_id: String,
     pub(crate) kind: String,
@@ -121,7 +121,7 @@ pub(crate) struct ProofPortfolioArtifact {
 /// candidates the planner lane never listed. Content-addressed ids can
 /// legitimately appear in both this catalog and planner output; when they
 /// do, both entries must describe the same work.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct ProofPortfolioCandidateTask {
     pub(crate) id: String,
     pub(crate) kind: String,

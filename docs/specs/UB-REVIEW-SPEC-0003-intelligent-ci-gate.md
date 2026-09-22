@@ -246,14 +246,21 @@ denominator, `gate_required_requests` copies `required_proof.matched` so both
 appear side by side, `total`/`proven`/`unproven` count required portfolio
 tasks, and `unproven_tasks[]` carries one record per required task with no
 satisfying receipt (`task_id`, `kind`, `status`, verbatim `reason`,
-`request_ids`, `receipt_ids`, `receipts_present`). A task is proven iff some
-run receipt shares a request id with it; an unrelated passing receipt never
-satisfies it. Any unproven required task pushes a `required-planner-proof:`
+`request_ids`, `receipt_ids`, `receipts_present`). A task is proven only by
+a receipt stamped with the current revision digest, carrying a successful
+result class (`head_passed` or `discriminating`), with a non-head-only
+proof kind, that shares a request id with the task; failed, skipped,
+timed-out, stale-revision, head-only, and unrelated receipts never satisfy
+it. Any unproven required task pushes a `required-planner-proof:`
 reason, which may move `analysis_result`/`gate_result` to `not_proven` while
 `conclusion` stays `pass` — advisory only, never a blocking reason, and proof
 budgets are unchanged. Optional deferrals never enter the accounting. The
 section is omitted when no readable `review/proof_portfolio.json` exists, and
-the artifact schema stays `ub-review.gate_outcome.v1`.
+the artifact schema stays `ub-review.gate_outcome.v1`. The step summary
+renders every copied planner field sanitized (inline-code fields via
+`init_markdown_inline_code`, the reason with line breaks collapsed and
+Markdown-significant punctuation backslash-escaped), so portfolio text can
+never forge summary output.
 
 Reason kinds (src/gate.rs gate outcome construction; docs/adr/0002):
 
