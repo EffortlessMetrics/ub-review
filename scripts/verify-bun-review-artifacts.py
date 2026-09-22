@@ -7263,6 +7263,7 @@ GATE_OUTCOME_NOT_PROVEN_REASON_PREFIXES = (
     "terminal-state:",
     "required-sensor-coverage:",
     "required-proof:",
+    "required-planner-proof:",
     "model-coverage:",
     "instrument-coverage:",
     "publication:",
