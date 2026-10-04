@@ -665,6 +665,49 @@ mod tests {
         }
     }
 
+
+    #[test]
+    fn enable_writes_companion_config_and_pr_head_inputs() -> Result<()> {
+        for resolve in [
+            offline_resolve_source as fn() -> ReleaseLookup,
+            offline_resolve_release as fn() -> ReleaseLookup,
+        ] {
+            for mode in [
+                ReviewModePreset::Advisory,
+                ReviewModePreset::Gate,
+                ReviewModePreset::Strict,
+            ] {
+                let temp = tempfile::tempdir()?;
+                cmd_enable_with_resolver(
+                    EnableArgs {
+                        mode,
+                        model: "minimax".to_owned(),
+                        action_sha: Some("a".repeat(40)),
+                        root: temp.path().to_path_buf(),
+                        inspect: false,
+                        force: false,
+                    },
+                    resolve,
+                )?;
+                let workflow = fs::read_to_string(temp.path().join(WORKFLOW_RELATIVE_PATH))?;
+                let config_input = workflow
+                    .lines()
+                    .find_map(|line| line.strip_prefix("          config: "))
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("generated action does not select its companion config")
+                    })?;
+                anyhow::ensure!(config_input == CONFIG_RELATIVE_PATH);
+                let config = Config::load_or_default(&temp.path().join(config_input), None)?;
+                anyhow::ensure!(config.review_body.summary_only_body.key() == "post_substantive");
+                anyhow::ensure!(
+                    workflow.contains("          pr-head-sha: ${{ github.event.pull_request.head.sha }}"),
+                    "synthetic merge checkout requires exact PR-head metadata"
+                );
+            }
+        }
+        Ok(())
+    }
+
     #[test]
     fn enable_workflow_renders_review_mode_input() {
         for mode in [
