@@ -320,9 +320,11 @@ pub(crate) fn render_enable_workflow(strategy: &InstallStrategy, mode: ReviewMod
           opencode-api-key: ${{{{ secrets.OPENCODE }}}}
           opencode-model: mimo-v2.5
           github-token: ${{{{ github.token }}}}
+          config: {CONFIG_RELATIVE_PATH}
           root: .
           base: origin/${{{{ github.base_ref }}}}
           head: HEAD
+          pr-head-sha: ${{{{ github.event.pull_request.head.sha }}}}
           out: target/ub-review
           posting: review
 "#
@@ -351,9 +353,11 @@ pub(crate) fn render_enable_workflow(strategy: &InstallStrategy, mode: ReviewMod
           opencode-api-key: ${{{{ secrets.OPENCODE }}}}
           opencode-model: mimo-v2.5
           github-token: ${{{{ github.token }}}}
+          config: {CONFIG_RELATIVE_PATH}
           root: .
           base: origin/${{{{ github.base_ref }}}}
           head: HEAD
+          pr-head-sha: ${{{{ github.event.pull_request.head.sha }}}}
           out: target/ub-review
           posting: review
 "#
@@ -415,6 +419,8 @@ pub(crate) fn render_enable_config() -> String {
 profile = "gh-runner"
 
 [repo]
+kind = "generic"
+ledger = ""
 base = "origin/main"
 head = "HEAD"
 
@@ -663,6 +669,97 @@ mod tests {
         ReleaseLookup::Installable {
             tag: "v9.9.9".to_owned(),
         }
+    }
+
+    #[test]
+    fn enable_workflows_select_the_written_companion_config() -> Result<()> {
+        for resolve in [
+            offline_resolve_source as fn() -> ReleaseLookup,
+            offline_resolve_release as fn() -> ReleaseLookup,
+        ] {
+            for mode in [
+                ReviewModePreset::Advisory,
+                ReviewModePreset::Gate,
+                ReviewModePreset::Strict,
+            ] {
+                for inspect in [false, true] {
+                    let temp = tempfile::tempdir()?;
+                    if inspect {
+                        fs::create_dir_all(temp.path().join("src"))?;
+                        fs::write(
+                            temp.path().join("Cargo.toml"),
+                            "[package]\nname = \"enable-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+                        )?;
+                        fs::write(temp.path().join("src/lib.rs"), "")?;
+                    }
+                    cmd_enable_with_resolver(
+                        EnableArgs {
+                            mode,
+                            model: "minimax".to_owned(),
+                            action_sha: Some("a".repeat(40)),
+                            root: temp.path().to_path_buf(),
+                            inspect,
+                            force: false,
+                        },
+                        resolve,
+                    )?;
+                    let workflow = fs::read_to_string(temp.path().join(WORKFLOW_RELATIVE_PATH))?;
+                    let config_input = workflow
+                        .lines()
+                        .find_map(|line| line.strip_prefix("          config: "))
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("generated action does not select its companion config")
+                        })?;
+                    anyhow::ensure!(config_input == CONFIG_RELATIVE_PATH);
+                    let config = Config::load_or_default(&temp.path().join(config_input), None)?;
+                    anyhow::ensure!(config.policy_errors.is_empty());
+                    anyhow::ensure!(config.repo.kind == if inspect { "rust" } else { "generic" });
+                    anyhow::ensure!(config.repo.ledger.is_empty());
+                    anyhow::ensure!(
+                        summary_only_body_policy_permits_post(
+                            config.review_body.summary_only_body,
+                            1,
+                            1,
+                        ),
+                        "the selected companion policy must permit substantive summary findings"
+                    );
+                    anyhow::ensure!(
+                        !summary_only_body_policy_permits_post(
+                            config.review_body.summary_only_body,
+                            0,
+                            0,
+                        ),
+                        "the selected companion policy must keep empty output quiet"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn enable_workflows_include_exact_pr_head_metadata() -> Result<()> {
+        for strategy in [
+            InstallStrategy::source(&"a".repeat(40)),
+            InstallStrategy::Release {
+                tag: "v9.9.9".to_owned(),
+            },
+        ] {
+            for mode in [
+                ReviewModePreset::Advisory,
+                ReviewModePreset::Gate,
+                ReviewModePreset::Strict,
+            ] {
+                let workflow = render_enable_workflow(&strategy, mode);
+                anyhow::ensure!(
+                    workflow.contains(
+                        "          pr-head-sha: ${{ github.event.pull_request.head.sha }}"
+                    ),
+                    "synthetic merge checkout requires exact PR-head metadata"
+                );
+            }
+        }
+        Ok(())
     }
 
     #[test]
@@ -978,18 +1075,11 @@ mod tests {
     }
 
     #[test]
-    fn enable_config_is_not_the_bun_dogfood_default() {
-        // The enable config must NOT carry the bun-dogfood defaults that
-        // Config::default() ships (repo.kind="bun", personal ledger path).
-        let toml = render_enable_config();
-        assert!(
-            !toml.contains("bun"),
-            "enable config must not hardcode the bun repo kind"
-        );
-        assert!(
-            !toml.contains("/home/steven"),
-            "enable config must not carry the personal ledger path"
-        );
+    fn enable_config_is_not_the_bun_dogfood_default() -> Result<()> {
+        let config = Config::from_toml_with_policy_receipts(&render_enable_config())?;
+        anyhow::ensure!(config.repo.kind == "generic");
+        anyhow::ensure!(config.repo.ledger.is_empty());
+        Ok(())
     }
 
     #[test]
