@@ -320,9 +320,11 @@ pub(crate) fn render_enable_workflow(strategy: &InstallStrategy, mode: ReviewMod
           opencode-api-key: ${{{{ secrets.OPENCODE }}}}
           opencode-model: mimo-v2.5
           github-token: ${{{{ github.token }}}}
+          config: {CONFIG_RELATIVE_PATH}
           root: .
           base: origin/${{{{ github.base_ref }}}}
           head: HEAD
+          pr-head-sha: ${{{{ github.event.pull_request.head.sha }}}}
           out: target/ub-review
           posting: review
 "#
@@ -351,9 +353,11 @@ pub(crate) fn render_enable_workflow(strategy: &InstallStrategy, mode: ReviewMod
           opencode-api-key: ${{{{ secrets.OPENCODE }}}}
           opencode-model: mimo-v2.5
           github-token: ${{{{ github.token }}}}
+          config: {CONFIG_RELATIVE_PATH}
           root: .
           base: origin/${{{{ github.base_ref }}}}
           head: HEAD
+          pr-head-sha: ${{{{ github.event.pull_request.head.sha }}}}
           out: target/ub-review
           posting: review
 "#
@@ -415,6 +419,8 @@ pub(crate) fn render_enable_config() -> String {
 profile = "gh-runner"
 
 [repo]
+kind = "generic"
+ledger = ""
 base = "origin/main"
 head = "HEAD"
 

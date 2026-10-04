@@ -83,8 +83,16 @@ ub-review enable --mode advisory --model minimax --action-sha <40-hex-sha>
 
 `--action-sha` is a fallback: it does not override a successfully resolved
 release. Inspect the emitted `uses:`, `install-mode`, `release-version`,
-permissions, provider inputs, and config. Do not use `--force` to overwrite an
-existing setup without reviewing the exact delta and preserving rollback.
+permissions, provider inputs, and config. The generated workflow passes
+`config: .ub-review.toml` so the Action uses the companion configuration,
+and `pr-head-sha` from the PR event so it can identify the ordinary merge
+checkout. The non-inspected configuration records a generic repository with no
+external ledger; `--inspect` selects the detected repository kind, sensors, and
+lanes. Inspect `effective-config.json` and the admitted revision in the first
+packet to verify the selected policy and code state.
+
+Do not use `--force` to overwrite an existing setup without reviewing the exact
+delta and preserving rollback.
 
 ## 4. Add model review only after reviewing its trust boundary
 
@@ -141,3 +149,4 @@ Reviewed against GitHub's primary guidance on 2026-09-16:
 [Runtime profiles](RUNTIME_PROFILES.md) ·
 [Release preparation](RELEASE_RUNBOOK.md) ·
 [Fresh-repository acceptance #811](https://github.com/EffortlessMetrics/ub-review/issues/811).
+
