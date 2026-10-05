@@ -344,6 +344,9 @@ pub(crate) fn build_gate_truth(input: GateTruthInput<'_>) -> GateTruth {
     let publication_result = if input.terminal_state.review_payload_status == "prepared" {
         // Preparation has no GitHub confirmation. The later post transaction
         // finalizes publication independently of deterministic enforcement.
+        not_proven_reasons.push(
+            "publication: grouped review is prepared but delivery is not confirmed".to_owned(),
+        );
         "not_proven"
     } else if input.terminal_state.status == "failed-to-review" {
         not_proven_reasons.push(

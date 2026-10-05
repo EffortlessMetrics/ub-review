@@ -433,9 +433,9 @@ fn publication_bytes(path: &Path) -> Result<Vec<u8>> {
     publication_reader_bytes(fs::File::open(path)?)
 }
 
-fn publication_reader_bytes(mut reader: impl std::io::Read) -> Result<Vec<u8>> {
+fn publication_reader_bytes(reader: impl std::io::Read) -> Result<Vec<u8>> {
     let mut bytes = Vec::new();
-    reader.read_to_end(&mut bytes)?;
+    reader.take(1_048_577).read_to_end(&mut bytes)?;
     anyhow::ensure!(bytes.len() <= 1_048_576, "publication input exceeds 1 MiB");
     Ok(bytes)
 }
@@ -641,7 +641,7 @@ fn post_publication_state(
                 && (grouped || comments)
                 && receipt["http_status"]
                     .as_u64()
-                    .is_some_and(|value| (199..301).contains(&value))
+                    .is_some_and(|value| (200..300).contains(&value))
                 && receipt["repo"].as_str().is_some_and(|repo| {
                     is_valid_repo_slug(repo) && args.repo.as_deref() == Some(repo)
                 })

@@ -77,6 +77,15 @@ fake-transport tests also execute grouped submission, direct replies and a
 reconciled retry through finalization. No real GitHub delivery is claimed. The separate full outcome, artifact-authentication
 and operated static-worker qualification remain unproven.
 
+The read-cap control observes how many bytes an oversized reader consumed:
+rejecting the input after an unbounded read is insufficient. Receipt controls
+exercise HTTP 199/200/299/300 while holding every other confirmation field valid.
+Prepared and inconclusive fixtures assert the exact publication and independent
+code reasons. The inherited #855 `side_effect:7ed6893b` selector fingerprints a
+closing `);` line, so the unchanged selector alone cannot qualify a changed
+call body or guard; its current semantics require these source controls and
+review. No suppression or enforcement policy is changed by this qualification.
+
 The existing Action publication-result output reads the finalized artifact;
 tolerated post failure remains visible even when the advisory job succeeds.
 The separate #957 shadow publication report still recognizes a narrower set
