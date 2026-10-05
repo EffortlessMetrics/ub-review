@@ -70,6 +70,18 @@ fn publication_bytes_enforces_its_limit_and_preserves_exact_bytes() -> Result<()
 }
 
 #[test]
+fn publication_reader_stops_after_the_first_oversized_byte() -> Result<()> {
+    let mut input = std::io::Cursor::new(vec![b'x'; 2_097_152]);
+    let error = publication_reader_bytes(&mut input)
+        .err()
+        .ok_or_else(|| anyhow::anyhow!("oversized reader accepted"))?;
+    assert_eq!(error.to_string(), "publication input exceeds 1 MiB");
+    // An unbounded read returns the same error, but consumes the whole input.
+    assert_eq!(input.position(), 1_048_577);
+    Ok(())
+}
+
+#[test]
 fn publication_source_removes_only_owned_projection_fields_and_reasons() -> Result<()> {
     let (_temp, args) = fixture()?;
     let mut value = gate(&args)?;
@@ -175,6 +187,32 @@ fn post_publication_state_distinguishes_current_success_and_blocked_payload() ->
         ),
         ("not_proven", "unknown", "unknown", "invalid_post_receipt")
     );
+    Ok(())
+}
+
+#[test]
+fn post_publication_state_checks_both_http_success_boundaries() -> Result<()> {
+    let (_temp, args) = fixture()?;
+    let publication = snapshot(&args)?;
+    let mut states = Vec::new();
+    for status in [199, 200, 299, 300] {
+        let mut receipt = success(&args);
+        receipt["http_status"] = status.into();
+        states.push(post_publication_state(&args, &publication, &receipt));
+    }
+    let unconfirmed = (
+        "not_proven",
+        "unknown",
+        "attempted",
+        "post_confirmation_unverifiable",
+    );
+    let confirmed = (
+        "posted",
+        "confirmed",
+        "attempted",
+        "current_revision_confirmed",
+    );
+    assert_eq!(states, [unconfirmed, confirmed, confirmed, unconfirmed]);
     Ok(())
 }
 
