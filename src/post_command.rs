@@ -597,6 +597,14 @@ fn post_publication_state(
                 serde_json::from_value::<RevisionRef>(publication.source["revision"].clone());
             let current_revision = revision.as_ref().is_ok_and(|value| {
                 value.validate().is_ok()
+                    && receipt["response"]
+                        .get("delivery_confirmation")
+                        .is_none_or(|current| {
+                            matches!(
+                                current["kind"].as_str(),
+                                Some("submitted_review" | "reconciled_comments")
+                            ) && current["exact_head_sha"] == value.reviewed_commit
+                        })
                     && match receipt["response"].get("commit_id") {
                         Some(commit) => commit.as_str() == Some(value.reviewed_commit.as_str()),
                         None => {

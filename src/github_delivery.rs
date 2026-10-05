@@ -378,6 +378,11 @@ fn execute_pending_review_delivery_with_transport(
         }
         write_response_artifacts(&args.out, "post", &submitted)?;
         let mut response = parse_success_json(&submitted, "pending review submission")?;
+        let submitted_review_id = json_identifier(&response, "id", "submitted review")?;
+        ensure!(
+            submitted_review_id == created_review_id,
+            "submitted review identity does not match the current transaction"
+        );
         response
             .as_object_mut()
             .ok_or_else(|| anyhow::anyhow!("delivery response must be an object"))?
@@ -683,12 +688,7 @@ fn comment_matches_delivery(
     planned: &PlannedDelivery,
     exact_head_sha: &str,
 ) -> Result<bool> {
-    let id = comment.get("id").and_then(|value| {
-        value
-            .as_u64()
-            .map(|id| id.to_string())
-            .or_else(|| value.as_str().map(str::to_owned))
-    });
+    let id = json_identifier(comment, "id", "current review comment").ok();
     let path = comment
         .get("path")
         .and_then(serde_json::Value::as_str)
@@ -789,6 +789,10 @@ fn execute_reply_deliveries(
         let source_id = source_thread_id.parse::<u64>().with_context(|| {
             format!("reply source thread {source_thread_id} is not a numeric GitHub comment id")
         })?;
+        ensure!(
+            source_id > 0,
+            "reply source thread must have a positive GitHub comment id"
+        );
         let payload = serde_json::json!({
             "body": body,
             "in_reply_to": source_id,
@@ -1073,7 +1077,7 @@ fn json_identifier(value: &serde_json::Value, field: &str, label: &str) -> Resul
                 .map(|number| number.to_string())
                 .or_else(|| value.as_str().map(str::to_owned))
         })
-        .filter(|value| !value.trim().is_empty())
+        .filter(|value| value.parse::<u64>().is_ok_and(|id| id > 0))
         .ok_or_else(|| anyhow::anyhow!("{label} response has no valid {field}"))?;
     Ok(id)
 }
