@@ -592,20 +592,44 @@ fn post_publication_state(
             "public_value_not_needed",
         ),
         Some("ok") => {
+            let confirmation = &receipt["response"]["delivery_confirmation"];
             let revision =
                 serde_json::from_value::<RevisionRef>(publication.source["revision"].clone());
             let current_revision = revision.as_ref().is_ok_and(|value| {
                 value.validate().is_ok()
-                    && receipt["response"]["commit_id"] == value.reviewed_commit
+                    && match receipt["response"].get("commit_id") {
+                        Some(commit) => commit.as_str() == Some(value.reviewed_commit.as_str()),
+                        None => {
+                            matches!(
+                                confirmation["kind"].as_str(),
+                                Some("submitted_review" | "reconciled_comments")
+                            ) && confirmation["exact_head_sha"] == value.reviewed_commit
+                        }
+                    }
             });
+            let grouped = matches!(
+                receipt["response"]["state"].as_str(),
+                Some("COMMENTED" | "commented")
+            ) && positive_review_id(&receipt["response"]["id"])
+                && matches!(
+                    confirmation["kind"].as_str(),
+                    None | Some("submitted_review")
+                );
+            let planned = confirmation["planned_count"].as_u64();
+            let comments = confirmation["kind"] == "reconciled_comments"
+                && planned.is_some_and(|count| count > 0)
+                && confirmation["confirmed_count"].as_u64() == planned
+                && receipt["comments"].as_u64() == planned
+                && (receipt["response"]["state"] == "already_delivered"
+                    || (receipt["response"]["state"] == "commented"
+                        && positive_review_id(&receipt["response"]["id"])));
             let valid = current_revision
                 && matches!(
                     publication.source["code_gate_result"].as_str(),
                     Some("pass" | "finding" | "not_proven")
                 )
                 && publication.review_sha256.is_some()
-                && receipt["response"]["state"] == "COMMENTED"
-                && positive_review_id(&receipt["response"]["id"])
+                && (grouped || comments)
                 && receipt["http_status"]
                     .as_u64()
                     .is_some_and(|value| (200..300).contains(&value))
@@ -625,7 +649,11 @@ fn post_publication_state(
                 (
                     "posted",
                     "confirmed",
-                    "attempted",
+                    if receipt["response"]["state"] == "already_delivered" {
+                        "not_attempted"
+                    } else {
+                        "attempted"
+                    },
                     "current_revision_confirmed",
                 )
             } else {

@@ -5,8 +5,8 @@
 //! retries, and body fallback are later delivery slices.
 
 use crate::delivery_transaction::{
-    CleanupOutcome, DeliveryAction, DeliveryFailureStage, DeliveryLocation, DeliveryTransaction,
-    DeliveryTransactionState, ObservedDelivery, PlannedDelivery, reconcile_deliveries,
+    reconcile_deliveries, CleanupOutcome, DeliveryAction, DeliveryFailureStage, DeliveryLocation,
+    DeliveryTransaction, DeliveryTransactionState, ObservedDelivery, PlannedDelivery,
 };
 use crate::*;
 use anyhow::ensure;
@@ -220,10 +220,22 @@ fn execute_pending_review_delivery_with_transport(
                 .cloned(),
         );
         write_retry_decisions(args, &all_planned, &confirmed_for_body)?;
-        let response = replies
+        let mut response = replies
             .last()
             .map(|receipt| serde_json::json!({"id": receipt.comment_id, "state": "commented"}))
             .unwrap_or_else(|| serde_json::json!({"state": "already_delivered"}));
+        response
+            .as_object_mut()
+            .ok_or_else(|| anyhow::anyhow!("delivery response must be an object"))?
+            .insert(
+                "delivery_confirmation".to_owned(),
+                serde_json::json!({
+                    "kind": "reconciled_comments",
+                    "exact_head_sha": expected_head,
+                    "planned_count": all_planned.len(),
+                    "confirmed_count": confirmed_for_body.len(),
+                }),
+            );
         return Ok(PendingReviewPostOutcome {
             response,
             http_status: Some(200),
@@ -365,7 +377,19 @@ fn execute_pending_review_delivery_with_transport(
             transaction.transition(DeliveryTransactionState::Submitted)?;
         }
         write_response_artifacts(&args.out, "post", &submitted)?;
-        let response = parse_success_json(&submitted, "pending review submission")?;
+        let mut response = parse_success_json(&submitted, "pending review submission")?;
+        response
+            .as_object_mut()
+            .ok_or_else(|| anyhow::anyhow!("delivery response must be an object"))?
+            .insert(
+                "delivery_confirmation".to_owned(),
+                serde_json::json!({
+                    "kind": "submitted_review",
+                    "exact_head_sha": expected_head,
+                    "planned_count": all_planned.len(),
+                    "confirmed_count": confirmed_for_body.len(),
+                }),
+            );
         transaction.transition(DeliveryTransactionState::ReceiptsPersisted)?;
         write_transaction(&args.out, &transaction)?;
         Ok(PendingReviewPostOutcome {
@@ -1125,7 +1149,7 @@ fn failure_stage(
 }
 
 #[cfg(test)]
-pub(crate) use tests::{FakeHttpResponse, lock_fake_delivery_tests, spawn_fake_delivery_api};
+pub(crate) use tests::{lock_fake_delivery_tests, spawn_fake_delivery_api, FakeHttpResponse};
 
 #[cfg(test)]
 mod tests {
@@ -1483,6 +1507,62 @@ mod tests {
         Ok(())
     }
 
+    fn native_publication_fixture(
+        args: &PostArgs,
+        review: &GitHubReview,
+    ) -> Result<crate::post_command::PostPublication> {
+        fs::create_dir_all(&args.out)?;
+        fs::write(&args.review_json, serde_json::to_vec(review)?)?;
+        fs::write(
+            args.review_json.with_file_name("diff.patch"),
+            "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -11,1 +11,2 @@\n existing line\n+    let fixture = 1;\n",
+        )?;
+        fs::write(
+            args.review_json.with_file_name("gate_outcome.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "schema":"ub-review.gate_outcome.v1", "publication_result":"not_proven",
+                "gate_result":"not_proven", "code_gate_result":"pass", "conclusion":"pass",
+                "analysis_result":"findings", "not_proven_reasons":["publication: prepared"],
+                "revision":{"digest":"e".repeat(64),"semantics":"candidate_head","reviewed_commit":HEAD}
+            }))?,
+        )?;
+        crate::post_command::begin_post_publication(args)?
+            .ok_or_else(|| anyhow::anyhow!("native publication fixture absent"))
+    }
+
+    fn confirm_native_publication(
+        args: &PostArgs,
+        publication: &crate::post_command::PostPublication,
+        review: &GitHubReview,
+        outcome: &PendingReviewPostOutcome,
+    ) -> Result<()> {
+        let receipt = serde_json::json!({
+            "schema_version":1, "status":"ok", "repo":args.repo,
+            "repo_valid":args.repo.as_deref().is_some_and(is_valid_repo_slug),
+            "pull_number":args.pull_number, "comments":review.comments.len(),
+            "review_json":args.review_json.display().to_string(),
+            "review_json_exists":args.review_json.exists(),
+            "review_json_valid":read_github_review_metadata(args).is_some_and(|value| value.valid),
+            "token_present":args.github_token.as_ref().is_some_and(|value| !value.is_empty()),
+            "payload_written":true, "http_status":outcome.http_status,
+            "response":outcome.response.clone()
+        });
+        crate::post_command::write_post_receipt_and_finalize(
+            args,
+            Some(publication),
+            "post-result.json",
+            &receipt,
+        )?;
+        let gate: serde_json::Value = serde_json::from_slice(&fs::read(
+            args.review_json.with_file_name("gate_outcome.json"),
+        )?)?;
+        assert_eq!(gate["publication_result"], "posted");
+        assert_eq!(gate["delivery_result"], "confirmed");
+        assert_eq!(gate["code_gate_result"], "pass");
+        assert_eq!(gate["conclusion"], "pass");
+        Ok(())
+    }
+
     #[test]
     fn production_delivery_reconciles_head_comments_and_submission() -> Result<()> {
         let _lock = lock_fake_delivery_tests()?;
@@ -1494,8 +1574,14 @@ mod tests {
         )?;
         let (review, payload) = delivery_review();
         let (api, server) = spawn_fake_delivery_api(successful_delivery_responses())?;
-        let outcome =
-            execute_pending_review_delivery(&delivery_args(temp.path(), &api), &review, &payload)?;
+        let args = delivery_args(temp.path(), &api);
+        let publication = native_publication_fixture(&args, &review)?;
+        let outcome = execute_pending_review_delivery(&args, &review, &payload)?;
+        confirm_native_publication(&args, &publication, &review, &outcome)?;
+        assert_eq!(
+            outcome.response["delivery_confirmation"]["exact_head_sha"],
+            HEAD
+        );
         ensure!(outcome.response["state"] == "commented");
         let transaction: DeliveryTransaction = serde_json::from_slice(&fs::read(
             temp.path().join("review/delivery-transaction.json"),
@@ -1514,11 +1600,9 @@ mod tests {
             .map_err(|_| anyhow::anyhow!("fake API panicked"))??;
         ensure!(requests.len() == 5, "expected five API calls");
         ensure!(requests[0].0.starts_with("GET /repos/owner/repo/pulls/42 "));
-        ensure!(
-            requests[1]
-                .0
-                .starts_with("POST /repos/owner/repo/pulls/42/reviews ")
-        );
+        ensure!(requests[1]
+            .0
+            .starts_with("POST /repos/owner/repo/pulls/42/reviews "));
         ensure!(requests[1].1.contains("commit_id") && requests[1].1.contains(HEAD));
         ensure!(
             !requests[1].1.contains("PENDING"),
@@ -1564,20 +1648,16 @@ mod tests {
             temp.path().join("review/delivery-transaction.json"),
         )?)?;
         ensure!(transaction.state() == &DeliveryTransactionState::CleanedUp);
-        ensure!(
-            !temp
-                .path()
-                .join("review/delivery-reconciliation.json")
-                .exists()
-        );
+        ensure!(!temp
+            .path()
+            .join("review/delivery-reconciliation.json")
+            .exists());
         let requests = server
             .join()
             .map_err(|_| anyhow::anyhow!("fake API panicked"))??;
-        ensure!(
-            requests[4]
-                .0
-                .starts_with("DELETE /repos/owner/repo/pulls/42/reviews/987 ")
-        );
+        ensure!(requests[4]
+            .0
+            .starts_with("DELETE /repos/owner/repo/pulls/42/reviews/987 "));
         Ok(())
     }
 
@@ -1667,12 +1747,19 @@ mod tests {
                 true,
             )?]),
         };
+        let args = delivery_args(temp.path(), "http://scripted");
+        let publication = native_publication_fixture(&args, &review)?;
         let outcome = execute_pending_review_delivery_with_transport(
-            &delivery_args(temp.path(), "http://scripted"),
+            &args,
             &review,
             &payload,
             &mut transport,
         )?;
+        confirm_native_publication(&args, &publication, &review, &outcome)?;
+        assert_eq!(
+            outcome.response["delivery_confirmation"]["confirmed_count"],
+            1
+        );
         ensure!(outcome.response["id"] == "456");
         let receipts: serde_json::Value = serde_json::from_slice(&fs::read(
             temp.path().join("review/delivery-reply-receipts.json"),
@@ -1760,12 +1847,19 @@ mod tests {
             ]),
             sends: VecDeque::new(),
         };
+        let args = delivery_args(temp.path(), "http://scripted");
+        let publication = native_publication_fixture(&args, &review)?;
         let outcome = execute_pending_review_delivery_with_transport(
-            &delivery_args(temp.path(), "http://scripted"),
+            &args,
             &review,
             &payload,
             &mut retry_transport,
         )?;
+        confirm_native_publication(&args, &publication, &review, &outcome)?;
+        assert_eq!(
+            outcome.response["delivery_confirmation"]["confirmed_count"],
+            1
+        );
         ensure!(outcome.response["state"] == "already_delivered");
         ensure!(retry_transport.gets.is_empty() && retry_transport.sends.is_empty());
         let decisions: serde_json::Value = serde_json::from_slice(&fs::read(
@@ -1935,12 +2029,10 @@ mod tests {
             Err(error) => error,
         };
         ensure!(format!("{error:#}").contains("another source thread"));
-        ensure!(
-            !temp
-                .path()
-                .join("review/delivery-reply-receipts.json")
-                .exists()
-        );
+        ensure!(!temp
+            .path()
+            .join("review/delivery-reply-receipts.json")
+            .exists());
         Ok(())
     }
 
