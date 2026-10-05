@@ -418,3 +418,499 @@ pub(crate) fn off_diff_comment_count(
         })
         .count()
 }
+
+/// The existing run artifact, frozen before this post attempt. No prior
+/// post-result/error file is used to confirm a new attempt.
+pub(crate) struct PostPublication {
+    path: PathBuf,
+    source: serde_json::Value,
+    review_sha256: Option<String>,
+    not_needed: bool,
+}
+
+fn publication_bytes(path: &Path) -> Result<Vec<u8>> {
+    use std::io::Read;
+    let mut bytes = Vec::new();
+    fs::File::open(path)?
+        .take(1_048_577)
+        .read_to_end(&mut bytes)?;
+    anyhow::ensure!(bytes.len() <= 1_048_576, "publication input exceeds 1 MiB");
+    Ok(bytes)
+}
+
+fn publication_source(mut gate: serde_json::Value) -> Result<serde_json::Value> {
+    let object = gate
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("gate outcome must be an object"))?;
+    anyhow::ensure!(
+        object.get("schema").and_then(serde_json::Value::as_str)
+            == Some("ub-review.gate_outcome.v1"),
+        "unsupported gate outcome schema"
+    );
+    for field in [
+        "publication_result",
+        "gate_result",
+        "delivery_result",
+        "delivery_attempt",
+        "delivery_reason",
+        "delivery_receipt_sha256",
+        "delivery_review_sha256",
+    ] {
+        object.remove(field);
+    }
+    if let Some(reasons) = object
+        .get_mut("not_proven_reasons")
+        .and_then(serde_json::Value::as_array_mut)
+    {
+        reasons.retain(|reason| {
+            !reason
+                .as_str()
+                .is_some_and(|text| text.starts_with("publication:"))
+        });
+    }
+    Ok(gate)
+}
+
+pub(crate) fn begin_post_publication(args: &PostArgs) -> Result<Option<PostPublication>> {
+    let path = args
+        .review_json
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("gate_outcome.json");
+    if !path.exists() {
+        return Ok(None); // Standalone posting keeps its existing contract.
+    }
+    let mut gate: serde_json::Value = serde_json::from_slice(&publication_bytes(&path)?)?;
+    let source = publication_source(gate.clone())?;
+    let not_needed = gate["publication_result"] == "not_needed";
+    let review_sha256 = args
+        .review_json
+        .exists()
+        .then(|| publication_bytes(&args.review_json).map(|bytes| sha256_hex(&bytes)))
+        .transpose()?;
+    gate["publication_result"] = if not_needed && review_sha256.is_none() {
+        "not_needed".into()
+    } else {
+        "not_proven".into()
+    };
+    gate["delivery_result"] = if review_sha256.is_some() {
+        "prepared"
+    } else {
+        "unknown"
+    }
+    .into();
+    gate["delivery_attempt"] = "not_attempted".into();
+    gate["delivery_reason"] = "post_confirmation_unavailable".into();
+    if let Some(object) = gate.as_object_mut() {
+        object.remove("delivery_receipt_sha256");
+    }
+    gate["delivery_review_sha256"] = serde_json::to_value(&review_sha256)?;
+    fs::write(&path, serde_json::to_vec_pretty(&gate)?)?;
+    Ok(Some(PostPublication {
+        path,
+        source,
+        review_sha256,
+        not_needed,
+    }))
+}
+
+fn positive_review_id(value: &serde_json::Value) -> bool {
+    value
+        .as_u64()
+        .or_else(|| value.as_str()?.parse().ok())
+        .is_some_and(|id| id > 0)
+}
+
+fn post_publication_state(
+    args: &PostArgs,
+    publication: &PostPublication,
+    receipt: &serde_json::Value,
+) -> (&'static str, &'static str, &'static str, &'static str) {
+    if receipt["schema_version"] != 1 {
+        return ("not_proven", "unknown", "unknown", "invalid_post_receipt");
+    }
+    match receipt["status"].as_str() {
+        Some("failed") => {
+            let stage = receipt["failure_stage"].as_str();
+            let attempt = match stage {
+                Some("preflight") => "blocked",
+                Some("network_post") => "attempted",
+                _ => "unknown",
+            };
+            let reason = if receipt["error_kind"] == "missing_token" {
+                "missing_token"
+            } else if receipt["error_kind"] == "receipt_persistence" {
+                "receipt_persistence"
+            } else {
+                "post_failed"
+            };
+            ("failed", "failed", attempt, reason)
+        }
+        Some("skipped") if publication.not_needed && publication.review_sha256.is_none() => (
+            "not_needed",
+            "not_needed",
+            "not_attempted",
+            "public_value_not_needed",
+        ),
+        Some("ok") => {
+            let revision =
+                serde_json::from_value::<RevisionRef>(publication.source["revision"].clone());
+            let current_revision = revision.as_ref().is_ok_and(|value| {
+                value.validate().is_ok()
+                    && receipt["response"]["commit_id"] == value.reviewed_commit
+            });
+            let valid = current_revision
+                && matches!(
+                    publication.source["code_gate_result"].as_str(),
+                    Some("pass" | "finding" | "not_proven")
+                )
+                && publication.review_sha256.is_some()
+                && receipt["response"]["state"] == "COMMENTED"
+                && positive_review_id(&receipt["response"]["id"])
+                && receipt["http_status"]
+                    .as_u64()
+                    .is_some_and(|value| (200..300).contains(&value))
+                && receipt["repo"].as_str().is_some_and(|repo| {
+                    is_valid_repo_slug(repo) && args.repo.as_deref() == Some(repo)
+                })
+                && receipt["pull_number"].as_u64().is_some_and(|number| {
+                    number > 0 && args.pull_number.is_none_or(|expected| expected == number)
+                })
+                && receipt["review_json"] == args.review_json.display().to_string()
+                && receipt["repo_valid"] == true
+                && receipt["review_json_exists"] == true
+                && receipt["review_json_valid"] == true
+                && receipt["token_present"] == true
+                && receipt["payload_written"] == true;
+            if valid {
+                (
+                    "posted",
+                    "confirmed",
+                    "attempted",
+                    "current_revision_confirmed",
+                )
+            } else {
+                (
+                    "not_proven",
+                    "unknown",
+                    "attempted",
+                    "post_confirmation_unverifiable",
+                )
+            }
+        }
+        _ => (
+            "not_proven",
+            "unknown",
+            "unknown",
+            "post_confirmation_unavailable",
+        ),
+    }
+}
+
+pub(crate) fn finalize_post_publication(
+    args: &PostArgs,
+    publication: &PostPublication,
+    receipt: &serde_json::Value,
+) -> Result<()> {
+    let mut gate: serde_json::Value =
+        serde_json::from_slice(&publication_bytes(&publication.path)?)?;
+    anyhow::ensure!(
+        publication_source(gate.clone())? == publication.source,
+        "gate source changed during posting"
+    );
+    let current = args
+        .review_json
+        .exists()
+        .then(|| publication_bytes(&args.review_json).map(|bytes| sha256_hex(&bytes)))
+        .transpose()?;
+    let state = if current == publication.review_sha256 {
+        post_publication_state(args, publication, receipt)
+    } else {
+        (
+            "not_proven",
+            "unknown",
+            "unknown",
+            "prepared_review_changed",
+        )
+    };
+    gate["publication_result"] = state.0.into();
+    gate["delivery_result"] = state.1.into();
+    gate["delivery_attempt"] = state.2.into();
+    gate["delivery_reason"] = state.3.into();
+    gate["gate_result"] = if matches!(state.0, "failed" | "not_proven") {
+        "not_proven".into()
+    } else {
+        publication.source["code_gate_result"].clone()
+    };
+    if let Some(reasons) = gate
+        .get_mut("not_proven_reasons")
+        .and_then(serde_json::Value::as_array_mut)
+    {
+        reasons.retain(|reason| {
+            !reason
+                .as_str()
+                .is_some_and(|text| text.starts_with("publication:"))
+        });
+        if matches!(state.0, "failed" | "not_proven") {
+            reasons.push(format!("publication: {}", state.3).into());
+        }
+    }
+    gate["delivery_receipt_sha256"] = sha256_hex(&serde_json::to_vec(receipt)?).into();
+    gate["delivery_review_sha256"] = serde_json::to_value(&publication.review_sha256)?;
+    fs::write(&publication.path, serde_json::to_vec_pretty(&gate)?)?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod publication_tests {
+    use super::*;
+    use anyhow::ensure;
+
+    fn fixture() -> Result<(tempfile::TempDir, PostArgs)> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("review");
+        fs::create_dir_all(&out)?;
+        let args = PostArgs {
+            review_json: out.join("github-review.json"),
+            diff_patch: Some(out.join("diff.patch")),
+            out,
+            github_token: None,
+            repo: Some("Example/review-fixture".to_owned()),
+            pull_number: Some(9),
+            github_api_url: "https://fixture.invalid".to_owned(),
+            fail_on_post_error: false,
+        };
+        fs::write(
+            &args.review_json,
+            br#"{"event":"COMMENT","body":"Authored synthetic review.","comments":[]}"#,
+        )?;
+        fs::write(args.out.join("diff.patch"), "")?;
+        fs::write(
+            args.out.join("gate_outcome.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "schema":"ub-review.gate_outcome.v1", "publication_result":"not_proven",
+            "analysis_result":"findings", "conclusion":"pass", "gate_result":"not_proven",
+            "code_gate_result":"pass", "not_proven_reasons":["publication: prepared"],
+                "revision":{"digest":"a".repeat(64),"semantics":"candidate_head","reviewed_commit":"b".repeat(40)}
+            }))?,
+        )?;
+        Ok((temp, args))
+    }
+
+    fn gate(args: &PostArgs) -> Result<serde_json::Value> {
+        Ok(serde_json::from_slice(&fs::read(
+            args.out.join("gate_outcome.json"),
+        )?)?)
+    }
+
+    fn success(args: &PostArgs) -> serde_json::Value {
+        serde_json::json!({"schema_version":1,"status":"ok","repo":"Example/review-fixture",
+            "repo_valid":true,"pull_number":9,"review_json":args.review_json.display().to_string(),
+            "review_json_exists":true,"review_json_valid":true,"token_present":true,"payload_written":true,
+            "http_status":200,"response":{"id":17,"state":"COMMENTED","commit_id":"b".repeat(40)}})
+    }
+
+    fn snapshot(args: &PostArgs) -> Result<PostPublication> {
+        begin_post_publication(args)?.ok_or_else(|| anyhow::anyhow!("missing publication fixture"))
+    }
+
+    #[test]
+    fn prepared_only_is_unconfirmed_and_old_result_is_not_reused() -> Result<()> {
+        let (_temp, args) = fixture()?;
+        fs::write(
+            args.out.join("post-result.json"),
+            serde_json::to_vec(&success(&args))?,
+        )?;
+        let _snapshot = snapshot(&args)?;
+        let value = gate(&args)?;
+        ensure!(value["publication_result"] == "not_proven");
+        ensure!(value["delivery_result"] == "prepared");
+        ensure!(value["delivery_attempt"] == "not_attempted");
+        ensure!(value.get("delivery_receipt_sha256").is_none());
+        ensure!(value["conclusion"] == "pass" && value["analysis_result"] == "findings");
+        Ok(())
+    }
+
+    #[test]
+    fn matching_success_confirms_only_after_receipt_write_and_replays_idempotently() -> Result<()> {
+        let (_temp, args) = fixture()?;
+        let publication = snapshot(&args)?;
+        let receipt = success(&args);
+        write_post_receipt_and_finalize(&args, Some(&publication), "post-result.json", &receipt)?;
+        let first = fs::read(args.out.join("gate_outcome.json"))?;
+        let value = gate(&args)?;
+        ensure!(value["publication_result"] == "posted" && value["delivery_result"] == "confirmed");
+        ensure!(value["delivery_attempt"] == "attempted");
+        ensure!(value["delivery_receipt_sha256"] == sha256_hex(&serde_json::to_vec(&receipt)?));
+        ensure!(
+            value["conclusion"] == "pass"
+                && value["analysis_result"] == "findings"
+                && value["gate_result"] == "pass"
+        );
+        finalize_post_publication(&args, &publication, &receipt)?;
+        ensure!(fs::read(args.out.join("gate_outcome.json"))? == first);
+        Ok(())
+    }
+
+    #[test]
+    fn actual_missing_token_post_is_blocked_and_failed_even_when_tolerated() -> Result<()> {
+        let (_temp, args) = fixture()?;
+        let out = args.out.clone();
+        cmd_post(args)?; // No token: the actual producer stops before HTTP.
+        let receipt: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("post-error.json"))?)?;
+        let value: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("gate_outcome.json"))?)?;
+        ensure!(receipt["error_kind"] == "missing_token" && receipt["would_post"] == false);
+        ensure!(receipt["payload_written"] == false && receipt["failure_tolerated"] == true);
+        ensure!(value["publication_result"] == "failed" && value["delivery_result"] == "failed");
+        ensure!(
+            value["delivery_attempt"] == "blocked" && value["delivery_reason"] == "missing_token"
+        );
+        ensure!(value["conclusion"] == "pass");
+        Ok(())
+    }
+
+    #[test]
+    fn network_failure_is_attempted_but_never_posted() -> Result<()> {
+        let (_temp, mut args) = fixture()?;
+        args.github_token = Some("authored-unused-fixture-token".to_owned());
+        let publication = snapshot(&args)?;
+        let error = anyhow::anyhow!("github review post failed HTTP status 403");
+        let receipt = build_post_error_receipt(&args, &error);
+        write_post_receipt_and_finalize(&args, Some(&publication), "post-error.json", &receipt)?;
+        let value = gate(&args)?;
+        ensure!(value["publication_result"] == "failed");
+        ensure!(value["delivery_attempt"] == "attempted");
+        ensure!(value["delivery_result"] == "failed" && value["conclusion"] == "pass");
+        Ok(())
+    }
+
+    #[test]
+    fn stale_malformed_or_incomplete_success_is_unknown_not_confirmed() -> Result<()> {
+        let (_temp, args) = fixture()?;
+        let publication = snapshot(&args)?;
+        for (field, replacement) in [
+            ("id", serde_json::json!(0)),
+            ("id", serde_json::json!(true)),
+            ("id", serde_json::json!("invalid")),
+            ("state", serde_json::json!("PENDING")),
+            ("commit_id", serde_json::json!("c".repeat(40))),
+            ("commit_id", serde_json::Value::Null),
+        ] {
+            let mut receipt = success(&args);
+            receipt["response"][field] = replacement;
+            finalize_post_publication(&args, &publication, &receipt)?;
+            let value = gate(&args)?;
+            ensure!(
+                value["publication_result"] == "not_proven"
+                    && value["delivery_result"] == "unknown"
+            );
+        }
+        for (field, replacement) in [
+            ("repo", serde_json::json!("Example/other")),
+            ("pull_number", serde_json::json!(10)),
+            ("schema_version", serde_json::json!(2)),
+            ("token_present", serde_json::json!(false)),
+            ("payload_written", serde_json::json!(false)),
+            ("repo_valid", serde_json::json!(false)),
+            ("http_status", serde_json::json!(500)),
+            ("review_json_valid", serde_json::json!(false)),
+        ] {
+            let mut receipt = success(&args);
+            receipt[field] = replacement;
+            finalize_post_publication(&args, &publication, &receipt)?;
+            ensure!(gate(&args)?["publication_result"] == "not_proven");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn changed_payload_unknown_and_changed_gate_source_rejected() -> Result<()> {
+        let (_temp, args) = fixture()?;
+        let publication = snapshot(&args)?;
+        fs::write(&args.review_json, "changed")?;
+        finalize_post_publication(&args, &publication, &success(&args))?;
+        ensure!(gate(&args)?["delivery_reason"] == "prepared_review_changed");
+        let mut changed = gate(&args)?;
+        changed["analysis_result"] = "clean".into();
+        fs::write(
+            args.out.join("gate_outcome.json"),
+            serde_json::to_vec(&changed)?,
+        )?;
+        ensure!(finalize_post_publication(&args, &publication, &success(&args)).is_err());
+        ensure!(gate(&args)?["analysis_result"] == "clean");
+        Ok(())
+    }
+
+    #[test]
+    fn receipt_persistence_failure_invalidates_confirmation() -> Result<()> {
+        let (_temp, args) = fixture()?;
+        let publication = snapshot(&args)?;
+        fs::create_dir(args.out.join("post-result.json"))?;
+        ensure!(
+            write_post_receipt_and_finalize(
+                &args,
+                Some(&publication),
+                "post-result.json",
+                &success(&args)
+            )
+            .is_err()
+        );
+        let value = gate(&args)?;
+        ensure!(value["publication_result"] == "failed" && value["delivery_result"] == "failed");
+        ensure!(
+            value["delivery_attempt"] == "unknown"
+                && value["delivery_reason"] == "receipt_persistence"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn no_value_skip_is_not_needed_and_legacy_standalone_has_no_gate_write() -> Result<()> {
+        let (_temp, args) = fixture()?;
+        let mut value = gate(&args)?;
+        value["publication_result"] = "not_needed".into();
+        fs::write(
+            args.out.join("gate_outcome.json"),
+            serde_json::to_vec(&value)?,
+        )?;
+        fs::remove_file(&args.review_json)?;
+        let publication = snapshot(&args)?;
+        let skipped = serde_json::json!({"schema_version":1,"status":"skipped"});
+        finalize_post_publication(&args, &publication, &skipped)?;
+        ensure!(gate(&args)?["publication_result"] == "not_needed");
+        ensure!(gate(&args)?["delivery_result"] == "not_needed");
+        fs::remove_file(args.out.join("gate_outcome.json"))?;
+        ensure!(begin_post_publication(&args)?.is_none());
+        write_post_receipt_and_finalize(&args, None, "post-result.json", &skipped)?;
+        ensure!(!args.out.join("gate_outcome.json").exists());
+        Ok(())
+    }
+}
+
+pub(crate) fn write_post_receipt_and_finalize(
+    args: &PostArgs,
+    publication: Option<&PostPublication>,
+    filename: &str,
+    receipt: &impl Serialize,
+) -> Result<()> {
+    let value = serde_json::to_value(receipt)?;
+    if let Err(error) = fs::write(args.out.join(filename), serde_json::to_vec_pretty(&value)?) {
+        if let Some(publication) = publication {
+            finalize_post_publication(
+                args,
+                publication,
+                &serde_json::json!({
+                    "schema_version":1, "status":"failed", "error_kind":"receipt_persistence",
+                    "failure_stage":"receipt_persistence"
+                }),
+            )?;
+        }
+        return Err(error.into());
+    }
+    if let Some(publication) = publication {
+        finalize_post_publication(args, publication, &value)?;
+    }
+    Ok(())
+}
