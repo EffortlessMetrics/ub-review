@@ -434,6 +434,7 @@ fn publication_bytes(path: &Path) -> Result<Vec<u8>> {
 }
 
 fn publication_reader_bytes(reader: impl std::io::Read) -> Result<Vec<u8>> {
+    use std::io::Read;
     let mut bytes = Vec::new();
     reader.take(1_048_577).read_to_end(&mut bytes)?;
     anyhow::ensure!(bytes.len() <= 1_048_576, "publication input exceeds 1 MiB");
