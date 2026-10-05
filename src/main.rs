@@ -4695,6 +4695,7 @@ fn cmd_post(args: PostArgs) -> Result<()> {
     if !args.review_json.exists()
         && let Some(skip) = read_github_review_skip_receipt(&args.review_json)
     {
+        write_post_receipt_and_finalize(&args, publication.as_ref(), "post-result.json", &skip)?;
         println!(
             "skipped GitHub review post; wrote {}/post-result.json",
             args.out.display()

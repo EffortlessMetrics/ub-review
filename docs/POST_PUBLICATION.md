@@ -85,6 +85,11 @@ code reasons. The inherited #855 `side_effect:7ed6893b` selector fingerprints a
 closing `);` line, so the unchanged selector alone cannot qualify a changed
 call body or guard; its current semantics require these source controls and
 review. No suppression or enforcement policy is changed by this qualification.
+The actual `post` command also covers skipped receipt persistence against the
+current gate, including an unwritable receipt when post errors are tolerated.
+Native delivery rejection controls assert the exact guard error and include a
+valid paired case; malformed prior reply IDs exercise a fresh fake reply rather
+than passing because the fake transport runs out of responses.
 
 The existing Action publication-result output reads the finalized artifact;
 tolerated post failure remains visible even when the advisory job succeeds.
