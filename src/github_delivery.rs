@@ -1829,7 +1829,11 @@ mod tests {
     }
     #[test]
     fn every_new_reply_requires_a_positive_comment_identity() -> Result<()> {
-        for invalid_id in [serde_json::json!(0), serde_json::json!("invalid")] {
+        for invalid_id in [
+            serde_json::json!(0),
+            serde_json::json!("invalid"),
+            serde_json::json!(456),
+        ] {
             let temp = tempfile::tempdir()?;
             let graph = serde_json::json!({
                 "schema":"ub-review.claim_graph.v1", "head_sha":HEAD,
@@ -1967,6 +1971,98 @@ mod tests {
                 "invalid source thread bypassed validation through prior confirmation"
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    fn repeated_planned_reply_cannot_count_one_live_comment_twice() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let graph = serde_json::json!({
+            "schema":"ub-review.claim_graph.v1", "head_sha":HEAD,
+            "topics":[{"claim_id":"claim-1","planned_action":"reply","planned_thread_id":"123","head_sha":HEAD,"path":"src/lib.rs","anchor":12}]
+        });
+        fs::write(
+            temp.path().join("claim_graph.json"),
+            serde_json::to_vec(&graph)?,
+        )?;
+        let (mut review, mut payload) = delivery_review();
+        review.comments.push(review.comments[0].clone());
+        payload.comments.push(payload.comments[0].clone());
+        let mut transport = ScriptedTransport {
+            gets: VecDeque::from([
+                serde_json::json!({"head":{"sha":HEAD}}),
+                serde_json::json!([{"id":456,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":HEAD,"body":"exact body","in_reply_to_id":123}]),
+                serde_json::json!({"head":{"sha":HEAD}}),
+            ]),
+            sends: VecDeque::new(),
+        };
+        let args = delivery_args(temp.path(), "http://scripted");
+        let publication = native_publication_fixture(&args, &review)?;
+        let result = execute_pending_review_delivery_with_transport(
+            &args,
+            &review,
+            &payload,
+            &mut transport,
+        );
+        if let Ok(outcome) = &result {
+            confirm_native_publication(&args, &publication, &review, outcome)?;
+        }
+        assert!(
+            result.is_err(),
+            "one live comment was counted for repeated planned identities"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn distinct_planned_replies_cannot_share_one_live_comment_identity() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let graph = serde_json::json!({
+            "schema":"ub-review.claim_graph.v1", "head_sha":HEAD,
+            "topics":[
+                {"claim_id":"claim-1","planned_action":"reply","planned_thread_id":"123","head_sha":HEAD,"path":"src/lib.rs","anchor":12},
+                {"claim_id":"claim-2","planned_action":"reply","planned_thread_id":"124","head_sha":HEAD,"path":"src/lib.rs","anchor":13}
+            ]
+        });
+        fs::write(
+            temp.path().join("claim_graph.json"),
+            serde_json::to_vec(&graph)?,
+        )?;
+        let (mut review, mut payload) = delivery_review();
+        let mut second = review.comments[0].clone();
+        second.line = 13;
+        second.body = "[tests] second body".to_owned();
+        review.comments.push(second);
+        let mut second_payload = payload.comments[0].clone();
+        second_payload.line = 13;
+        second_payload.body = "[tests] second body".to_owned();
+        payload.comments.push(second_payload);
+        let mut transport = ScriptedTransport {
+            gets: VecDeque::from([
+                serde_json::json!({"head":{"sha":HEAD}}),
+                serde_json::json!([
+                    {"id":456,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":HEAD,"body":"exact body","in_reply_to_id":123},
+                    {"id":456,"path":"src/lib.rs","line":13,"side":"RIGHT","commit_id":HEAD,"body":"second body","in_reply_to_id":124}
+                ]),
+                serde_json::json!({"head":{"sha":HEAD}}),
+            ]),
+            sends: VecDeque::new(),
+        };
+        let args = delivery_args(temp.path(), "http://scripted");
+        let publication = native_publication_fixture(&args, &review)?;
+        let result = execute_pending_review_delivery_with_transport(
+            &args,
+            &review,
+            &payload,
+            &mut transport,
+        );
+        if let Ok(outcome) = &result {
+            confirm_native_publication(&args, &publication, &review, outcome)?;
+        }
+        assert!(
+            result.is_err(),
+            "one physical live comment identity confirmed distinct planned replies"
+        );
         Ok(())
     }
     #[test]
