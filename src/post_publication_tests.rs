@@ -451,6 +451,25 @@ fn direct_reply_and_already_delivered_need_complete_current_transaction_confirma
 }
 
 #[test]
+fn explicit_response_commit_cannot_hide_a_conflicting_native_transaction_head() -> Result<()> {
+    let (_temp, args) = fixture()?;
+    let publication = snapshot(&args)?;
+    for kind in ["submitted_review", "reconciled_comments"] {
+        let mut receipt = success(&args);
+        receipt["comments"] = 1.into();
+        receipt["response"]["state"] = "commented".into();
+        receipt["response"]["delivery_confirmation"] = serde_json::json!({
+            "kind":kind, "exact_head_sha":"c".repeat(40),
+            "planned_count":1, "confirmed_count":1
+        });
+        assert_eq!(
+            post_publication_state(&args, &publication, &receipt).0,
+            "not_proven"
+        );
+    }
+    Ok(())
+}
+#[test]
 fn changed_payload_unknown_and_changed_gate_source_rejected() -> Result<()> {
     let (_temp, args) = fixture()?;
     let publication = snapshot(&args)?;

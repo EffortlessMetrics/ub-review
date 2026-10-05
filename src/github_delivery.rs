@@ -5,8 +5,8 @@
 //! retries, and body fallback are later delivery slices.
 
 use crate::delivery_transaction::{
-    reconcile_deliveries, CleanupOutcome, DeliveryAction, DeliveryFailureStage, DeliveryLocation,
-    DeliveryTransaction, DeliveryTransactionState, ObservedDelivery, PlannedDelivery,
+    CleanupOutcome, DeliveryAction, DeliveryFailureStage, DeliveryLocation, DeliveryTransaction,
+    DeliveryTransactionState, ObservedDelivery, PlannedDelivery, reconcile_deliveries,
 };
 use crate::*;
 use anyhow::ensure;
@@ -1149,7 +1149,7 @@ fn failure_stage(
 }
 
 #[cfg(test)]
-pub(crate) use tests::{lock_fake_delivery_tests, spawn_fake_delivery_api, FakeHttpResponse};
+pub(crate) use tests::{FakeHttpResponse, lock_fake_delivery_tests, spawn_fake_delivery_api};
 
 #[cfg(test)]
 mod tests {
@@ -1513,9 +1513,15 @@ mod tests {
     ) -> Result<crate::post_command::PostPublication> {
         fs::create_dir_all(&args.out)?;
         fs::write(&args.review_json, serde_json::to_vec(review)?)?;
+        let diff_path = post_diff_patch_path(args);
+        fs::create_dir_all(
+            diff_path
+                .parent()
+                .ok_or_else(|| anyhow::anyhow!("native fixture diff parent absent"))?,
+        )?;
         fs::write(
-            args.review_json.with_file_name("diff.patch"),
-            "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -11,1 +11,2 @@\n existing line\n+    let fixture = 1;\n",
+            diff_path,
+            "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -11,1 +11,3 @@\n existing line\n+    let fixture = 1;\n+    let second = 2;\n",
         )?;
         fs::write(
             args.review_json.with_file_name("gate_outcome.json"),
@@ -1600,9 +1606,11 @@ mod tests {
             .map_err(|_| anyhow::anyhow!("fake API panicked"))??;
         ensure!(requests.len() == 5, "expected five API calls");
         ensure!(requests[0].0.starts_with("GET /repos/owner/repo/pulls/42 "));
-        ensure!(requests[1]
-            .0
-            .starts_with("POST /repos/owner/repo/pulls/42/reviews "));
+        ensure!(
+            requests[1]
+                .0
+                .starts_with("POST /repos/owner/repo/pulls/42/reviews ")
+        );
         ensure!(requests[1].1.contains("commit_id") && requests[1].1.contains(HEAD));
         ensure!(
             !requests[1].1.contains("PENDING"),
@@ -1648,16 +1656,20 @@ mod tests {
             temp.path().join("review/delivery-transaction.json"),
         )?)?;
         ensure!(transaction.state() == &DeliveryTransactionState::CleanedUp);
-        ensure!(!temp
-            .path()
-            .join("review/delivery-reconciliation.json")
-            .exists());
+        ensure!(
+            !temp
+                .path()
+                .join("review/delivery-reconciliation.json")
+                .exists()
+        );
         let requests = server
             .join()
             .map_err(|_| anyhow::anyhow!("fake API panicked"))??;
-        ensure!(requests[4]
-            .0
-            .starts_with("DELETE /repos/owner/repo/pulls/42/reviews/987 "));
+        ensure!(
+            requests[4]
+                .0
+                .starts_with("DELETE /repos/owner/repo/pulls/42/reviews/987 ")
+        );
         Ok(())
     }
 
@@ -1775,6 +1787,141 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn grouped_confirmation_requires_the_submitted_transaction_review_id() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        fs::write(
+            temp.path().join("claim_graph.json"),
+            serde_json::to_vec(&graph_for("src/lib.rs", 12, "inline", HEAD))?,
+        )?;
+        let (review, payload) = delivery_review();
+        let mut transport = ScriptedTransport {
+            gets: VecDeque::from([
+                serde_json::json!({"head":{"sha":HEAD}}),
+                serde_json::json!([{"id":123,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":HEAD,"body":"exact body"}]),
+                serde_json::json!({"head":{"sha":HEAD}}),
+            ]),
+            sends: VecDeque::from([
+                scripted_output(r#"{"id":987}"#, true)?,
+                scripted_output(r#"{"id":988,"state":"commented"}"#, true)?,
+            ]),
+        };
+        let args = delivery_args(temp.path(), "http://scripted");
+        let publication = native_publication_fixture(&args, &review)?;
+        let result = execute_pending_review_delivery_with_transport(
+            &args,
+            &review,
+            &payload,
+            &mut transport,
+        );
+        if let Ok(outcome) = &result {
+            confirm_native_publication(&args, &publication, &review, outcome)?;
+        }
+        assert!(
+            result.is_err(),
+            "a different review object inherited current transaction confirmation"
+        );
+        Ok(())
+    }
+    #[test]
+    fn every_new_reply_requires_a_positive_comment_identity() -> Result<()> {
+        for invalid_id in [serde_json::json!(0), serde_json::json!("invalid")] {
+            let temp = tempfile::tempdir()?;
+            let graph = serde_json::json!({
+                "schema":"ub-review.claim_graph.v1", "head_sha":HEAD,
+                "topics":[
+                    {"claim_id":"claim-1","planned_action":"reply","planned_thread_id":"123","head_sha":HEAD,"path":"src/lib.rs","anchor":12},
+                    {"claim_id":"claim-2","planned_action":"reply","planned_thread_id":"124","head_sha":HEAD,"path":"src/lib.rs","anchor":13}
+                ]
+            });
+            fs::write(
+                temp.path().join("claim_graph.json"),
+                serde_json::to_vec(&graph)?,
+            )?;
+            let (mut review, mut payload) = delivery_review();
+            let mut second = review.comments[0].clone();
+            second.line = 13;
+            second.body = "[tests] second body".to_owned();
+            review.comments.push(second);
+            let mut second_payload = payload.comments[0].clone();
+            second_payload.line = 13;
+            second_payload.body = "[tests] second body".to_owned();
+            payload.comments.push(second_payload);
+            let mut transport = ScriptedTransport {
+                gets: VecDeque::from([
+                    serde_json::json!({"head":{"sha":HEAD}}),
+                    serde_json::json!([
+                        {"id":123,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":HEAD,"body":"prior finding"},
+                        {"id":124,"path":"src/lib.rs","line":13,"side":"RIGHT","commit_id":HEAD,"body":"prior finding"}
+                    ]),
+                    serde_json::json!({"head":{"sha":HEAD}}),
+                ]),
+                sends: VecDeque::from([
+                    scripted_output(&serde_json::json!({"id":invalid_id,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":HEAD,"body":"exact body","in_reply_to_id":123}).to_string(), true)?,
+                    scripted_output(&serde_json::json!({"id":456,"path":"src/lib.rs","line":13,"side":"RIGHT","commit_id":HEAD,"body":"second body","in_reply_to_id":124}).to_string(), true)?,
+                ]),
+            };
+            let args = delivery_args(temp.path(), "http://scripted");
+            let publication = native_publication_fixture(&args, &review)?;
+            let result = execute_pending_review_delivery_with_transport(
+                &args,
+                &review,
+                &payload,
+                &mut transport,
+            );
+            if let Ok(outcome) = &result {
+                confirm_native_publication(&args, &publication, &review, outcome)?;
+            }
+            assert!(
+                result.is_err(),
+                "invalid first reply identity was counted as complete delivery"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn retry_does_not_count_live_replies_without_positive_comment_identity() -> Result<()> {
+        for invalid_id in [serde_json::json!(0), serde_json::json!("invalid")] {
+            let temp = tempfile::tempdir()?;
+            let graph = serde_json::json!({
+                "schema":"ub-review.claim_graph.v1", "head_sha":HEAD,
+                "topics":[{"claim_id":"claim-1","planned_action":"reply","planned_thread_id":"123","head_sha":HEAD,"path":"src/lib.rs","anchor":12}]
+            });
+            fs::write(
+                temp.path().join("claim_graph.json"),
+                serde_json::to_vec(&graph)?,
+            )?;
+            let (review, payload) = delivery_review();
+            let mut transport = ScriptedTransport {
+                gets: VecDeque::from([
+                    serde_json::json!({"head":{"sha":HEAD}}),
+                    serde_json::json!([
+                        {"id":123,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":HEAD,"body":"prior finding"},
+                        {"id":invalid_id,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":HEAD,"body":"exact body","in_reply_to_id":123}
+                    ]),
+                    serde_json::json!({"head":{"sha":HEAD}}),
+                ]),
+                sends: VecDeque::new(),
+            };
+            let args = delivery_args(temp.path(), "http://scripted");
+            let publication = native_publication_fixture(&args, &review)?;
+            let result = execute_pending_review_delivery_with_transport(
+                &args,
+                &review,
+                &payload,
+                &mut transport,
+            );
+            if let Ok(outcome) = &result {
+                confirm_native_publication(&args, &publication, &review, outcome)?;
+            }
+            assert!(
+                result.is_err(),
+                "invalid existing reply identity was counted as delivered"
+            );
+        }
+        Ok(())
+    }
     #[test]
     fn reply_delivery_reuses_exact_current_comment_without_duplicate_post() -> Result<()> {
         let temp = tempfile::tempdir()?;
@@ -2029,10 +2176,12 @@ mod tests {
             Err(error) => error,
         };
         ensure!(format!("{error:#}").contains("another source thread"));
-        ensure!(!temp
-            .path()
-            .join("review/delivery-reply-receipts.json")
-            .exists());
+        ensure!(
+            !temp
+                .path()
+                .join("review/delivery-reply-receipts.json")
+                .exists()
+        );
         Ok(())
     }
 
