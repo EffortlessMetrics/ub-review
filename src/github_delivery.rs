@@ -1926,6 +1926,49 @@ mod tests {
         }
         Ok(())
     }
+
+    #[test]
+    fn retry_rejects_invalid_source_thread_before_counting_current_replies() -> Result<()> {
+        for thread_id in ["0", "invalid"] {
+            let temp = tempfile::tempdir()?;
+            let graph = serde_json::json!({
+                "schema":"ub-review.claim_graph.v1", "head_sha":HEAD,
+                "topics":[{"claim_id":"claim-1","planned_action":"reply","planned_thread_id":thread_id,"head_sha":HEAD,"path":"src/lib.rs","anchor":12}]
+            });
+            fs::write(
+                temp.path().join("claim_graph.json"),
+                serde_json::to_vec(&graph)?,
+            )?;
+            let (review, payload) = delivery_review();
+            let parent_id = thread_id
+                .parse::<u64>()
+                .map_or_else(|_| serde_json::json!(thread_id), |id| serde_json::json!(id));
+            let mut transport = ScriptedTransport {
+                gets: VecDeque::from([
+                    serde_json::json!({"head":{"sha":HEAD}}),
+                    serde_json::json!([{"id":456,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":HEAD,"body":"exact body","in_reply_to_id":parent_id}]),
+                    serde_json::json!({"head":{"sha":HEAD}}),
+                ]),
+                sends: VecDeque::new(),
+            };
+            let args = delivery_args(temp.path(), "http://scripted");
+            let publication = native_publication_fixture(&args, &review)?;
+            let result = execute_pending_review_delivery_with_transport(
+                &args,
+                &review,
+                &payload,
+                &mut transport,
+            );
+            if let Ok(outcome) = &result {
+                confirm_native_publication(&args, &publication, &review, outcome)?;
+            }
+            assert!(
+                result.is_err(),
+                "invalid source thread bypassed validation through prior confirmation"
+            );
+        }
+        Ok(())
+    }
     #[test]
     fn reply_delivery_reuses_exact_current_comment_without_duplicate_post() -> Result<()> {
         let temp = tempfile::tempdir()?;
