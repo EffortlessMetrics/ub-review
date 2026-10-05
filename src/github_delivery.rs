@@ -144,6 +144,9 @@ fn execute_pending_review_delivery_with_transport(
         &current_head,
     )?;
     let all_planned = build_planned_deliveries(review, &expected_head, claim_graph.as_ref())?;
+    // Apply the existing transaction's identity admission before reply-only
+    // and already-delivered branches can reconcile or count the plan.
+    DeliveryTransaction::new(expected_head.clone(), all_planned.clone())?;
     let needs_existing_state = all_planned
         .iter()
         .any(|item| item.action() == DeliveryAction::Reply)
@@ -298,6 +301,25 @@ fn execute_pending_review_delivery_with_transport(
             &remaining_inline,
             &observed,
         )?;
+        let pending_comment_ids = listed
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("pending review comments must be an array"))?
+            .iter()
+            .map(|comment| json_identifier(comment, "id", "pending review comment"))
+            .collect::<Result<BTreeSet<_>>>()?;
+        ensure!(
+            existing_comments
+                .as_ref()
+                .and_then(serde_json::Value::as_array)
+                .into_iter()
+                .flatten()
+                .all(|comment| {
+                    json_identifier(comment, "id", "current review comment")
+                        .ok()
+                        .is_none_or(|id| !pending_comment_ids.contains(&id))
+                }),
+            "new inline comment identity is already present"
+        );
         transaction.transition(DeliveryTransactionState::CommentsReconciled)?;
         let reconciliation_value = serde_json::to_value(&reconciliation)?;
         write_json(
@@ -325,6 +347,12 @@ fn execute_pending_review_delivery_with_transport(
             existing_comments.as_ref(),
             transport,
         )?;
+        ensure!(
+            replies
+                .iter()
+                .all(|reply| !pending_comment_ids.contains(&reply.comment_id)),
+            "inline and reply deliveries reused one comment identity"
+        );
         confirmed_for_body.extend(
             remaining_inline.iter().cloned().chain(
                 replies
@@ -560,7 +588,7 @@ fn build_planned_deliveries(
                     let thread_id = topic
                         .get("planned_thread_id")
                         .and_then(serde_json::Value::as_str)
-                        .filter(|value| !value.trim().is_empty())
+                        .filter(|value| value.parse::<u64>().is_ok_and(|id| id > 0))
                         .ok_or_else(|| {
                             anyhow::anyhow!("reply delivery plan has no current source thread")
                         })?;
@@ -658,6 +686,7 @@ fn prior_confirmed_deliveries(
         }
     }
     let mut confirmed = Vec::new();
+    let mut confirmed_comment_ids = BTreeSet::new();
     for item in planned {
         let identity = serde_json::to_value(item)?;
         let current = items.iter().find(|comment| {
@@ -677,6 +706,15 @@ fn prior_confirmed_deliveries(
                 && receipt.get("comment_id").is_some()
         });
         if current.is_some() && (receipt_match || item.action() == DeliveryAction::Reply) {
+            let comment_id = json_identifier(
+                current.ok_or_else(|| anyhow::anyhow!("confirmed current comment absent"))?,
+                "id",
+                "confirmed current review comment",
+            )?;
+            ensure!(
+                confirmed_comment_ids.insert(comment_id),
+                "one current comment identity cannot confirm multiple planned deliveries"
+            );
             confirmed.push(item.clone());
         }
     }
@@ -815,6 +853,17 @@ fn execute_reply_deliveries(
         )?;
         let response = parse_success_json(&output, "review comment reply")?;
         let comment_id = json_identifier(&response, "id", "review comment reply")?;
+        ensure!(
+            receipts
+                .iter()
+                .all(|receipt: &ReplyDeliveryReceipt| receipt.comment_id != comment_id)
+                && current_comments.iter().all(|comment| {
+                    json_identifier(comment, "id", "current review comment")
+                        .ok()
+                        .is_none_or(|id| id != comment_id)
+                }),
+            "new reply comment identity is already present or was reused"
+        );
         ensure!(
             response
                 .get("commit_id")
@@ -1074,10 +1123,10 @@ fn json_identifier(value: &serde_json::Value, field: &str, label: &str) -> Resul
         .and_then(|value| {
             value
                 .as_u64()
-                .map(|number| number.to_string())
-                .or_else(|| value.as_str().map(str::to_owned))
+                .or_else(|| value.as_str()?.parse::<u64>().ok())
+                .filter(|id| *id > 0)
+                .map(|id| id.to_string())
         })
-        .filter(|value| value.parse::<u64>().is_ok_and(|id| id > 0))
         .ok_or_else(|| anyhow::anyhow!("{label} response has no valid {field}"))?;
     Ok(id)
 }
@@ -2067,6 +2116,7 @@ mod tests {
         );
         Ok(())
     }
+
     #[test]
     fn grouped_inline_and_reply_confirmation_requires_distinct_new_comment_ids() -> Result<()> {
         for (inline_id, reply_id, valid) in [(456, 457, true), (456, 456, false), (123, 457, false)]

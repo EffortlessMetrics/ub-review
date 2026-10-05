@@ -43,6 +43,10 @@ reviews require a positive GitHub review ID and COMMENTED/commented state.
 The submitted review ID must match the container created by that transaction.
 Every newly delivered or currently reconciled comment has a positive numeric
 GitHub ID; a valid final reply ID cannot cover an invalid earlier reply.
+The native plan uses the existing transaction's duplicate-identity admission
+before reply/retry handling, and one physical comment ID cannot satisfy more
+than one planned delivery. Reply source-thread IDs are validated before prior
+confirmation can bypass a new post.
 The existing transaction attaches current in-memory head confirmation after
 native reconciliation and head checks; a grouped REST response without
 `commit_id` uses that confirmation. An explicit response commit and any attached
