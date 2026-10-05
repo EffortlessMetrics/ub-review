@@ -14,7 +14,10 @@ When `post` finds a sibling `gate_outcome.json`, it freezes the decision source
 and prepared payload hash, then invalidates any old publication confirmation
 before a new attempt. A standalone `post` without that artifact keeps its
 existing receipt-only behavior. Gate and payload inputs are each bounded to
-1 MiB; malformed or oversized decision inputs fail before posting.
+1 MiB; malformed, oversized or historical decision inputs without a supported
+`code_gate_result` fail before posting. The command owns the gate and payload
+for the attempt; concurrent replacement, including an ABA payload change, is
+outside this bounded seam's qualification.
 
 After persisting the current attempt's existing success/error/skip receipt,
 `post` finalizes only publication fields and their dependent reported

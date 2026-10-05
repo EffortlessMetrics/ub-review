@@ -374,7 +374,10 @@ pub(crate) fn build_gate_truth(input: GateTruthInput<'_>) -> GateTruth {
     } else if analysis_result == "not_proven" {
         "not_proven"
     } else if input.conclusion == "inconclusive" {
-        if not_proven_reasons.is_empty() {
+        if not_proven_reasons
+            .iter()
+            .all(|reason| reason.starts_with("publication:"))
+        {
             not_proven_reasons.push(
                 "gate-conclusion: the recorded conclusion is `inconclusive` (required evidence \
                  was unavailable)"
@@ -664,7 +667,6 @@ mod tests {
         );
     }
 
-    /// An optional sensor loss is visible without poisoning a run that still
     #[test]
     fn prepared_inconclusive_retains_an_independent_code_reason() {
         let plan = test_plan(vec![planned_sensor("tokmd", true)]);
