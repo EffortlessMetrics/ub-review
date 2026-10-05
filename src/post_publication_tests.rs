@@ -82,6 +82,53 @@ fn publication_reader_stops_after_the_first_oversized_byte() -> Result<()> {
 }
 
 #[test]
+fn oversized_begin_inputs_return_the_size_error_without_changing_the_gate() -> Result<()> {
+    for oversized_gate in [true, false] {
+        let (_temp, args) = fixture()?;
+        assert!(begin_post_publication(&args)?.is_some());
+        let gate_path = args.out.join("gate_outcome.json");
+        let input_path = if oversized_gate {
+            gate_path.clone()
+        } else {
+            args.review_json.clone()
+        };
+        fs::write(input_path, vec![b'x'; 1_048_577])?;
+        let before = sha256_hex(&fs::read(&gate_path)?);
+        let error = begin_post_publication(&args)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("oversized begin input accepted"))?;
+        assert_eq!(error.to_string(), "publication input exceeds 1 MiB");
+        assert_eq!(sha256_hex(&fs::read(&gate_path)?), before);
+    }
+    Ok(())
+}
+
+#[test]
+fn oversized_finalize_inputs_return_the_size_error_without_changing_the_gate() -> Result<()> {
+    for oversized_gate in [true, false] {
+        let (_temp, args) = fixture()?;
+        let publication = snapshot(&args)?;
+        finalize_post_publication(&args, &publication, &success(&args))?;
+        assert_eq!(gate(&args)?["publication_result"], "posted");
+        let publication = snapshot(&args)?;
+        let gate_path = args.out.join("gate_outcome.json");
+        let input_path = if oversized_gate {
+            gate_path.clone()
+        } else {
+            args.review_json.clone()
+        };
+        fs::write(input_path, vec![b'x'; 1_048_577])?;
+        let before = sha256_hex(&fs::read(&gate_path)?);
+        let error = finalize_post_publication(&args, &publication, &success(&args))
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("oversized finalize input accepted"))?;
+        assert_eq!(error.to_string(), "publication input exceeds 1 MiB");
+        assert_eq!(sha256_hex(&fs::read(&gate_path)?), before);
+    }
+    Ok(())
+}
+
+#[test]
 fn publication_source_removes_only_owned_projection_fields_and_reasons() -> Result<()> {
     let (_temp, args) = fixture()?;
     let mut value = gate(&args)?;
@@ -186,6 +233,43 @@ fn post_publication_state_distinguishes_current_success_and_blocked_payload() ->
             &serde_json::json!({"schema_version":2})
         ),
         ("not_proven", "unknown", "unknown", "invalid_post_receipt")
+    );
+    Ok(())
+}
+
+#[test]
+fn receipt_state_preserves_unknown_status_and_failure_stage_tuples() -> Result<()> {
+    let (_temp, args) = fixture()?;
+    let publication = snapshot(&args)?;
+    let receipts = [
+        serde_json::json!({"schema_version":1, "status":"unrecognized"}),
+        serde_json::json!({"schema_version":1}),
+        serde_json::json!({"schema_version":1, "status":"failed", "failure_stage":"unrecognized"}),
+        serde_json::json!({"schema_version":1, "status":"failed"}),
+        serde_json::json!({"schema_version":1, "status":"failed", "failure_stage":"preflight"}),
+        serde_json::json!({"schema_version":1, "status":"failed", "failure_stage":"network_post"}),
+    ];
+    let states = receipts
+        .iter()
+        .map(|receipt| post_publication_state(&args, &publication, receipt))
+        .collect::<Vec<_>>();
+    let unavailable = (
+        "not_proven",
+        "unknown",
+        "unknown",
+        "post_confirmation_unavailable",
+    );
+    let failed_unknown = ("failed", "failed", "unknown", "post_failed");
+    assert_eq!(
+        states,
+        [
+            unavailable,
+            unavailable,
+            failed_unknown,
+            failed_unknown,
+            ("failed", "failed", "blocked", "post_failed"),
+            ("failed", "failed", "attempted", "post_failed"),
+        ]
     );
     Ok(())
 }

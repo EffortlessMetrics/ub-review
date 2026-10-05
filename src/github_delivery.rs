@@ -419,7 +419,7 @@ fn execute_pending_review_delivery_with_transport(
                 serde_json::json!({
                     "kind": "submitted_review",
                     "exact_head_sha": expected_head,
-                    "planned_count": all_planned.len(),
+                    "planned_count": 0,
                     "confirmed_count": confirmed_for_body.len(),
                 }),
             );
@@ -1638,8 +1638,11 @@ mod tests {
         let outcome = execute_pending_review_delivery(&args, &review, &payload)?;
         confirm_native_publication(&args, &publication, &review, &outcome)?;
         assert_eq!(
-            outcome.response["delivery_confirmation"]["exact_head_sha"],
-            HEAD
+            outcome.response["delivery_confirmation"],
+            serde_json::json!({
+                "kind":"submitted_review", "exact_head_sha":HEAD,
+                "planned_count":1, "confirmed_count":1
+            })
         );
         ensure!(outcome.response["state"] == "commented");
         let transaction: DeliveryTransaction = serde_json::from_slice(&fs::read(
@@ -1822,8 +1825,11 @@ mod tests {
         )?;
         confirm_native_publication(&args, &publication, &review, &outcome)?;
         assert_eq!(
-            outcome.response["delivery_confirmation"]["confirmed_count"],
-            1
+            outcome.response["delivery_confirmation"],
+            serde_json::json!({
+                "kind":"reconciled_comments", "exact_head_sha":HEAD,
+                "planned_count":1, "confirmed_count":1
+            })
         );
         ensure!(outcome.response["id"] == "456");
         let receipts: serde_json::Value = serde_json::from_slice(&fs::read(
@@ -2257,6 +2263,13 @@ mod tests {
                 assert_eq!(error.to_string(), expected);
             } else {
                 let outcome = result?;
+                assert_eq!(
+                    outcome.response["delivery_confirmation"],
+                    serde_json::json!({
+                        "kind":"submitted_review", "exact_head_sha":HEAD,
+                        "planned_count":2, "confirmed_count":2
+                    })
+                );
                 confirm_native_publication(&args, &publication, &review, &outcome)?;
                 assert!(transport.gets.is_empty() && transport.sends.is_empty());
             }
@@ -2345,8 +2358,11 @@ mod tests {
         )?;
         confirm_native_publication(&args, &publication, &review, &outcome)?;
         assert_eq!(
-            outcome.response["delivery_confirmation"]["confirmed_count"],
-            1
+            outcome.response["delivery_confirmation"],
+            serde_json::json!({
+                "kind":"reconciled_comments", "exact_head_sha":HEAD,
+                "planned_count":1, "confirmed_count":1
+            })
         );
         ensure!(outcome.response["state"] == "already_delivered");
         ensure!(retry_transport.gets.is_empty() && retry_transport.sends.is_empty());

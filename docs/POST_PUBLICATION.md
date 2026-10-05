@@ -91,6 +91,19 @@ Native delivery rejection controls assert the exact guard error and include a
 valid paired case; malformed prior reply IDs exercise a fresh fake reply rather
 than passing because the fake transport runs out of responses.
 
+Oversized gate and review inputs are checked through both preparation and
+finalization. These controls require the size-limit error and unchanged gate
+bytes, so an unrelated parse error cannot count as the intended rejection.
+Schema-v1 unknown or missing statuses and failure stages assert the complete
+publication/delivery/attempt/reason tuple, paired with known preflight and
+network-stage outcomes. Native grouped, direct and reconciled fixtures assert
+the exact confirmation object; a mixed inline/reply plan requires both counts
+to be two. These checks reverify the bounded reply-collection target of the
+inherited #828 receipt without treating its selector as inventory clearance.
+Producer attribution and source-role limitations stay with
+[EffortlessMetrics/ripr#1453](https://github.com/EffortlessMetrics/ripr/issues/1453)
+and [#1714](https://github.com/EffortlessMetrics/ripr/issues/1714).
+
 The existing Action publication-result output reads the finalized artifact;
 tolerated post failure remains visible even when the advisory job succeeds.
 The separate #957 shadow publication report still recognizes a narrower set

@@ -437,7 +437,7 @@ fn publication_reader_bytes(reader: impl std::io::Read) -> Result<Vec<u8>> {
     use std::io::Read;
     let mut bytes = Vec::new();
     reader.take(1_048_577).read_to_end(&mut bytes)?;
-    anyhow::ensure!(bytes.len() <= 1_048_576, "publication input exceeds 1 MiB");
+    // Temporary hosted mutation: remove the oversized-input guard.
     Ok(bytes)
 }
 
@@ -576,7 +576,7 @@ fn post_publication_state(
             let attempt = match stage {
                 Some("preflight" | "payload_validation") => "blocked",
                 Some("network_post") => "attempted",
-                _ => "unknown",
+                _ => "blocked",
             };
             let reason = if receipt["error_kind"] == "missing_token" {
                 "missing_token"
@@ -678,8 +678,8 @@ fn post_publication_state(
         _ => (
             "not_proven",
             "unknown",
-            "unknown",
-            "post_confirmation_unavailable",
+            "attempted",
+            "post_confirmation_unverifiable",
         ),
     }
 }
