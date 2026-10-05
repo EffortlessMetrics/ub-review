@@ -548,6 +548,84 @@ fn receipt_persistence_failure_invalidates_confirmation() -> Result<()> {
 }
 
 #[test]
+fn actual_skip_post_persists_receipt_and_finalizes_the_current_gate() -> Result<()> {
+    let (_temp, args) = fixture()?;
+    let mut value = gate(&args)?;
+    value["publication_result"] = "not_needed".into();
+    fs::write(
+        args.out.join("gate_outcome.json"),
+        serde_json::to_vec(&value)?,
+    )?;
+    fs::remove_file(&args.review_json)?;
+    let skipped = serde_json::json!({
+        "schema_version":1, "status":"skipped", "reason":"empty smoke review",
+        "review_payload_status":"skipped_empty_smoke"
+    });
+    fs::write(
+        github_review_skip_path(&args.review_json),
+        serde_json::to_vec(&skipped)?,
+    )?;
+    let out = args.out.clone();
+    cmd_post(args)?;
+    let receipt: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-result.json"))?)?;
+    let value: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("gate_outcome.json"))?)?;
+    assert_eq!(receipt, skipped);
+    assert_eq!(value["publication_result"], "not_needed");
+    assert_eq!(value["delivery_result"], "not_needed");
+    assert_eq!(value["delivery_attempt"], "not_attempted");
+    assert_eq!(value["delivery_reason"], "public_value_not_needed");
+    assert_eq!(value["gate_result"], "pass");
+    assert_eq!(value["code_gate_result"], "pass");
+    assert_eq!(value["conclusion"], "pass");
+    assert_eq!(
+        value["delivery_receipt_sha256"],
+        sha256_hex(&serde_json::to_vec(&receipt)?)
+    );
+    assert!(!out.join("post-error.json").exists());
+    Ok(())
+}
+
+#[test]
+fn actual_skip_post_propagates_receipt_failure_even_when_post_errors_are_tolerated() -> Result<()> {
+    let (_temp, args) = fixture()?;
+    assert!(!args.fail_on_post_error);
+    let mut value = gate(&args)?;
+    value["publication_result"] = "not_needed".into();
+    fs::write(
+        args.out.join("gate_outcome.json"),
+        serde_json::to_vec(&value)?,
+    )?;
+    fs::remove_file(&args.review_json)?;
+    fs::write(
+        github_review_skip_path(&args.review_json),
+        serde_json::to_vec(&serde_json::json!({
+            "schema_version":1, "status":"skipped", "reason":"empty smoke review",
+            "review_payload_status":"skipped_empty_smoke"
+        }))?,
+    )?;
+    fs::create_dir(args.out.join("post-result.json"))?;
+    let out = args.out.clone();
+    let error = cmd_post(args)
+        .err()
+        .ok_or_else(|| anyhow::anyhow!("skip receipt failure was tolerated"))?;
+    assert!(error.downcast_ref::<std::io::Error>().is_some());
+    let value: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("gate_outcome.json"))?)?;
+    assert_eq!(value["publication_result"], "failed");
+    assert_eq!(value["delivery_result"], "failed");
+    assert_eq!(value["delivery_attempt"], "unknown");
+    assert_eq!(value["delivery_reason"], "receipt_persistence");
+    assert_eq!(value["gate_result"], "not_proven");
+    assert_eq!(value["code_gate_result"], "pass");
+    assert_eq!(value["conclusion"], "pass");
+    assert!(out.join("post-result.json").is_dir());
+    assert!(!out.join("post-error.json").exists());
+    Ok(())
+}
+
+#[test]
 fn no_value_skip_is_not_needed_and_legacy_standalone_has_no_gate_write() -> Result<()> {
     let (_temp, args) = fixture()?;
     let mut value = gate(&args)?;
