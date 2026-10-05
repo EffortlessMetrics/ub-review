@@ -384,6 +384,73 @@ fn stale_malformed_or_incomplete_success_is_unknown_not_confirmed() -> Result<()
 }
 
 #[test]
+fn rest_grouped_submission_accepts_lowercase_state_and_current_transaction_head() -> Result<()> {
+    let (_temp, args) = fixture()?;
+    let publication = snapshot(&args)?;
+    let mut receipt = success(&args);
+    receipt["response"]["state"] = "commented".into();
+    assert_eq!(
+        post_publication_state(&args, &publication, &receipt).0,
+        "posted"
+    );
+    receipt["response"]
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("response absent"))?
+        .remove("commit_id");
+    receipt["response"]["delivery_confirmation"] = serde_json::json!({"kind":"submitted_review", "exact_head_sha":"b".repeat(40), "planned_count":1, "confirmed_count":1});
+    assert_eq!(
+        post_publication_state(&args, &publication, &receipt).0,
+        "posted"
+    );
+    receipt["response"]["delivery_confirmation"]["exact_head_sha"] = "c".repeat(40).into();
+    assert_eq!(
+        post_publication_state(&args, &publication, &receipt).0,
+        "not_proven"
+    );
+    Ok(())
+}
+
+#[test]
+fn direct_reply_and_already_delivered_need_complete_current_transaction_confirmation() -> Result<()>
+{
+    let (_temp, args) = fixture()?;
+    let publication = snapshot(&args)?;
+    for state in ["commented", "already_delivered"] {
+        let mut receipt = success(&args);
+        receipt["comments"] = 1.into();
+        receipt["response"] = serde_json::json!({"state":state,"delivery_confirmation":{"kind":"reconciled_comments","exact_head_sha":"b".repeat(40),"planned_count":1,"confirmed_count":1}});
+        if state == "commented" {
+            receipt["response"]["id"] = 17.into();
+        }
+        finalize_post_publication(&args, &publication, &receipt)?;
+        assert_eq!(gate(&args)?["publication_result"], "posted");
+        assert_eq!(gate(&args)?["delivery_result"], "confirmed");
+        for (field, value) in [
+            ("kind", serde_json::json!("unknown")),
+            ("exact_head_sha", serde_json::json!("c".repeat(40))),
+            ("planned_count", serde_json::json!(0)),
+            ("confirmed_count", serde_json::json!(0)),
+        ] {
+            let mut invalid = receipt.clone();
+            invalid["response"]["delivery_confirmation"][field] = value;
+            assert_eq!(
+                post_publication_state(&args, &publication, &invalid).0,
+                "not_proven"
+            );
+        }
+        receipt["response"]
+            .as_object_mut()
+            .ok_or_else(|| anyhow::anyhow!("response absent"))?
+            .remove("delivery_confirmation");
+        assert_eq!(
+            post_publication_state(&args, &publication, &receipt).0,
+            "not_proven"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn changed_payload_unknown_and_changed_gate_source_rejected() -> Result<()> {
     let (_temp, args) = fixture()?;
     let publication = snapshot(&args)?;
