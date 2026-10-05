@@ -19666,6 +19666,7 @@ index 1111111..2222222 100644
             analysis_result: "clean".to_owned(),
             publication_result: "not_needed".to_owned(),
             gate_result: "pass".to_owned(),
+            code_gate_result: "pass".to_owned(),
             reasons: Vec::new(),
             required_proof: super::GateRequiredProofCounts::default(),
             tool_gates: super::GateToolGateCounts::default(),
