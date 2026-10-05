@@ -732,6 +732,91 @@ mod publication_tests {
     }
 
     #[test]
+    fn interrupted_repeat_post_invalidates_the_previous_reported_pass() -> Result<()> {
+        let (_temp, args) = fixture()?;
+        let mut value = gate(&args)?;
+        value["publication_result"] = "posted".into();
+        value["gate_result"] = "pass".into();
+        value["not_proven_reasons"] = serde_json::json!([]);
+        value["delivery_receipt_sha256"] = "previous-confirmation".into();
+        fs::write(
+            args.out.join("gate_outcome.json"),
+            serde_json::to_vec(&value)?,
+        )?;
+        let _publication = snapshot(&args)?; // An interruption occurs before any receipt.
+        let value = gate(&args)?;
+        ensure!(value["publication_result"] == "not_proven");
+        ensure!(value["gate_result"] == "not_proven");
+        ensure!(value["code_gate_result"] == "pass" && value["conclusion"] == "pass");
+        ensure!(value["analysis_result"] == "findings");
+        ensure!(value.get("delivery_receipt_sha256").is_none());
+        ensure!(
+            value["not_proven_reasons"]
+                .as_array()
+                .is_some_and(|reasons| reasons.iter().any(|reason| reason
+                    .as_str()
+                    .is_some_and(|text| text.starts_with("publication:"))))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn successful_publication_preserves_independent_inconclusive_evidence() -> Result<()> {
+        let (_temp, args) = fixture()?;
+        let mut value = gate(&args)?;
+        value["conclusion"] = "inconclusive".into();
+        value["code_gate_result"] = "not_proven".into();
+        value["not_proven_reasons"] = serde_json::json!([
+            "publication: prepared",
+            "gate-conclusion: required reporter evidence unavailable"
+        ]);
+        fs::write(
+            args.out.join("gate_outcome.json"),
+            serde_json::to_vec(&value)?,
+        )?;
+        let publication = snapshot(&args)?;
+        finalize_post_publication(&args, &publication, &success(&args))?;
+        let value = gate(&args)?;
+        ensure!(value["publication_result"] == "posted" && value["gate_result"] == "not_proven");
+        ensure!(
+            value["not_proven_reasons"]
+                == serde_json::json!(["gate-conclusion: required reporter evidence unavailable"])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn skipped_legacy_or_invalid_code_projection_never_emits_an_invalid_gate_result() -> Result<()>
+    {
+        for projection in [serde_json::Value::Null, serde_json::json!("invalid")] {
+            let (_temp, args) = fixture()?;
+            let mut value = gate(&args)?;
+            value["publication_result"] = "not_needed".into();
+            value["code_gate_result"] = projection;
+            value["not_proven_reasons"] = serde_json::json!([]);
+            fs::write(
+                args.out.join("gate_outcome.json"),
+                serde_json::to_vec(&value)?,
+            )?;
+            fs::remove_file(&args.review_json)?;
+            let publication = snapshot(&args)?;
+            finalize_post_publication(
+                &args,
+                &publication,
+                &serde_json::json!({"schema_version":1,"status":"skipped"}),
+            )?;
+            let value = gate(&args)?;
+            ensure!(value["gate_result"] == "not_proven");
+            ensure!(
+                value["not_proven_reasons"]
+                    .as_array()
+                    .is_some_and(|reasons| !reasons.is_empty())
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn matching_success_confirms_only_after_receipt_write_and_replays_idempotently() -> Result<()> {
         let (_temp, args) = fixture()?;
         let publication = snapshot(&args)?;
