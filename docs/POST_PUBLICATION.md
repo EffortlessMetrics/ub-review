@@ -40,9 +40,13 @@ Confirmation requires the current in-memory success result, valid receipt
 preconditions, successful HTTP status, matching repository/PR/payload path,
 and a head equal to the frozen validated RevisionRef.reviewed_commit. Grouped
 reviews require a positive GitHub review ID and COMMENTED/commented state.
+The submitted review ID must match the container created by that transaction.
+Every newly delivered or currently reconciled comment has a positive numeric
+GitHub ID; a valid final reply ID cannot cover an invalid earlier reply.
 The existing transaction attaches current in-memory head confirmation after
 native reconciliation and head checks; a grouped REST response without
-`commit_id` uses that confirmation. An explicit response commit must match.
+`commit_id` uses that confirmation. An explicit response commit and any attached
+native head confirmation must independently match the frozen head.
 Direct replies and already-delivered retries require complete, positive
 planned/confirmed comment counts for the same frozen head and PR. A new reply
 requires its positive GitHub comment ID; an already-delivered retry records
@@ -71,5 +75,9 @@ and operated static-worker qualification remain unproven.
 
 The existing Action publication-result output reads the finalized artifact;
 tolerated post failure remains visible even when the advisory job succeeds.
+The separate #957 shadow publication report still recognizes a narrower set
+of response forms and does not qualify native lowercase grouped responses,
+direct replies or reconciled retries. Its integration remains with the #957
+owners; this seam does not establish one globally coherent packet.
 Rollback removes the post finalization hooks, while retaining pre-post
 unconfirmed truth; restoring the old prepared-equals-posted claim is invalid.

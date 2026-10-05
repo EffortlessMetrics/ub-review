@@ -2531,10 +2531,16 @@ mod tests {
     #[test]
     fn response_parsing_and_identifiers_fail_closed() -> Result<()> {
         ensure!(json_identifier(&serde_json::json!({"id": 7}), "id", "review")? == "7");
-        ensure!(
-            json_identifier(&serde_json::json!({"id": "review-7"}), "id", "review")? == "review-7"
-        );
-        for value in [serde_json::json!({}), serde_json::json!({"id": ""})] {
+        ensure!(json_identifier(&serde_json::json!({"id": "7"}), "id", "review")? == "7");
+        for value in [
+            serde_json::json!({}),
+            serde_json::json!({"id": ""}),
+            serde_json::json!({"id": "review-7"}),
+            serde_json::json!({"id": 0}),
+            serde_json::json!({"id": "0"}),
+            serde_json::json!({"id": -7}),
+            serde_json::json!({"id": 7.5}),
+        ] {
             ensure!(
                 json_identifier(&value, "id", "review").is_err(),
                 "invalid identifier was accepted"
