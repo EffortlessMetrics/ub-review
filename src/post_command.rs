@@ -501,9 +501,7 @@ pub(crate) fn begin_post_publication(args: &PostArgs) -> Result<Option<PostPubli
         .review_json
         .exists()
         .then(|| publication_bytes(&args.review_json).map(|bytes| sha256_hex(&bytes)))
-        .transpose()
-        .ok()
-        .flatten();
+        .transpose()?;
     gate["publication_result"] = if not_needed && review_sha256.is_none() {
         "not_needed".into()
     } else {
@@ -701,9 +699,7 @@ pub(crate) fn finalize_post_publication(
         .review_json
         .exists()
         .then(|| publication_bytes(&args.review_json).map(|bytes| sha256_hex(&bytes)))
-        .transpose()
-        .ok()
-        .flatten();
+        .transpose()?;
     let state = if current == publication.review_sha256 {
         post_publication_state(args, publication, receipt)
     } else {
