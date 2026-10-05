@@ -665,6 +665,26 @@ mod tests {
     }
 
     /// An optional sensor loss is visible without poisoning a run that still
+    #[test]
+    fn prepared_inconclusive_retains_an_independent_code_reason() {
+        let plan = test_plan(vec![planned_sensor("tokmd", true)]);
+        let mut terminal_state = test_terminal_state("needs-reviewer-attention");
+        terminal_state.model_lanes = 2;
+        terminal_state.usable_model_lanes = 2;
+        terminal_state.inline_comments = 2;
+        terminal_state.reviewer_value_present = true;
+        terminal_state.review_payload_status = "prepared".to_owned();
+        let truth = truth(&plan, &terminal_state, &[], &[], &[], "inconclusive");
+        assert_eq!(truth.code_gate_result, "not_proven");
+        assert!(
+            truth
+                .not_proven_reasons
+                .iter()
+                .any(|reason| reason.starts_with("gate-conclusion:"))
+        );
+    }
+
+    /// An optional sensor loss is visible without poisoning a run that still
     /// gathered evidence elsewhere.
     #[test]
     fn optional_sensor_loss_is_limited_not_unproven() {
