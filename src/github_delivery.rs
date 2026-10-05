@@ -353,20 +353,8 @@ fn execute_pending_review_delivery_with_transport(
                 .all(|reply| !pending_comment_ids.contains(&reply.comment_id)),
             "inline and reply deliveries reused one comment identity"
         );
-        confirmed_for_body.extend(
-            remaining_inline.iter().cloned().chain(
-                replies
-                    .iter()
-                    .filter_map(|receipt| {
-                        all_planned.iter().find(|planned| {
-                            planned.claim_id() == receipt.claim_id
-                                && planned.source_thread_id()
-                                    == Some(receipt.source_thread_id.as_str())
-                        })
-                    })
-                    .cloned(),
-            ),
-        );
+        // Temporary hosted mutation: delivered replies are omitted from confirmation.
+        confirmed_for_body.extend(remaining_inline.iter().cloned());
         write_retry_decisions(args, &all_planned, &confirmed_for_body)?;
 
         let rechecked_head = fetch_pull_head(transport, api, repo, pull_number, token)?;
@@ -419,7 +407,7 @@ fn execute_pending_review_delivery_with_transport(
                 serde_json::json!({
                     "kind": "submitted_review",
                     "exact_head_sha": expected_head,
-                    "planned_count": 0,
+                    "planned_count": all_planned.len(),
                     "confirmed_count": confirmed_for_body.len(),
                 }),
             );

@@ -437,7 +437,7 @@ fn publication_reader_bytes(reader: impl std::io::Read) -> Result<Vec<u8>> {
     use std::io::Read;
     let mut bytes = Vec::new();
     reader.take(1_048_577).read_to_end(&mut bytes)?;
-    // Temporary hosted mutation: remove the oversized-input guard.
+    anyhow::ensure!(bytes.len() <= 1_048_576, "publication input exceeds 1 MiB");
     Ok(bytes)
 }
 
@@ -501,7 +501,9 @@ pub(crate) fn begin_post_publication(args: &PostArgs) -> Result<Option<PostPubli
         .review_json
         .exists()
         .then(|| publication_bytes(&args.review_json).map(|bytes| sha256_hex(&bytes)))
-        .transpose()?;
+        .transpose()
+        .ok()
+        .flatten();
     gate["publication_result"] = if not_needed && review_sha256.is_none() {
         "not_needed".into()
     } else {
@@ -576,7 +578,7 @@ fn post_publication_state(
             let attempt = match stage {
                 Some("preflight" | "payload_validation") => "blocked",
                 Some("network_post") => "attempted",
-                _ => "blocked",
+                _ => "unknown",
             };
             let reason = if receipt["error_kind"] == "missing_token" {
                 "missing_token"
@@ -678,8 +680,8 @@ fn post_publication_state(
         _ => (
             "not_proven",
             "unknown",
-            "attempted",
-            "post_confirmation_unverifiable",
+            "unknown",
+            "post_confirmation_unavailable",
         ),
     }
 }
@@ -699,7 +701,9 @@ pub(crate) fn finalize_post_publication(
         .review_json
         .exists()
         .then(|| publication_bytes(&args.review_json).map(|bytes| sha256_hex(&bytes)))
-        .transpose()?;
+        .transpose()
+        .ok()
+        .flatten();
     let state = if current == publication.review_sha256 {
         post_publication_state(args, publication, receipt)
     } else {
