@@ -4740,6 +4740,7 @@ fn cmd_post(args: PostArgs) -> Result<()> {
     run_issue_broker_step(&args);
     post_outcome
 }
+
 /// Execute the run-written broker plan, never fatally: read
 /// review/issue_broker_plan.json next to the review payload, perform the
 /// remote duplicate search and opens for `attempt` entries, and write
