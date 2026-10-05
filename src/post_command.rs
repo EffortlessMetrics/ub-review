@@ -425,6 +425,7 @@ pub(crate) struct PostPublication {
     path: PathBuf,
     source: serde_json::Value,
     review_sha256: Option<String>,
+    expected_pull_number: Option<u64>,
     not_needed: bool,
 }
 
@@ -522,6 +523,7 @@ pub(crate) fn begin_post_publication(args: &PostArgs) -> Result<Option<PostPubli
         path,
         source,
         review_sha256,
+        expected_pull_number: args.pull_number.or_else(detect_pull_number_from_event),
         not_needed,
     }))
 }
@@ -611,7 +613,7 @@ fn post_publication_state(
                     is_valid_repo_slug(repo) && args.repo.as_deref() == Some(repo)
                 })
                 && receipt["pull_number"].as_u64().is_some_and(|number| {
-                    number > 0 && args.pull_number.is_none_or(|expected| expected == number)
+                    number > 0 && publication.expected_pull_number == Some(number)
                 })
                 && receipt["review_json"] == args.review_json.display().to_string()
                 && receipt["repo_valid"] == true

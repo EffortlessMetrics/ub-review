@@ -103,6 +103,7 @@ fn begin_post_publication_freezes_payload_and_independent_source() -> Result<()>
     );
     assert_eq!(publication.source["code_gate_result"], "pass");
     assert_eq!(publication.source["analysis_result"], "findings");
+    assert_eq!(publication.expected_pull_number, Some(9));
     assert!(!publication.not_needed);
     assert_eq!(gate(&args)?["gate_result"], "not_proven");
     Ok(())
@@ -173,6 +174,28 @@ fn post_publication_state_distinguishes_current_success_and_blocked_payload() ->
             &serde_json::json!({"schema_version":2})
         ),
         ("not_proven", "unknown", "unknown", "invalid_post_receipt")
+    );
+    Ok(())
+}
+
+#[test]
+fn post_publication_state_requires_the_frozen_expected_pull_number() -> Result<()> {
+    let (_temp, mut args) = fixture()?;
+    let mut publication = snapshot(&args)?;
+    args.pull_number = None; // Frozen resolution still names PR 9.
+    assert_eq!(
+        post_publication_state(&args, &publication, &success(&args)).0,
+        "posted"
+    );
+    publication.expected_pull_number = None;
+    assert_eq!(
+        post_publication_state(&args, &publication, &success(&args)).0,
+        "not_proven"
+    );
+    publication.expected_pull_number = Some(10);
+    assert_eq!(
+        post_publication_state(&args, &publication, &success(&args)).0,
+        "not_proven"
     );
     Ok(())
 }
