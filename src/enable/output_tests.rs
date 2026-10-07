@@ -75,10 +75,11 @@ fn enable_rejects_directory_config_before_any_workflow_output() -> Result<()> {
                 let before = inventory(root)?;
                 anyhow::ensure!(config.is_dir());
                 anyhow::ensure!(fs::read(root.join("src/lib.rs"))? == SOURCE);
-                let error = match cmd_enable_with_resolver(args(root, inspect, true), offline_source) {
-                    Ok(()) => None,
-                    Err(error) => Some(format!("{error:#}")),
-                };
+                let error =
+                    match cmd_enable_with_resolver(args(root, inspect, true), offline_source) {
+                        Ok(()) => None,
+                        Err(error) => Some(format!("{error:#}")),
+                    };
                 let rejected = error.is_some();
                 let diagnostic = error.as_deref().is_some_and(|message| {
                     message.contains(&config.display().to_string())
@@ -131,14 +132,28 @@ fn enable_regular_file_outputs_preserve_rendering_and_replay() -> Result<()> {
             let expected_config = fs::read(&config)?;
             let expected_workflow = fs::read(&workflow)?;
             let parsed: toml::Value = toml::from_str(std::str::from_utf8(&expected_config)?)?;
-            anyhow::ensure!(parsed["profile"].as_str() == Some("gh-runner"));
             anyhow::ensure!(
-                parsed["repo"]["kind"].as_str() == Some(if inspect { "rust" } else { "generic" })
+                parsed.get("profile").and_then(toml::Value::as_str) == Some("gh-runner")
             );
-            anyhow::ensure!(parsed["gate"]["required_check"].as_str() == Some("ub-review/gate"));
-            anyhow::ensure!(
-                parsed["providers"]["policy"].as_str() == Some("primary-with-fallback")
-            );
+            let kind = parsed
+                .get("repo")
+                .and_then(|value| value.get("kind"))
+                .and_then(toml::Value::as_str);
+            anyhow::ensure!(kind == Some(if inspect { "rust" } else { "generic" }));
+            let required_check = parsed
+                .get("gate")
+                .and_then(|value| value.get("required_check"))
+                .and_then(toml::Value::as_str);
+            anyhow::ensure!(required_check == Some("ub-review/gate"));
+            if inspect {
+                let provider_policy = parsed
+                    .get("providers")
+                    .and_then(|value| value.get("policy"))
+                    .and_then(toml::Value::as_str);
+                anyhow::ensure!(provider_policy == Some("primary-with-fallback"));
+            } else {
+                anyhow::ensure!(parsed.get("providers").is_none());
+            }
             let yaml = std::str::from_utf8(&expected_workflow)?;
             anyhow::ensure!(yaml.contains("          review-mode: advisory\n"));
             anyhow::ensure!(yaml.contains("          config: .ub-review.toml\n"));
