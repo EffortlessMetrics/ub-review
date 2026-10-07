@@ -921,34 +921,34 @@ jobs:
 
 #[cfg(unix)]
 fn init_guide_recommended_command(guide: &str, subcommand: &str) -> Result<String> {
-    let section = guide
-        .split_once("\n## Recommended path\n\n")
-        .context("recommended path section is missing")?
-        .1;
     let prefix = format!("ub-review {subcommand} ");
-    let mut lines = section.lines();
+    let mut recommended = false;
+    let mut lines = guide.split('\n');
     while let Some(line) = lines.next() {
         let line = line.strip_prefix("   ").unwrap_or(line);
-        if let Some(fence) = line.strip_suffix("sh")
-            && fence.len() >= 3
-            && fence.bytes().all(|byte| byte == b'`')
-        {
+        let fence_length = line.bytes().take_while(|byte| *byte == b'`').count();
+        if fence_length >= 3 {
+            let language = &line[fence_length..];
             let mut body = Vec::new();
             let mut closed = false;
             for body_line in lines.by_ref() {
                 let body_line = body_line.strip_prefix("   ").unwrap_or(body_line);
-                if body_line == fence {
+                if body_line.len() >= fence_length
+                    && body_line.bytes().all(|byte| byte == b'`')
+                {
                     closed = true;
                     break;
                 }
                 body.push(body_line);
             }
-            anyhow::ensure!(closed, "command fence is not closed");
+            anyhow::ensure!(closed, "guide fence is not closed");
             let command = body.join("\n");
-            if command.starts_with(&prefix) {
+            if recommended && language == "sh" && command.starts_with(&prefix) {
                 return Ok(command);
             }
-        } else if let Some(start) = line.find(&prefix) {
+        } else if line == "## Recommended path" {
+            recommended = true;
+        } else if recommended && let Some(start) = line.find(&prefix) {
             let suffix = match subcommand {
                 "doctor" => "` and fix missing tools or provider keys before trusting the standard gate image.",
                 "audit-ci" => "` for read-only CI receipts.",
@@ -969,6 +969,8 @@ fn verify_init_guide_posix_paths(root_name: &str, config_name: &str) -> Result<(
     let repo = temp.path().join(root_name);
     let config = temp.path().join(config_name);
     let guide = temp.path().join("guide.md");
+    let empty_path = temp.path().join("empty-path");
+    fs::create_dir(&empty_path)?;
     write_file(
         &repo.join(".github/workflows/ci.yml"),
         "name: path-proof\non: [pull_request]\njobs:\n  path_witness:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n",
@@ -977,9 +979,9 @@ fn verify_init_guide_posix_paths(root_name: &str, config_name: &str) -> Result<(
     let init = Command::new(bin)
         .current_dir(temp.path())
         .env_clear()
-        .env("PATH", "")
-        .args(["init", "--root"])
-        .arg(&repo)
+        .env("PATH", &empty_path)
+        .arg("init")
+        .arg(format!("--root={root_name}"))
         .arg(format!("--path={config_name}"))
         .arg("--guide-out")
         .arg(&guide)
@@ -1001,7 +1003,7 @@ fn verify_init_guide_posix_paths(root_name: &str, config_name: &str) -> Result<(
         let output = Command::new("/bin/sh")
             .current_dir(temp.path())
             .env_clear()
-            .env("PATH", "")
+            .env("PATH", &empty_path)
             .env("UB_REVIEW_TEST_BINARY", bin)
             .env("UB_REVIEW_TEST_ARGV", &argv_path)
             .env("UB_REVIEW_TEST_EXPAND", "expanded")
@@ -1027,14 +1029,14 @@ fn verify_init_guide_posix_paths(root_name: &str, config_name: &str) -> Result<(
                 "--config".to_owned(),
                 config_name.to_owned(),
                 "--root".to_owned(),
-                path_str(&repo)?.to_owned(),
+                root_name.to_owned(),
                 "--require-core-tools".to_owned(),
             ]
         } else {
             vec![
                 "audit-ci".to_owned(),
                 "--root".to_owned(),
-                path_str(&repo)?.to_owned(),
+                root_name.to_owned(),
                 "--out".to_owned(),
                 "target/ub-review".to_owned(),
             ]
@@ -1112,29 +1114,42 @@ fn init_guide_rejects_non_utf8_command_paths_before_writes() -> Result<()> {
     use std::os::unix::ffi::OsStringExt;
 
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
-    let temp = tempfile::tempdir()?;
-    let config = temp
-        .path()
-        .join(std::ffi::OsString::from_vec(b"config-\xff.toml".to_vec()));
-    let guide = temp.path().join("guide.md");
-    let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
-        .current_dir(temp.path())
-        .env_clear()
-        .env("PATH", "")
-        .args(["init", "--root"])
-        .arg(temp.path())
-        .arg("--path")
-        .arg(&config)
-        .arg("--guide-out")
-        .arg(&guide)
-        .output()?;
-    anyhow::ensure!(!output.status.success());
-    anyhow::ensure!(
-        String::from_utf8_lossy(&output.stderr)
-            .contains("POSIX command paths must be valid UTF-8")
-    );
-    anyhow::ensure!(!config.exists());
-    anyhow::ensure!(!guide.exists());
+    for invalid_root in [false, true] {
+        let temp = tempfile::tempdir()?;
+        let invalid = std::ffi::OsString::from_vec(b"invalid-\xff".to_vec());
+        let root = if invalid_root {
+            temp.path().join(&invalid)
+        } else {
+            temp.path().join("repo")
+        };
+        let config = if invalid_root {
+            temp.path().join("config.toml")
+        } else {
+            temp.path().join(&invalid)
+        };
+        let guide = temp.path().join("guide.md");
+        let empty_path = temp.path().join("empty-path");
+        fs::create_dir(&root)?;
+        fs::create_dir(&empty_path)?;
+        let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
+            .current_dir(temp.path())
+            .env_clear()
+            .env("PATH", &empty_path)
+            .args(["init", "--root"])
+            .arg(&root)
+            .arg("--path")
+            .arg(&config)
+            .arg("--guide-out")
+            .arg(&guide)
+            .output()?;
+        anyhow::ensure!(!output.status.success());
+        anyhow::ensure!(
+            String::from_utf8_lossy(&output.stderr)
+                .contains("POSIX command paths must be valid UTF-8")
+        );
+        anyhow::ensure!(!config.exists());
+        anyhow::ensure!(!guide.exists());
+    }
     Ok(())
 }
 
