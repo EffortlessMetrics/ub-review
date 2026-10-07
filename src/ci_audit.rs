@@ -3421,9 +3421,7 @@ pub(crate) fn cmd_setup_ci(args: SetupCiArgs) -> Result<()> {
             ),
         }
     }
-    let required_check = Config::load_or_default(&args.config, None)
-        .map(|config| config.gate.required_check)
-        .unwrap_or_else(|_| "ub-review/gate".to_owned());
+    let required_check = Config::load_or_default(&args.config, None)?.gate.required_check;
     let plan =
         render_setup_ci_migration_plan(&inventory, &recommendations, &accepts, &required_check);
     let branch_protection_doc =
