@@ -450,6 +450,7 @@ fn init_guide_preflight_preserves_writable_guide_when_config_write_fails() -> Re
 #[test]
 fn init_preserves_root_error_precedence_over_unusable_guide() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let mut failures = Vec::new();
     for guide_is_directory in [false, true] {
         let temp = tempfile::tempdir()?;
         let root = temp.path().join("missing-root");
@@ -483,14 +484,19 @@ fn init_preserves_root_error_precedence_over_unusable_guide() -> Result<()> {
             let stderr = String::from_utf8_lossy(&output.stderr);
             assert!(!output.status.success());
             assert!(output.stdout.is_empty());
-            assert!(
-                stderr.contains(path_str(&root)?)
-                    && stderr.contains("is not a directory; pass --root")
-                    && !stderr.contains("--guide-out"),
-                "root error must retain precedence: {stderr}"
-            );
+            if !stderr.contains(path_str(&root)?)
+                || !stderr.contains("is not a directory; pass --root")
+                || stderr.contains("--guide-out")
+            {
+                failures.push(format!(
+                    "guide_is_directory={guide_is_directory}: root error must retain precedence: {stderr}"
+                ));
+            }
             assert_eq!(fs::read(&config)?, b"existing config sentinel\n");
-            assert_eq!(fs::read(temp.path().join("keep.txt"))?, b"source sentinel\n");
+            assert_eq!(
+                fs::read(temp.path().join("keep.txt"))?,
+                b"source sentinel\n"
+            );
             assert!(!root.exists());
             if guide_is_directory {
                 assert!(guide.is_dir());
@@ -516,5 +522,6 @@ fn init_preserves_root_error_precedence_over_unusable_guide() -> Result<()> {
             previous_output = Some(current_output);
         }
     }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
     Ok(())
 }
