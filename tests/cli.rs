@@ -949,8 +949,8 @@ fn init_rejects_directory_guide_before_replacing_config() -> Result<()> {
             .output()?;
         let stderr = String::from_utf8_lossy(&output.stderr);
         let config_preserved = fs::read(&config)? == b"existing config sentinel\n";
-        let directory_preserved = guide.is_dir()
-            && fs::read(guide.join("keep.txt"))? == b"guide directory sentinel\n";
+        let directory_preserved =
+            guide.is_dir() && fs::read(guide.join("keep.txt"))? == b"guide directory sentinel\n";
         let paths_preserved = collect_relative_file_paths(temp.path())?
             == vec!["config.toml", "guide-directory/keep.txt", "repo/src/lib.rs"];
         if output.status.success()
@@ -1087,7 +1087,10 @@ fn init_no_guide_ignores_directory_destination_and_missing_root() -> Result<()> 
         let parsed: toml::Value = toml::from_str(std::str::from_utf8(&config_bytes)?)?;
         assert_eq!(parsed["profile"].as_str(), Some("gh-runner"));
         assert!(guide.is_dir());
-        assert_eq!(fs::read(guide.join("keep.txt"))?, b"unused guide sentinel\n");
+        assert_eq!(
+            fs::read(guide.join("keep.txt"))?,
+            b"unused guide sentinel\n"
+        );
         assert!(!root.exists());
         assert_eq!(
             collect_relative_file_paths(temp.path())?,
