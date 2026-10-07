@@ -650,6 +650,10 @@ fn print_enable_summary(
 }
 
 #[cfg(test)]
+#[path = "enable/output_tests.rs"]
+mod output_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
