@@ -525,3 +525,76 @@ fn init_preserves_root_error_precedence_over_unusable_guide() -> Result<()> {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
     Ok(())
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn init_rejects_guide_metadata_errors_before_replacing_config() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    let config = temp.path().join("config.toml");
+    let guide = temp.path().join("guide.md");
+    let peer = temp.path().join("guide-peer.md");
+    write_file(&repo.join("src/lib.rs"), "pub fn answer() -> u8 { 42 }\n")?;
+    fs::write(&config, b"existing config sentinel\n")?;
+    std::os::unix::fs::symlink("guide-peer.md", &guide)?;
+    std::os::unix::fs::symlink("guide.md", &peer)?;
+    assert!(fs::symlink_metadata(&guide)?.file_type().is_symlink());
+    assert!(fs::symlink_metadata(&peer)?.file_type().is_symlink());
+    assert_eq!(fs::read_link(&guide)?, Path::new("guide-peer.md"));
+    assert_eq!(fs::read_link(&peer)?, Path::new("guide.md"));
+    let admission_error = fs::metadata(&guide)
+        .err()
+        .context("guide cycle must fail metadata admission before init")?;
+    assert_ne!(
+        admission_error.kind(),
+        std::io::ErrorKind::NotFound,
+        "fixture must exercise a present guide with a metadata error"
+    );
+
+    let mut previous_output = None;
+    for _ in 0..2 {
+        let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
+            .env_clear()
+            .current_dir(temp.path())
+            .args([
+                "init",
+                "--root",
+                path_str(&repo)?,
+                "--path",
+                path_str(&config)?,
+                "--guide-out",
+                path_str(&guide)?,
+                "--force",
+            ])
+            .output()?;
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
+        assert!(
+            stderr.contains(path_str(&guide)?)
+                && stderr.contains("cannot inspect guide")
+                && stderr.contains("--guide-out"),
+            "guide metadata error must identify the destination: {stderr}"
+        );
+        assert_eq!(fs::read(&config)?, b"existing config sentinel\n");
+        assert_eq!(fs::read_link(&guide)?, Path::new("guide-peer.md"));
+        assert_eq!(fs::read_link(&peer)?, Path::new("guide.md"));
+        assert!(fs::symlink_metadata(&guide)?.file_type().is_symlink());
+        assert!(fs::symlink_metadata(&peer)?.file_type().is_symlink());
+        assert_eq!(
+            collect_relative_file_paths(temp.path())?,
+            vec!["config.toml", "repo/src/lib.rs"]
+        );
+        let current_output = (output.stdout, output.stderr);
+        if let Some(previous) = &previous_output {
+            assert_eq!(&current_output, previous, "metadata rejection must replay");
+        }
+        previous_output = Some(current_output);
+    }
+    assert_eq!(
+        fs::read(repo.join("src/lib.rs"))?,
+        b"pub fn answer() -> u8 { 42 }\n"
+    );
+    Ok(())
+}
