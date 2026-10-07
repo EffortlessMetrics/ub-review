@@ -379,3 +379,209 @@ fn setup_ci_open_pr_cli_creates_payloads_and_terminal_receipt() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn setup_ci_print_pr_rejects_malformed_existing_config_before_outputs() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    for contents in ["[gate\n", "profile = 7\n"] {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("target/ub-review");
+        let audit = out.join("ci-audit");
+        write_setup_ci_cli_audit_fixture(&audit)?;
+        let config = temp.path().join("review config.toml");
+        fs::write(&config, contents)?;
+        let before_paths = collect_relative_file_paths(temp.path())?;
+        let before_bytes = before_paths
+            .iter()
+            .map(|relative| fs::read(temp.path().join(relative)))
+            .collect::<std::io::Result<Vec<_>>>()?;
+        let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
+            .current_dir(temp.path())
+            .env_clear()
+            .args(["setup-ci", "--print-pr", "--out"])
+            .arg(&out)
+            .arg("--config")
+            .arg(&config)
+            .args(["--accept", "unit=cargo test --lib --locked"])
+            .arg("--action-sha")
+            .arg("d".repeat(40))
+            .output()?;
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !output.status.success(),
+            "setup-ci accepted malformed config: {contents:?}\n{stderr}"
+        );
+        assert!(stderr.contains(&format!("parse {}", config.display())));
+        assert!(
+            output.stdout.is_empty(),
+            "invalid config must not render a plan"
+        );
+        assert!(!audit.join("migration-plan.md").exists());
+        assert!(!audit.join("preview").exists());
+        assert_eq!(collect_relative_file_paths(temp.path())?, before_paths);
+        for (relative, before) in before_paths.iter().zip(&before_bytes) {
+            assert_eq!(fs::read(temp.path().join(relative))?, *before);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn setup_ci_print_pr_rejects_unreadable_existing_config_before_outputs() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    for directory in [true, false] {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("target/ub-review");
+        let audit = out.join("ci-audit");
+        write_setup_ci_cli_audit_fixture(&audit)?;
+        let config = temp.path().join("review config.toml");
+        if directory {
+            fs::create_dir(&config)?;
+        } else {
+            fs::write(&config, b"invalid-utf8-\xff")?;
+        }
+        let before_paths = collect_relative_file_paths(temp.path())?;
+        let before_bytes = before_paths
+            .iter()
+            .map(|relative| fs::read(temp.path().join(relative)))
+            .collect::<std::io::Result<Vec<_>>>()?;
+        let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
+            .current_dir(temp.path())
+            .env_clear()
+            .args(["setup-ci", "--print-pr", "--out"])
+            .arg(&out)
+            .arg("--config")
+            .arg(&config)
+            .args(["--accept", "unit=cargo test --lib --locked"])
+            .arg("--action-sha")
+            .arg("d".repeat(40))
+            .output()?;
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !output.status.success(),
+            "setup-ci accepted unreadable config (directory={directory})\n{stderr}"
+        );
+        assert!(stderr.contains(&format!("read {}", config.display())));
+        assert!(
+            output.stdout.is_empty(),
+            "unreadable config must not render a plan"
+        );
+        assert!(!audit.join("migration-plan.md").exists());
+        assert!(!audit.join("preview").exists());
+        assert_eq!(collect_relative_file_paths(temp.path())?, before_paths);
+        for (relative, before) in before_paths.iter().zip(&before_bytes) {
+            assert_eq!(fs::read(temp.path().join(relative))?, *before);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn setup_ci_print_pr_preserves_missing_and_valid_config_semantics() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    for (contents, required_check) in [
+        (None, "ub-review/gate"),
+        (
+            Some("[gate]\nrequired_check = \"acme/custom-proof\"\n"),
+            "acme/custom-proof",
+        ),
+    ] {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("target/ub-review");
+        let audit = out.join("ci-audit");
+        write_setup_ci_cli_audit_fixture(&audit)?;
+        let input_paths = collect_relative_file_paths(&audit)?;
+        let input_bytes = input_paths
+            .iter()
+            .map(|relative| fs::read(audit.join(relative)))
+            .collect::<std::io::Result<Vec<_>>>()?;
+        let config = temp.path().join("review config.toml");
+        if let Some(text) = contents {
+            fs::write(&config, text)?;
+        }
+        let mut command = Command::new(env!("CARGO_BIN_EXE_ub-review"));
+        command
+            .current_dir(temp.path())
+            .env_clear()
+            .args(["setup-ci", "--print-pr", "--out"])
+            .arg(&out)
+            .arg("--config")
+            .arg(&config)
+            .args(["--accept", "unit=cargo test --lib --locked"])
+            .arg("--action-sha")
+            .arg("d".repeat(40));
+        let first = command.output()?;
+        assert!(
+            first.status.success(),
+            "setup-ci failed for a supported config: {}",
+            String::from_utf8_lossy(&first.stderr)
+        );
+        let plan = fs::read(audit.join("migration-plan.md"))?;
+        assert_eq!(first.stdout, plan);
+        let plan_text = std::str::from_utf8(&plan)?;
+        assert!(plan_text.contains(&format!(
+            "Fold 1 accepted job(s) into one required check `{required_check}`"
+        )));
+        let preview = audit.join("preview");
+        let generated: toml::Value =
+            toml::from_str(&fs::read_to_string(preview.join(".ub-review.toml"))?)?;
+        assert_eq!(
+            generated
+                .get("gate")
+                .and_then(|gate| gate.get("required_check"))
+                .and_then(toml::Value::as_str),
+            Some(required_check)
+        );
+        let proofs = generated
+            .get("proof")
+            .and_then(|proof| proof.get("required"))
+            .and_then(toml::Value::as_array)
+            .context("generated proof list is missing")?;
+        assert_eq!(proofs.len(), 1);
+        let proof = proofs.first().context("unit proof is missing")?;
+        assert_eq!(proof.get("id").and_then(toml::Value::as_str), Some("unit"));
+        assert_eq!(
+            proof.get("command").and_then(toml::Value::as_str),
+            Some("cargo test --lib --locked")
+        );
+        assert_eq!(
+            proof.get("required").and_then(toml::Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            proof.get("enabled").and_then(toml::Value::as_bool),
+            Some(true)
+        );
+        let workflow = fs::read_to_string(preview.join(".github/workflows/ub-review-gate.yml"))?;
+        let workflow_name = format!("name: {required_check}");
+        assert_eq!(workflow.lines().next(), Some(workflow_name.as_str()));
+        assert!(workflow.contains(&format!("\n    name: {required_check}\n")));
+        assert_eq!(config.exists(), contents.is_some());
+        if let Some(text) = contents {
+            assert_eq!(fs::read_to_string(&config)?, text);
+        }
+        assert!(!temp.path().join(".ub-review.toml").exists());
+        assert!(!temp.path().join(".github").exists());
+        for (relative, before) in input_paths.iter().zip(&input_bytes) {
+            assert_eq!(fs::read(audit.join(relative))?, *before);
+        }
+        let first_paths = collect_relative_file_paths(temp.path())?;
+        let first_bytes = first_paths
+            .iter()
+            .map(|relative| fs::read(temp.path().join(relative)))
+            .collect::<std::io::Result<Vec<_>>>()?;
+        let second = command.output()?;
+        assert!(
+            second.status.success(),
+            "repeated setup-ci failed: {}",
+            String::from_utf8_lossy(&second.stderr)
+        );
+        assert_eq!(first.stdout, second.stdout);
+        assert_eq!(first.stderr, second.stderr);
+        assert_eq!(collect_relative_file_paths(temp.path())?, first_paths);
+        for (relative, before) in first_paths.iter().zip(&first_bytes) {
+            assert_eq!(fs::read(temp.path().join(relative))?, *before);
+        }
+    }
+    Ok(())
+}
