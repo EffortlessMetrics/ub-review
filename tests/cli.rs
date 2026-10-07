@@ -933,9 +933,7 @@ fn init_guide_recommended_command(guide: &str, subcommand: &str) -> Result<Strin
             let mut closed = false;
             for body_line in lines.by_ref() {
                 let body_line = body_line.strip_prefix("   ").unwrap_or(body_line);
-                if body_line.len() >= fence_length
-                    && body_line.bytes().all(|byte| byte == b'`')
-                {
+                if body_line.len() >= fence_length && body_line.bytes().all(|byte| byte == b'`') {
                     closed = true;
                     break;
                 }
@@ -950,7 +948,9 @@ fn init_guide_recommended_command(guide: &str, subcommand: &str) -> Result<Strin
             recommended = true;
         } else if recommended && let Some(start) = line.find(&prefix) {
             let suffix = match subcommand {
-                "doctor" => "` and fix missing tools or provider keys before trusting the standard gate image.",
+                "doctor" => {
+                    "` and fix missing tools or provider keys before trusting the standard gate image."
+                }
                 "audit-ci" => "` for read-only CI receipts.",
                 _ => bail!("unexpected guide subcommand"),
             };
@@ -998,7 +998,7 @@ fn verify_init_guide_posix_paths(root_name: &str, config_name: &str) -> Result<(
         let command = init_guide_recommended_command(&guide_text, subcommand)?;
         let argv_path = temp.path().join(format!("{subcommand}.argv"));
         let script = format!(
-            "ub-review() {{ printf '%s\\000' \"$@\" > \"$UB_REVIEW_TEST_ARGV\"; \"$UB_REVIEW_TEST_BINARY\" \"$@\"; }}\n{command}"
+            "record_ub_review() {{ printf '%s\\000' \"$@\" > \"$UB_REVIEW_TEST_ARGV\"; \"$UB_REVIEW_TEST_BINARY\" \"$@\"; }}\nalias ub-review=record_ub_review\n{command}"
         );
         let output = Command::new("/bin/sh")
             .current_dir(temp.path())
@@ -1144,8 +1144,7 @@ fn init_guide_rejects_non_utf8_command_paths_before_writes() -> Result<()> {
             .output()?;
         anyhow::ensure!(!output.status.success());
         anyhow::ensure!(
-            String::from_utf8_lossy(&output.stderr)
-                .contains("POSIX command paths must be valid UTF-8")
+            String::from_utf8_lossy(&output.stderr).contains("POSIX command paths must be valid UTF-8")
         );
         anyhow::ensure!(!config.exists());
         anyhow::ensure!(!guide.exists());
