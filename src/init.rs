@@ -163,6 +163,10 @@ pub(crate) fn init_destination_key(path: &Path) -> Result<PathBuf> {
             .context("resolve current directory for init output paths")?
             .join(path)
     };
+    if absolute.exists() {
+        return fs::canonicalize(&absolute)
+            .with_context(|| format!("resolve existing init output {}", path.display()));
+    }
     Ok(init_normalize_path_lexically(&absolute))
 }
 
