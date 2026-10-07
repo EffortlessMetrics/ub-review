@@ -257,6 +257,10 @@ fn init_posix_shell_path(path: &Path) -> Result<String> {
     let value = path
         .to_str()
         .context("POSIX command paths must be valid UTF-8")?;
+    anyhow::ensure!(
+        !value.contains('\r'),
+        "POSIX command paths must not contain carriage returns: Markdown changes line endings"
+    );
     Ok(format!("'{}'", value.replace('\'', "'\\''")))
 }
 
