@@ -598,3 +598,141 @@ fn init_rejects_guide_metadata_errors_before_replacing_config() -> Result<()> {
     );
     Ok(())
 }
+
+#[cfg(unix)]
+#[test]
+fn init_rejects_existing_guide_symlink_to_config_before_output() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    let config = temp.path().join("config.toml");
+    let guide = temp.path().join("guide.md");
+    write_file(&repo.join("src/lib.rs"), "pub fn answer() -> u8 { 42 }\n")?;
+    fs::write(&config, b"profile = \"retained-existing-config\"\n")?;
+    std::os::unix::fs::symlink("config.toml", &guide)?;
+    assert!(fs::symlink_metadata(&guide)?.file_type().is_symlink());
+    assert_eq!(fs::read_link(&guide)?, Path::new("config.toml"));
+    assert!(fs::metadata(&guide)?.is_file());
+
+    let mut failures = Vec::new();
+    let mut previous_output = None;
+    for attempt in 0..2 {
+        fs::write(&config, b"profile = \"retained-existing-config\"\n")?;
+        let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
+            .env_clear()
+            .current_dir(temp.path())
+            .args([
+                "init",
+                "--root",
+                path_str(&repo)?,
+                "--path",
+                path_str(&config)?,
+                "--guide-out",
+                path_str(&guide)?,
+                "--force",
+            ])
+            .output()?;
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let config_bytes = fs::read(&config)?;
+        let config_preserved = config_bytes == b"profile = \"retained-existing-config\"\n";
+        let config_is_toml =
+            toml::from_str::<toml::Value>(std::str::from_utf8(&config_bytes)?).is_ok();
+        let config_is_guide = config_bytes.starts_with(b"# ub-review init guide\n");
+        let link_preserved = fs::symlink_metadata(&guide)?.file_type().is_symlink()
+            && fs::read_link(&guide)? == Path::new("config.toml");
+        let paths_preserved =
+            collect_relative_file_paths(temp.path())? == vec!["config.toml", "repo/src/lib.rs"];
+        if output.status.success()
+            || !output.stdout.is_empty()
+            || !stderr.contains("--path and --guide-out must name different files")
+            || !stderr.contains(path_str(&config)?)
+            || !config_preserved
+            || !config_is_toml
+            || !link_preserved
+            || !paths_preserved
+        {
+            failures.push(format!(
+                "attempt {attempt}: status={}, stdout={:?}, stderr={stderr:?}, \
+                 config_preserved={config_preserved}, config_is_toml={config_is_toml}, \
+                 config_is_guide={config_is_guide}, link_preserved={link_preserved}, \
+                 paths_preserved={paths_preserved}",
+                output.status,
+                String::from_utf8_lossy(&output.stdout)
+            ));
+        }
+        let current_output = (output.stdout, output.stderr);
+        if let Some(previous) = &previous_output {
+            assert_eq!(&current_output, previous, "alias rejection must replay");
+        }
+        previous_output = Some(current_output);
+    }
+    assert_eq!(
+        fs::read(repo.join("src/lib.rs"))?,
+        b"pub fn answer() -> u8 { 42 }\n"
+    );
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn init_no_guide_ignores_existing_guide_symlink_to_config() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let root = temp.path().join("unused-missing-root");
+    let config = temp.path().join("config.toml");
+    let guide = temp.path().join("guide.md");
+    fs::write(&config, b"existing config without guide\n")?;
+    write_file(&temp.path().join("keep.txt"), "source sentinel\n")?;
+    std::os::unix::fs::symlink("config.toml", &guide)?;
+    let mut expected = None;
+    for _ in 0..2 {
+        fs::write(&config, b"existing config without guide\n")?;
+        let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
+            .env_clear()
+            .current_dir(temp.path())
+            .args([
+                "init",
+                "--root",
+                path_str(&root)?,
+                "--path",
+                path_str(&config)?,
+                "--guide-out",
+                path_str(&guide)?,
+                "--no-guide",
+                "--force",
+            ])
+            .output()?;
+        assert!(
+            output.status.success(),
+            "unused guide alias failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.stderr.is_empty());
+        assert_eq!(
+            String::from_utf8(output.stdout.clone())?,
+            format!("wrote {}\n", config.display())
+        );
+        let config_bytes = fs::read(&config)?;
+        let parsed: toml::Value = toml::from_str(std::str::from_utf8(&config_bytes)?)?;
+        assert_eq!(parsed["profile"].as_str(), Some("gh-runner"));
+        assert!(fs::symlink_metadata(&guide)?.file_type().is_symlink());
+        assert_eq!(fs::read_link(&guide)?, Path::new("config.toml"));
+        assert!(!root.exists());
+        assert_eq!(
+            collect_relative_file_paths(temp.path())?,
+            vec!["config.toml", "keep.txt"]
+        );
+        let current = (config_bytes, output.stdout, output.stderr);
+        if let Some(first) = &expected {
+            assert_eq!(&current, first, "unused guide alias must replay");
+        } else {
+            expected = Some(current);
+        }
+    }
+    assert_eq!(
+        fs::read(temp.path().join("keep.txt"))?,
+        b"source sentinel\n"
+    );
+    Ok(())
+}
