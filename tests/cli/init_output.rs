@@ -310,8 +310,8 @@ fn init_rejects_unwritable_existing_guide_before_replacing_config() -> Result<()
         let config_preserved = fs::read(&config)? == b"existing config sentinel\n";
         let link_preserved = fs::symlink_metadata(&guide)?.file_type().is_symlink()
             && fs::read_link(&guide)? == running_test;
-        let paths_preserved = collect_relative_file_paths(temp.path())?
-            == vec!["config.toml", "repo/src/lib.rs"];
+        let paths_preserved =
+            collect_relative_file_paths(temp.path())? == vec!["config.toml", "repo/src/lib.rs"];
         if output.status.success()
             || !output.stdout.is_empty()
             || !stderr.contains(path_str(&guide)?)
