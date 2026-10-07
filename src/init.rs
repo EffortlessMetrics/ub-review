@@ -55,6 +55,12 @@ pub(crate) fn cmd_init(args: InitArgs) -> Result<()> {
                 args.guide_out.display()
             );
         }
+        if args.guide_out.is_dir() {
+            bail!(
+                "{} is a directory; pass --guide-out <file> or --no-guide",
+                args.guide_out.display()
+            );
+        }
         if !args.root.is_dir() {
             bail!(
                 "{} is not a directory; pass --root <repo> or --no-guide",
