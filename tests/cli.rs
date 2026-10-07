@@ -1153,6 +1153,46 @@ fn init_guide_rejects_non_utf8_command_paths_before_writes() -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn init_guide_rejects_carriage_return_command_paths_before_writes() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    for name in ["carriage\rreturn", "pair\r\nreturn"] {
+        for invalid_root in [false, true] {
+            let temp = tempfile::tempdir()?;
+            let root = temp.path().join(if invalid_root { name } else { "repo" });
+            let config = temp.path().join(if invalid_root { "config.toml" } else { name });
+            let guide = temp.path().join("guide.md");
+            let empty_path = temp.path().join("empty-path");
+            fs::create_dir(&root)?;
+            fs::create_dir(&empty_path)?;
+            let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
+                .current_dir(temp.path())
+                .env_clear()
+                .env("PATH", &empty_path)
+                .args(["init", "--root"])
+                .arg(&root)
+                .arg("--path")
+                .arg(&config)
+                .arg("--guide-out")
+                .arg(&guide)
+                .output()?;
+            anyhow::ensure!(
+                !output.status.success(),
+                "init accepted a carriage return in a command path"
+            );
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::ensure!(
+                stderr.contains("POSIX command paths must not contain carriage returns"),
+                "init did not explain the path limitation: {stderr}"
+            );
+            anyhow::ensure!(!config.exists());
+            anyhow::ensure!(!guide.exists());
+        }
+    }
+    Ok(())
+}
+
 #[test]
 fn init_writes_file_driven_setup_guide_from_repo_scan() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
