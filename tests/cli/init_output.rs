@@ -273,6 +273,8 @@ fn init_rejects_unwritable_existing_guide_before_replacing_config() -> Result<()
     let running_test = std::env::current_exe()?;
     write_file(&repo.join("src/lib.rs"), "pub fn answer() -> u8 { 42 }\n")?;
     std::os::unix::fs::symlink(&running_test, &guide)?;
+    assert!(fs::symlink_metadata(&guide)?.file_type().is_symlink());
+    assert_eq!(fs::read_link(&guide)?, running_test);
     assert!(fs::metadata(&guide)?.is_file());
 
     // Linux denies write-open while this integration-test executable is running.
@@ -386,6 +388,57 @@ fn init_relative_guide_filename_preserves_successful_output_and_replay() -> Resu
         } else {
             expected = Some(current);
         }
+    }
+    assert_eq!(
+        fs::read(repo.join("src/lib.rs"))?,
+        b"pub fn answer() -> u8 { 42 }\n"
+    );
+    Ok(())
+}
+
+#[test]
+fn init_guide_preflight_preserves_writable_guide_when_config_write_fails() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    let config = temp.path().join("config-directory");
+    let guide = temp.path().join("guide.md");
+    write_file(&repo.join("src/lib.rs"), "pub fn answer() -> u8 { 42 }\n")?;
+    write_file(&config.join("keep.txt"), "config directory sentinel\n")?;
+    fs::write(&guide, b"existing writable guide sentinel\n")?;
+    let mut previous_output = None;
+    for _ in 0..2 {
+        let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
+            .env_clear()
+            .current_dir(temp.path())
+            .args([
+                "init",
+                "--root",
+                path_str(&repo)?,
+                "--path",
+                path_str(&config)?,
+                "--guide-out",
+                path_str(&guide)?,
+                "--force",
+            ])
+            .output()?;
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
+        assert!(config.is_dir());
+        assert_eq!(
+            fs::read(config.join("keep.txt"))?,
+            b"config directory sentinel\n"
+        );
+        assert_eq!(fs::read(&guide)?, b"existing writable guide sentinel\n");
+        assert_eq!(
+            collect_relative_file_paths(temp.path())?,
+            vec!["config-directory/keep.txt", "guide.md", "repo/src/lib.rs"]
+        );
+        let current_output = (output.stdout, output.stderr);
+        if let Some(previous) = &previous_output {
+            assert_eq!(&current_output, previous, "unchanged failure must replay");
+        }
+        previous_output = Some(current_output);
     }
     assert_eq!(
         fs::read(repo.join("src/lib.rs"))?,
