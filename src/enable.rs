@@ -653,6 +653,90 @@ fn print_enable_summary(
 mod tests {
     use super::*;
 
+    fn unsafe_native_inspection_fixture(
+        file_count: usize,
+        marker_file: Option<usize>,
+    ) -> Result<tempfile::TempDir> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("src");
+        fs::create_dir(&source)?;
+        for ordinal in 1..=file_count {
+            let contents = if marker_file == Some(ordinal) {
+                "pub unsafe fn marker() {}\n"
+            } else {
+                "pub fn ordinary() {}\n"
+            };
+            fs::write(source.join(format!("file{ordinal:03}.rs")), contents)?;
+        }
+        Ok(temp)
+    }
+
+    #[test]
+    fn inspected_enable_detects_unsafe_native_in_admitted_file_257() -> Result<()> {
+        let temp = unsafe_native_inspection_fixture(257, Some(257))?;
+        let inspection = inspect_init_guide_repo(temp.path())?;
+        anyhow::ensure!(inspection.rust_source_count == 257);
+        anyhow::ensure!(inspection.unsafe_native_found);
+        let rendered = render_enable_config_for_inspection(&inspection);
+        let config: toml::Value = toml::from_str(&rendered)?;
+        anyhow::ensure!(config["tools"]["unsafe-review"]["enabled"].as_bool() == Some(true));
+
+        let repeated = inspect_init_guide_repo(temp.path())?;
+        anyhow::ensure!(repeated.rust_source_count == 257);
+        anyhow::ensure!(repeated.unsafe_native_found);
+        anyhow::ensure!(format!("{inspection:?}") == format!("{repeated:?}"));
+        anyhow::ensure!(rendered == render_enable_config_for_inspection(&repeated));
+        Ok(())
+    }
+
+    #[test]
+    fn inspected_enable_keeps_marker_free_257_files_disabled() -> Result<()> {
+        let temp = unsafe_native_inspection_fixture(257, None)?;
+        let inspection = inspect_init_guide_repo(temp.path())?;
+        anyhow::ensure!(inspection.rust_source_count == 257);
+        anyhow::ensure!(!inspection.unsafe_native_found);
+        let rendered = render_enable_config_for_inspection(&inspection);
+        let config: toml::Value = toml::from_str(&rendered)?;
+        anyhow::ensure!(config["tools"]["unsafe-review"]["enabled"].as_bool() == Some(false));
+        Ok(())
+    }
+
+    #[test]
+    fn inspected_enable_detects_unsafe_native_in_admitted_file_256() -> Result<()> {
+        let temp = unsafe_native_inspection_fixture(257, Some(256))?;
+        let inspection = inspect_init_guide_repo(temp.path())?;
+        anyhow::ensure!(inspection.rust_source_count == 257);
+        anyhow::ensure!(inspection.unsafe_native_found);
+        let rendered = render_enable_config_for_inspection(&inspection);
+        let config: toml::Value = toml::from_str(&rendered)?;
+        anyhow::ensure!(config["tools"]["unsafe-review"]["enabled"].as_bool() == Some(true));
+        Ok(())
+    }
+
+    #[test]
+    fn inspected_enable_detects_unsafe_native_in_admitted_file_512() -> Result<()> {
+        let temp = unsafe_native_inspection_fixture(512, Some(512))?;
+        let inspection = inspect_init_guide_repo(temp.path())?;
+        anyhow::ensure!(inspection.rust_source_count == 512);
+        anyhow::ensure!(inspection.unsafe_native_found);
+        let rendered = render_enable_config_for_inspection(&inspection);
+        let config: toml::Value = toml::from_str(&rendered)?;
+        anyhow::ensure!(config["tools"]["unsafe-review"]["enabled"].as_bool() == Some(true));
+        Ok(())
+    }
+
+    #[test]
+    fn inspected_enable_preserves_512_file_admission_cap() -> Result<()> {
+        let temp = unsafe_native_inspection_fixture(513, Some(513))?;
+        let inspection = inspect_init_guide_repo(temp.path())?;
+        anyhow::ensure!(inspection.rust_source_count == 512);
+        anyhow::ensure!(!inspection.unsafe_native_found);
+        let rendered = render_enable_config_for_inspection(&inspection);
+        let config: toml::Value = toml::from_str(&rendered)?;
+        anyhow::ensure!(config["tools"]["unsafe-review"]["enabled"].as_bool() == Some(false));
+        Ok(())
+    }
+
     /// Deterministic offline resolver stub for `cmd_enable`-level tests so they
     /// never hit the live GitHub Releases API (determinism, per #732
     /// self-review). Always resolves to the source-build path.
