@@ -592,11 +592,11 @@ fn setup_ci_print_pr_rejects_invalid_action_sha_before_outputs() -> Result<()> {
     let mut failures = Vec::new();
     for action_sha in [
         "deadbeef",
-        "0123456789abcdef0123456789abcdef012345678g",
+        "0123456789abcdef0123456789abcdef0123456g",
         "",
         " \t\n ",
         "main",
-        "0123456789abcdef0123456789abcdef0123456789,abcdef0123456789abcdef0123456789abcdef01",
+        "0123456789abcdef0123456789abcdef01234567,abcdef0123456789abcdef0123456789abcdef01",
     ] {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("target/ub-review");
@@ -665,16 +665,16 @@ fn setup_ci_print_pr_preserves_full_action_sha_and_replay() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     for (action_sha, expected_pin) in [
         (
-            "0123456789abcdef0123456789abcdef0123456789",
-            "        uses: EffortlessMetrics/ub-review@0123456789abcdef0123456789abcdef0123456789",
+            "0123456789abcdef0123456789abcdef01234567",
+            "        uses: EffortlessMetrics/ub-review@0123456789abcdef0123456789abcdef01234567",
         ),
         (
-            "0123456789aBcDeF0123456789AbCdEf0123456789",
-            "        uses: EffortlessMetrics/ub-review@0123456789aBcDeF0123456789AbCdEf0123456789",
+            "0123456789aBcDeF0123456789AbCdEf01234567",
+            "        uses: EffortlessMetrics/ub-review@0123456789aBcDeF0123456789AbCdEf01234567",
         ),
         (
-            " \t0123456789aBcDeF0123456789AbCdEf0123456789\n ",
-            "        uses: EffortlessMetrics/ub-review@0123456789aBcDeF0123456789AbCdEf0123456789",
+            " \t0123456789aBcDeF0123456789AbCdEf01234567\n ",
+            "        uses: EffortlessMetrics/ub-review@0123456789aBcDeF0123456789AbCdEf01234567",
         ),
     ] {
         let temp = tempfile::tempdir()?;
