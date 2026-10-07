@@ -446,3 +446,75 @@ fn init_guide_preflight_preserves_writable_guide_when_config_write_fails() -> Re
     );
     Ok(())
 }
+
+#[test]
+fn init_preserves_root_error_precedence_over_unusable_guide() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    for guide_is_directory in [false, true] {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("missing-root");
+        let config = temp.path().join("config.toml");
+        let guide = if guide_is_directory {
+            temp.path().join("guide-directory")
+        } else {
+            temp.path().join("missing-parent/guide.md")
+        };
+        fs::write(&config, b"existing config sentinel\n")?;
+        write_file(&temp.path().join("keep.txt"), "source sentinel\n")?;
+        if guide_is_directory {
+            write_file(&guide.join("keep.txt"), "guide directory sentinel\n")?;
+        }
+        let mut previous_output = None;
+        for _ in 0..2 {
+            let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
+                .env_clear()
+                .current_dir(temp.path())
+                .args([
+                    "init",
+                    "--root",
+                    path_str(&root)?,
+                    "--path",
+                    path_str(&config)?,
+                    "--guide-out",
+                    path_str(&guide)?,
+                    "--force",
+                ])
+                .output()?;
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(!output.status.success());
+            assert!(output.stdout.is_empty());
+            assert!(
+                stderr.contains(path_str(&root)?)
+                    && stderr.contains("is not a directory; pass --root")
+                    && !stderr.contains("--guide-out"),
+                "root error must retain precedence: {stderr}"
+            );
+            assert_eq!(fs::read(&config)?, b"existing config sentinel\n");
+            assert_eq!(fs::read(temp.path().join("keep.txt"))?, b"source sentinel\n");
+            assert!(!root.exists());
+            if guide_is_directory {
+                assert!(guide.is_dir());
+                assert_eq!(
+                    fs::read(guide.join("keep.txt"))?,
+                    b"guide directory sentinel\n"
+                );
+                assert_eq!(
+                    collect_relative_file_paths(temp.path())?,
+                    vec!["config.toml", "guide-directory/keep.txt", "keep.txt"]
+                );
+            } else {
+                assert!(!temp.path().join("missing-parent").exists());
+                assert_eq!(
+                    collect_relative_file_paths(temp.path())?,
+                    vec!["config.toml", "keep.txt"]
+                );
+            }
+            let current_output = (output.stdout, output.stderr);
+            if let Some(previous) = &previous_output {
+                assert_eq!(&current_output, previous, "root rejection must replay");
+            }
+            previous_output = Some(current_output);
+        }
+    }
+    Ok(())
+}
