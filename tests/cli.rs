@@ -1144,7 +1144,8 @@ fn init_guide_rejects_non_utf8_command_paths_before_writes() -> Result<()> {
             .output()?;
         anyhow::ensure!(!output.status.success());
         anyhow::ensure!(
-            String::from_utf8_lossy(&output.stderr).contains("POSIX command paths must be valid UTF-8")
+            String::from_utf8_lossy(&output.stderr)
+                .contains("POSIX command paths must be valid UTF-8")
         );
         anyhow::ensure!(!config.exists());
         anyhow::ensure!(!guide.exists());
