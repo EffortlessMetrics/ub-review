@@ -131,13 +131,15 @@ pub(crate) fn init_normalize_path_lexically(path: &Path) -> PathBuf {
 }
 
 pub(crate) fn render_init_guide(args: &InitArgs, config: &Config) -> Result<String> {
+    let config_path = init_posix_shell_path(&args.path)?;
+    let root_path = init_posix_shell_path(&args.root)?;
     let inspection = inspect_init_guide_repo(&args.root)?;
     let mut text = String::new();
     text.push_str("# ub-review init guide\n\n");
     text.push_str("## Decision\n\n");
     text.push_str(&format!(
         "- Starter config: `{}` using profile `{}`.\n",
-        args.path.display(),
+        init_markdown_inline_code(&args.path.to_string_lossy()),
         config.profile
     ));
     text.push_str(
@@ -146,7 +148,10 @@ pub(crate) fn render_init_guide(args: &InitArgs, config: &Config) -> Result<Stri
     text.push_str("- `audit-ci` and `setup-ci` own CI migration; `init` only writes the starter config and this handoff.\n\n");
 
     text.push_str("## Repo inspection\n\n");
-    text.push_str(&format!("- Root: `{}`.\n", inspection.root.display()));
+    text.push_str(&format!(
+        "- Root: `{}`.\n",
+        init_markdown_inline_code(&inspection.root.to_string_lossy())
+    ));
     if inspection.build_systems.is_empty() {
         text.push_str("- Build systems: no recognized manifest found; add required proof commands manually.\n");
     } else {
@@ -217,15 +222,17 @@ pub(crate) fn render_init_guide(args: &InitArgs, config: &Config) -> Result<Stri
     render_init_config_proposal(&mut text, &inspection);
 
     text.push_str("\n## Recommended path\n\n");
-    text.push_str(&format!(
-        "1. Run `ub-review doctor --config {} --root {} --require-core-tools` and fix missing tools or provider keys before trusting the standard gate image.\n",
-        args.path.display(),
-        args.root.display()
-    ));
-    text.push_str(&format!(
-        "2. Run `ub-review audit-ci --root {} --out target/ub-review` for read-only CI receipts.\n",
-        args.root.display()
-    ));
+    text.push_str("These commands use POSIX `sh` syntax. Run them from the same working directory used for `init`.\n\n");
+    text.push_str("1. Run doctor and fix missing tools or provider keys before trusting the standard gate image.\n");
+    render_init_posix_command(
+        &mut text,
+        &format!("ub-review doctor --config={config_path} --root={root_path} --require-core-tools"),
+    );
+    text.push_str("2. Collect read-only CI receipts.\n");
+    render_init_posix_command(
+        &mut text,
+        &format!("ub-review audit-ci --root={root_path} --out target/ub-review"),
+    );
     text.push_str(
         "3. Run `ub-review setup-ci --print-pr --out target/ub-review` to inspect the migration without writes.\n",
     );
@@ -244,6 +251,31 @@ pub(crate) fn render_init_guide(args: &InitArgs, config: &Config) -> Result<Stri
     text.push_str("- Follow-up capture: route real out-of-scope work into issue candidates with evidence, plan, and acceptance criteria.\n");
 
     Ok(text)
+}
+
+fn init_posix_shell_path(path: &Path) -> Result<String> {
+    let value = path
+        .to_str()
+        .context("POSIX command paths must be valid UTF-8")?;
+    Ok(format!("'{}'", value.replace('\'', "'\\''")))
+}
+
+fn render_init_posix_command(text: &mut String, command: &str) {
+    let fence_length = command
+        .split(|ch| ch != '`')
+        .map(str::len)
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1)
+        .max(3);
+    let fence = "`".repeat(fence_length);
+    text.push_str(&format!("\n   {fence}sh\n"));
+    for line in command.split('\n') {
+        text.push_str("   ");
+        text.push_str(line);
+        text.push('\n');
+    }
+    text.push_str(&format!("   {fence}\n\n"));
 }
 
 pub(crate) fn render_init_audit_ci_summary(text: &mut String, inspection: &InitGuideInspection) {
