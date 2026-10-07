@@ -55,13 +55,13 @@ pub(crate) fn cmd_init(args: InitArgs) -> Result<()> {
                 args.guide_out.display()
             );
         }
-        preflight_init_guide_destination(&args.guide_out)?;
         if !args.root.is_dir() {
             bail!(
                 "{} is not a directory; pass --root <repo> or --no-guide",
                 args.root.display()
             );
         }
+        preflight_init_guide_destination(&args.guide_out)?;
     }
     let config = starter_config(args.profile.key());
     let guide = if args.no_guide {
