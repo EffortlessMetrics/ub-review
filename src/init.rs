@@ -958,3 +958,49 @@ pub(crate) fn init_join_or_none(values: &[String]) -> String {
         values.join(", ")
     }
 }
+
+#[cfg(all(test, unix))]
+mod guide_presentation_tests {
+    use super::*;
+
+    #[test]
+    fn init_guide_identifies_the_inspected_root_with_safe_literal_metadata() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        for (name, display_name) in [
+            ("repo", "repo"),
+            ("My Repo", "My Repo"),
+            ("literal`root", "literal'root"),
+            ("line\n```\nroot", "line ''' root"),
+        ] {
+            let root = temp.path().join(name);
+            fs::create_dir(&root)?;
+            let args = InitArgs {
+                path: temp.path().join("config.toml"),
+                root,
+                guide_out: temp.path().join("guide.md"),
+                no_guide: false,
+                profile: ProfileArg::Cx23,
+                force: false,
+            };
+            let guide = render_init_guide(&args, &starter_config("cx23"))?;
+            let inspection = guide
+                .split_once("## Repo inspection\n\n")
+                .context("repo inspection section is missing")?
+                .1
+                .split_once("\n## Sensor receipts")
+                .context("repo inspection section is not bounded")?
+                .0;
+            let root_lines = inspection
+                .lines()
+                .filter(|line| line.starts_with("- Root: "))
+                .collect::<Vec<_>>();
+            let expected = format!("- Root: `{}/{display_name}`.", temp.path().display());
+            assert_eq!(
+                root_lines,
+                vec![expected.as_str()],
+                "guide must identify the inspected root on one safe metadata line"
+            );
+        }
+        Ok(())
+    }
+}
