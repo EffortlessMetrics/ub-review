@@ -710,9 +710,10 @@ fn setup_ci_print_pr_preserves_full_action_sha_and_replay() -> Result<()> {
         );
         let plan = fs::read(audit.join("migration-plan.md"))?;
         assert_eq!(first.stdout, plan);
-        assert!(std::str::from_utf8(&plan)?.contains(
-            "Fold 1 accepted job(s) into one required check `ub-review/gate`"
-        ));
+        assert!(
+            std::str::from_utf8(&plan)?
+                .contains("Fold 1 accepted job(s) into one required check `ub-review/gate`")
+        );
         let preview = audit.join("preview");
         assert_eq!(
             collect_relative_file_paths(&preview)?,
@@ -768,7 +769,10 @@ fn setup_ci_print_pr_preserves_full_action_sha_and_replay() -> Result<()> {
             proof.get("enabled").and_then(toml::Value::as_bool),
             Some(true)
         );
-        assert_eq!(fs::read(preview.join("docs/ci/ub-review-migration.md"))?, plan);
+        assert_eq!(
+            fs::read(preview.join("docs/ci/ub-review-migration.md"))?,
+            plan
+        );
         assert!(
             fs::read_to_string(preview.join("docs/ci/branch-protection-change.md"))?
                 .contains("Branch protection remains manual")
@@ -824,17 +828,20 @@ fn setup_ci_print_pr_preserves_plan_only_sha_semantics() -> Result<()> {
         let plan = fs::read(audit.join("migration-plan.md"))?;
         assert_eq!(first.stdout, plan);
         if accept_unit {
-            assert!(std::str::from_utf8(&plan)?.contains(
-                "Fold 1 accepted job(s) into one required check `ub-review/gate`"
-            ));
+            assert!(
+                std::str::from_utf8(&plan)?
+                    .contains("Fold 1 accepted job(s) into one required check `ub-review/gate`")
+            );
             assert!(!audit.join("preview").exists());
-            assert!(String::from_utf8_lossy(&first.stderr).contains(
-                "skipped setup-ci preview files; pass --action-sha <40-hex-sha>"
-            ));
+            assert!(
+                String::from_utf8_lossy(&first.stderr)
+                    .contains("skipped setup-ci preview files; pass --action-sha <40-hex-sha>")
+            );
         } else {
-            assert!(std::str::from_utf8(&plan)?.contains(
-                "No jobs accepted into the generated gate policy"
-            ));
+            assert!(
+                std::str::from_utf8(&plan)?
+                    .contains("No jobs accepted into the generated gate policy")
+            );
             assert_eq!(
                 collect_relative_file_paths(&audit.join("preview"))?,
                 vec!["keep.txt"]
