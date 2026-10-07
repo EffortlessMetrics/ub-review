@@ -412,7 +412,10 @@ fn setup_ci_print_pr_rejects_malformed_existing_config_before_outputs() -> Resul
             "setup-ci accepted malformed config: {contents:?}\n{stderr}"
         );
         assert!(stderr.contains(&format!("parse {}", config.display())));
-        assert!(output.stdout.is_empty(), "invalid config must not render a plan");
+        assert!(
+            output.stdout.is_empty(),
+            "invalid config must not render a plan"
+        );
         assert!(!audit.join("migration-plan.md").exists());
         assert!(!audit.join("preview").exists());
         assert_eq!(collect_relative_file_paths(temp.path())?, before_paths);
@@ -459,7 +462,10 @@ fn setup_ci_print_pr_rejects_unreadable_existing_config_before_outputs() -> Resu
             "setup-ci accepted unreadable config (directory={directory})\n{stderr}"
         );
         assert!(stderr.contains(&format!("read {}", config.display())));
-        assert!(output.stdout.is_empty(), "unreadable config must not render a plan");
+        assert!(
+            output.stdout.is_empty(),
+            "unreadable config must not render a plan"
+        );
         assert!(!audit.join("migration-plan.md").exists());
         assert!(!audit.join("preview").exists());
         assert_eq!(collect_relative_file_paths(temp.path())?, before_paths);
@@ -475,7 +481,10 @@ fn setup_ci_print_pr_preserves_missing_and_valid_config_semantics() -> Result<()
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     for (contents, required_check) in [
         (None, "ub-review/gate"),
-        (Some("[gate]\nrequired_check = \"acme/custom-proof\"\n"), "acme/custom-proof"),
+        (
+            Some("[gate]\nrequired_check = \"acme/custom-proof\"\n"),
+            "acme/custom-proof",
+        ),
     ] {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("target/ub-review");
@@ -535,10 +544,15 @@ fn setup_ci_print_pr_preserves_missing_and_valid_config_semantics() -> Result<()
             proof.get("command").and_then(toml::Value::as_str),
             Some("cargo test --lib --locked")
         );
-        assert_eq!(proof.get("required").and_then(toml::Value::as_bool), Some(true));
-        assert_eq!(proof.get("enabled").and_then(toml::Value::as_bool), Some(true));
-        let workflow =
-            fs::read_to_string(preview.join(".github/workflows/ub-review-gate.yml"))?;
+        assert_eq!(
+            proof.get("required").and_then(toml::Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            proof.get("enabled").and_then(toml::Value::as_bool),
+            Some(true)
+        );
+        let workflow = fs::read_to_string(preview.join(".github/workflows/ub-review-gate.yml"))?;
         let workflow_name = format!("name: {required_check}");
         assert_eq!(workflow.lines().next(), Some(workflow_name.as_str()));
         assert!(workflow.contains(&format!("\n    name: {required_check}\n")));
