@@ -1161,7 +1161,9 @@ fn init_guide_rejects_carriage_return_command_paths_before_writes() -> Result<()
         for invalid_root in [false, true] {
             let temp = tempfile::tempdir()?;
             let root = temp.path().join(if invalid_root { name } else { "repo" });
-            let config = temp.path().join(if invalid_root { "config.toml" } else { name });
+            let config = temp
+                .path()
+                .join(if invalid_root { "config.toml" } else { name });
             let guide = temp.path().join("guide.md");
             let empty_path = temp.path().join("empty-path");
             fs::create_dir(&root)?;
