@@ -155,12 +155,12 @@ repository's `.ub-review.toml` makes the five non-tokmd core sensors
 
 - `doctor --require-core-tools` (or `UB_REVIEW_STANDARD_IMAGE`): doctor
   bails when a core tool is missing or a pinned version mismatches
-  (src/main.rs `cmd_doctor`). The pin table covers tokmd (`1.12.0`),
+  (src/main.rs `cmd_doctor`). The pin table covers tokmd (`1.15.0`),
 cargo-allow (`0.1.8`), ripr (`0.10.0`), unsafe-review (`0.3.4`),
   and actionlint (`1.7.12`) (src/post_run_utils.rs
   `expected_standard_image_tool_version`); ast-grep remains unpinned.
 - The action's sensor install step (scripts/install-gh-runner-tools.sh)
-  pins tokmd (default 1.12.0, `UB_REVIEW_TOKMD_VERSION`), cargo-allow
+  pins tokmd (default 1.15.0, `UB_REVIEW_TOKMD_VERSION`), cargo-allow
   (0.1.8, `UB_REVIEW_CARGO_ALLOW_VERSION`), actionlint (v1.7.12,
   `UB_REVIEW_ACTIONLINT_VERSION`), ripr (0.10.0, `UB_REVIEW_RIPR_VERSION`),
   and unsafe-review (0.3.4, `UB_REVIEW_UNSAFE_REVIEW_VERSION`).
@@ -411,7 +411,7 @@ cargo test --bin ub-review --locked
                        # set; tool-gate outcome, sensor-evidence-issue, and
                        # policy sanitizer contracts live in the inline tests
 ub-review doctor --require-core-tools
-                       # core six present, tokmd pinned at 1.12.0; bails on
+                       # core six present, tokmd pinned at 1.15.0; bails on
                        # missing tools or version mismatch
 ub-review plan --write --out target/ub-review
                        # resolved-tools.json with per-sensor trigger
@@ -504,7 +504,7 @@ the running-summary missing-evidence section.
 
 What does success look like in ten minutes?
 Run `ub-review doctor --require-core-tools` on the standard image: six core
-tools found, tokmd at 1.12.0. Run `plan --write` on a Rust diff: ripr and
+tools found, tokmd at 1.15.0. Run `plan --write` on a Rust diff: ripr and
 unsafe-review planned with matched triggers, coverage skipped with
 `heavy/manual witness requires --allow-heavy` unless leased. Run the gate:
 every planned sensor has a status receipt naming its exact command; delete

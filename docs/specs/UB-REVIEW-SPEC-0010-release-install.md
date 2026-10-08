@@ -150,7 +150,7 @@ deliberately not an input and doctor does not check it
 
 - `none` installs nothing;
 - `core`, `bun-fast`, and `full` all install the same six advisory sensors:
-  tokmd (pinned 1.12.0, override `UB_REVIEW_TOKMD_VERSION`), cargo-allow
+  tokmd (pinned 1.15.0, override `UB_REVIEW_TOKMD_VERSION`), cargo-allow
   (pinned 0.1.8, override `UB_REVIEW_CARGO_ALLOW_VERSION`), ripr
   (pinned 0.10.0, override `UB_REVIEW_RIPR_VERSION`), unsafe-review
   (pinned 0.3.4, override `UB_REVIEW_UNSAFE_REVIEW_VERSION`), ast-grep
@@ -236,7 +236,7 @@ cache warm manifest      schema_version 1; profile; profile_hash; base;
 doctor provider lines    env var name + present|missing, never the value
 doctor pins              CORE_REVIEW_TOOLS = tokmd, cargo-allow, ripr,
                          unsafe-review, ast-grep, actionlint;
-                         STANDARD_IMAGE_TOKMD_VERSION = 1.12.0;
+                         STANDARD_IMAGE_TOKMD_VERSION = 1.15.0;
                          STANDARD_IMAGE_CARGO_ALLOW_VERSION = 0.1.8;
                          STANDARD_IMAGE_RIPR_VERSION = 0.10.0;
                          STANDARD_IMAGE_UNSAFE_REVIEW_VERSION = 0.3.4;
@@ -261,7 +261,7 @@ doctor pins              CORE_REVIEW_TOOLS = tokmd, cargo-allow, ripr,
   is missing, or when a pinned tool's `--version` output does not contain
   the pinned version token (`command_version_matches` tolerates `v`
   prefixes and punctuation splits). The standard-image pin table covers
-  tokmd (`1.12.0`), cargo-allow (`0.1.8`), ripr (`0.10.0`),
+  tokmd (`1.15.0`), cargo-allow (`0.1.8`), ripr (`0.10.0`),
   unsafe-review (`0.3.4`), and actionlint (`1.7.12`).
 - `cache warm` never blocks; tools missing at warm time are recorded as
   `status: missing` in the manifest.
@@ -286,7 +286,7 @@ doctor pins              CORE_REVIEW_TOOLS = tokmd, cargo-allow, ripr,
   docs/RUNNER_IMAGE.md "Policy").
 - Honest gaps, where the surface does not fail closed today:
   - ast-grep is NOT version-pinned: the install scripts take latest and
-    doctor's drift check does not cover it. The pins cover tokmd (1.12.0),
+    doctor's drift check does not cover it. The pins cover tokmd (1.15.0),
     cargo-allow (0.1.8), ripr (0.10.0), unsafe-review (0.3.4), and
     actionlint (1.7.12) in both the install script and doctor. Unpinned
     ripr drift is how #316 stayed invisible until a local 0.5/0.8 mismatch

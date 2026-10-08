@@ -20,13 +20,13 @@ The script installs Rust and npm-backed tools into `$UB_REVIEW_TOOL_DIR/bin`,
 where `UB_REVIEW_TOOL_DIR` defaults to `/opt/ub-review`. It uses
 `cargo install --locked --root "$UB_REVIEW_TOOL_DIR"` for Rust tools and
 `go install` for `actionlint`, so the standard image build must provide Go.
-`tokmd` defaults to version `1.12.0` because the Bun profile depends on the
+`tokmd` defaults to version `1.15.0` because the Bun profile depends on the
 current on-diff `bun-ub`, `cockpit`, and `context` command surfaces.
 `cargo-allow` defaults to `0.1.8`; `ripr` defaults to `0.10.0`;
 `unsafe-review` defaults to `0.3.4`; `actionlint` defaults to `v1.7.12`:
 
 ```bash
-export UB_REVIEW_TOKMD_VERSION="1.12.0"
+export UB_REVIEW_TOKMD_VERSION="1.15.0"
 export UB_REVIEW_CARGO_ALLOW_VERSION="0.1.8"
 export UB_REVIEW_RIPR_VERSION="0.10.0"
 export UB_REVIEW_UNSAFE_REVIEW_VERSION="0.3.4"
@@ -154,7 +154,7 @@ For the Bun profile:
 
 - missing `tokmd`, `cargo-allow`, `ripr`, `unsafe-review`, `ast-grep`, or
   `actionlint` on the standard image is image drift and should fail `doctor`;
-- `tokmd` reporting a version other than `1.12.0` on the standard image is image
+- `tokmd` reporting a version other than `1.15.0` on the standard image is image
   drift and should fail `doctor`;
 - missing tools on a generic hosted runner are missing evidence, not proof of a
   clean review;

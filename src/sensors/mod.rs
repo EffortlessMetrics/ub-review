@@ -2078,8 +2078,8 @@ mod tests {
             "unexpected tokmd failure reason: {reason}"
         );
         assert!(reason.contains("tokmd 1.11.1 installed"));
-        assert!(reason.contains("pin requires 1.12.0 (bun-ub preset)"));
-        assert!(reason.contains("cargo install tokmd --locked --version 1.12.0 --force"));
+        assert!(reason.contains("pin requires 1.15.0 (bun-ub preset)"));
+        assert!(reason.contains("cargo install tokmd --locked --version 1.15.0 --force"));
         let commands: serde_json::Value =
             serde_json::from_slice(&fs::read(sensor_dir.join("commands.json"))?)?;
         let commands = commands

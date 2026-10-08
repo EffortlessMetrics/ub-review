@@ -9,7 +9,7 @@ fn gh_runner_tool_installer_pins_core_rust_sensor_versions() -> Result<()> {
     let script = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/install-gh-runner-tools.sh"),
     )?;
-    assert!(script.contains("UB_REVIEW_TOKMD_VERSION:-1.12.0"));
+    assert!(script.contains("UB_REVIEW_TOKMD_VERSION:-1.15.0"));
     assert!(script.contains("UB_REVIEW_CARGO_ALLOW_VERSION:-0.1.8"));
     assert!(script.contains("install_cargo_bin tokmd tokmd \"$tokmd_version\""));
     assert!(script.contains("install_cargo_bin cargo-allow cargo-allow \"$cargo_allow_version\""));
@@ -29,7 +29,7 @@ fn review_image_tool_installer_uses_tool_dir_as_install_prefix() -> Result<()> {
     let script = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/install-review-image-tools.sh"),
     )?;
-    assert!(script.contains("UB_REVIEW_TOKMD_VERSION:-1.12.0"));
+    assert!(script.contains("UB_REVIEW_TOKMD_VERSION:-1.15.0"));
     assert!(script.contains("UB_REVIEW_CARGO_ALLOW_VERSION:-0.1.8"));
     assert!(script.contains("UB_REVIEW_RIPR_VERSION:-0.10.0"));
     let github_runner_script = std::fs::read_to_string("scripts/install-gh-runner-tools.sh")?;
@@ -3212,7 +3212,7 @@ command = "ub-review-test-missing-tokmd"
     assert!(output.contains("tokmd"));
     assert!(output.contains("Fixes:"));
     assert!(
-        output.contains("tokmd missing: cargo install tokmd --locked --version 1.12.0 --force")
+        output.contains("tokmd missing: cargo install tokmd --locked --version 1.15.0 --force")
     );
     assert!(output.contains("see Fixes above"));
     Ok(())
@@ -3276,10 +3276,10 @@ command = "ub-review-test-missing-tokmd"
         .find(|line| line.trim_start().starts_with("tokmd "))
         .context("doctor output missing tokmd tool row")?;
     assert!(tokmd_row.contains("missing"), "{tokmd_row}");
-    assert!(tokmd_row.contains("expected=1.12.0"), "{tokmd_row}");
+    assert!(tokmd_row.contains("expected=1.15.0"), "{tokmd_row}");
     assert!(output.contains("Fixes:"), "{output}");
     assert!(
-        output.contains("tokmd missing: cargo install tokmd --locked --version 1.12.0 --force"),
+        output.contains("tokmd missing: cargo install tokmd --locked --version 1.15.0 --force"),
         "{output}"
     );
     assert!(!output.contains("required core review tools missing from standard image"));
@@ -3294,7 +3294,7 @@ fn doctor_reports_advisory_stale_tool_fix_without_requiring_core_tools() -> Resu
     write_fake_core_review_tools_with_versions(
         &fake_bin,
         &[
-            ("tokmd", "1.12.0"),
+            ("tokmd", "1.15.0"),
             ("cargo-allow", "0.1.8"),
             ("ripr", "0.7.9"),
             ("unsafe-review", "0.3.4"),
@@ -3353,7 +3353,7 @@ command = "ub-review-test-missing-tokmd"
     assert!(output.contains("tokmd"));
     assert!(output.contains("Fixes:"));
     assert!(
-        output.contains("tokmd missing: cargo install tokmd --locked --version 1.12.0 --force")
+        output.contains("tokmd missing: cargo install tokmd --locked --version 1.15.0 --force")
     );
     assert!(output.contains("see Fixes above"));
     Ok(())
@@ -3382,12 +3382,12 @@ fn doctor_require_core_tools_fails_stale_tokmd_version() -> Result<()> {
         &[("PATH", path.as_str())],
     )?;
     assert!(output.contains("required core review tool versions drifted"));
-    assert!(output.contains("tokmd expected 1.12.0"));
+    assert!(output.contains("tokmd expected 1.15.0"));
     assert!(output.contains("tokmd 1.10.0"));
     assert!(output.contains("Fixes:"));
     assert!(
         output
-            .contains("tokmd version drift: cargo install tokmd --locked --version 1.12.0 --force")
+            .contains("tokmd version drift: cargo install tokmd --locked --version 1.15.0 --force")
     );
     assert!(output.contains("see Fixes above"));
     Ok(())
@@ -3401,7 +3401,7 @@ fn doctor_require_core_tools_fails_stale_cargo_allow_version() -> Result<()> {
     let fake_tools_written = write_fake_core_review_tools_with_versions(
         &fake_bin,
         &[
-            ("tokmd", "1.12.0"),
+            ("tokmd", "1.15.0"),
             ("cargo-allow", "0.1.7"),
             ("ripr", "0.10.0"),
             ("unsafe-review", "0.3.4"),
@@ -3449,7 +3449,7 @@ fn doctor_require_core_tools_fails_stale_actionlint_version() -> Result<()> {
     let fake_tools_written = write_fake_core_review_tools_with_versions(
         &fake_bin,
         &[
-            ("tokmd", "1.12.0"),
+            ("tokmd", "1.15.0"),
             ("cargo-allow", "0.1.8"),
             ("ripr", "0.10.0"),
             ("unsafe-review", "0.3.4"),
