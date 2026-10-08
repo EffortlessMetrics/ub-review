@@ -28,8 +28,8 @@ jobs:
           path = Path("src/main.rs")
           text = path.read_text(encoding="utf-8")
           count = text.count("1.12.0")
-          if count != 2:
-              raise SystemExit(f"{path}: expected exactly 2 stale doctor assertions, found {count}")
+          if count != 3:
+              raise SystemExit(f"{path}: expected exactly 3 stale doctor assertion values, found {count}")
           path.write_text(text.replace("1.12.0", "1.15.0"), encoding="utf-8")
           print(f"{path}: replaced {count} occurrence(s)")
           PY
