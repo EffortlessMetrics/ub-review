@@ -22,7 +22,10 @@ fn malformed_reason(text: &str) -> Result<String> {
         ToolGateDecisionState::Malformed(reason) => Ok(reason),
         ToolGateDecisionState::Missing => bail!("existing receipt was missing: {text}"),
         ToolGateDecisionState::Present(decision) => {
-            bail!("unadmitted receipt yielded count {}: {text}", decision.new_unsuppressed)
+            bail!(
+                "unadmitted receipt yielded count {}: {text}",
+                decision.new_unsuppressed
+            )
         }
     }
 }
@@ -34,8 +37,12 @@ fn supported_native_and_badge_versions_preserve_exact_counts() -> Result<()> {
     for count in [0_u64, 1, u64::MAX] {
         let receipts = [
             format!(r#"{{"new_unsuppressed":{count}}}"#),
-            format!(r#"{{"schema_version":"0.5","counts":{{"unsuppressed_exposure_gaps":{count}}}}}"#),
-            format!(r#"{{"schema_version":"0.6","counts":{{"unsuppressed_exposure_gaps":{count}}},"preview_skipped":[]}}"#),
+            format!(
+                r#"{{"schema_version":"0.5","counts":{{"unsuppressed_exposure_gaps":{count}}}}}"#
+            ),
+            format!(
+                r#"{{"schema_version":"0.6","counts":{{"unsuppressed_exposure_gaps":{count}}},"preview_skipped":[]}}"#
+            ),
         ];
         for text in receipts {
             let ToolGateDecisionState::Present(decision) = read_receipt(&text)? else {
@@ -50,7 +57,9 @@ fn supported_native_and_badge_versions_preserve_exact_counts() -> Result<()> {
 #[test]
 fn badge_unknown_versions_cannot_evaluate_familiar_zero_counts() -> Result<()> {
     for version in ["9.9", "0.7", "", "0.5.0", "0.6 "] {
-        let text = format!(r#"{{"schema_version":"{version}","counts":{{"unsuppressed_exposure_gaps":0}},"preview_skipped":[]}}"#);
+        let text = format!(
+            r#"{{"schema_version":"{version}","counts":{{"unsuppressed_exposure_gaps":0}},"preview_skipped":[]}}"#
+        );
         let reason = malformed_reason(&text)?;
         assert!(reason.contains("schema_version"), "{reason}");
         assert!(reason.contains(version), "{reason}");
@@ -113,8 +122,12 @@ fn malformed_counts_cannot_be_coerced_or_fall_through() -> Result<()> {
     for count in ["null", "-1", "0.5", "\"0\"", "true", "18446744073709551616"] {
         let receipts = [
             format!(r#"{{"new_unsuppressed":{count}}}"#),
-            format!(r#"{{"schema_version":"0.5","counts":{{"unsuppressed_exposure_gaps":{count}}}}}"#),
-            format!(r#"{{"new_unsuppressed":{count},"schema_version":"0.5","counts":{{"unsuppressed_exposure_gaps":0}}}}"#),
+            format!(
+                r#"{{"schema_version":"0.5","counts":{{"unsuppressed_exposure_gaps":{count}}}}}"#
+            ),
+            format!(
+                r#"{{"new_unsuppressed":{count},"schema_version":"0.5","counts":{{"unsuppressed_exposure_gaps":0}}}}"#
+            ),
         ];
         for text in receipts {
             let reason = malformed_reason(&text)?;
@@ -127,7 +140,11 @@ fn malformed_counts_cannot_be_coerced_or_fall_through() -> Result<()> {
 #[test]
 fn only_json_objects_with_complete_receipt_fields_are_admitted() -> Result<()> {
     let cases = [
-        "not json", "null", "[]", "[0]", "{}",
+        "not json",
+        "null",
+        "[]",
+        "[0]",
+        "{}",
         r#"{"schema_version":"0.5","counts":[0]}"#,
         r#"{"schema_version":"0.5","counts":{}}"#,
         r#"{"new_unsuppressed":0} trailing"#,
@@ -207,34 +224,61 @@ fn unknown_badge_is_missing_evidence_without_changing_requiredness() -> Result<(
         true,
     );
     let temp = tempfile::tempdir()?;
-    let sensor = plan.sensors.iter().find(|sensor| sensor.id == "ripr")
+    let sensor = plan
+        .sensors
+        .iter()
+        .find(|sensor| sensor.id == "ripr")
         .ok_or_else(|| anyhow!("ripr sensor missing"))?;
     write_sensor_status(
-        temp.path(), sensor,
+        temp.path(),
+        sensor,
         SensorStatusWrite {
-            status: "ok", argv: &["ripr".to_owned(), "check".to_owned()],
-            duration_ms: 12, reason: "completed", exit_code: Some(0), timed_out: false,
+            status: "ok",
+            argv: &["ripr".to_owned(), "check".to_owned()],
+            duration_ms: 12,
+            reason: "completed",
+            exit_code: Some(0),
+            timed_out: false,
         },
     )?;
     fs::write(
         temp.path().join("sensors/ripr/gate-decision.json"),
         r#"{"schema_version":"9.9","counts":{"unsuppressed_exposure_gaps":0}}"#,
     )?;
-    let tool = config.tools.get("ripr").ok_or_else(|| anyhow!("ripr tool missing"))?;
-    let policy = tool.gate.clone().ok_or_else(|| anyhow!("ripr gate policy missing"))?;
+    let tool = config
+        .tools
+        .get("ripr")
+        .ok_or_else(|| anyhow!("ripr tool missing"))?;
+    let policy = tool
+        .gate
+        .clone()
+        .ok_or_else(|| anyhow!("ripr gate policy missing"))?;
     assert_eq!(policy.max_new_unsuppressed, Some(0));
-    let status = super::tool_status_artifact(temp.path(), &config, config.selected_profile()?, &plan);
-    let mut entry = status.tools.into_iter().find(|entry| entry.id == "ripr")
+    let status =
+        super::tool_status_artifact(temp.path(), &config, config.selected_profile()?, &plan);
+    let mut entry = status
+        .tools
+        .into_iter()
+        .find(|entry| entry.id == "ripr")
         .ok_or_else(|| anyhow!("ripr tool status missing"))?;
     for required in [false, true] {
         entry.required = required;
-        let outcome = super::tool_gate_outcome_entry(temp.path(), tool, policy.clone(), Some(&entry));
+        let outcome =
+            super::tool_gate_outcome_entry(temp.path(), tool, policy.clone(), Some(&entry));
         assert_eq!(outcome.required, required);
         assert_eq!(outcome.outcome, "missing_evidence");
         assert!(!outcome.evaluated);
         assert_eq!(outcome.metrics.new_unsuppressed, None);
-        assert!(outcome.reason.contains("schema_version"), "{}", outcome.reason);
-        assert!(outcome.source_artifacts.contains(&"sensors/ripr/gate-decision.json".to_owned()));
+        assert!(
+            outcome.reason.contains("schema_version"),
+            "{}",
+            outcome.reason
+        );
+        assert!(
+            outcome
+                .source_artifacts
+                .contains(&"sensors/ripr/gate-decision.json".to_owned())
+        );
         let value = serde_json::to_value(&outcome)?;
         assert_eq!(value["outcome"], "missing_evidence");
         assert_eq!(value["required"], required);
