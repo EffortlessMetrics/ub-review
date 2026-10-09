@@ -95,3 +95,6 @@ pub(super) fn parse(text: &str) -> Result<u64, String> {
         ),
     }
 }
+
+#[cfg(test)]
+mod tests;
