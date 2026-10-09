@@ -54,12 +54,8 @@ fn known_partial_counts_preserve_violations_but_never_prove_pass() -> Result<()>
         .clone()
         .ok_or_else(|| anyhow!("ripr gate policy missing"))?;
     assert_eq!(policy.max_new_unsuppressed, Some(0));
-    let status = crate::tools::tool_status_artifact(
-        temp.path(),
-        &config,
-        config.selected_profile()?,
-        &plan,
-    );
+    let status =
+        crate::tools::tool_status_artifact(temp.path(), &config, config.selected_profile()?, &plan);
     let mut entry = status
         .tools
         .into_iter()

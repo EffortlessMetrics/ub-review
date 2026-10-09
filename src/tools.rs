@@ -221,7 +221,9 @@ pub(crate) fn tool_gate_outcome_entry(
     let gate_decision_path = format!("sensors/{}/gate-decision.json", tool.id);
     let gate_decision_state = read_tool_gate_decision(&out.join(&gate_decision_path));
     let gate_decision = match &gate_decision_state {
-        ToolGateDecisionState::Present(decision) => Some(decision),
+        ToolGateDecisionState::Present(decision) | ToolGateDecisionState::Incomplete(decision) => {
+            Some(decision)
+        }
         ToolGateDecisionState::Missing | ToolGateDecisionState::Malformed(_) => None,
     };
     let sensor_status = status
@@ -269,6 +271,25 @@ pub(crate) fn tool_gate_outcome_entry(
                     format!("`{}` gate-decision receipt is malformed: {reason}", tool.id),
                     None,
                 ),
+                (ToolGateDecisionState::Incomplete(decision), Some(maximum)) => {
+                    if decision.new_unsuppressed > maximum {
+                        let (outcome, evaluated, reason, count) =
+                            evaluate_tool_gate_threshold(tool, &policy, gate_decision);
+                        (
+                            outcome,
+                            evaluated,
+                            format!("{reason}; preview_skipped reports incomplete coverage"),
+                            count,
+                        )
+                    } else {
+                        (
+                            "missing_evidence".to_owned(),
+                            false,
+                            "RIPR badge preview_skipped reports incomplete coverage".to_owned(),
+                            None,
+                        )
+                    }
+                }
                 _ => evaluate_tool_gate_threshold(tool, &policy, gate_decision),
             }
         }
@@ -365,6 +386,7 @@ pub(crate) enum ToolGateDecisionState {
     Missing,
     Malformed(String),
     Present(ToolGateDecision),
+    Incomplete(ToolGateDecision),
 }
 
 pub(crate) fn read_tool_gate_decision(path: &Path) -> ToolGateDecisionState {
@@ -376,8 +398,11 @@ pub(crate) fn read_tool_gate_decision(path: &Path) -> ToolGateDecisionState {
         Err(err) => return ToolGateDecisionState::Malformed(err.to_string()),
     };
     match gate_receipt::parse(&text) {
-        Ok(new_unsuppressed) => {
+        Ok(gate_receipt::CountEvidence::Complete(new_unsuppressed)) => {
             ToolGateDecisionState::Present(ToolGateDecision { new_unsuppressed })
+        }
+        Ok(gate_receipt::CountEvidence::Incomplete(new_unsuppressed)) => {
+            ToolGateDecisionState::Incomplete(ToolGateDecision { new_unsuppressed })
         }
         Err(reason) => ToolGateDecisionState::Malformed(reason),
     }
