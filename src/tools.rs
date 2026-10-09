@@ -444,6 +444,10 @@ pub(crate) fn trigger_description(trigger: Trigger) -> &'static str {
 }
 
 #[cfg(test)]
+#[path = "tests/tool_gate_receipt_tests.rs"]
+mod gate_receipt_tests;
+
+#[cfg(test)]
 mod tests {
     use std::path::Path;
 
