@@ -27,6 +27,12 @@ fn malformed_reason(text: &str) -> Result<String> {
                 decision.new_unsuppressed
             )
         }
+        ToolGateDecisionState::Incomplete(decision) => {
+            bail!(
+                "malformed receipt yielded partial count {}: {text}",
+                decision.new_unsuppressed
+            )
+        }
     }
 }
 
@@ -157,14 +163,14 @@ fn only_json_objects_with_complete_receipt_fields_are_admitted() -> Result<()> {
 }
 
 #[test]
-fn badge_v06_requires_complete_preview_coverage() -> Result<()> {
+fn badge_v06_requires_typed_preview_coverage() -> Result<()> {
+    // Structurally valid nonempty lists are partial evidence, covered by the
+    // real threshold matrix in tools/gate_receipt/tests.rs, not malformed.
     let cases = [
         r#"{"schema_version":"0.6","counts":{"unsuppressed_exposure_gaps":0}}"#,
-        r#"{"schema_version":"0.6","counts":{"unsuppressed_exposure_gaps":0},"preview_skipped":["typescript"]}"#,
         r#"{"schema_version":"0.6","counts":{"unsuppressed_exposure_gaps":0},"preview_skipped":null}"#,
         r#"{"schema_version":"0.6","counts":{"unsuppressed_exposure_gaps":0},"preview_skipped":"perl"}"#,
         r#"{"schema_version":"0.6","counts":{"unsuppressed_exposure_gaps":0},"preview_skipped":[1]}"#,
-        r#"{"schema_version":"0.5","counts":{"unsuppressed_exposure_gaps":0},"preview_skipped":["perl"]}"#,
     ];
     for text in cases {
         let reason = malformed_reason(text)?;
