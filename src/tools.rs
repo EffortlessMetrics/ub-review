@@ -11,6 +11,8 @@ use serde::Deserialize;
 
 use crate::*;
 
+mod gate_receipt;
+
 pub(crate) fn write_resolved_tools_artifacts(
     out: &Path,
     config: &Config,
@@ -219,7 +221,9 @@ pub(crate) fn tool_gate_outcome_entry(
     let gate_decision_path = format!("sensors/{}/gate-decision.json", tool.id);
     let gate_decision_state = read_tool_gate_decision(&out.join(&gate_decision_path));
     let gate_decision = match &gate_decision_state {
-        ToolGateDecisionState::Present(decision) => Some(decision),
+        ToolGateDecisionState::Present(decision) | ToolGateDecisionState::Incomplete(decision) => {
+            Some(decision)
+        }
         ToolGateDecisionState::Missing | ToolGateDecisionState::Malformed(_) => None,
     };
     let sensor_status = status
@@ -267,6 +271,25 @@ pub(crate) fn tool_gate_outcome_entry(
                     format!("`{}` gate-decision receipt is malformed: {reason}", tool.id),
                     None,
                 ),
+                (ToolGateDecisionState::Incomplete(decision), Some(maximum)) => {
+                    if decision.new_unsuppressed > maximum {
+                        let (outcome, evaluated, reason, count) =
+                            evaluate_tool_gate_threshold(tool, &policy, gate_decision);
+                        (
+                            outcome,
+                            evaluated,
+                            format!("{reason}; preview_skipped reports incomplete coverage"),
+                            count,
+                        )
+                    } else {
+                        (
+                            "missing_evidence".to_owned(),
+                            false,
+                            "RIPR badge preview_skipped reports incomplete coverage".to_owned(),
+                            None,
+                        )
+                    }
+                }
                 _ => evaluate_tool_gate_threshold(tool, &policy, gate_decision),
             }
         }
@@ -359,24 +382,11 @@ pub(crate) struct ToolGateDecision {
     pub(crate) new_unsuppressed: u64,
 }
 
-/// ripr's `check --format badge-json` receipt, the shape the tool actually
-/// ships (#316). Only the structure the threshold needs is bound: the
-/// schema_version string floats across ripr releases (0.3 in 0.5.0, 0.5 in
-/// 0.8.0), so the badge contract keys on the counts block, not the version.
-#[derive(Clone, Debug, Deserialize)]
-pub(crate) struct RiprBadgeReceipt {
-    pub(crate) counts: RiprBadgeCounts,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub(crate) struct RiprBadgeCounts {
-    pub(crate) unsuppressed_exposure_gaps: u64,
-}
-
 pub(crate) enum ToolGateDecisionState {
     Missing,
     Malformed(String),
     Present(ToolGateDecision),
+    Incomplete(ToolGateDecision),
 }
 
 pub(crate) fn read_tool_gate_decision(path: &Path) -> ToolGateDecisionState {
@@ -387,18 +397,14 @@ pub(crate) fn read_tool_gate_decision(path: &Path) -> ToolGateDecisionState {
         Ok(text) => text,
         Err(err) => return ToolGateDecisionState::Malformed(err.to_string()),
     };
-    // Native shape first ({"new_unsuppressed": N}), then ripr's badge-json
-    // (the receipt the tool actually ships, copied verbatim from sensor
-    // stdout). Anything else stays malformed -> missing_evidence; a receipt
-    // that parses as neither must never read as clean.
-    match serde_json::from_str::<ToolGateDecision>(&text) {
-        Ok(decision) => ToolGateDecisionState::Present(decision),
-        Err(native_err) => match serde_json::from_str::<RiprBadgeReceipt>(&text) {
-            Ok(badge) => ToolGateDecisionState::Present(ToolGateDecision {
-                new_unsuppressed: badge.counts.unsuppressed_exposure_gaps,
-            }),
-            Err(_) => ToolGateDecisionState::Malformed(native_err.to_string()),
-        },
+    match gate_receipt::parse(&text) {
+        Ok(gate_receipt::CountEvidence::Complete(new_unsuppressed)) => {
+            ToolGateDecisionState::Present(ToolGateDecision { new_unsuppressed })
+        }
+        Ok(gate_receipt::CountEvidence::Incomplete(new_unsuppressed)) => {
+            ToolGateDecisionState::Incomplete(ToolGateDecision { new_unsuppressed })
+        }
+        Err(reason) => ToolGateDecisionState::Malformed(reason),
     }
 }
 
@@ -442,6 +448,10 @@ pub(crate) fn trigger_description(trigger: Trigger) -> &'static str {
         Trigger::Never => "disabled unless explicitly selected",
     }
 }
+
+#[cfg(test)]
+#[path = "tests/tool_gate_receipt_tests.rs"]
+mod gate_receipt_tests;
 
 #[cfg(test)]
 mod tests {
@@ -562,10 +572,9 @@ mod tests {
 
     #[test]
     fn tool_gate_outcome_evaluates_ripr_badge_json_receipt() -> Result<()> {
-        // The receipt ripr actually ships (#316): `check --format badge-json`
-        // copied verbatim from sensor stdout. Shape captured from ripr 0.8.0;
-        // the parser keys on the counts block, not the floating
-        // schema_version.
+        // Historical RIPR 0.8.0 badge-json fixture (#316). Schema 0.5 remains
+        // an explicitly supported compatibility contract; unknown versions
+        // must not inherit its count meaning from a familiar field shape.
         let mut config: Config = toml::from_str(include_str!("../.ub-review.toml"))?;
         config.merge_defaults();
         let plan = super::build_plan(
