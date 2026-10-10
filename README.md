@@ -88,10 +88,12 @@ See:
 
 ## Inspect before adopting
 
-Run these commands from the repository root with the UB Review CLI installed.
-`ub-review audit-ci` is read-only and can be used before choosing a setup path.
-The generators below write local proposals; none changes branch protection or
-removes existing CI.
+Run these commands from a GitHub repository checkout with the UB Review CLI
+installed and `origin` set to that repository. `ub-review audit-ci` inventories
+CI without changing workflows or protection; it writes local audit receipts.
+Without GitHub authentication its history and required-check observations remain
+explicitly unavailable. The generators below write local proposals; none changes
+branch protection or removes existing CI.
 
 ### Generate a new advisory setup
 

@@ -22,6 +22,7 @@ struct Fixture {
 }
 
 impl Fixture {
+    /// Create a GitHub-shaped fixture with inert release discovery.
     fn new() -> Result<Self> {
         let temp = tempfile::tempdir()?;
         let root = temp.path().join("repository with spaces");
@@ -51,9 +52,19 @@ impl Fixture {
         git.arg("init").arg("--quiet").arg(&fixture.root);
         let (status, output) = fixture.execute(git)?;
         ensure!(status.success(), "fixture git init: {output}");
+        let mut remote = Command::new("git");
+        remote.args([
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/onboarding-fixture/example.git",
+        ]);
+        let (status, output) = fixture.execute(remote)?;
+        ensure!(status.success(), "fixture origin setup: {output}");
         Ok(fixture)
     }
 
+    /// Run a bounded child without inherited credentials or shell parsing.
     fn execute(&self, mut command: Command) -> Result<(ExitStatus, String)> {
         let stdout = tempfile::NamedTempFile::new_in(self.temp.path())?;
         let stderr = tempfile::NamedTempFile::new_in(self.temp.path())?;
@@ -85,12 +96,14 @@ impl Fixture {
         Ok((status, output))
     }
 
+    /// Select Cargo's built executable, never an ambient installed binary.
     fn cli(&self, args: &[&str]) -> Result<(ExitStatus, String)> {
         let mut command = Command::new(env!("CARGO_BIN_EXE_ub-review"));
         command.args(args);
         self.execute(command)
     }
 
+    /// Check independent sentinel bytes after generation and each refusal.
     fn original_files_are_unchanged(&self) -> Result<()> {
         ensure!(
             fs::read_to_string(self.root.join(".github/workflows/ci.yml"))? == ORIGINAL_CI,
@@ -104,6 +117,7 @@ impl Fixture {
     }
 }
 
+/// Extract only the reviewed executable vocabulary from the first setup block.
 fn first_run_commands(readme: &str) -> Result<Vec<Vec<&str>>> {
     let (_, section) = readme
         .split_once("## Inspect before adopting\n")
@@ -137,6 +151,7 @@ fn first_run_commands(readme: &str) -> Result<Vec<Vec<&str>>> {
         .collect()
 }
 
+/// The documented generated path must work and refuse destructive repetition.
 #[test]
 fn readme_first_run_creates_advisory_setup_without_conflicting_commands() -> Result<()> {
     let readme = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("README.md"))?;
@@ -186,6 +201,7 @@ fn readme_first_run_creates_advisory_setup_without_conflicting_commands() -> Res
     Ok(())
 }
 
+/// Manual init remains useful without authorizing enable to overwrite it.
 #[test]
 fn manual_init_is_an_alternative_and_enable_preserves_its_config() -> Result<()> {
     let fixture = Fixture::new()?;
