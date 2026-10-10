@@ -3442,13 +3442,18 @@ pub(crate) fn cmd_setup_ci(args: SetupCiArgs) -> Result<()> {
             );
         }
     }
+    let preview_action_sha = if args.print_pr && !accepts.is_empty() {
+        valid_setup_ci_action_sha(&args)?
+    } else {
+        None
+    };
     fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
     let plan_path = dir.join("migration-plan.md");
     fs::write(&plan_path, &plan).with_context(|| format!("write {}", plan_path.display()))?;
     print!("{plan}");
     eprintln!("wrote {}", plan_path.display());
     if args.print_pr && !accepts.is_empty() {
-        if let Some(action_sha) = valid_setup_ci_action_sha(&args)? {
+        if let Some(action_sha) = preview_action_sha {
             let files = setup_ci_generated_files(
                 &plan,
                 &generated,
