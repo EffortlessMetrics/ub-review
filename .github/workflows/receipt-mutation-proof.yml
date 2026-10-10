@@ -43,7 +43,7 @@ jobs:
           test "$(df --output=avail -B1 "$RUNNER_TEMP" | tail -1)" -gt 8589934592
           export SUBJECT_ROOT="$RUNNER_TEMP/subject"
           export PACKET_ROOT="$RUNNER_TEMP/mutation-packet"
-          git worktree add --detach "$SUBJECT_ROOT" 9fa5ac2353194209b26d89672fb7c66bf4810a93
+          git worktree add --detach "$SUBJECT_ROOT" 99a60cf5e3dab78fa84a94af108359c4ff143c33
           python scripts/receipt-mutation-proof.py
       - name: Seal evidence including failures
         if: always()

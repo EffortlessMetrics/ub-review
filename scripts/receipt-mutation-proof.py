@@ -10,8 +10,9 @@ import signal
 import subprocess
 import time
 
-HEAD = '9fa5ac2353194209b26d89672fb7c66bf4810a93'
-TREE = '642f05dd2b868076183211678d25440b9170e6c2'
+HEAD = '99a60cf5e3dab78fa84a94af108359c4ff143c33'
+TREE = '3c117b694142166549c93aceed752779152a98b1'
+EXPECTED_TESTS = 17
 P = 'src/tools/gate_receipt.rs'
 T = 'src/tools.rs'
 # Every replacement is performed once on the original bytes, never cumulatively.
@@ -45,7 +46,7 @@ def classify(code, text, bounded=True):
     if not bounded or len(summary) != 1 or 'could not compile' in text:
         return 'not_proven', failed
     state, passed, failures, ignored, measured, _ = summary[0]
-    if int(passed) + int(failures) != 16 or int(ignored) or int(measured):
+    if int(passed) + int(failures) != EXPECTED_TESTS or int(ignored) or int(measured):
         return 'not_proven', failed
     if code == 0 and state == 'ok' and int(failures) == 0:
         return 'survived', failed
@@ -54,13 +55,14 @@ def classify(code, text, bounded=True):
     return 'not_proven', failed
 
 def self_test():
-    good = 'test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 1114 filtered out;\n'
-    bad = 'test tools::x ... FAILED\ntest result: FAILED. 15 passed; 1 failed; 0 ignored; 0 measured; 1114 filtered out;\n'
+    good = 'test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 1114 filtered out;\n'
+    bad = 'test tools::x ... FAILED\ntest result: FAILED. 16 passed; 1 failed; 0 ignored; 0 measured; 1114 filtered out;\n'
     assert classify(0, good)[0] == 'survived'
     assert classify(101, bad)[0] == 'killed'
     for code, text, bounded in [(101, 'could not compile', True), (101, bad, False),
-        (0, good.replace('16 passed','0 passed'), True), (101, bad.replace('tools::x',''), True),
-        (101, 'could not compile\n'+bad, True), (0, bad, True)]:
+        (0, good.replace('17 passed','0 passed'), True), (101, bad.replace('tools::x',''), True),
+        (101, 'could not compile\n'+bad, True), (0, bad, True),
+        (0, good.replace('17 passed','16 passed'), True)]:
         assert classify(code, text, bounded)[0] == 'not_proven'
 
 def run(root, packet, name, timeout):
@@ -124,7 +126,7 @@ def main():
     shard = int(os.environ['SHARD'])
     selected = [m for i,m in enumerate(MUTATIONS) if i%4==shard]
     receipt = dict(schema='ub-review.targeted_mutation.v1', authority='evidence-only',
-        subject_head=HEAD, subject_tree=TREE, shard=shard,
+        subject_head=HEAD, subject_tree=TREE, shard=shard, expected_tests=EXPECTED_TESTS,
         harness_commit=os.environ['HARNESS_SHA'], run_id=os.environ['GITHUB_RUN_ID'],
         attempt=os.environ['GITHUB_RUN_ATTEMPT'], test_sha256=tests, rows=[])
     def save():
@@ -132,7 +134,7 @@ def main():
     try:
         receipt['baseline'] = run(root,packet,'baseline',900)
         save()
-        assert receipt['baseline']['status']=='survived', 'initial control must pass all 16 tests'
+        assert receipt['baseline']['status']=='survived', 'initial control must pass all 17 tests'
         for name,p,old,new in selected:
             changed = originals[p].replace(old,new,1)
             (root/p).write_text(changed)
