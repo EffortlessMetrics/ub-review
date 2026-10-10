@@ -4,17 +4,17 @@
 //! (`conclusion`) that answered three different questions at once: did we
 //! investigate, did the reviewer receive the result, and does the check go
 //! red. A run where every instrument failed and no model lane was usable
-//! therefore recorded `conclusion: "pass"` — the gate said "clean" about a
+//! therefore recorded `conclusion: "pass"` - the gate said "clean" about a
 //! review that never happened.
 //!
 //! This module derives three independent results next to the legacy
 //! `conclusion` (whose meaning and enforcement behavior are unchanged):
 //!
-//! - `analysis_result`: `clean | findings | limited | not_proven` — what the
+//! - `analysis_result`: `clean | findings | limited | not_proven` - what the
 //!   investigation established;
-//! - `publication_result`: `posted | not_needed | failed | not_proven` — whether
+//! - `publication_result`: `posted | not_needed | failed | not_proven` - whether
 //!   reviewer-facing value reached the PR surface;
-//! - `gate_result`: `pass | finding | not_proven` — the truthful check verdict.
+//! - `gate_result`: `pass | finding | not_proven` - the truthful check verdict.
 //!
 //! Everything here is a pure function of receipts already in the packet, so
 //! the derivation is unit-testable and model output never feeds it.
@@ -82,6 +82,7 @@ pub(crate) struct GateTruth {
     pub(crate) analysis_result: String,
     pub(crate) publication_result: String,
     pub(crate) gate_result: String,
+    pub(crate) code_gate_result: String,
     pub(crate) sensor_coverage: GateSensorCoverage,
     pub(crate) model_coverage: GateModelCoverage,
     /// Every reason some part of the run was not proven, each prefixed with a
@@ -107,8 +108,8 @@ pub(crate) struct GateTruthInput<'a> {
     /// Retained planner-required portfolio accounting (#4271). `None` when
     /// the run had no readable portfolio artifact; unproven required
     /// portfolio tasks push a `required-planner-proof:` reason. This moves
-    /// only the separated results — never `conclusion`, never a blocking
-    /// reason — so advisory enforcement posture is unchanged.
+    /// only the separated results - never `conclusion`, never a blocking
+    /// reason - so advisory enforcement posture is unchanged.
     pub(crate) planner_required_proofs: Option<&'a PlannerRequiredProofAccounting>,
     /// The legacy verdict, whose meaning is unchanged: `pass | fail |
     /// inconclusive`. `gate_result` corrects it for truth without moving it.
@@ -168,8 +169,8 @@ pub(crate) fn build_sensor_coverage(
     coverage
 }
 
-/// Required sensors that ran and demonstrated a failure. These are findings —
-/// `gate.rs` raises them as `sensor-finding` reasons under intelligent-ci — and
+/// Required sensors that ran and demonstrated a failure. These are findings -
+/// `gate.rs` raises them as `sensor-finding` reasons under intelligent-ci - and
 /// they stay findings in the reported result even where repo policy left them
 /// advisory and raised no gate reason.
 pub(crate) fn required_failed_sensor_count(plan: &Plan, issues: &[SensorEvidenceIssue]) -> usize {
@@ -236,7 +237,7 @@ pub(crate) fn build_model_coverage(
 /// - material findings that never reached the PR surface yield `not_proven`,
 ///   because a finding trapped in artifacts proves nothing to the reviewer;
 /// - optional-instrument absence is visible (`limited`) but does not by itself
-///   poison an otherwise sufficient run — a wholesale instrument blackout,
+///   poison an otherwise sufficient run - a wholesale instrument blackout,
 ///   where nothing reported at all, does.
 pub(crate) fn build_gate_truth(input: GateTruthInput<'_>) -> GateTruth {
     let sensor_coverage = build_sensor_coverage(input.plan, input.sensor_issues);
@@ -252,7 +253,7 @@ pub(crate) fn build_gate_truth(input: GateTruthInput<'_>) -> GateTruth {
             input.terminal_state.proof_receipts
         ));
     }
-    // A required sensor that RAN and demonstrated a failure produced evidence —
+    // A required sensor that RAN and demonstrated a failure produced evidence -
     // it is a finding, and `gate.rs` already raises it as one. Only a required
     // sensor that could not report at all leaves a requirement unproven.
     let required_unreported = required_unreported_sensor_count(input.plan, input.sensor_issues);
@@ -341,10 +342,12 @@ pub(crate) fn build_gate_truth(input: GateTruthInput<'_>) -> GateTruth {
     };
 
     let publication_result = if input.terminal_state.review_payload_status == "prepared" {
-        // `run` only prepares the grouped review; `post` submits it and fails
-        // the job on a submission error, so a prepared payload is the strongest
-        // publication claim this artifact can make.
-        "posted"
+        // Preparation has no GitHub confirmation. The later post transaction
+        // finalizes publication independently of deterministic enforcement.
+        not_proven_reasons.push(
+            "publication: grouped review is prepared but delivery is not confirmed".to_owned(),
+        );
+        "not_proven"
     } else if input.terminal_state.status == "failed-to-review" {
         not_proven_reasons.push(
             "publication: the run never reached a reviewable state, so whether a PR review was \
@@ -366,14 +369,15 @@ pub(crate) fn build_gate_truth(input: GateTruthInput<'_>) -> GateTruth {
     };
 
     let publication_unproven = matches!(publication_result, "failed" | "not_proven");
-    let gate_result = if publication_unproven {
-        "not_proven"
-    } else if input.conclusion == "fail" {
+    let code_gate_result = if input.conclusion == "fail" {
         "finding"
     } else if analysis_result == "not_proven" {
         "not_proven"
     } else if input.conclusion == "inconclusive" {
-        if not_proven_reasons.is_empty() {
+        if not_proven_reasons
+            .iter()
+            .all(|reason| reason.starts_with("publication:"))
+        {
             not_proven_reasons.push(
                 "gate-conclusion: the recorded conclusion is `inconclusive` (required evidence \
                  was unavailable)"
@@ -388,6 +392,11 @@ pub(crate) fn build_gate_truth(input: GateTruthInput<'_>) -> GateTruth {
     } else {
         "pass"
     };
+    let gate_result = if publication_unproven {
+        "not_proven"
+    } else {
+        code_gate_result
+    };
 
     if gate_result == "not_proven" && not_proven_reasons.is_empty() {
         not_proven_reasons.push(format!(
@@ -400,6 +409,7 @@ pub(crate) fn build_gate_truth(input: GateTruthInput<'_>) -> GateTruth {
         analysis_result: analysis_result.to_owned(),
         publication_result: publication_result.to_owned(),
         gate_result: gate_result.to_owned(),
+        code_gate_result: code_gate_result.to_owned(),
         sensor_coverage,
         model_coverage,
         not_proven_reasons,
@@ -635,7 +645,7 @@ mod tests {
     }
 
     #[test]
-    fn prepared_payload_reports_posted_publication() {
+    fn prepared_payload_never_reports_confirmed_publication() {
         let plan = test_plan(vec![planned_sensor("tokmd", true)]);
         let mut terminal_state = test_terminal_state("needs-reviewer-attention");
         terminal_state.model_lanes = 2;
@@ -647,9 +657,33 @@ mod tests {
         let truth = truth(&plan, &terminal_state, &[], &[], &[], "pass");
 
         assert_eq!(truth.analysis_result, "findings");
-        assert_eq!(truth.publication_result, "posted");
-        assert_eq!(truth.gate_result, "pass");
-        assert!(truth.not_proven_reasons.is_empty());
+        assert_eq!(truth.publication_result, "not_proven");
+        assert_eq!(truth.gate_result, "not_proven");
+        assert_eq!(truth.code_gate_result, "pass");
+        assert_eq!(
+            truth.not_proven_reasons,
+            ["publication: grouped review is prepared but delivery is not confirmed"]
+        );
+    }
+
+    #[test]
+    fn prepared_inconclusive_retains_an_independent_code_reason() {
+        let plan = test_plan(vec![planned_sensor("tokmd", true)]);
+        let mut terminal_state = test_terminal_state("needs-reviewer-attention");
+        terminal_state.model_lanes = 2;
+        terminal_state.usable_model_lanes = 2;
+        terminal_state.inline_comments = 2;
+        terminal_state.reviewer_value_present = true;
+        terminal_state.review_payload_status = "prepared".to_owned();
+        let truth = truth(&plan, &terminal_state, &[], &[], &[], "inconclusive");
+        assert_eq!(truth.code_gate_result, "not_proven");
+        assert_eq!(
+            truth.not_proven_reasons,
+            [
+                "publication: grouped review is prepared but delivery is not confirmed",
+                "gate-conclusion: the recorded conclusion is `inconclusive` (required evidence was unavailable)",
+            ]
+        );
     }
 
     /// An optional sensor loss is visible without poisoning a run that still

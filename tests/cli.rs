@@ -5995,7 +5995,15 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
     assert_eq!(post_result["payload_written"], true);
     assert_eq!(post_result["post_stdout_written"], true);
     assert_eq!(post_result["post_stderr_written"], true);
-    assert_eq!(post_result["response"]["id"], 988);
+    assert_eq!(post_result["response"]["id"], 987);
+    assert_eq!(
+        post_result["response"]["delivery_confirmation"]["kind"],
+        "submitted_review"
+    );
+    assert_eq!(
+        post_result["response"]["delivery_confirmation"]["exact_head_sha"],
+        "test-head"
+    );
     assert_eq!(post_result["response"]["state"], "COMMENTED");
 
     for path in [

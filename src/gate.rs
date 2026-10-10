@@ -284,6 +284,9 @@ pub(crate) struct GateOutcome {
     /// masking this separation removes; enforcement still follows
     /// `conclusion`, so an advisory workflow stays non-blocking.
     pub(crate) gate_result: String,
+    /// The same receipt-derived result before publication uncertainty. Post
+    /// finalization uses it without recomputing or changing code enforcement.
+    pub(crate) code_gate_result: String,
     pub(crate) reasons: Vec<GateReason>,
     pub(crate) required_proof: GateRequiredProofCounts,
     pub(crate) tool_gates: GateToolGateCounts,
@@ -860,6 +863,7 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
         analysis_result: truth.analysis_result,
         publication_result: truth.publication_result,
         gate_result: truth.gate_result,
+        code_gate_result: truth.code_gate_result,
         reasons,
         required_proof,
         planner_required_proofs,

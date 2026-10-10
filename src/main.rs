@@ -4691,13 +4691,11 @@ fn cmd_summary(args: SummaryArgs) -> Result<()> {
 
 fn cmd_post(args: PostArgs) -> Result<()> {
     fs::create_dir_all(&args.out)?;
+    let publication = begin_post_publication(&args)?;
     if !args.review_json.exists()
         && let Some(skip) = read_github_review_skip_receipt(&args.review_json)
     {
-        fs::write(
-            args.out.join("post-result.json"),
-            serde_json::to_vec_pretty(&skip)?,
-        )?;
+        write_post_receipt_and_finalize(&args, publication.as_ref(), "post-result.json", &skip)?;
         println!(
             "skipped GitHub review post; wrote {}/post-result.json",
             args.out.display()
@@ -4707,18 +4705,22 @@ fn cmd_post(args: PostArgs) -> Result<()> {
     }
     let post_outcome = match post_github_review(&args) {
         Ok(value) => {
-            fs::write(
-                args.out.join("post-result.json"),
-                serde_json::to_vec_pretty(&value)?,
+            write_post_receipt_and_finalize(
+                &args,
+                publication.as_ref(),
+                "post-result.json",
+                &value,
             )?;
             println!("wrote {}/post-result.json", args.out.display());
             Ok(())
         }
         Err(err) => {
             let value = build_post_error_receipt(&args, &err);
-            fs::write(
-                args.out.join("post-error.json"),
-                serde_json::to_vec_pretty(&value)?,
+            write_post_receipt_and_finalize(
+                &args,
+                publication.as_ref(),
+                "post-error.json",
+                &value,
             )?;
             if args.fail_on_post_error {
                 Err(err)
@@ -19665,6 +19667,7 @@ index 1111111..2222222 100644
             analysis_result: "clean".to_owned(),
             publication_result: "not_needed".to_owned(),
             gate_result: "pass".to_owned(),
+            code_gate_result: "pass".to_owned(),
             reasons: Vec::new(),
             required_proof: super::GateRequiredProofCounts::default(),
             tool_gates: super::GateToolGateCounts::default(),
