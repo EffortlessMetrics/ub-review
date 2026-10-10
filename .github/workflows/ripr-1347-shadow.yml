@@ -31,6 +31,8 @@ jobs:
       DIFF_SHA256: 77e910fee4df048ea5ab073da1641a01cb77217d5cd23625d5e5d9ad72473206
       CANDIDATE_SHA: 380f3c0ed69d76fb0ff3c90712d855a38d151a9d
       CARGO_BUILD_JOBS: 2
+      # #813 observer-only renderer envelope; not an analysis or gate-policy override.
+      RIPR_CHECK_FINDINGS_BYTES: 8388608
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -67,7 +69,8 @@ jobs:
           retained += [str(p.relative_to(root)) for p in sorted((root / '.ripr').rglob('*')) if p.is_file()]
           hashes = {p: hashlib.sha256((root / p).read_bytes()).hexdigest() for p in retained}
           receipt = {k: e[k] for k in ['SUBJECT_BASE', 'SUBJECT_HEAD', 'SUBJECT_TREE',
-                                      'DIFF_SHA256', 'CANDIDATE_SHA', 'SIDE', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT']}
+                                      'DIFF_SHA256', 'CANDIDATE_SHA', 'SIDE', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT',
+                                      'RIPR_CHECK_FINDINGS_BYTES']}
           receipt.update(schema='ub-review.ripr_frozen_replay.v1', authority='shadow-only',
                          tracked_inputs=hashes, consumer_source_changed=False,
                          harness_commit=subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip())
@@ -112,6 +115,7 @@ jobs:
               resource.setrlimit(resource.RLIMIT_FSIZE, (file_limit, file_limit))
           env = {k: e[k] for k in ('PATH', 'HOME', 'CARGO_HOME') if k in e}
           env['RUSTUP_HOME'] = e['HOME'] + '/.rustup'
+          env['RIPR_CHECK_FINDINGS_BYTES'] = e['RIPR_CHECK_FINDINGS_BYTES']
           invocations = []
           for name, fmt in [('raw-1','json'), ('raw-2','json'), ('badge','badge-json')]:
               argv = [str(binary), 'check', '--root', '.', '--diff', str(packet/'subject.diff'), '--mode', 'ready', '--format', fmt]
@@ -132,7 +136,8 @@ jobs:
                           code = process.wait(timeout=30)
               row = dict(name=name, argv=argv, cwd=str(root), exit_code=code,
                          timed_out=timed_out, duration_seconds=round(time.monotonic()-started,3),
-                         per_stream_kernel_limit_bytes=file_limit)
+                         per_stream_kernel_limit_bytes=file_limit,
+                         diagnostic_findings_byte_budget=int(e['RIPR_CHECK_FINDINGS_BYTES']))
               for suffix in ('stdout','stderr'):
                   path = raw/(name+'.'+suffix)
                   row[suffix+'_bytes'] = path.stat().st_size
