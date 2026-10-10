@@ -109,8 +109,12 @@ fn first_run_commands(readme: &str) -> Result<Vec<Vec<&str>>> {
         .split_once("## Inspect before adopting\n")
         .context("README onboarding section missing")?;
     let section = section.split("\n## ").next().context("empty section")?;
-    let (_, block) = section.split_once("```bash\n").context("command block missing")?;
-    let (block, _) = block.split_once("\n```").context("unclosed command block")?;
+    let (_, block) = section
+        .split_once("```bash\n")
+        .context("command block missing")?;
+    let (block, _) = block
+        .split_once("\n```")
+        .context("unclosed command block")?;
     block
         .lines()
         .filter(|line| !line.trim().is_empty())
@@ -141,12 +145,21 @@ fn readme_first_run_creates_advisory_setup_without_conflicting_commands() -> Res
     let fixture = Fixture::new()?;
     for args in &commands {
         let (status, output) = fixture.cli(args)?;
-        ensure!(status.success(), "documented command {args:?} failed: {output}");
+        ensure!(
+            status.success(),
+            "documented command {args:?} failed: {output}"
+        );
     }
     let workflow_path = fixture.root.join(".github/workflows/ub-review.yml");
     let workflow = fs::read_to_string(&workflow_path)?;
-    ensure!(workflow.contains("review-mode: advisory\n"), "first run must be advisory");
-    ensure!(workflow.contains("install-mode: release\n"), "release-only fixture was not selected");
+    ensure!(
+        workflow.contains("review-mode: advisory\n"),
+        "first run must be advisory"
+    );
+    ensure!(
+        workflow.contains("install-mode: release\n"),
+        "release-only fixture was not selected"
+    );
     ensure!(workflow.contains("EffortlessMetrics/ub-review@v0.1.1\n"));
     ensure!(!workflow.contains("pull_request_target"));
     let config_path = fixture.root.join(".ub-review.toml");
@@ -162,7 +175,10 @@ fn readme_first_run_creates_advisory_setup_without_conflicting_commands() -> Res
     let first = commands.first().context("first command missing")?;
     for _ in 0..2 {
         let (status, output) = fixture.cli(first)?;
-        ensure!(!status.success() && output.contains("already exists"), "{output}");
+        ensure!(
+            !status.success() && output.contains("already exists"),
+            "{output}"
+        );
         ensure!(fs::read(&config_path)? == config_bytes);
         ensure!(fs::read_to_string(&workflow_path)? == workflow);
         fixture.original_files_are_unchanged()?;
@@ -179,11 +195,24 @@ fn manual_init_is_an_alternative_and_enable_preserves_its_config() -> Result<()>
     let config = fs::read(&config_path)?;
     for _ in 0..2 {
         let (status, output) = fixture.cli(&[
-            "enable", "--inspect", "--mode", "advisory", "--model", "minimax",
+            "enable",
+            "--inspect",
+            "--mode",
+            "advisory",
+            "--model",
+            "minimax",
         ])?;
-        ensure!(!status.success() && output.contains("already exists"), "{output}");
+        ensure!(
+            !status.success() && output.contains("already exists"),
+            "{output}"
+        );
         ensure!(fs::read(&config_path)? == config);
-        ensure!(!fixture.root.join(".github/workflows/ub-review.yml").exists());
+        ensure!(
+            !fixture
+                .root
+                .join(".github/workflows/ub-review.yml")
+                .exists()
+        );
         ensure!(!fixture.temp.path().join("curl-called").exists());
         fixture.original_files_are_unchanged()?;
     }
