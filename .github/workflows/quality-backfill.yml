@@ -41,6 +41,27 @@ jobs:
       - name: Build ub-review
         run: cargo build --locked --bin ub-review
 
+      - name: Collect bounded GitHub bootstrap
+        id: github_bootstrap
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: >-
+          python3 scripts/quality-bootstrap.py
+          --out "$UB_REVIEW_QUALITY_INPUT_DIR/github"
+          --diagnostic target/ub-review-quality-diagnostics/bootstrap.json
+
+      # Separate failure metadata is never a successful calibration artifact.
+      # Owner release/ci, #1345; non-rust-github-actions/non-rust-release-scripts.
+      - name: Retain unavailable GitHub bootstrap receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: failure() && steps.github_bootstrap.outcome == 'failure'
+        with:
+          name: ub-review-quality-bootstrap-unavailable
+          path: target/ub-review-quality-diagnostics/bootstrap.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Collect GitHub receipts
         shell: bash
         env:
@@ -49,30 +70,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          rm -rf -- "$UB_REVIEW_QUALITY_INPUT_DIR"
-          mkdir -p "$UB_REVIEW_QUALITY_INPUT_DIR/github"
-          gh run list \
-            --workflow ub-review-gate.yml \
-            --event pull_request \
-            --limit 100 \
-            --json databaseId,headSha,conclusion,createdAt,displayTitle,url \
-            > "$UB_REVIEW_QUALITY_INPUT_DIR/github/actions-runs.json"
-          gh pr list \
-            --state all \
-            --limit 100 \
-            --json number,title,state,isDraft,mergedAt,reviewDecision,headRefOid,comments,reviews,url \
-            > "$UB_REVIEW_QUALITY_INPUT_DIR/github/pr-state.json"
-          python - <<'PY' > "$UB_REVIEW_QUALITY_INPUT_DIR/github/pr-numbers.txt"
-          import json
-          import os
-          from pathlib import Path
-
-          source = Path(os.environ["UB_REVIEW_QUALITY_INPUT_DIR"]) / "github"
-          for pull in json.loads((source / "pr-state.json").read_text()):
-              number = pull.get("number")
-              if isinstance(number, int):
-                  print(number)
-          PY
+          # A successful bootstrap preserves prior GitHub data separately,
+          # but each backfill must collect fresh artifact/trend inputs.
+          rm -rf -- "$UB_REVIEW_QUALITY_INPUT_DIR/runs" "$UB_REVIEW_QUALITY_INPUT_DIR/previous"
           target/debug/ub-review quality-github-collect \
             --repo "$GH_REPO" \
             --source-dir "$UB_REVIEW_QUALITY_INPUT_DIR/github" \
