@@ -1,0 +1,187 @@
+name: ripr/1347-frozen-comparison
+
+# Owner: release/ci, #813; non-rust-github-actions in policy/allow.toml.
+# Disposable observer only. Never merge or promote its development analyzer.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+permissions:
+  contents: read
+concurrency:
+  group: ripr-1347-shadow-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  replay:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == 'fix/1333-versioned-gate-receipts' &&
+      github.event.pull_request.head.ref == 'evidence/1347-ripr-380f3c0e'
+    name: frozen replay / ${{ matrix.analyzer }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        analyzer: [stable, candidate]
+    env:
+      SIDE: ${{ matrix.analyzer }}
+      SUBJECT_BASE: 266260b454dbb7efd383bf1366162a204c4bdf72
+      SUBJECT_HEAD: 9fa5ac2353194209b26d89672fb7c66bf4810a93
+      SUBJECT_TREE: 642f05dd2b868076183211678d25440b9170e6c2
+      DIFF_SHA256: 77e910fee4df048ea5ab073da1641a01cb77217d5cd23625d5e5d9ad72473206
+      CANDIDATE_SHA: 380f3c0ed69d76fb0ff3c90712d855a38d151a9d
+      CARGO_BUILD_JOBS: 2
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Freeze exact source and original gate diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          subject="$RUNNER_TEMP/subject"
+          packet="$RUNNER_TEMP/replay-packet"
+          mkdir "$packet"
+          git worktree add --detach "$subject" "$SUBJECT_HEAD"
+          test "$(git rev-parse "$SUBJECT_HEAD^{tree}")" = "$SUBJECT_TREE"
+          test "$(git rev-parse refs/remotes/origin/fix/1333-versioned-gate-receipts)" = "$SUBJECT_HEAD"
+          git -c core.abbrev=7 diff --no-ext-diff --no-color --unified=3 \
+            "$SUBJECT_BASE" "$SUBJECT_HEAD" -- > "$packet/subject.diff"
+          echo "$DIFF_SHA256  $packet/subject.diff" | sha256sum --check
+          test "$(stat -c %s "$packet/subject.diff")" -eq 25403
+          export SUBJECT_ROOT="$subject" PACKET_ROOT="$packet"
+          printf 'SUBJECT_ROOT=%s\nPACKET_ROOT=%s\n' "$subject" "$packet" >> "$GITHUB_ENV"
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          e = os.environ
+          root = pathlib.Path(e['SUBJECT_ROOT'])
+          def git(*args):
+              return subprocess.check_output(['git', '-C', str(root), *args], text=True, timeout=30).strip()
+          paths = git('diff', '--name-only', e['SUBJECT_BASE'], e['SUBJECT_HEAD']).splitlines()
+          assert paths == ['src/tests/tool_gate_receipt_tests.rs', 'src/tools.rs',
+                           'src/tools/gate_receipt.rs', 'src/tools/gate_receipt/tests.rs']
+          assert not git('status', '--porcelain', '--untracked-files=no')
+          retained = paths + ['Cargo.lock', '.ub-review.toml', 'policy/allow.toml']
+          retained += [str(p.relative_to(root)) for p in sorted((root / '.ripr').rglob('*')) if p.is_file()]
+          hashes = {p: hashlib.sha256((root / p).read_bytes()).hexdigest() for p in retained}
+          receipt = {k: e[k] for k in ['SUBJECT_BASE', 'SUBJECT_HEAD', 'SUBJECT_TREE',
+                                      'DIFF_SHA256', 'CANDIDATE_SHA', 'SIDE', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT']}
+          receipt.update(schema='ub-review.ripr_frozen_replay.v1', authority='shadow-only',
+                         tracked_inputs=hashes, consumer_source_changed=False,
+                         harness_commit=subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip())
+          (pathlib.Path(e['PACKET_ROOT']) / 'frozen-input.json').write_text(json.dumps(receipt, indent=2)+'\n')
+          PY
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772
+        with:
+          toolchain: 1.95.0
+      - name: Build exact analyzer without repository credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(df --output=avail -B1 "$RUNNER_TEMP" | tail -1)" -gt 8589934592
+          rustc --version --verbose > "$PACKET_ROOT/rustc.txt"
+          cargo --version --verbose > "$PACKET_ROOT/cargo.txt"
+          args=(install --locked --root "$RUNNER_TEMP/analyzer")
+          case "$SIDE" in
+            stable) args+=(--version 0.10.0 ripr) ;;
+            candidate) args+=(--git https://github.com/EffortlessMetrics/ripr-swarm.git --rev "$CANDIDATE_SHA" ripr) ;;
+            *) exit 2 ;;
+          esac
+          env -i PATH="$PATH" HOME="$HOME" CARGO_HOME="$CARGO_HOME" \
+            RUSTUP_HOME="$HOME/.rustup" CARGO_BUILD_JOBS=2 \
+            CARGO_TARGET_DIR="$RUNNER_TEMP/analyzer-target" \
+            cargo "${args[@]}"
+          "$RUNNER_TEMP/analyzer/bin/ripr" --version > "$PACKET_ROOT/analyzer-version.txt"
+          sha256sum "$RUNNER_TEMP/analyzer/bin/ripr" | cut -d' ' -f1 > "$PACKET_ROOT/analyzer-binary.sha256"
+      - name: Repeat raw analysis and record badge compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="$RUNNER_TEMP/replay-raw"
+          mkdir "$raw"
+          export RAW_ROOT="$raw"
+          python - <<'PY'
+          import gzip, hashlib, json, os, pathlib, resource, signal, subprocess, time
+          e = os.environ
+          packet, root, raw = map(pathlib.Path, (e['PACKET_ROOT'], e['SUBJECT_ROOT'], e['RAW_ROOT']))
+          binary = pathlib.Path(e['RUNNER_TEMP']) / 'analyzer/bin/ripr'
+          file_limit = 134217728
+          def limits():
+              resource.setrlimit(resource.RLIMIT_FSIZE, (file_limit, file_limit))
+          env = {k: e[k] for k in ('PATH', 'HOME', 'CARGO_HOME') if k in e}
+          env['RUSTUP_HOME'] = e['HOME'] + '/.rustup'
+          invocations = []
+          for name, fmt in [('raw-1','json'), ('raw-2','json'), ('badge','badge-json')]:
+              argv = [str(binary), 'check', '--root', '.', '--diff', str(packet/'subject.diff'), '--mode', 'ready', '--format', fmt]
+              started = time.monotonic()
+              timed_out = False
+              with (raw/(name+'.stdout')).open('wb') as out, (raw/(name+'.stderr')).open('wb') as err:
+                  process = subprocess.Popen(argv, cwd=root, env=env, stdout=out, stderr=err,
+                                             start_new_session=True, preexec_fn=limits)
+                  try:
+                      code = process.wait(timeout=900)
+                  except subprocess.TimeoutExpired:
+                      timed_out = True
+                      os.killpg(process.pid, signal.SIGTERM)
+                      try:
+                          code = process.wait(timeout=30)
+                      except subprocess.TimeoutExpired:
+                          os.killpg(process.pid, signal.SIGKILL)
+                          code = process.wait(timeout=30)
+              row = dict(name=name, argv=argv, cwd=str(root), exit_code=code,
+                         timed_out=timed_out, duration_seconds=round(time.monotonic()-started,3),
+                         per_stream_kernel_limit_bytes=file_limit)
+              for suffix in ('stdout','stderr'):
+                  path = raw/(name+'.'+suffix)
+                  row[suffix+'_bytes'] = path.stat().st_size
+                  with path.open('rb') as stream:
+                      row[suffix+'_sha256'] = hashlib.file_digest(stream,'sha256').hexdigest()
+                  with path.open('rb') as source, (packet/(name+'.'+suffix+'.gz')).open('wb') as target:
+                      with gzip.GzipFile(fileobj=target, mode='wb', mtime=0, filename='') as zipped:
+                          while chunk := source.read(1048576):
+                              zipped.write(chunk)
+              row['invocation_valid'] = (code in (0,1) and not timed_out and
+                                         0 < row['stdout_bytes'] < file_limit and row['stderr_bytes'] < file_limit)
+              invocations.append(row)
+              (packet/'invocations.json').write_text(json.dumps(invocations, indent=2)+'\n')
+              assert not subprocess.check_output(['git','status','--porcelain','--untracked-files=no'], cwd=root, text=True).strip()
+          frozen = json.loads((packet/'frozen-input.json').read_text())
+          assert all(hashlib.sha256((root/p).read_bytes()).hexdigest() == digest
+                     for p,digest in frozen['tracked_inputs'].items())
+          assert sum(p.stat().st_size for p in raw.iterdir()) <= 805306368
+          # Exit codes describe invocation health only; they are NOT gate or scope qualification.
+          # Both unfavorable and incomplete producer receipts are retained for independent inspection.
+          assert all(r['invocation_valid'] for r in invocations), 'invalid invocation; retained outputs are not evidence of pass'
+          PY
+      - name: Seal bounded observer packet
+        if: always()
+        id: seal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, os, pathlib
+          e = os.environ
+          root = pathlib.Path(e['RUNNER_TEMP'])/'replay-packet'
+          assert root.is_dir(), 'freeze failed before packet creation'
+          paths = sorted(root.iterdir())
+          assert len(paths) <= 16 and all(p.is_file() and not p.is_symlink() for p in paths)
+          total = sum(p.stat().st_size for p in paths)
+          assert total <= 67108864, 'observer packet exceeds 64 MiB; no upload'
+          rows=[]
+          for p in paths:
+              with p.open('rb') as f:
+                  rows.append(dict(path=p.name, bytes=p.stat().st_size, sha256=hashlib.file_digest(f,'sha256').hexdigest()))
+          (root/'manifest.json').write_text(json.dumps(dict(authority='shadow-only', files=rows),indent=2)+'\n')
+          with open(e['GITHUB_OUTPUT'],'a') as f:
+              f.write('sealed=true\n')
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always() && steps.seal.outputs.sealed == 'true'
+        with:
+          name: ripr-1347-${{ matrix.analyzer }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/replay-packet/
+          if-no-files-found: error
+          retention-days: 30
