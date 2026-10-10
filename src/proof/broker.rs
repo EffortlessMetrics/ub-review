@@ -443,10 +443,25 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
             } else {
                 "declined_for_higher_value_proof"
             };
+            let remaining_allocation = input.budget.max_total_seconds.saturating_sub(used_seconds);
+            let remaining_deadline = input
+                .runtime
+                .deadline_remaining_seconds
+                .saturating_sub(used_seconds);
             let reason = if !fits_box {
                 "proof lease does not fit the current runner capacity"
-            } else if effective_max_seconds == 0 || deadline_cannot_fit {
+            } else if input.runtime.deadline_remaining_seconds == 0 {
                 "hard deadline has expired; proof was safely wound down"
+            } else if remaining_allocation == 0 {
+                "proof-time allocation is exhausted"
+            } else if used_tasks >= input.budget.max_focused_tests {
+                "proof task capacity is exhausted"
+            } else if !file_available {
+                "focused test-file capacity is exhausted"
+            } else if candidate_task.estimated_cost_sec > remaining_deadline {
+                "estimated task cost cannot fit the remaining hard-deadline wall time"
+            } else if candidate_task.estimated_cost_sec > remaining_allocation {
+                "estimated task cost cannot fit the remaining proof-time allocation"
             } else if candidate_task.required {
                 "required floor could not fit inside the remaining safe proof budget"
             } else {
