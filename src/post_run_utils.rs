@@ -189,7 +189,7 @@ pub(crate) const CORE_REVIEW_TOOLS: [&str; 6] = [
     "ast-grep",
     "actionlint",
 ];
-pub(crate) const STANDARD_IMAGE_TOKMD_VERSION: &str = "1.12.0";
+pub(crate) const STANDARD_IMAGE_TOKMD_VERSION: &str = "1.15.0";
 pub(crate) const STANDARD_IMAGE_CARGO_ALLOW_VERSION: &str = "0.1.8";
 // Core Rust sensors must not float on crates.io latest: the install script took
 // crates.io latest, so image and local drifted apart silently (#316 — the

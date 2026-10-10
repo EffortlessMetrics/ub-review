@@ -6954,7 +6954,7 @@ mod tests {
     fn doctor_tool_install_hints_name_exact_core_tool_fixes() {
         assert_eq!(
             super::doctor_tool_install_hint("tokmd"),
-            "cargo install tokmd --locked --version 1.12.0 --force"
+            "cargo install tokmd --locked --version 1.15.0 --force"
         );
         assert_eq!(
             super::doctor_tool_install_hint("cargo-allow"),
@@ -6977,8 +6977,8 @@ mod tests {
     #[test]
     fn doctor_version_fix_reinstalls_pinned_standard_image_tools() {
         assert_eq!(
-            super::doctor_tool_version_fix("tokmd", "1.12.0"),
-            "cargo install tokmd --locked --version 1.12.0 --force"
+            super::doctor_tool_version_fix("tokmd", "1.15.0"),
+            "cargo install tokmd --locked --version 1.15.0 --force"
         );
         assert_eq!(
             super::doctor_tool_version_fix("cargo-allow", "0.1.8"),
