@@ -134,10 +134,13 @@ jobs:
                       except subprocess.TimeoutExpired:
                           os.killpg(process.pid, signal.SIGKILL)
                           code = process.wait(timeout=30)
+              budget_applies = e['SIDE'] == 'candidate' and fmt == 'json'
               row = dict(name=name, argv=argv, cwd=str(root), exit_code=code,
                          timed_out=timed_out, duration_seconds=round(time.monotonic()-started,3),
                          per_stream_kernel_limit_bytes=file_limit,
-                         diagnostic_findings_byte_budget=int(e['RIPR_CHECK_FINDINGS_BYTES']))
+                         diagnostic_findings_byte_budget=(int(e['RIPR_CHECK_FINDINGS_BYTES'])
+                             if budget_applies else None),
+                         findings_byte_budget_supported=budget_applies)
               for suffix in ('stdout','stderr'):
                   path = raw/(name+'.'+suffix)
                   row[suffix+'_bytes'] = path.stat().st_size
@@ -179,7 +182,10 @@ jobs:
           for p in paths:
               with p.open('rb') as f:
                   rows.append(dict(path=p.name, bytes=p.stat().st_size, sha256=hashlib.file_digest(f,'sha256').hexdigest()))
-          (root/'manifest.json').write_text(json.dumps(dict(authority='shadow-only', files=rows),indent=2)+'\n')
+          manifest = (json.dumps(dict(authority='shadow-only', files=rows), indent=2) + '\n').encode()
+          assert len(paths) + 1 <= 16, 'completed packet exceeds file-count limit'
+          assert total + len(manifest) <= 67108864, 'completed packet exceeds 64 MiB; no upload'
+          (root/'manifest.json').write_bytes(manifest)
           with open(e['GITHUB_OUTPUT'],'a') as f:
               f.write('sealed=true\n')
           PY
