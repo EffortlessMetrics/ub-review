@@ -229,6 +229,13 @@ fn cmd_enable_with_resolver(args: EnableArgs, resolve: fn() -> ReleaseLookup) ->
         render_enable_config()
     };
 
+    if config_path.is_dir() {
+        bail!(
+            "{} is a directory; remove or rename it before running enable",
+            config_path.display()
+        );
+    }
+
     let workflow_dir = workflow_path.parent().ok_or_else(|| {
         anyhow::anyhow!("workflow path {} has no parent", workflow_path.display())
     })?;
@@ -648,6 +655,10 @@ fn print_enable_summary(
         render_enable_summary(workflow_path, config_path, mode, strategy)
     );
 }
+
+#[cfg(test)]
+#[path = "enable/output_tests.rs"]
+mod output_tests;
 
 #[cfg(test)]
 mod tests {
