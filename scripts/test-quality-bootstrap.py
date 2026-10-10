@@ -2,9 +2,12 @@
 """Offline transport, filesystem, and secret-retention controls for #1345."""
 import importlib.util
 import json
+import os
 from pathlib import Path
+import signal
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -140,6 +143,33 @@ class BootstrapTests(unittest.TestCase):
             module.transport([sys.executable,'-c','import sys; sys.stderr.write("x"*70000)'], 2)
         self.assertEqual(caught.exception.reason,'response_too_large')
         self.assertEqual(module.transport([sys.executable,'-c','print("[]")'], 2)[0],0)
+
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'Linux process-group contract')
+    def test_timeout_terminates_pipe_inheriting_child_after_parent_exits(self):
+        marker = self.root/'descendant.pid'
+        parent = f"import os,time\npid = os.fork()\nif pid: os._exit(0)\nopen({str(marker)!r}, 'w').write(str(os.getpid()))\ntime.sleep(30)"
+        pid = None
+        try:
+            with self.assertRaises(module.ReadFailure) as caught:
+                module.transport([sys.executable,'-S','-c',parent], 2)
+            self.assertEqual(caught.exception.reason, 'transport_timeout')
+            pid = int(marker.read_text())
+            status = Path(f'/proc/{pid}/stat')
+            stopped = False
+            for _ in range(50):
+                if not status.exists() or status.read_text().split()[2] == 'Z':
+                    stopped = True
+                    break
+                time.sleep(.01)
+            self.assertTrue(stopped, 'timed-out read left its pipe-inheriting descendant running')
+        finally:
+            if pid is None and marker.exists():
+                pid = int(marker.read_text())
+            if pid is not None:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
 
 if __name__ == '__main__':
     unittest.main()

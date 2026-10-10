@@ -46,6 +46,7 @@ def transport(argv, timeout):
     selector.register(child.stdout, selectors.EVENT_READ, 'stdout')
     selector.register(child.stderr, selectors.EVENT_READ, 'stderr')
     deadline = time.monotonic() + timeout
+    completed = False
     try:
         while selector.get_map():
             remaining = deadline - time.monotonic()
@@ -64,10 +65,16 @@ def transport(argv, timeout):
             code = child.wait(timeout=max(.001, deadline-time.monotonic()))
         except subprocess.TimeoutExpired as error:
             raise ReadFailure('transport_timeout', True) from error
+        completed = True
         return code, bytes(streams['stdout']), bytes(streams['stderr'])
     finally:
-        if child.poll() is None:
-            os.killpg(child.pid, signal.SIGKILL)
+        if not completed:
+            # The leader may already have exited while a descendant holds a
+            # pipe open. Kill the owned group before reaping the leader.
+            try:
+                os.killpg(child.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
             child.wait(timeout=5)
         selector.close()
         child.stdout.close()
