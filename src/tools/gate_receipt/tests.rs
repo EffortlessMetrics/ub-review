@@ -107,3 +107,27 @@ fn known_partial_counts_preserve_violations_but_never_prove_pass() -> Result<()>
     }
     Ok(())
 }
+
+/// The targeted mutation campaign found that erasing this recovery hint was
+/// not observed by the prior rejection tests. Pin the useful type guidance,
+/// not Serde's incidental line/column formatting.
+#[test]
+fn malformed_counts_explain_expected_object_shape() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let path = temp.path().join("gate-decision.json");
+    for schema in ["0.5", "0.6"] {
+        for counts in ["null", "[]", "0", "true", "\"zero\""] {
+            let text = format!(
+                r#"{{"schema_version":"{schema}","counts":{counts},"preview_skipped":[]}}"#
+            );
+            fs::write(&path, &text)?;
+            let crate::tools::ToolGateDecisionState::Malformed(reason) =
+                crate::tools::read_tool_gate_decision(&path)
+            else {
+                return Err(anyhow!("invalid counts were not rejected: {text}"));
+            };
+            assert!(reason.contains("expected a counts object"), "{reason}");
+        }
+    }
+    Ok(())
+}
