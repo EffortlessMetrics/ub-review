@@ -61,6 +61,7 @@ pub(crate) fn cmd_init(args: InitArgs) -> Result<()> {
                 args.root.display()
             );
         }
+        preflight_init_guide_destination(&args.guide_out)?;
     }
     let config = starter_config(args.profile.key());
     let guide = if args.no_guide {
@@ -73,6 +74,59 @@ pub(crate) fn cmd_init(args: InitArgs) -> Result<()> {
     if let Some(guide) = guide {
         fs::write(&args.guide_out, guide)?;
         println!("wrote {}", args.guide_out.display());
+    }
+    Ok(())
+}
+
+fn preflight_init_guide_destination(path: &Path) -> Result<()> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let parent_metadata = fs::metadata(parent).with_context(|| {
+        format!(
+            "cannot access guide parent {} for {}; pass --guide-out <file> or --no-guide",
+            parent.display(),
+            path.display()
+        )
+    })?;
+    if !parent_metadata.is_dir() {
+        bail!(
+            "guide parent {} for {} is not a directory; pass --guide-out <file> or --no-guide",
+            parent.display(),
+            path.display()
+        );
+    }
+    match fs::metadata(path) {
+        Ok(metadata) if metadata.is_dir() => {
+            bail!(
+                "{} is a directory; pass --guide-out <file> or --no-guide",
+                path.display()
+            );
+        }
+        Ok(metadata) if metadata.is_file() => {
+            fs::OpenOptions::new()
+                .write(true)
+                .create(false)
+                .truncate(false)
+                .open(path)
+                .with_context(|| {
+                    format!(
+                        "cannot write guide {}; pass --guide-out <file> or --no-guide",
+                        path.display()
+                    )
+                })?;
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "cannot inspect guide {}; pass --guide-out <file> or --no-guide",
+                    path.display()
+                )
+            });
+        }
     }
     Ok(())
 }
@@ -109,6 +163,10 @@ pub(crate) fn init_destination_key(path: &Path) -> Result<PathBuf> {
             .context("resolve current directory for init output paths")?
             .join(path)
     };
+    if absolute.exists() {
+        return fs::canonicalize(&absolute)
+            .with_context(|| format!("resolve existing init output {}", path.display()));
+    }
     Ok(init_normalize_path_lexically(&absolute))
 }
 
