@@ -512,7 +512,6 @@ pub(crate) fn inspect_init_guide_repo(root: &Path) -> Result<InitGuideInspection
         .count();
     let unsafe_native_found = rust_files
         .iter()
-        .take(256)
         .any(|path| init_rust_file_has_unsafe_native(path));
     let docs_or_specs_count = collect_init_repo_files(&root, is_init_docs_or_spec_file, 256).len();
     let mut build_systems = Vec::new();
