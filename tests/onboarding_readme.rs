@@ -73,7 +73,16 @@ impl Fixture {
     }
 
     /// Run a bounded child without inherited credentials or shell parsing.
-    fn execute(&self, mut command: Command) -> Result<(ExitStatus, String)> {
+    fn execute(&self, command: Command) -> Result<(ExitStatus, String)> {
+        self.execute_with_timeout(command, Duration::from_secs(20))
+    }
+
+    /// Permit timeout controls to exercise cleanup without the onboarding wait.
+    fn execute_with_timeout(
+        &self,
+        mut command: Command,
+        timeout: Duration,
+    ) -> Result<(ExitStatus, String)> {
         let stdout = tempfile::NamedTempFile::new_in(self.temp.path())?;
         let stderr = tempfile::NamedTempFile::new_in(self.temp.path())?;
         command
@@ -88,12 +97,12 @@ impl Fixture {
             .stdout(stdout.reopen()?)
             .stderr(stderr.reopen()?);
         let mut child = command.spawn()?;
-        let status = match child.wait_timeout(Duration::from_secs(20))? {
+        let status = match child.wait_timeout(timeout)? {
             Some(status) => status,
             None => {
                 child.kill()?;
                 child.wait()?;
-                bail!("onboarding fixture command exceeded 20 seconds");
+                bail!("onboarding fixture command exceeded {timeout:?}");
             }
         };
         let output = format!(
@@ -511,13 +520,10 @@ fn execute_timeout_terminates_reaps_and_cleans_its_owned_child() -> Result<()> {
         "-c",
         "printf '%s' \"$$\" > timeout-child.pid; exec sleep 60",
     ]);
-    let result = fixture.execute(child);
+    let result = fixture.execute_with_timeout(child, Duration::from_secs(1));
     assert!(result.is_err(), "timeout unexpectedly completed");
     let error = result.err().context("timeout was swallowed")?;
-    assert_eq!(
-        error.to_string(),
-        "onboarding fixture command exceeded 20 seconds"
-    );
+    assert_eq!(error.to_string(), "onboarding fixture command exceeded 1s");
     let pid_text = fs::read_to_string(fixture.root.join("timeout-child.pid"))?;
     let pid: u32 = pid_text.parse()?;
     assert_ne!(pid, std::process::id());
