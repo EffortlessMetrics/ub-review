@@ -60,8 +60,7 @@ A small additional investment in review can be worth it when it catches somethin
 important. We measure that benefit alongside the extra cost rather than optimizing
 purely for the fewest model calls.
 
-**A concrete review-output replay:** the
-[perl-lsp-swarm #3627 fixture](docs/REVIEW_EXPERIENCE_FIXTURES.md) starts with existing
+The [perl-lsp-swarm #3627 review replay](docs/REVIEW_EXPERIENCE_FIXTURES.md) starts with existing
 parser-review threads. Instead of duplicating the finding, its expected public output
 replies to the relevant thread:
 
@@ -81,7 +80,7 @@ executing them.
 
 Review judgment, successful GitHub delivery, and deterministic CI sufficiency remain
 different results. Full tool output, model traces, costs, and receipts stay in
-artifacts. The maintainer gets the findings that matter.
+artifacts.
 
 [Architecture](docs/ARCHITECTURE.md) covers the execution and authority contracts.
 [CI efficiency design](docs/CI_EFFICIENCY_PATH.md) covers the intended scheduling and
