@@ -109,6 +109,21 @@ containment through #1269/#1283; a frozen model-off `SharedRunPlan` core in
 measured #1275 plus result-plane #1277 before #1015 changes enforcement.
 Legacy `gate_outcome.conclusion` remains authority until that switch lands.
 
+### Source-only reuse decision pending (#1349)
+
+[The bounded judgment-mode decision packet](JUDGMENT_MODE_DECISION_1349.md)
+traces the current implementation and proposes phase-specific dependency edges
+for #945/#1216. It is a recommendation for Steven, not an adopted architecture
+ruling, implemented mode guard, or closure of #1013/#1014/#1277.
+
+Pure recorded-input contract/projector work under #1334/#1335/#1338 may proceed
+within those owners' existing authorization. Source-only mode owns no CI
+sufficiency result: an absent CI decision cannot be constructed as empty-Required
+PASS. Immutable judgment, immutable public plan, append-only delivery attempts,
+and the derived agent view remain separate. Earlier standalone model-on
+activation requires an explicit ruling and the packet's negative proof;
+integrated Required wind-down and frozen-CI safeguards remain unchanged.
+
 ## Authority map
 
 | Decision | Current authority | Destination |
