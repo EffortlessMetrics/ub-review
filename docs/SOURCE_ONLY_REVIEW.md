@@ -4,9 +4,10 @@ A pull request can carry more than the code it claims to change. Build scripts,
 workflows, installers, hooks, plugins, tests, and project-controlled tools can all
 cause code to execute when someone checks the contribution.
 
-The proposed source-only Review Pipe investigates an unfamiliar change *before*
-authorizing any candidate-controlled execution. It shares ub-review's review semantics,
-but it does not own a CI gate, dispatch proof, approve a merge, or write source.
+The proposed source-only Review Pipe investigates an unfamiliar change without
+executing candidate-controlled code. It shares ub-review's review semantics, but it
+does not authorize execution, own a CI gate, dispatch proof, approve a merge, or
+write source.
 
 ## What the review can do
 
@@ -29,9 +30,8 @@ have to be measured.
 
 Candidate execution is forbidden, including builds, tests, candidate-defined hooks,
 package lifecycle scripts, plugins, macros, project language servers, locally defined
-Actions, dynamic libraries, Docker builds, and model-generated commands. The
-source-only reviewer cannot dispatch executable ProofIntents; they remain questions for
-a separately authorized proof environment.
+Actions, dynamic libraries, Docker builds, and model-generated commands. The source-only reviewer may record ProofIntents but cannot turn them into commands
+or dispatch proof. Those questions belong to a separately authorized proof environment.
 
 Trusted analysis code still executes. Git ingestion, parsers, static workers, bounded
 context materialization, model prompts, and credential separation must therefore be
