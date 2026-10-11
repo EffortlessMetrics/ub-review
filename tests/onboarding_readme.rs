@@ -122,6 +122,7 @@ fn first_run_commands(readme: &str) -> Result<Vec<Vec<&str>>> {
     let (_, section) = readme
         .split_once("## Inspect before adopting\n")
         .context("README onboarding section missing")?;
+    ensure!(!section.starts_with("## "), "command block missing");
     let section = section.split("\n## ").next().context("empty section")?;
     let (_, block) = section
         .split_once("```bash\n")
@@ -129,7 +130,7 @@ fn first_run_commands(readme: &str) -> Result<Vec<Vec<&str>>> {
     let (block, _) = block
         .split_once("\n```")
         .context("unclosed command block")?;
-    block
+    let commands: Vec<Vec<&str>> = block
         .lines()
         .filter(|line| !line.trim().is_empty())
         .map(|line| {
@@ -148,7 +149,9 @@ fn first_run_commands(readme: &str) -> Result<Vec<Vec<&str>>> {
             );
             Ok(line.split_whitespace().skip(1).collect())
         })
-        .collect()
+        .collect::<Result<_>>()?;
+    ensure!(!commands.is_empty(), "README must contain a first-run path");
+    Ok(commands)
 }
 
 /// The documented generated path must work and refuse destructive repetition.
@@ -242,7 +245,14 @@ fn first_run_commands_preserves_reviewed_argv_and_stops_at_first_block() -> Resu
     assert_eq!(
         first_run_commands(document)?,
         vec![
-            vec!["enable", "--inspect", "--mode", "advisory", "--model", "minimax"],
+            vec![
+                "enable",
+                "--inspect",
+                "--mode",
+                "advisory",
+                "--model",
+                "minimax"
+            ],
             vec!["audit-ci"],
         ]
     );
@@ -253,11 +263,26 @@ fn first_run_commands_preserves_reviewed_argv_and_stops_at_first_block() -> Resu
 #[test]
 fn first_run_commands_rejects_missing_and_unclosed_blocks() -> Result<()> {
     for (document, diagnostic) in [
-        ("# Other\n```bash\nub-review audit-ci\n```\n", "README onboarding section missing"),
-        ("## Inspect before adopting\nNo commands\n", "command block missing"),
-        ("## Inspect before adopting\n## Later\n```bash\nub-review audit-ci\n```\n", "command block missing"),
-        ("## Inspect before adopting\n```bash\nub-review audit-ci\n", "unclosed command block"),
-        ("## Inspect before adopting\n```bash\nub-review audit-ci\n## Later\n```\n", "unclosed command block"),
+        (
+            "# Other\n```bash\nub-review audit-ci\n```\n",
+            "README onboarding section missing",
+        ),
+        (
+            "## Inspect before adopting\nNo commands\n",
+            "command block missing",
+        ),
+        (
+            "## Inspect before adopting\n## Later\n```bash\nub-review audit-ci\n```\n",
+            "command block missing",
+        ),
+        (
+            "## Inspect before adopting\n```bash\nub-review audit-ci\n",
+            "unclosed command block",
+        ),
+        (
+            "## Inspect before adopting\n```bash\nub-review audit-ci\n## Later\n```\n",
+            "unclosed command block",
+        ),
     ] {
         let result = first_run_commands(document);
         assert!(result.is_err(), "malformed document accepted: {document}");
@@ -294,13 +319,15 @@ fn first_run_commands_rejects_unreviewed_text_without_side_effects() -> Result<(
         "ub-review audit-ci --unreviewed",
         " ub-review audit-ci",
     ] {
-        let document = format!(
-            "## Inspect before adopting\n```bash\nub-review audit-ci\n{command}\n```\n"
-        );
+        let document =
+            format!("## Inspect before adopting\n```bash\nub-review audit-ci\n{command}\n```\n");
         let result = first_run_commands(&document);
         assert!(result.is_err(), "unreviewed command accepted: {command}");
         let error = result.err().context("expected vocabulary rejection")?;
-        assert_eq!(error.to_string(), format!("unreviewed onboarding command: {command}"));
+        assert_eq!(
+            error.to_string(),
+            format!("unreviewed onboarding command: {command}")
+        );
         assert!(!marker.exists());
         assert!(!fixture.root.join("target").exists());
         assert!(!fixture.temp.path().join("curl-called").exists());
@@ -316,17 +343,32 @@ fn fixture_new_writes_exact_sources_and_inert_release_metadata() -> Result<()> {
         fs::read_to_string(fixture.root.join("Cargo.toml"))?,
         "[package]\nname = \"onboarding-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n"
     );
-    assert_eq!(fs::read_to_string(fixture.root.join("src/lib.rs"))?, "pub fn value() -> u8 { 7 }\n");
-    assert_eq!(fs::read_to_string(fixture.root.join(".github/workflows/ci.yml"))?, ORIGINAL_CI);
+    assert_eq!(
+        fs::read_to_string(fixture.root.join("src/lib.rs"))?,
+        "pub fn value() -> u8 { 7 }\n"
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.root.join(".github/workflows/ci.yml"))?,
+        ORIGINAL_CI
+    );
     assert!(!fixture.temp.path().join("curl-called").exists());
     let (status, output) = fixture.execute(Command::new("curl"))?;
     assert_eq!(status.code(), Some(0));
     let metadata: serde_json::Value = serde_json::from_str(&output)?;
     assert_eq!(metadata["tag_name"], "v0.1.1");
     assert_eq!(metadata["assets"].as_array().map(Vec::len), Some(2));
-    assert_eq!(metadata["assets"][0]["name"], "ub-review-x86_64-unknown-linux-gnu.tar.gz");
-    assert_eq!(metadata["assets"][1]["name"], "ub-review-x86_64-unknown-linux-gnu.tar.gz.sha256");
-    assert_eq!(fs::read_to_string(fixture.temp.path().join("curl-called"))?, "lookup\n");
+    assert_eq!(
+        metadata["assets"][0]["name"],
+        "ub-review-x86_64-unknown-linux-gnu.tar.gz"
+    );
+    assert_eq!(
+        metadata["assets"][1]["name"],
+        "ub-review-x86_64-unknown-linux-gnu.tar.gz.sha256"
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.temp.path().join("curl-called"))?,
+        "lookup\n"
+    );
     Ok(())
 }
 
@@ -338,13 +380,22 @@ fn original_files_are_unchanged_detects_each_corrupted_sentinel() -> Result<()> 
     let ci_path = fixture.root.join(".github/workflows/ci.yml");
     let source_path = fixture.root.join("src/lib.rs");
     fs::write(&ci_path, "changed CI\n")?;
-    let ci_error = fixture.original_files_are_unchanged().err().context("CI corruption escaped")?;
+    let ci_error = fixture
+        .original_files_are_unchanged()
+        .err()
+        .context("CI corruption escaped")?;
     assert_eq!(ci_error.to_string(), "onboarding changed existing CI");
     fs::write(&ci_path, ORIGINAL_CI)?;
     assert!(fixture.original_files_are_unchanged().is_ok());
     fs::write(&source_path, "pub fn value() -> u8 { 8 }\n")?;
-    let source_error = fixture.original_files_are_unchanged().err().context("source corruption escaped")?;
-    assert_eq!(source_error.to_string(), "onboarding changed repository source");
+    let source_error = fixture
+        .original_files_are_unchanged()
+        .err()
+        .context("source corruption escaped")?;
+    assert_eq!(
+        source_error.to_string(),
+        "onboarding changed repository source"
+    );
     fs::write(&source_path, "pub fn value() -> u8 { 7 }\n")?;
     assert!(fixture.original_files_are_unchanged().is_ok());
     Ok(())
@@ -381,7 +432,9 @@ fn execute_reports_missing_executable_and_removes_logs() -> Result<()> {
     assert!(result.is_err());
     let error = result.err().context("spawn failure was swallowed")?;
     assert_eq!(
-        error.downcast_ref::<std::io::Error>().map(std::io::Error::kind),
+        error
+            .downcast_ref::<std::io::Error>()
+            .map(std::io::Error::kind),
         Some(std::io::ErrorKind::NotFound)
     );
     assert_eq!(fs::read_dir(fixture.temp.path())?.count(), entries_before);
@@ -394,18 +447,27 @@ fn execute_timeout_terminates_reaps_and_cleans_its_owned_child() -> Result<()> {
     let fixture = Fixture::new()?;
     let entries_before = fs::read_dir(fixture.temp.path())?.count();
     let mut child = Command::new("sh");
-    child.args(["-c", "printf '%s' \"$$\" > timeout-child.pid; exec sleep 60"]);
+    child.args([
+        "-c",
+        "printf '%s' \"$$\" > timeout-child.pid; exec sleep 60",
+    ]);
     let result = fixture.execute(child);
     assert!(result.is_err(), "timeout unexpectedly completed");
     let error = result.err().context("timeout was swallowed")?;
-    assert_eq!(error.to_string(), "onboarding fixture command exceeded 20 seconds");
+    assert_eq!(
+        error.to_string(),
+        "onboarding fixture command exceeded 20 seconds"
+    );
     let pid_text = fs::read_to_string(fixture.root.join("timeout-child.pid"))?;
     let pid: u32 = pid_text.parse()?;
     assert_ne!(pid, std::process::id());
     let mut probe = Command::new("kill");
     probe.args(["-0", &pid_text]);
     let (status, _) = fixture.execute(probe)?;
-    assert!(!status.success(), "timed-out child {pid} is still alive or unreaped");
+    assert!(
+        !status.success(),
+        "timed-out child {pid} is still alive or unreaped"
+    );
     assert_eq!(fs::read_dir(fixture.temp.path())?.count(), entries_before);
     let temp_path = fixture.temp.path().to_owned();
     drop(fixture);
