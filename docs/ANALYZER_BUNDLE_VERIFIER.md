@@ -100,7 +100,7 @@ capability identities, and successful exact executable-bound probe records.
 Probe stdout bytes are independently hashed. The compatibility envelope
 `ub-review.analyzer_compatibility.v1` binds owner/tool, frozen scope, candidate
 archive/executable, current baseline archive, accepted decision and rollback
-qualification. Null/missing receipt references are missing evidence, never zero.
+qualification plus the exact selected artifact rolled back from. Null/missing receipt references are missing evidence, never zero.
 
 ## Proof and current limitations
 

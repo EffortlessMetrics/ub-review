@@ -178,6 +178,7 @@ struct Compatibility {
     baseline_artifact_sha256: String,
     decision: String,
     rollback_qualified: bool,
+    rollback_from_artifact_sha256: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -452,6 +453,17 @@ fn validate_identity(
             "not_selected",
             "compatibility or rollback qualification not accepted",
         ));
+    }
+    if rollback {
+        let selected = row
+            .candidate
+            .as_ref()
+            .ok_or_else(|| failure("missing_evidence", "missing rollback transition source"))?;
+        require(
+            compatibility.rollback_from_artifact_sha256.as_deref()
+                == Some(selected.artifact.sha256.as_str()),
+            "rollback transition differs from selected candidate",
+        )?;
     }
     Ok(())
 }
