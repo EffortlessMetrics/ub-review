@@ -9,6 +9,10 @@ Read `AGENTS.md` and `docs/development/AGENTIC_WORKFLOW.md`. Obtain the current
 assignment, base/head, changed paths, intended contract and raw receipts from
 native PR state and the conversation. Inspect substantive threads before
 claiming technical clearance. Author self-review is not independent review.
+Failed or incomplete authenticated review reads leave formal review state
+unknown; absence on a public page is not an authoritative empty review result.
+Carry that uncertainty into the handoff without evading the failed access
+boundary or treating it as a clean review.
 
 ## Use an isolated lab
 

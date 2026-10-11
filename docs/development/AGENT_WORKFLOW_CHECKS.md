@@ -25,6 +25,9 @@ identity, prompt and answer bytes/digests, checker command/outcome and any
 failures. Re-run when the guidance changes. The five cases cover workflow
 discovery, continuing after a status/recovery checkpoint, replacing an explicit
 old assignment, isolated review experiments and native exact-head evidence.
+The evidence case also pins an observed recovery failure: failed authenticated
+formal-review reads leave review state unknown even when a public page shows
+no reviews. The oracle rejects inferring absence from that weaker surface.
 
 The oracle checks reported next-action decisions, cited workflow, unique and
 complete cases and answer shape. Deterministic negative controls reject omitted

@@ -57,8 +57,14 @@ of review output. Do not add a second ledger, coordinator or status service.
 
 Read back the published branch/head and PR state. Distinguish local validation,
 independent review, hosted required checks and publication confirmation. A
-successful write request alone is not a readback receipt. Inspect substantive
-review comments and resolve each against the current head with proof. Draft,
+successful write request alone is not a readback receipt. Read formal review
+state through authoritative native reads. A failed, denied or incomplete
+read leaves the unread state unknown; a public page with no visible reviews
+does not prove formal reviews are absent. Record the exact failed surface and
+use only the state actually returned. Preserve access denials; do not change
+credentials or permissions to turn unknown into a clearance claim.
+Inspect substantive review comments and resolve each against the current head
+with proof. Draft,
 Ready, merge and release are distinct transitions: obey live authorization and
 repository protections for each; do not infer one from another. A green
 aggregate or local baseline does not waive a failing required check.
