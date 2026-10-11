@@ -730,3 +730,6 @@ fn no_value_skip_is_not_needed_and_legacy_standalone_has_no_gate_write() -> Resu
     assert!(!args.out.join("gate_outcome.json").exists());
     Ok(())
 }
+
+#[path = "post_publication_recovery_tests.rs"]
+mod recovery_tests;
