@@ -177,6 +177,16 @@ const CHANGED_PATHS_DOMAIN: &str = "ub-review.revision-identity.changed-paths.v1
 const DIFF_DIGEST_DOMAIN: &str = "ub-review.revision-identity.diff.v1";
 
 impl RevisionIdentity {
+    /// Delivery names the candidate head even when the reviewed object is a merge.
+    pub(crate) fn candidate_head_commit(&self) -> &str {
+        self.head.commit_oid()
+    }
+
+    /// Independently bind recorded anchor text to this identity's diff bytes.
+    pub(crate) fn matches_diff_bytes(&self, bytes: &[u8]) -> bool {
+        Self::diff_digest(bytes) == self.diff
+    }
+
     /// Derive a reference from the validated full identity, never a producer's
     /// claimed digest. Pure recorded judgment validation uses this exact join.
     pub(crate) fn revision_ref(&self) -> RevisionRef {
