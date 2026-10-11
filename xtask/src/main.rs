@@ -276,7 +276,7 @@ where
             "untracked Rust inputs are not included in git diff: {}; add or stage them, then rerun `cargo xtask ripr`",
             untracked_rust
                 .iter()
-                .map(|path| format!("{:?}", String::from_utf8_lossy(path)))
+                .map(|path| format!("\"{}\"", path.escape_ascii()))
                 .collect::<Vec<_>>()
                 .join(", ")
         );
@@ -2018,7 +2018,6 @@ mod tests {
                         .with_context(|| format!("untracked input {path:?} was admitted"))?;
                     let message = format!("{error:#}");
                     assert!(message.contains("untracked Rust inputs"));
-                    assert!(message.contains(&format!("{:?}", path.as_os_str().to_string_lossy())));
                     assert_eq!(*calls.borrow(), 0);
                     assert!(!out_dir.join("receipt.json").exists());
                     assert!(!out_dir.join("diff.patch").exists());
@@ -2111,6 +2110,39 @@ mod tests {
                 b" trailing.rs\n".to_vec(),
             ]
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_ripr_untracked_diagnostic_distinguishes_original_path_bytes() -> Result<()> {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        let root = initialized_test_repo("ripr-untracked-path-diagnostics")?;
+        for path in [
+            b"src/bad-\xfe.rs".as_slice(),
+            b"src/bad-\xff.rs",
+            b"src/new\nline.rs",
+            b"src/\xc3\xa9.rs",
+        ] {
+            fs::write(root.join(OsStr::from_bytes(path)), "untracked\n")?;
+        }
+        let error = run_local_ripr_with(
+            &root,
+            RiprOptions {
+                base: "HEAD".to_owned(),
+            },
+            |_, _, _| Err(io::Error::other("untracked inputs invoked RIPR")),
+        )
+        .err()
+        .context("untracked paths unexpectedly admitted")?;
+        assert_eq!(
+            error.to_string(),
+            "untracked Rust inputs are not included in git diff: \"src/bad-\\xfe.rs\", \"src/bad-\\xff.rs\", \"src/new\\nline.rs\", \"src/\\xc3\\xa9.rs\"; add or stage them, then rerun `cargo xtask ripr`"
+        );
+        assert!(!root.join("target/xtask/ripr/receipt.json").exists());
+        fs::remove_dir_all(root)?;
+        Ok(())
     }
 
     #[cfg(unix)]
