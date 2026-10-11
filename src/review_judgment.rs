@@ -3,11 +3,6 @@
 //! lead call, public compilation, or qualification of upstream evidence.
 //! Callers supply independently pinned, already admitted source objects. Pins
 //! must never be learned from the answer being validated. No I/O lives here.
-#![cfg_attr(
-    not(test),
-    expect(dead_code, reason = "policy/allow.toml#recorded-judgment-shadow-1013")
-)]
-
 use std::collections::BTreeSet;
 
 use anyhow::{Result, ensure};
@@ -291,3 +286,5 @@ pub(crate) fn validate_recorded_judgment(
 
 #[cfg(test)]
 mod tests;
+
+pub(crate) mod public_plan;
