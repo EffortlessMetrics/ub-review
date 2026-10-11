@@ -231,3 +231,83 @@ fn preserves_literal_dollar_currency() -> Result<()> {
     assert_eq!(bytes, "# ub-review v1\n\nPrice $20 stays.\n");
     Ok(())
 }
+
+#[test]
+fn rejects_template_without_version_slot() -> Result<()> {
+    let fixture = Fixture::create("missing-slot")?;
+    fixture.write_template("# ub-review\n\nNo version slot.\n")?;
+    fixture.write_sentinel()?;
+    let output = fixture.run(&success_args(LITERAL_TAG))?;
+    assert!(
+        !output.status.success(),
+        "missing $TAG unexpectedly succeeded"
+    );
+    assert_eq!(fixture.read_output()?, SENTINEL);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("$TAG"),
+        "missing-slot diagnostic must name $TAG: {stderr}"
+    );
+    Ok(())
+}
+
+#[test]
+fn reports_targeted_negative_diagnostics() -> Result<()> {
+    let fixture = Fixture::create("diag-tag")?;
+    fixture.write_template(LITERAL_TEMPLATE)?;
+    fixture.write_sentinel()?;
+    let args: Vec<String> = vec![
+        "render-release-notes".to_owned(),
+        "--tag".to_owned(),
+        "vx".to_owned(),
+        "--output".to_owned(),
+        OUTPUT_NAME.to_owned(),
+    ];
+    let output = fixture.run(&args)?;
+    assert!(
+        !output.status.success(),
+        "invalid tag unexpectedly succeeded"
+    );
+    assert_eq!(fixture.read_output()?, SENTINEL);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("invalid tag") && stderr.contains("vx"),
+        "invalid-tag diagnostic must name the tag: {stderr}"
+    );
+
+    let fixture = Fixture::create("diag-placeholder")?;
+    fixture.write_template("# ub-review $TAG_EXTRA\n")?;
+    fixture.write_sentinel()?;
+    let output = fixture.run(&success_args(LITERAL_TAG))?;
+    assert!(
+        !output.status.success(),
+        "unknown placeholder unexpectedly succeeded"
+    );
+    assert_eq!(fixture.read_output()?, SENTINEL);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unknown placeholder") && stderr.contains("$TAG_EXTRA"),
+        "placeholder diagnostic must name the token: {stderr}"
+    );
+
+    let fixture = Fixture::create("diag-missing")?;
+    fixture.write_template(LITERAL_TEMPLATE)?;
+    fixture.write_sentinel()?;
+    let args: Vec<String> = vec![
+        "render-release-notes".to_owned(),
+        "--tag".to_owned(),
+        "v1".to_owned(),
+    ];
+    let output = fixture.run(&args)?;
+    assert!(
+        !output.status.success(),
+        "missing --output unexpectedly succeeded"
+    );
+    assert_eq!(fixture.read_output()?, SENTINEL);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("missing required --output"),
+        "missing-flag diagnostic must name --output: {stderr}"
+    );
+    Ok(())
+}
