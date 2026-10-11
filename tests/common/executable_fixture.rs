@@ -148,10 +148,17 @@ mod tests {
         // A genuinely open writer must still fail immediately, never retry or
         // become a successful expected-nonzero result.
         let writer = fs::OpenOptions::new().write(true).open(&path)?;
-        let direct = Command::new(&path)
-            .output()
-            .err()
-            .context("direct ETXTBSY")?;
+        let direct = {
+            // Even the native-output control must not inherit another test's
+            // writer. This call fails at spawn because our own writer is open.
+            let _guard = EXECUTABLE_FIXTURE_LAUNCH
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            Command::new(&path)
+                .output()
+                .err()
+                .context("direct ETXTBSY")?
+        };
         let guarded = Command::new(&path)
             .fixture_output()
             .err()
