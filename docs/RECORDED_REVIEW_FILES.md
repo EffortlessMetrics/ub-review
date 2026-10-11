@@ -154,3 +154,13 @@ wrapper, including qualifications and the binding. A repinned modified wrapper
 is rejected. No live append, retry, model call, config/provider loading, network
 or persistent writer is added. Source and owner reviews and hosted gates remain
 separate prerequisites to acceptance.
+
+For a retained agent view paired with another valid prefix of the same source,
+`agent-replay` rejects with a content-free watermark association hint. Compare
+`name`, `count`, `chain_sha256` and `observed_head_sha` in the selected intake's
+watermark and retained view's `observation_view_json` watermark, then select the
+matching independently pinned pair. Do not rewrite pins from view metadata.
+The hint prints no labels, claim text, CI contents or identity values, validates
+the selected inputs first, and does not qualify the retained view. Other invalid
+inputs/views keep the generic rejection. Successful output and source bytes are
+unchanged; no automatic prefix selection or authenticated recovery is added.

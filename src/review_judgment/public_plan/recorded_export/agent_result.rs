@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use super::RecordedReviewExport;
 use crate::delivery_transaction::recorded_observations::{
-    ObservationInput, RecordedObservationExport, export_recorded_observations,
-    replay_recorded_observations,
+    ObservationInput, ObservationWatermark, RecordedObservationExport, WATERMARK_SCHEMA,
+    export_recorded_observations, replay_recorded_observations,
 };
 use crate::review_judgment::public_plan::payload::{
     RecordedPreparedPayload, validate_prepared_payload,
@@ -26,6 +26,28 @@ struct AgentReviewResult {
     accepted_intent: String,
     remote_authenticity: String,
     whole_review_delivery: String,
+}
+
+/// A content-free recovery hint, never admission of the retained view's metadata.
+#[derive(Debug)]
+pub(super) struct WatermarkAssociationMismatch;
+
+impl std::fmt::Display for WatermarkAssociationMismatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("recorded agent replay rejected: watermark association mismatch; compare watermark name/count/chain_sha256/observed_head_sha in the selected intake and retained view, then select the matching independently pinned pair; do not rewrite pins from the view")
+    }
+}
+
+impl std::error::Error for WatermarkAssociationMismatch {}
+
+fn watermark(bytes: &[u8]) -> Option<ObservationWatermark> {
+    if bytes.len() > 1024 * 1024 {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_slice(bytes).ok()?;
+    let watermark: ObservationWatermark =
+        serde_json::from_value(value.get("watermark")?.clone()).ok()?;
+    (watermark.schema == WATERMARK_SCHEMA).then_some(watermark)
 }
 
 pub(super) fn export(
@@ -67,6 +89,30 @@ pub(super) fn replay(
         "agent result byte pin mismatch"
     );
     let view: AgentReviewResult = serde_json::from_slice(recorded)?;
+    // Validate the selected source/payload/prefix before producing any hint.
+    // This reuses the final export comparison; no expected pin comes from view.
+    let derived = export(
+        ObservationInput {
+            source: input.source,
+            ..input
+        },
+        payload,
+        payload_source_pin,
+    )?;
+    let expected: AgentReviewResult = serde_json::from_slice(&derived)?;
+    if view.schema == expected.schema
+        && view.qualification == expected.qualification
+        && view.source_view_json == expected.source_view_json
+        && view.prepared_payload_binding == expected.prepared_payload_binding
+        && view.accepted_intent == expected.accepted_intent
+        && view.remote_authenticity == expected.remote_authenticity
+        && view.whole_review_delivery == expected.whole_review_delivery
+        && watermark(&view.observation_view_json)
+            .zip(watermark(&expected.observation_view_json))
+            .is_some_and(|(recorded, selected)| recorded != selected)
+    {
+        return Err(WatermarkAssociationMismatch.into());
+    }
     let prior = RecordedObservationExport {
         source: RecordedReviewExport {
             view_json: view.source_view_json,
@@ -87,9 +133,6 @@ pub(super) fn replay(
         &prior,
         &sha256_hex(&prior.observation_json),
     )?;
-    ensure!(
-        export(input, payload, payload_source_pin)? == recorded,
-        "agent result replay mismatch"
-    );
+    ensure!(derived == recorded, "agent result replay mismatch");
     Ok(())
 }

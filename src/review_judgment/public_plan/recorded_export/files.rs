@@ -438,7 +438,13 @@ pub(crate) fn run(args: RecordedReviewArgs) -> Result<()> {
                 &prior,
                 &replay.view_sha256,
             )
-            .map_err(|_| anyhow::anyhow!("recorded agent replay rejected"))?;
+            .map_err(|error| {
+                if error.is::<super::agent_result::WatermarkAssociationMismatch>() {
+                    error
+                } else {
+                    anyhow::anyhow!("recorded agent replay rejected")
+                }
+            })?;
             let mut bytes = serde_json::to_vec(&serde_json::json!({
                 "schema":"ub-review.recorded-agent-file-replay.v1", "status":"replayed_recorded_sources_and_prefix",
                 "view_sha256":replay.view_sha256, "qualification":"shadow_recorded_only_pending_dependency_review",
