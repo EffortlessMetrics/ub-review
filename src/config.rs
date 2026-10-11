@@ -1145,6 +1145,18 @@ fn sanitize_impact_section(table: &mut toml::value::Table, errors: &mut Vec<Poli
 /// are stripped with `PolicyError` receipts so the run cannot silently fall
 /// back while looking configured.
 fn sanitize_providers_section(table: &mut toml::value::Table, errors: &mut Vec<PolicyError>) {
+    if let Some(value) = table.get("providers")
+        && value.as_table().is_none()
+    {
+        errors.push(PolicyError {
+            section: "providers".to_owned(),
+            detail: format!(
+                "invalid [providers] value {value}; expected a table with `policy`, `minimax`, and `opencode` keys"
+            ),
+        });
+        table.remove("providers");
+        return;
+    }
     let Some(providers) = table
         .get_mut("providers")
         .and_then(toml::Value::as_table_mut)
@@ -1168,6 +1180,16 @@ fn sanitize_providers_section(table: &mut toml::value::Table, errors: &mut Vec<P
         }
     }
     for provider in ["minimax", "opencode"] {
+        if let Some(value) = providers.get(provider)
+            && value.as_table().is_none()
+        {
+            errors.push(PolicyError {
+                section: format!("providers.{provider}"),
+                detail: format!("invalid [providers.{provider}] value {value}; expected a table"),
+            });
+            providers.remove(provider);
+            continue;
+        }
         let Some(provider_table) = providers
             .get_mut(provider)
             .and_then(toml::Value::as_table_mut)
@@ -2061,6 +2083,28 @@ unknown = true
         assert!(sanitize_policy_sections(&mut valid).is_empty());
         let kept: Config = valid.try_into()?;
         assert_eq!(kept.providers.policy, "minimax-only");
+        Ok(())
+    }
+
+    #[test]
+    fn providers_section_receipts_invalid_table_shapes_and_keeps_valid_siblings()
+    -> anyhow::Result<()> {
+        let malformed = Config::from_toml_with_policy_receipts(
+            "providers = \"disabled\"\n[impact]\nmode = \"active\"\n",
+        )?;
+        assert_eq!(malformed.policy_errors.len(), 1);
+        assert_eq!(malformed.policy_errors[0].section, "providers");
+        assert_eq!(malformed.providers.policy, "");
+        assert_eq!(malformed.impact.resolved_mode(), "active");
+
+        let malformed = Config::from_toml_with_policy_receipts(
+            "[providers]\npolicy = \"minimax-only\"\nminimax = false\nopencode = { max_concurrency = 2 }\n",
+        )?;
+        assert_eq!(malformed.policy_errors.len(), 1);
+        assert_eq!(malformed.policy_errors[0].section, "providers.minimax");
+        assert_eq!(malformed.providers.policy, "minimax-only");
+        assert_eq!(malformed.providers.minimax.max_concurrency, None);
+        assert_eq!(malformed.providers.opencode.max_concurrency, Some(2));
         Ok(())
     }
 
