@@ -159,7 +159,21 @@ fn first_run_commands(readme: &str) -> Result<Vec<Vec<&str>>> {
 fn readme_first_run_creates_advisory_setup_without_conflicting_commands() -> Result<()> {
     let readme = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("README.md"))?;
     let commands = first_run_commands(&readme)?;
-    ensure!(!commands.is_empty(), "README must contain a first-run path");
+    ensure!(
+        commands
+            == [
+                vec![
+                    "enable",
+                    "--inspect",
+                    "--mode",
+                    "advisory",
+                    "--model",
+                    "minimax"
+                ],
+                vec!["audit-ci"],
+            ],
+        "README first-run path must enable advisory review followed by audit-ci; keep optional migration commands separate"
+    );
     let fixture = Fixture::new()?;
     for args in &commands {
         let (status, output) = fixture.cli(args)?;
