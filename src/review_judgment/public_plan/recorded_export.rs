@@ -2,7 +2,14 @@
 //! This API consumes admitted typed source objects, not an arbitrary directory,
 //! Markdown, a transport transaction, or a model. It is not the final command
 //! or AgentReviewResult: delivery-event admission and its watermark are absent.
+<<<<<<< HEAD
 pub(crate) mod files;
+=======
+#![cfg_attr(
+    not(test),
+    expect(dead_code, reason = "policy/allow.toml#recorded-export-shadow-1335")
+)]
+>>>>>>> 5aaeda54 (wip(review): preserve independent recorded export facade)
 
 use anyhow::{Result, ensure};
 use serde::Serialize;
@@ -39,7 +46,10 @@ struct SourceExport<'a> {
     source_manifest_digest: &'a str,
     source_review_complete: bool,
     current_revision: crate::RevisionRef,
+<<<<<<< HEAD
     source_currentness: &'static str,
+=======
+>>>>>>> 5aaeda54 (wip(review): preserve independent recorded export facade)
     judgment: JudgmentView<'a>,
     public_plan: &'a RecordedPublicPlan,
     public_plan_recorded_bytes: Option<&'a [u8]>,
@@ -91,7 +101,10 @@ pub(crate) fn export_recorded_review(input: PublicPlanInput<'_>) -> Result<Recor
         source_manifest_digest: source_digest,
         source_review_complete: source.review_complete,
         current_revision: current_revision.revision_ref(),
+<<<<<<< HEAD
         source_currentness: "matches_admitted_revision",
+=======
+>>>>>>> 5aaeda54 (wip(review): preserve independent recorded export facade)
         judgment,
         public_plan_recorded_bytes: match &public_plan {
             RecordedPublicPlan::Validated { .. } => plan_bytes,

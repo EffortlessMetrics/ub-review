@@ -11,7 +11,9 @@ mod payload;
 mod recorded_export;
 
 =======
->>>>>>> e37a2835 (feat(review): validate shadow recorded public plans under #1014)
+mod recorded_export;
+
+>>>>>>> 5aaeda54 (wip(review): preserve independent recorded export facade)
 const PATCH: &str = "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1 +1 @@\n-safe();\n+danger();\n";
 const BODY_A: &[u8] = b"This unchecked index may read beyond the allocation.";
 const BODY_B: &[u8] = b"The summary-only claim remains material without an inline anchor.";
@@ -396,7 +398,6 @@ fn duplicate_locations_forged_subjects_and_reference_tampering_fail() -> Result<
 }
 
 #[test]
-<<<<<<< HEAD
 fn nested_delivery_firewall_preserves_exact_positive_bytes() -> Result<()> {
     let f = Fixture::new()?;
     let materials = f.materials();
@@ -456,8 +457,6 @@ fn nested_delivery_firewall_preserves_exact_positive_bytes() -> Result<()> {
 }
 
 #[test]
-=======
->>>>>>> e37a2835 (feat(review): validate shadow recorded public plans under #1014)
 fn private_and_operational_material_require_qualified_withholding() -> Result<()> {
     let f = Fixture::new()?;
     let anchors = f.anchors();
