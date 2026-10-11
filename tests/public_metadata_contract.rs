@@ -135,6 +135,22 @@ fn metadata_reader_and_option_lookup_reject_ambiguous_surfaces() -> Result<()> {
 }
 
 #[test]
+fn option_lookup_truncates_at_next_heading_and_normalizes_whitespace() -> Result<()> {
+    // Synthetic output is independent of Clap and the product's descriptions:
+    // later options must never supply words/defaults missing from the first.
+    let help = "\n      --posting <POSTING>\n          First\tparagraph.\n\n          Second   line.\n          [default: artifact-only]\n\n      --mode <MODE>\n          Later option must stay separate.\n          [default: review-byok]\n";
+    assert_eq!(
+        option(help, "posting")?,
+        "--posting <POSTING> First paragraph. Second line. [default: artifact-only]"
+    );
+    assert_eq!(
+        option(help, "mode")?,
+        "--mode <MODE> Later option must stay separate. [default: review-byok]"
+    );
+    Ok(())
+}
+
+#[test]
 fn action_recommendation_is_explicit_and_compatibility_defaults_are_preserved() -> Result<()> {
     let action = include_str!("../action.yml");
     let inputs = action_inputs(action)?;
