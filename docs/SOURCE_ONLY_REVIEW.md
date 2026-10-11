@@ -55,4 +55,4 @@ has distinct qualification and authorization. Neither programme creates a second
 engine or changes ub-review's CI authority.
 
 For present nonblocking use, see [advisory evaluation](ADOPTION_ADVISORY.md) and
-[Product state](PRODUCT_STATE.md) .
+[Product state](PRODUCT_STATE.md).
