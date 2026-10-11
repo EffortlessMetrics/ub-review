@@ -4,6 +4,7 @@
 //! Public-content admission/classification and delivery-subject authority are
 //! independently pinned caller obligations, not permissions minted here.
 
+pub(crate) mod payload;
 pub(crate) mod recorded_export;
 
 use std::collections::BTreeSet;
