@@ -45,8 +45,8 @@ The Rust unsafe evidence stack distinguishes exception-policy drift (`cargo-allo
 weak test oracles (`ripr`), unsafe-contract reviewability (`unsafe-review`), concrete
 mutation-test failure (`cargo-mutants`), concrete UB witnessed by execution (Miri), and
 execution coverage (Codecov). These do not establish the same proposition. See
-[unsafe-review policy](UNSAFE_REVIEW_POLICY.md) and [CI guidance](ci/unsafe-review.md)
-.
+[unsafe-review policy](UNSAFE_REVIEW_POLICY.md) and
+[CI guidance](ci/unsafe-review.md).
 
 A repository can also declare approved Required proof for intelligent CI, subject to
 the central allowlist and runtime budget:
@@ -136,5 +136,6 @@ back to building from source. Commit SHA refs use source installation. Explicit
 unsupported runner instead of silently rebuilding.
 
 Separate the Action SHA, release artifact, sensor bundle, and reviewed candidate
-identity. The full supported options and defaults live in [`action.yml`](../action.yml)
-; [Bun integration](GH_RUNNER_BUN.md) covers its specialist preset.
+identity. The full supported options and defaults live in
+[`action.yml`](../action.yml); [Bun integration](GH_RUNNER_BUN.md) covers its
+specialist preset.
