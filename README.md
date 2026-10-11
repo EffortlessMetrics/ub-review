@@ -1,589 +1,69 @@
 # ub-review
 
-Revision-bound evidence control plane for PR review and targeted CI.
+Agentic software production can turn out changes faster than traditional CI and review can economically handle. Builds, tests, model calls, and maintainer attention still cost something. An unfamiliar PR creates another problem: running its build scripts or tests before inspecting them gives that code a chance to execute.
 
-`ub-review` coordinates one evidence transaction over an exact admitted code
-state. It decides what deterministic evidence and bounded model investigation a
-change needs, brokers only approved proof tasks, reconciles the resulting
-claims and receipts, prepares one concise Pull Request Review, and records a
-separate CI evidence result.
+`ub-review` is being built for two jobs: **efficient, effective CI** and **first-line security review of untrusted contributions without executing their code**. Both paths should also produce an excellent PR review using much of the investigation they already need.
 
-It is not another generic PR-commenting bot, a fixed wall of AI reviewers, or a
-large CI matrix summarized by a model.
+[Try the current advisory path](#inspect-before-adopting) · [Current capabilities](docs/PRODUCT_STATE.md)
 
-```text
-exact admitted revision
-  -> repository facts + diff/impact context
-  -> deterministic sensors and Required proof
-  -> relevant model investigation
-  <-> approved focused proof and revision-bound receipts
-  -> claim reconciliation and final review judgment
-  -> one grouped Pull Request Review
-  + one current pass / finding / not_proven CI evidence report
-  -> retained audit artifacts
-```
+## Intelligent CI
 
-Today `gate-result` reports `pass | finding | not_proven`, while the legacy
-`gate-conclusion` remains enforcement authority. `PASS / FAIL / NOT_PROVEN`
-names the eventual `FinalizedOutcome.ci_evidence_result`; a current `finding`
-is not automatically target `fail`. See the canonical
-[CI outcome vocabulary](docs/PRODUCT_STATE.md#ci-outcome-vocabulary).
+A PR needs the checks its repository requires. It doesn't need independent jobs and reviewers repeatedly discovering the same facts or running equivalent work.
 
-## What sets it apart
+We're designing the CI path to start Required work promptly, reuse approved executions and their evidence, and spend additional compute where static analysis or model investigation finds a question worth testing. Builds, focused tests, sanitizers, and other proof still have a place; they should be selected for what they establish.
 
-- **Models investigate; receipts decide.** Models can form hypotheses, propose
-  findings, and request semantic proof. Rust resolves any request to an
-  approved target and command template. A model verdict is never proof.
-- **The reviewer has a controlled lab.** Focused proof can run while
-  investigation continues, and its receipt can change only the exact claim it
-  tested.
-- **Review and CI share evidence, not authority.** Review quality, publication
-  success, instrument coverage, and gate sufficiency remain separate results.
-- **One required check is the eventual authority surface, not one giant job.**
-  The destination is one stable coordinator over independently receipted tasks,
-  caches, deadlines, and side effects.
-- **Private machinery, public judgment.** Planner state, lane traces, provider
-  status, command output, and cost stay in artifacts. The PR surface spends
-  attention on material findings, verification questions, and the bounded
-  decision.
-- **Repository-native programmes replace generic reviewer panels.** Explicit
-  architecture, ownership, support, mirror, CI, and proof contracts should
-  determine which review programmes apply.
+The goal is better verification with less wasted runner time and model spend. We'll measure latency, total cost, review quality, and missed defects separately. Saving compute by silently skipping Required evidence wouldn't be much of an improvement.
 
-The initial work grew out of UB/native-boundary review, but the control-plane
-contract is broader: architecture-aware review and deterministic CI evidence
-for material changes.
+## Review untrusted code before running it
 
-## Current maturity
+A PR can change build scripts, workflows, dependencies, and tests. If our first move is to run them, we've already given the contribution more authority than it needed for an initial review.
 
-Candidate-head delivery transactions, current-head reconciliation, substantial
-review/proof substrate, immutable current-run revision joins, and the
-pure/replayable TaskLedger exist. Synthetic merge-result delivery binding and
-post-confirmed publication finalization remain open. Fast and late sensor
-execution, brokered proof, and standalone workers are now shadow-observed in
-the ledger. Receipt-content joins landed in #1290, and bounded shadow
-projection comparisons landed in #1289. Production-generated coherent packets
-and complete publication-boundary integration remain unproven under #957.
-The repository does **not** yet have one live task/resource scheduler,
-Required-first shared run plan, authoritative final lead, finalized outcome
-enforcement, trusted learning, hostile-head-safe stable coordinator, or
-externally calibrated sole-gate operation.
+The planned source-only path examines a bounded representation of the repository using approved static tools and model investigation. Candidate-controlled code does not run: no builds, tests, hooks, plugins, project language servers, or generated shell commands. It cannot dispatch executable proof or issue a CI pass.
 
-The released action should therefore be evaluated first in advisory or
-artifact-only operation. Promotion to a sole required check is a later,
-explicit repository-owner decision after exact-head stable-coordinator proof,
-rollback/break-glass coverage, and external calibration.
+Persistent repository context and inexpensive inference make it practical to investigate more changes without allocating a candidate-execution VM to every PR. That's useful for catching suspicious workflow changes, credential theft attempts, and other ways a contribution could compromise a developer or CI runner before someone runs it.
 
-See:
+Hostile source is still hostile input to parsers, tools, and models. Containment and detection quality need their own evidence. [Source-only review design and status](docs/SOURCE_ONLY_REVIEW.md).
 
-- [Product state](docs/PRODUCT_STATE.md) for the earned capability matrix and
-  active implementation front;
-- [Architecture](docs/ARCHITECTURE.md) for current versus destination
-  authority;
-- [advisory adoption](docs/ADOPTION_ADVISORY.md) for a non-blocking start;
-- [issue #840](https://github.com/EffortlessMetrics/ub-review/issues/840) for
-  the useful-reviewer and trustworthy-gate contract;
-- [issue #945](https://github.com/EffortlessMetrics/ub-review/issues/945) for
-  PR-sized execution order.
+## An excellent PR review from either path
+
+Both paths already need to understand what changed, what it affects, and where the evidence is weak. We want the maintainer to get one useful GitHub review from that work: material findings, specific verification questions, and evidence that changes the decision. They shouldn't have to read the status report from every model and sensor.
+
+A small additional investment in review can be worth it when it catches something important. We measure that benefit alongside the extra cost rather than optimizing purely for the fewest model calls.
+
+**A concrete review-output replay:** the [perl-lsp-swarm #3627 fixture](docs/REVIEW_EXPERIENCE_FIXTURES.md) starts with existing parser-review threads. Instead of duplicating the finding, its expected public output replies to the relevant thread:
+
+> Confirmed by focused execution: the later subscript case fails before the patch and passes on this head.
+
+On the fixed head, the expected public output is silent. This is a deterministic replay with recorded inputs and a fake GitHub transport, not a live model-review benchmark.
+
+## How the work fits together
+
+The shared design binds investigation to an exact code revision and reuses repository facts and change context. Static tools and model programmes can raise findings or questions. The CI path can run approved proof and connect its receipts to the claims they actually test; the source-only path records unresolved proof questions without executing them.
+
+Review judgment, successful GitHub delivery, and deterministic CI sufficiency remain different results. Full tool output, model traces, costs, and receipts stay in artifacts. The maintainer gets the findings that matter.
+
+[Architecture](docs/ARCHITECTURE.md) covers the execution and authority contracts. [CI efficiency design](docs/CI_EFFICIENCY_PATH.md) covers the intended scheduling and reuse model.
 
 ## Inspect before adopting
 
-Run these commands from a GitHub repository checkout with the UB Review CLI
-installed and `origin` set to that repository. `ub-review audit-ci` inventories
-CI without changing workflows or protection; it writes local audit receipts.
-Without GitHub authentication its history and required-check observations remain
-explicitly unavailable. The generators below write local proposals; none changes
-branch protection or removes existing CI.
+**Current availability:** revision-bound evidence collection, sensors, bounded model investigation, focused proof paths, and grouped-review compilation exist. The unified CI scheduler, externally calibrated sole required check, and operated source-only security service are still being built. [Product state](docs/PRODUCT_STATE.md) distinguishes implemented code, retained proof, and trusted authority.
 
-### Generate a new advisory setup
+For a first run without provider secrets or GitHub write permissions, use the [model-off, artifact-only advisory evaluation](docs/ADOPTION_ADVISORY.md) and keep existing required CI. That evaluates evidence collection; it does **not** demonstrate the model reviewer.
 
-Use this path only when the repository has no existing `.ub-review.toml` or
-UB Review workflow. **`enable --inspect` is not a dry run:** it inspects the
-repository, then writes `.github/workflows/ub-review.yml` and `.ub-review.toml`.
-The generated review posture below is nonblocking:
+With the CLI installed in a clean GitHub checkout with an `origin` remote, you can instead generate an advisory workflow and inventory existing CI. `enable --inspect` **writes** `.github/workflows/ub-review.yml` and `.ub-review.toml`; it isn't a dry run. Start only when those paths do not already exist:
 
 ```bash
 ub-review enable --inspect --mode advisory --model minimax
 ub-review audit-ci
 ```
 
-Do not run `init` first. `init` and `enable` are alternative setup paths;
-`enable` deliberately refuses a configuration that `init` already created.
-Keep that refusal when reviewing an existing installation rather than adding
-`--force` to a copied command. Review the generated diff before committing it.
-Release discovery requires access to GitHub's public release metadata. If no
-installable release is resolvable, generation stops unless an explicit reviewed
-`--action-sha` permits source-build fallback; do not invent a pin to continue.
+Review the generated files before committing them. The MiniMax option selects a model-on template, not a credential-safe source-only deployment. Do not expose provider or posting credentials to candidate-controlled execution. `audit-ci` writes local inventory receipts without altering existing CI or branch protection.
 
-The current generator prepares MiniMax review and optional OpenCode fallback;
-`--model minimax` selects that template, not permission to spend provider
-budget. For the first **model-off, artifact-only** evaluation, edit the generated
-UB Review Action step's `with:` mapping before running the workflow:
+`init` is an alternative configuration path, **not** a step before `enable`; the generator refuses to overwrite an existing setup. [Getting started](docs/QUICKSTART.md) covers installation, manual configuration, and the separate CI migration path.
 
-```yaml
-review-mode: advisory
-model-mode: off
-posting: artifact-only
-```
+## Documentation
 
-Remove its `minimax-api-key`, `opencode-api-key`, and `github-token` inputs for
-that evaluation, and reduce the workflow's `permissions:` to `contents: read`.
-Do not add provider secrets yet. Keep existing required CI unchanged. Enabling
-model review or GitHub posting later requires a separately reviewed credential
-and execution boundary; advisory mode alone does not isolate untrusted code.
-There is no `enable --model off` option. Model-off reports deterministic evidence
-without claiming that a semantic model review took place.
-
-### Manual configuration instead
-
-To create starter configuration and repository guidance without generating an
-Actions workflow, use this alternative in a repository without an existing
-configuration:
-
-```bash
-ub-review init --profile gh-runner
-```
-
-Review those files and configure the workflow manually; do not follow this
-command with `enable`. For an existing installation, review and preserve the
-current configuration and workflow rather than regenerating over them.
-
-### Preview an explicit CI migration
-
-This is a separate path, not a required final step of onboarding:
-
-```bash
-ub-review setup-ci --print-pr
-```
-
-Without accepted jobs it writes `migration-plan.md` only; it does not claim that
-preview files exist. To render the four new files in the preview, pass at least
-one exact audited job with its maintainer-supplied command and a reviewed
-40-hex UB Review commit:
-
-```bash
-ub-review setup-ci --print-pr \
-  --accept "$AUDITED_JOB=$REPOSITORY_OWNED_COMMAND" \
-  --action-sha "$REVIEWED_UB_REVIEW_SHA"
-```
-
-`setup-ci --open-pr` requires the same accepted-job and action-SHA inputs plus
-GitHub authentication. It opens the new-files-only migration PR but never
-mutates branch protection. Review the generated Required proof mapping and
-begin non-blocking; do not treat generated configuration as sole-gate proof.
-
-What the system never claims: code correctness, UB-freedom, replacement of
-security tooling, model findings as proof, prepared output as delivered output,
-or missing evidence as clean evidence.
-
-## What it writes
-
-```text
-target/ub-review/
-  input/
-    changed-files.txt
-    diff.patch
-    diff-context.json
-
-  sensors/
-    tokmd/
-    cargo-allow/
-    ripr/
-    unsafe-review/
-    ast-grep/
-    actionlint/
-    */ub-review-sensor-status.json
-
-  lanes/
-    ub.md
-    source-route.md
-    tests.md
-    arch.md
-    opposition.md
-    security.md
-
-  candidates/
-    candidate-0000-abc123def456.json
-    ...
-
-  observations/
-    tests-oracle.ndjson
-    source-route.ndjson
-    ...
-
-  proof_requests/
-    proof-001.json
-    ...
-
-  questions/
-    tests-oracle/
-      red-green.json
-      ...
-    orchestrator-follow-up/
-      follow-up-001.json
-      ...
-
-  review/
-    shared_context.md
-    metrics.json
-    review.json
-    review.md
-    candidates.json
-    observations.json
-    unique_observations.json
-    merged_observations.json
-    dropped_observations.json
-    orchestrator_plan.json
-    final_orchestrator_plan.json
-    model_stages.json
-    follow_up_results.json
-    follow_up_outputs.json
-    follow_up_evidence.json
-    resolved_candidates.json
-    final_compiler_input.json
-    witnesses.json
-    witness_registry.json
-    proof_requests.json
-    proof_request_groups.json
-    proof_receipts.json
-    proof_plan.md
-    receipt_routes.json
-    resource_leases.json
-    resource_plan.md
-    github-review.json
-    github-review-skip.json
-    post-result.json
-    post-error.json
-    github-review-post-payload.json
-    post-stdout.json
-    post-stderr.txt
-
-  events.ndjson
-  candidates.ndjson
-  follow_up_questions.ndjson
-  follow_up_results.ndjson
-  follow_up_outputs.ndjson
-  resolved_candidates.ndjson
-  model_stages.ndjson
-  witnesses.ndjson
-  proof_requests.ndjson
-  proof_receipts.ndjson
-  receipt_routes.ndjson
-  resource_leases.ndjson
-  running-summary.md
-```
-
-Start with:
-
-```text
-target/ub-review/running-summary.md
-target/ub-review/lanes/tests.md
-target/ub-review/lanes/ub.md
-target/ub-review/input/diff.patch
-```
-
-`resolved_candidates` reconciles `review/candidates.json` with
-`review/follow_up_results.json` and `review/follow_up_outputs.json`. It records
-unchanged, unresolved, unavailable, resolved, or conflicting candidate state
-after follow-up evidence; it is an audit receipt, not reviewer-facing text.
-
-## Bun preset
-
-The `bun-ub` preset loads `profiles/bun-ub-v0.toml` as the Bun review profile.
-The runtime profile (`gh-runner`, `cx23`, `cx33`, or `cx43`) supplies box
-budgets separately from `runtime/*.toml`.
-
-The profile creates six lane packets:
-
-| Lane | Purpose |
-|---|---|
-| `ub` | RAB, stale pointer/length, active view vs backing store, worker handoff |
-| `source-route` | public API route, sibling paths, PR claim truth |
-| `tests` | red/green proof, weak oracles, ASAN/witness posture |
-| `arch` | boundary placement, helper shape, smallest complete fix |
-| `opposition` | strongest correctness/test/perf/portability objection |
-| `security` | UB as exploit primitive, memory corruption, leak/DoS/security framing |
-
-Lane identity and model identity are separate. Static packet prefixes use lane
-names only; direct review mode records the provider/model separately in
-`review.json` and `review.md`. The Bun v0 direct model pass uses 10 lanes through
-direct MiniMax M3 with `provider-policy: minimax-only`. OpenCode Go canary/deep
-lanes remain available later through `provider-policy: minimax-primary`,
-`opencode-go-canary`, or `opencode-go-wide` once the provider key is proven.
-
-Use a full commit SHA for the Bun gate. The current known-good Bun pin is
-`EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd`,
-validated by `EffortlessSteven/bun#49` with a successful UB evidence packet,
-terminal state `sufficient`, artifact-only PR body skip, uploaded artifact,
-`tokmd` receipts, and verifier pass. Do not float the Bun hunt on `main`; update
-the SHA only after this repository's verifier and the Bun consumer workflow
-succeed.
-
-## Sensors
-
-Default core sensors are best-effort:
-
-- `tokmd` for deterministic repository/diff packets and LLM-ready context;
-- `cargo-allow` for source-tree exception ledger drift;
-- `ripr` for Rust changed-behavior test-oracle weakness;
-- `unsafe-review` for Rust unsafe-contract reviewability;
-- `ast-grep` for cheap structural route scans;
-- `actionlint` for workflow changes.
-
-Missing sensors are recorded as missing evidence. Missing evidence is never
-reported as clean evidence.
-
-Heavy witnesses such as builds, tests, Miri, ASAN, and mutation testing are off
-by default. Enable them only behind explicit workflow policy.
-
-Custom configs can mark a tool as required. The requirement applies only when
-the tool's trigger matches the current diff, so required workflow tools do not
-create evidence gaps on source-only PRs.
-
-```toml
-[tools.actionlint]
-required = true
-```
-
-### Rust unsafe evidence stack
-
-For Rust repositories with an unsafe surface, `unsafe-review` is the third
-static evidence pillar beside `cargo-allow` and `ripr`:
-
-| Tool | Review question |
-|---|---|
-| `cargo-allow` | Is this exception owned, scoped, evidenced, and not silently broadened? |
-| `ripr` | Does changed behavior appear exposed to a meaningful oracle? |
-| `unsafe-review` | Does changed unsafe code have reviewable safety evidence? |
-| `cargo-mutants` | Do tests fail against concrete mutants? |
-| Miri | Does this concrete execution hit UB? |
-| Codecov | Did this code execute? |
-
-`unsafe-review` asks whether an unsafe change has the safety contract,
-precondition guard, layout/alignment witness, aliasing/lifetime evidence, local
-test reach, and witness route needed for credible review. It is advisory by
-default and does not claim to prove soundness, UB-free status, or Miri
-cleanliness. See [docs/UNSAFE_REVIEW_POLICY.md](docs/UNSAFE_REVIEW_POLICY.md)
-and [docs/ci/unsafe-review.md](docs/ci/unsafe-review.md) for reusable repo
-guidance.
-
-## Review posting
-
-`ub-review run` prepares evidence and review artifacts. `ub-review post` submits
-`review/github-review.json` as one GitHub Pull Request Review:
-
-```bash
-ub-review run --posting review --out target/ub-review
-ub-review post --review-json target/ub-review/review/github-review.json
-```
-
-`post` writes separate success/error receipts. Current `gate_outcome` is not
-recomputed from them: `publication-result=posted` presently means the run
-prepared a payload, not that GitHub confirmed it. Candidate-head posting has
-retained proof; synthetic merge-result delivery binding remains open. See the
-[product state](docs/PRODUCT_STATE.md#capability-matrix).
-
-`ub-review gate-check` enforces a previously recorded gate verdict with the
-same `fail-on-gate` resolution `run` uses (`auto` enforces only for
-`--mode intelligent-ci`). The GitHub action's final `Enforce gate outcome`
-step calls it instead of re-implementing that logic in bash:
-
-```bash
-ub-review gate-check \
-  --gate-outcome target/ub-review/review/gate_outcome.json \
-  --fail-on-gate auto \
-  --mode intelligent-ci
-```
-
-Inline comments are only emitted when they pass the diff-line guardrails:
-repo-relative path, valid `RIGHT` side line from the PR diff, actionable
-severity, high or medium-high confidence, concise body, lane prefix, and
-evidence or a disproof condition. Other candidates stay in `review.md` under
-summary-only findings.
-
-## Efficient CI stance
-
-The intended cheap path is:
-
-```text
-1 runner job
-  checkout
-  build packet
-  run cheap sensors once
-  upload artifact
-```
-
-Do not run many independent review jobs that rediscover the repository. This
-action builds shared context once, runs bounded model lanes over that context,
-validates inline candidates, and submits one grouped PR review when configured.
-
-## Inputs
-
-| Input | Default | Meaning |
-|---|---|---|
-| `preset` | `bun-ub` | Repo preset. |
-| `config` | empty | Optional repo-local or absolute TOML config path; overrides `preset` when set. |
-| `profile` | `gh-runner` | Box profile. |
-| `base` | `origin/main` | Base ref. |
-| `head` | `HEAD` | Head ref. |
-| `out` | `target/ub-review` | Packet output directory. |
-| `tool-bundle` | `core` | `none`, `core`, `bun-fast`, or `full`. |
-| `install-tools` | `true` | Best-effort sensor install. |
-| `setup-rust` | `true` | Select Rust 1.95 with rustup when available. |
-| `install-mode` | `auto` | `auto`, `release`, `source`, or `path`. |
-| `binary-path` | empty | Existing binary path for `install-mode=path`. |
-| `release-version` | empty | Release tag for release downloads; empty lets tagged action refs provide the tag. |
-| `release-asset` | `ub-review-x86_64-unknown-linux-gnu.tar.gz` | Linux x64 release archive asset. |
-| `allow-heavy` | `false` | Permit heavy witness classes. |
-| `posting` | `review` | `review` posts one Pull Request Review; `artifact-only` only writes files. |
-| `mode` | `review-byok` | BYOK grouped review mode. `intelligent-ci` selects the required-gate product mode; legacy `review-direct` is accepted as an alias. |
-| `github-token` | empty | Scoped token for `posting=review`. |
-| `minimax-api-key` | empty | MiniMax M3 lane key. |
-| `minimax-api-url` | empty | Optional MiniMax API URL override. |
-| `minimax-provider-kind` | `anthropic` | MiniMax envelope, `anthropic` or `openai`. |
-| `minimax-model` | `MiniMax-M3` | MiniMax model name. |
-| `opencode-api-key` | empty | OpenCode Go key for optional direct provider lanes. |
-| `opencode-api-url` | empty | Optional OpenCode Go API URL override. |
-| `opencode-model` | `minimax-m3` | OpenCode Go canary model. |
-| `opencode-endpoint-kind` | `auto` | `auto`, `openai-chat`, or `anthropic-messages`. |
-| `model-mode` | `auto` | `auto` or `off`. |
-| `provider-policy` | `minimax-primary` | `minimax-primary`, `minimax-only`, `opencode-go-canary`, `opencode-go-wide`, or `auto`. |
-| `lane-width` | `10` | Bun model lane width: `6`, `10`, or `20`. |
-| `model-timeout-sec` | `300` | Per-model-call timeout. |
-| `max-inline-comments` | `8` | Upper bound for validated inline comments. |
-| `model-concurrency` | `8` | Planned model lane concurrency. |
-| `max-model-calls` | `14` | Upper bound for model review calls. |
-| `review-body-max-bytes` | `60000` | Maximum grouped review body size. |
-| `ledger-path` | empty | Optional read-only UB ledger path. |
-| `ledger-max-bytes` | `65536` | Maximum ledger context bytes. |
-| `fail-on-post-error` | `false` | Fail the action when PR review posting fails. |
-| `fail-on-gate` | `auto` | Gate enforcement: `auto`, `true`, or `false`. The action's final `Enforce gate outcome` step runs `ub-review gate-check`, which fails the check when `review/gate_outcome.json` records a `fail` conclusion and enforcement resolves to `true`; artifacts, the job summary, and PR review posting always complete first. `auto` resolves to `true` for `mode=intelligent-ci` and `false` otherwise. |
-| `github-summary` | `true` | Append running summary to job summary. |
-
-## Repo Config Proof Policy
-
-Custom configs can require proof in `intelligent-ci` mode. Matched requests are
-still routed through the central proof broker allowlist and runtime budget.
-
-```toml
-review_profile = "bun-ub-v0"
-profile = "gh-runner"
-
-[repo]
-kind = "rust"
-
-[[proof.required]]
-id = "cargo-check"
-languages = ["rust"]
-diff_classes = ["source-general", "source-ub"]
-command = "cargo check --workspace --locked"
-reason = "Required Rust workspace check for intelligent CI."
-cost = "focused-build"
-timeout_sec = 300
-required = true
-```
-
-## Outputs
-
-| Output | Meaning |
-|---|---|
-| `out` | Output directory containing the full packet. |
-| `summary-path` | `running-summary.md`. |
-| `events-path` | Append-only `events.ndjson`. |
-| `review-json-path` | Internal `review/review.json`. |
-| `metrics-json-path` | Review metrics artifact. |
-| `github-review-path` | Prepared grouped review payload. |
-| `post-result-path` | Successful grouped review post receipt. |
-| `post-error-path` | Grouped review post error receipt. |
-| `post-payload-path` | Exact grouped review payload submitted to GitHub. |
-| `post-stdout-path` | GitHub post response body artifact. |
-| `post-stderr-path` | GitHub post stderr artifact. |
-| `gate-outcome-path` | Deterministic gate verdict `review/gate_outcome.json`. |
-| `gate-conclusion` | Legacy single verdict — `pass`, `fail`, or `inconclusive`. Unchanged in meaning; this is what enforcement acts on. |
-| `analysis-result` | What the investigation established: `clean`, `findings`, `limited`, or `not_proven`. Insufficient evidence never reports `clean`. |
-| `publication-result` | Run-stage projection: `posted` currently means a review payload was prepared, not GitHub-confirmed. Post success/failure receipts remain separate until #959/#960 finalization. Other values are `not_needed`, `failed`, or `not_proven`. |
-| `gate-result` | Truthful check verdict: `pass`, `finding`, or `not_proven`. May be `not_proven` while `gate-conclusion` is `pass` — enforcement is unchanged, the report is not. |
-| `not-proven-reasons` | JSON array of token-prefixed reasons any result is `not_proven`. Consume with `fromJSON`. |
-| `sensor-coverage` | JSON object of instrument coverage counts. Consume with `fromJSON`. |
-
-## Bootstrap note
-
-With `install-mode=auto`, tagged action refs first try the Linux x64 release
-archive and fall back to a source build when the asset is unavailable. Commit
-SHA refs use the source build path. This keeps first adoption token-free and
-mechanically simple while leaving the faster release-binary path available for
-tagged rollouts. Explicit `install-mode=release` is strict: missing archives,
-missing checksum receipts, checksum mismatches, and unsupported runners fail
-instead of rebuilding from source. Use `auto` when fallback is acceptable. The
-consuming workflow can cache Cargo registry and target directories if needed.
-
-## Codex lane notes
-
-Codex work follows the current execution order in
-[issue #945](https://github.com/EffortlessMetrics/ub-review/issues/945) and the
-earned-state boundaries in [Product state](docs/PRODUCT_STATE.md).
-[The v0 lane brief](docs/CODEX_FINISH.md) retains historical Bun/provider
-decisions; it does not select today's next work. Keep one reviewable PR at a
-time and file real sensor defects in the matching `*-swarm` repo instead of
-silently absorbing them into `ub-review`.
-
-## Product state and implementation order
-
-[docs/PRODUCT_STATE.md](docs/PRODUCT_STATE.md) is the canonical earned-state
-matrix. It distinguishes implemented, production-wired, retained-run,
-trusted-authority, and externally calibrated capability instead of treating a
-schema or merged type as live authority.
-
-[Issue #945](https://github.com/EffortlessMetrics/ub-review/issues/945) owns the
-PR-sized execution order. Parent issues retain capability contracts; retained
-packets and exact-head verification outrank both prose surfaces. Historical
-roadmap/spec documents remain useful for design intent, but they are not the
-current merge-front authority.
-
-Fast/late sensor shadowing completed in #1263/#955, and proof/worker shadowing
-completed in #1266/#956. The #1290 receipt-content join and #1289 bounded
-shadow comparison are partial progress on #957; complete production packet
-and publication-boundary acceptance remains unproven.
-The remaining authority migration is deliberately serial:
-
-```text
-#957         coherent production packets and publication boundaries (unproven)
-  -> #958     pure FinalizedOutcome
-  -> #959     delivery finalization
-  -> #960     shadow integration and verification
-  -> #962     complete Horizon A packet proof
-```
-
-[The model-off CI-efficiency path](docs/CI_EFFICIENCY_PATH.md) is a bounded
-route through the same architecture, not a competing roadmap. Output
-containment through #1269/#1283 precedes measured use. #1274 proves the frozen
-model-off `SharedRunPlan` core and unlocks the pure #986 then deterministic #987
-scheduler path; #1120 remains required before model-programme and final-lead
-augmentation. Measured #1275 acceptance and #1277 result-plane
-non-interference precede #1015, which is the later enforcement switch. Until
-then, legacy `gate_outcome.conclusion` remains authority.
-
-Do not jump from the current substrate past those prerequisites into live
-scheduler authority, trusted learning, provider-native orchestration,
-CI-advisor behavior, or sole-gate promotion.
-
-## Local development
-
-```bash
-cargo generate-lockfile
-cargo fmt --all --check
-cargo check --workspace --all-targets --locked
-cargo test --workspace --all-targets --locked
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo doc --workspace --no-deps --locked
-```
-
-## Rust style
-
-- Rust 2024
-- Rust 1.95 MSRV
-- `unsafe_code = forbid`
-- efficient CI gates
-- advisory by default
-- one grouped PR Review when posting is configured
-- no issue-comment spam or standalone lane posts
+- [First-run advisory evaluation](docs/ADOPTION_ADVISORY.md) · [CLI and Action reference](docs/ACTION_REFERENCE.md)
+- [Review output and delivery](docs/REVIEW_BODY_CONTRACT.md) · [Packet artifacts](docs/ARTIFACTS.md)
+- [Source-only review](docs/SOURCE_ONLY_REVIEW.md) · [Architecture](docs/ARCHITECTURE.md)
+- [Bun/native-boundary preset](docs/GH_RUNNER_BUN.md) · [Current product state](docs/PRODUCT_STATE.md)
