@@ -978,6 +978,63 @@ pub(crate) fn posted_inline_comment_text(body: &str) -> String {
 }
 
 #[cfg(test)]
+mod github_review_serialization_tests {
+    use super::*;
+    use anyhow::{Result, ensure};
+
+    #[test]
+    fn github_review_round_trip_preserves_unicode_path_and_stable_post_json() -> Result<()> {
+        let review = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: "## Verification questions\n\n- Confirm the behavior on this changed line."
+                .to_owned(),
+            comments: vec![GitHubReviewComment {
+                path: "src/naïve/模块.rs".to_owned(),
+                line: 7,
+                side: "RIGHT".to_owned(),
+                body: "[tests] The changed branch is not exercised at this boundary.".to_owned(),
+                suggestion: None,
+            }],
+        };
+
+        let artifact = serde_json::to_vec(&review)?;
+        let decoded: GitHubReview = serde_json::from_slice(&artifact)?;
+        ensure!(
+            serde_json::to_value(&decoded)? == serde_json::to_value(&review)?,
+            "review artifact round trip changed its fields"
+        );
+
+        let first = serde_json::to_vec(&github_review_post_payload(&decoded)?)?;
+        let second = serde_json::to_vec(&github_review_post_payload(&decoded)?)?;
+        ensure!(
+            first == second,
+            "repeated post payload generation changed bytes"
+        );
+        let post: serde_json::Value = serde_json::from_slice(&first)?;
+        ensure!(post["comments"][0]["path"] == "src/naïve/模块.rs");
+        ensure!(post["comments"][0].get("suggestion").is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn empty_review_round_trip_keeps_an_explicit_empty_comments_array() -> Result<()> {
+        let review = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: "## Verification questions\n\n- Confirm the reported behavior.".to_owned(),
+            comments: Vec::new(),
+        };
+
+        let artifact = serde_json::to_vec(&review)?;
+        let decoded: GitHubReview = serde_json::from_slice(&artifact)?;
+        let payload = github_review_post_payload(&decoded)?;
+        let json = serde_json::to_value(payload)?;
+        ensure!(json["comments"].is_array());
+        ensure!(json["comments"].as_array().is_some_and(Vec::is_empty));
+        Ok(())
+    }
+}
+
+#[cfg(test)]
 mod output_degradation_tests {
     use super::*;
 
