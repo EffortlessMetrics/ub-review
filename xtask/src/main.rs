@@ -203,7 +203,11 @@ impl RenderReleaseNotesOptions {
                     if tag.is_some() {
                         bail!("duplicate --tag");
                     }
-                    tag = Some(args.next().context("--tag requires a value")?);
+                    let value = args.next().context("--tag requires a value")?;
+                    if value.starts_with("--") {
+                        bail!("--tag requires a value");
+                    }
+                    tag = Some(value);
                 }
                 "--output" => {
                     if output.is_some() {
@@ -3254,6 +3258,275 @@ path = "src/x.rs"
             expected,
             "SOURCE_DATE_EPOCH must not override the actual policy date"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn render_release_notes_options_parse_accepts_literal_and_flag_like_output() -> Result<()> {
+        let parsed = RenderReleaseNotesOptions::parse(
+            ["--tag", "v9.8.7-rc.12", "--output", "notes-out.md"]
+                .into_iter()
+                .map(str::to_owned),
+        )?;
+        assert_eq!(parsed.tag, "v9.8.7-rc.12");
+        assert_eq!(parsed.output, PathBuf::from("notes-out.md"));
+
+        let flag_output = RenderReleaseNotesOptions::parse(
+            ["--output", "--tag", "--tag", "v1"]
+                .into_iter()
+                .map(str::to_owned),
+        )?;
+        assert_eq!(flag_output.tag, "v1");
+        assert_eq!(flag_output.output, PathBuf::from("--tag"));
+        Ok(())
+    }
+
+    #[test]
+    fn render_release_notes_options_parse_rejects_negatives_with_targeted_diagnostics() -> Result<()>
+    {
+        let cases: &[(&[&str], &str)] = &[
+            (&["--output", "notes-out.md"], "missing required --tag"),
+            (&["--tag", "v1"], "missing required --output"),
+            (&["--tag"], "--tag requires a value"),
+            (&["--tag", "v1", "--output"], "--output requires a value"),
+            (
+                &["--tag", "v1", "--tag", "v1", "--output", "notes-out.md"],
+                "duplicate --tag",
+            ),
+            (
+                &[
+                    "--tag",
+                    "v1",
+                    "--output",
+                    "notes-out.md",
+                    "--output",
+                    "notes-out.md",
+                ],
+                "duplicate --output",
+            ),
+            (
+                &["--tag", "v1", "--output", "notes-out.md", "--unknown"],
+                "unexpected render-release-notes argument `--unknown`",
+            ),
+            (
+                &["--tag", "v1", "--output", "notes-out.md", "extra"],
+                "unexpected render-release-notes argument `extra`",
+            ),
+            (
+                &["--tag", "", "--output", "notes-out.md"],
+                "--tag must not be empty",
+            ),
+            (
+                &["--tag", "   ", "--output", "notes-out.md"],
+                "--tag must not be empty",
+            ),
+            (
+                &["--tag", "v1", "--output", ""],
+                "--output must not be empty",
+            ),
+            (
+                &["--tag", "--output", "notes-out.md"],
+                "--tag requires a value",
+            ),
+        ];
+        for &(args, expected) in cases {
+            let error =
+                match RenderReleaseNotesOptions::parse(args.iter().copied().map(str::to_owned)) {
+                    Ok(options) => bail!("args {args:?} unexpectedly parsed as {options:?}"),
+                    Err(error) => error,
+                };
+            assert!(
+                format!("{error:#}").contains(expected),
+                "args {args:?} diagnostic must contain {expected:?}: {error:#}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn is_valid_release_tag_matches_workflow_shapes_and_rejects_invalid() {
+        for tag in ["v1", "v0.1.2_rc.3", "v9.8.7-rc.12"] {
+            assert!(is_valid_release_tag(tag), "valid tag {tag} rejected");
+        }
+        for tag in [
+            "", "v", "vx", "1.2.3", "V1", "v 1", "v1!", "v1 ", " v1", "v1é", "vá1", "v1\t", "v1\n",
+            "v１",
+        ] {
+            assert!(!is_valid_release_tag(tag), "invalid tag {tag:?} accepted");
+        }
+    }
+
+    #[test]
+    fn render_release_notes_substitutes_exact_literal_bytes() -> Result<()> {
+        assert_eq!(
+            render_release_notes(
+                "# ub-review $TAG\n\nVersion $TAG is ready.\n",
+                "v9.8.7-rc.12"
+            )?,
+            "# ub-review v9.8.7-rc.12\n\nVersion v9.8.7-rc.12 is ready.\n"
+        );
+        assert_eq!(
+            render_release_notes("héllo $TAG wörld 🎉\n", "v1")?,
+            "héllo v1 wörld 🎉\n"
+        );
+        assert_eq!(
+            render_release_notes("# ub-review $TAG\n\nPrice $20 stays.\n", "v1")?,
+            "# ub-review v1\n\nPrice $20 stays.\n"
+        );
+        assert_eq!(
+            render_release_notes("notes $TAG trailing $\n", "v1")?,
+            "notes v1 trailing $\n"
+        );
+        assert_eq!(
+            render_release_notes("version $TAG$", "v0.1.2_rc.3")?,
+            "version v0.1.2_rc.3$"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn render_release_notes_rejects_unknown_and_missing_slots() -> Result<()> {
+        for (template, token) in [
+            ("# ub-review $TAG\n\n$VERSION\n", "$VERSION"),
+            ("# ub-review $TAG_EXTRA\n", "$TAG_EXTRA"),
+            ("# ub-review ${TAG}\n", "${TAG}"),
+            ("# ub-review ${TAG\n", "${TAG"),
+        ] {
+            let error = match render_release_notes(template, "v9.8.7-rc.12") {
+                Ok(rendered) => {
+                    bail!("template {template:?} unexpectedly rendered as {rendered:?}")
+                }
+                Err(error) => error,
+            };
+            let message = format!("{error:#}");
+            assert!(message.contains("unknown placeholder"), "{message}");
+            assert!(message.contains(token), "{message}");
+        }
+        for template in ["# ub-review\n\nNo version slot.\n", "Price $20 stays.\n"] {
+            let error = match render_release_notes(template, "v1") {
+                Ok(rendered) => {
+                    bail!("template {template:?} unexpectedly rendered as {rendered:?}")
+                }
+                Err(error) => error,
+            };
+            assert!(
+                format!("{error:#}").contains("template contains no $TAG version slot"),
+                "{error:#}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn run_render_release_notes_writes_relative_and_absolute_outputs() -> Result<()> {
+        let root = temp_repo_root("render-ok")?;
+        fs::create_dir_all(root.join(".github"))?;
+        fs::write(
+            root.join(".github").join("release-notes.md"),
+            "# ub-review $TAG\n\nVersion $TAG is ready.\n",
+        )?;
+        let relative = RenderReleaseNotesOptions {
+            tag: "v9.8.7-rc.12".to_owned(),
+            output: PathBuf::from("notes-out.md"),
+        };
+        run_render_release_notes(&root, &relative)?;
+        assert_eq!(
+            fs::read_to_string(root.join("notes-out.md"))?,
+            "# ub-review v9.8.7-rc.12\n\nVersion v9.8.7-rc.12 is ready.\n"
+        );
+
+        let absolute_path = root.join("abs-out.md");
+        assert!(absolute_path.is_absolute());
+        let absolute = RenderReleaseNotesOptions {
+            tag: "v1".to_owned(),
+            output: absolute_path.clone(),
+        };
+        run_render_release_notes(&root, &absolute)?;
+        assert_eq!(
+            fs::read_to_string(&absolute_path)?,
+            "# ub-review v1\n\nVersion v1 is ready.\n"
+        );
+        fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn run_render_release_notes_failures_leave_sentinel_with_targeted_diagnostics() -> Result<()> {
+        let root = temp_repo_root("render-bad-tag")?;
+        fs::create_dir_all(root.join(".github"))?;
+        fs::write(
+            root.join(".github").join("release-notes.md"),
+            "# ub-review $TAG\n\nVersion $TAG is ready.\n",
+        )?;
+        fs::write(
+            root.join("notes-out.md"),
+            "sentinel-1342-output-untouched\n",
+        )?;
+        let invalid = RenderReleaseNotesOptions {
+            tag: "vx".to_owned(),
+            output: PathBuf::from("notes-out.md"),
+        };
+        let error = match run_render_release_notes(&root, &invalid) {
+            Ok(()) => bail!("invalid tag unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        let message = format!("{error:#}");
+        assert!(message.contains("invalid tag"), "{message}");
+        assert!(message.contains("vx"), "{message}");
+        assert_eq!(
+            fs::read_to_string(root.join("notes-out.md"))?,
+            "sentinel-1342-output-untouched\n"
+        );
+        fs::remove_dir_all(&root)?;
+
+        let root = temp_repo_root("render-bad-template")?;
+        fs::create_dir_all(root.join(".github"))?;
+        fs::write(
+            root.join(".github").join("release-notes.md"),
+            "# ub-review $TAG_EXTRA\n",
+        )?;
+        fs::write(
+            root.join("notes-out.md"),
+            "sentinel-1342-output-untouched\n",
+        )?;
+        let unknown = RenderReleaseNotesOptions {
+            tag: "v9.8.7-rc.12".to_owned(),
+            output: PathBuf::from("notes-out.md"),
+        };
+        let error = match run_render_release_notes(&root, &unknown) {
+            Ok(()) => bail!("unknown placeholder unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        let message = format!("{error:#}");
+        assert!(message.contains("unknown placeholder"), "{message}");
+        assert!(message.contains("$TAG_EXTRA"), "{message}");
+        assert_eq!(
+            fs::read_to_string(root.join("notes-out.md"))?,
+            "sentinel-1342-output-untouched\n"
+        );
+        fs::remove_dir_all(&root)?;
+
+        let root = temp_repo_root("render-missing-template")?;
+        fs::write(
+            root.join("notes-out.md"),
+            "sentinel-1342-output-untouched\n",
+        )?;
+        let missing = RenderReleaseNotesOptions {
+            tag: "v1".to_owned(),
+            output: PathBuf::from("notes-out.md"),
+        };
+        let error = match run_render_release_notes(&root, &missing) {
+            Ok(()) => bail!("absent template unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        let message = format!("{error:#}");
+        assert!(message.contains("read"), "{message}");
+        assert!(message.contains("release-notes.md"), "{message}");
+        assert_eq!(
+            fs::read_to_string(root.join("notes-out.md"))?,
+            "sentinel-1342-output-untouched\n"
+        );
+        fs::remove_dir_all(&root)?;
         Ok(())
     }
 }
