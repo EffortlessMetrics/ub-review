@@ -80,6 +80,8 @@ fn stopped_child_receipt(stop: Stop) -> Result<()> {
         command: None,
     };
     let mut child_was_running = false;
+    #[cfg(target_os = "linux")]
+    let mut child_pid = None;
     let mut cleanup_called = false;
     let mut cleanup = || {
         cleanup_called = true;
@@ -116,6 +118,15 @@ fn stopped_child_receipt(stop: Stop) -> Result<()> {
                     for _ in 0..100 {
                         if started.is_file() {
                             child_was_running = child.try_wait()?.is_none();
+                            #[cfg(target_os = "linux")]
+                            {
+                                if !Path::new("/proc").join(child.id().to_string()).is_dir() {
+                                    return Err(io::Error::other(
+                                        "live child is not visible in procfs",
+                                    ));
+                                }
+                                child_pid = Some(child.id());
+                            }
                             return match stop {
                                 Stop::Interrupted => Err(io::Error::new(
                                     io::ErrorKind::Interrupted,
@@ -139,6 +150,17 @@ fn stopped_child_receipt(stop: Stop) -> Result<()> {
         "the regression must interrupt a live physical child"
     );
     ensure!(cleanup_called);
+    // A killed child can remain a zombie if the runner omits its reap. Marker
+    // absence alone cannot detect that bug. Linux procfs retains the PID until
+    // the parent collects its exit status; check before creating other children.
+    #[cfg(target_os = "linux")]
+    {
+        let pid = child_pid.context("live child PID was not observed")?;
+        ensure!(
+            !Path::new("/proc").join(pid.to_string()).exists(),
+            "proof runner returned before reaping child {pid}"
+        );
+    }
     let (status, disposition, timed_out) = match stop {
         Stop::Interrupted => ("skipped", TaskTerminalDisposition::Cancelled, false),
         Stop::TimedOut => ("timed_out", TaskTerminalDisposition::TimedOut, true),
