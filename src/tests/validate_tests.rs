@@ -3,6 +3,179 @@
 use super::*;
 use crate::*;
 
+// Joined offline proof of the artifact-only internal_audit contract. These
+// invented tokens are canaries, not credentials; public finding text is not
+// promised arbitrary secret detection by this contract.
+#[test]
+fn model_public_privacy_join_retains_private_audit_and_public_evidence() -> Result<()> {
+    for has_finding in [false, true] {
+        let temp = tempfile::tempdir()?;
+        let model_dir = temp.path().join("model");
+        let review_dir = temp.path().join("review");
+        fs::create_dir_all(&review_dir)?;
+        let lane = model_lane("tests-oracle", "Test oracle", &["tokmd"], "Check tests.");
+        let private_tokens = [
+            "SYNTHETIC_API_KEY=offline_audit_surface_7429",
+            "Bearer offline_rejected_hypothesis_5831",
+            "SYNTHETIC_PASSWORD=offline_uncertainty_9164",
+        ];
+        let finding_body =
+            "[tests-oracle] The changed route lacks a discriminating boundary assertion.";
+        let finding_evidence =
+            "src/lib.rs:2 added pointer; synthetic focused receipt boundary-oracle";
+        let mut wire = serde_json::json!({
+            "internal_audit": {
+                "surfaces_checked": [private_tokens[0]],
+                "strongest_rejected_hypothesis": private_tokens[1],
+                "remaining_local_uncertainty": private_tokens[2]
+            },
+            "candidate_findings": [],
+            "observations": [],
+            "proof_intents": []
+        });
+        if has_finding {
+            wire["candidate_findings"] = serde_json::json!([{
+                "severity": "medium", "confidence": "high",
+                "path": "src/lib.rs", "line": 2,
+                "body": finding_body, "evidence": finding_evidence
+            }]);
+        }
+        let raw = serde_json::to_string(&wire)?;
+        let output: LaneModelOutput = serde_json::from_str(&raw)?;
+        assert_eq!(
+            output.internal_audit_classification,
+            InternalAuditClassification::ValidNonEmpty
+        );
+        let audit = output
+            .internal_audit
+            .as_ref()
+            .context("private audit missing")?;
+        write_internal_audit_artifact(&model_dir, &lane.id, audit)?;
+        let retained = fs::read_to_string(internal_audit_artifact_path(&model_dir, &lane.id)?)?;
+        for token in private_tokens {
+            assert!(raw.contains(token));
+            assert!(
+                retained.contains(token),
+                "private audit evidence must survive"
+            );
+        }
+        let mut diff = test_diff();
+        diff.patch = "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,3 +1,4 @@\n pub fn active_len(len: usize) -> usize {\n+    let ptr = &len as *const usize;\n     len\n }\n".to_owned();
+        let right_lines = right_side_diff_lines(&diff.patch);
+        let mut inline = Vec::new();
+        let mut summary = Vec::new();
+        let mut observations = Vec::new();
+        let mut requests = Vec::new();
+        let mut intents = Vec::new();
+        let mut issues = Vec::new();
+        apply_model_output(
+            &lane,
+            output,
+            &right_lines,
+            ModelOutputSinks {
+                inline_comments: &mut inline,
+                summary_only_findings: &mut summary,
+                model_observations: &mut observations,
+                proof_requests: &mut requests,
+                proof_intents: &mut intents,
+                issue_candidates: &mut issues,
+            },
+        );
+        assert_eq!(inline.len(), usize::from(has_finding));
+        assert!(summary.is_empty());
+        assert!(observations.is_empty());
+        assert!(requests.is_empty());
+        assert!(intents.is_empty());
+        assert!(issues.is_empty());
+        let args = test_run_args(temp.path().to_path_buf());
+        let plan = test_plan(Vec::new());
+        let policy = ReviewBodyPolicy::default();
+        let lanes = [model_lane_receipt("tests-oracle", "ok")];
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &policy,
+            run_pass: RunPass::Manual,
+            post_review_on: &[],
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &lanes,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &inline,
+            summary_only_findings: &summary,
+            observations: &observations,
+            proof_receipts: &[],
+            suggested_issues: &[],
+            final_follow_up_tasks: 0,
+            reporter_distillation: None,
+        })?;
+        assert_eq!(surface.should_prepare_github_review, has_finding);
+        assert_eq!(
+            surface.review_payload_status,
+            if has_finding {
+                "prepared"
+            } else {
+                "skipped_empty_smoke"
+            }
+        );
+        // Exercise the real payload validator/writer offline. The empty
+        // projection must be rejected without creating a public artifact.
+        let write_result = write_github_review_payload(
+            &review_dir,
+            &surface.github_review,
+            &right_lines,
+            &policy,
+            false,
+        );
+        let public_bytes = if has_finding {
+            write_result?;
+            fs::read_to_string(review_dir.join("github-review.json"))?
+        } else {
+            let error = write_result
+                .err()
+                .context("empty review unexpectedly admitted")?;
+            assert!(error.to_string().contains("missing reviewer-value content"));
+            assert!(!review_dir.join("github-review.json").exists());
+            serde_json::to_string(&surface.github_review)?
+        };
+        let public: serde_json::Value = serde_json::from_str(&public_bytes)?;
+        for token in private_tokens {
+            assert!(
+                !public_bytes.contains(token),
+                "private canary leaked to public JSON"
+            );
+            assert!(
+                !surface.artifact_body.contains(token),
+                "audit escaped its private lane artifact"
+            );
+        }
+        assert_eq!(public["event"], "COMMENT");
+        assert_eq!(
+            public["comments"]
+                .as_array()
+                .context("comments missing")?
+                .len(),
+            usize::from(has_finding)
+        );
+        if has_finding {
+            assert_eq!(inline[0].evidence, finding_evidence);
+            assert!(surface.artifact_body.contains(finding_evidence));
+            assert_eq!(public["comments"][0]["path"], "src/lib.rs");
+            assert_eq!(public["comments"][0]["line"], 2);
+            assert_eq!(public["comments"][0]["side"], "RIGHT");
+            assert_eq!(public["comments"][0]["body"], finding_body);
+        } else {
+            assert_eq!(public["body"], "");
+        }
+        assert_eq!(
+            fs::read_to_string(internal_audit_artifact_path(&model_dir, &lane.id)?)?,
+            retained
+        );
+    }
+    Ok(())
+}
+
 #[test]
 fn summary_only_guard_rejects_unsupported_model_findings() -> Result<()> {
     let lane = default_lanes()
