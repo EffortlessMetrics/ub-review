@@ -556,11 +556,15 @@ fn is_rust_input(path: &[u8]) -> bool {
 
 fn git_paths(root: &Path, args: &[&str]) -> Result<Vec<Vec<u8>>> {
     let output = git_bytes(root, args)?;
-    Ok(output
+    Ok(parse_git_paths(&output))
+}
+
+fn parse_git_paths(output: &[u8]) -> Vec<Vec<u8>> {
+    output
         .split(|byte| *byte == b'\0')
         .filter(|path| !path.is_empty())
         .map(<[u8]>::to_vec)
-        .collect())
+        .collect()
 }
 
 fn git_bytes(root: &Path, args: &[&str]) -> Result<Vec<u8>> {
@@ -1931,110 +1935,95 @@ mod tests {
         Ok(root)
     }
 
-    fn assert_local_ripr_path_admission(path: &Path, tracked: bool) -> Result<()> {
-        let root = initialized_test_repo("ripr-path-admission")?;
-        git_test(&root, &["config", "core.quotePath", "true"])?;
-        let file = root.join(path);
-        fs::create_dir_all(file.parent().context("fixture path has no parent")?)?;
-        fs::write(&file, "initial\n")?;
-        if tracked {
-            git_test(&root, &["add", "."])?;
-            git_test(&root, &["commit", "-m", "path fixture"])?;
-            fs::write(&file, "changed\n")?;
-        }
-        let calls = RefCell::new(0);
-        let result = run_local_ripr_with(
-            &root,
-            RiprOptions {
-                base: "HEAD".to_owned(),
-            },
-            |_, args, _| {
-                *calls.borrow_mut() += 1;
-                let stdout = if args == ["--version"] {
-                    b"ripr 0.10.0\n".to_vec()
-                } else if args.last().map(String::as_str) == Some("badge-json") {
-                    fake_badge(0, 0, 1)
-                } else if args.last().map(String::as_str) == Some("json") {
-                    fake_detail(&["exposed"])
-                } else {
-                    b"no exposure gaps\n".to_vec()
-                };
-                Ok(RiprInvocation {
-                    success: true,
-                    stdout,
-                    stderr: Vec::new(),
-                })
-            },
-        );
-        let out_dir = root.join("target/xtask/ripr");
-        if tracked {
-            result?;
-            assert_eq!(*calls.borrow(), 4, "tracked input {path:?} was skipped");
-            let receipt: JsonValue =
-                serde_json::from_slice(&fs::read(out_dir.join("receipt.json"))?)?;
-            assert_eq!(receipt["status"], "completed");
-            assert_eq!(
-                fs::read(out_dir.join("diff.patch"))?,
-                git_bytes(&root, &["diff", "--binary", "--no-ext-diff", "HEAD", "--"])?
+    #[test]
+    fn local_ripr_quoted_paths_preserve_input_admission() -> Result<()> {
+        let paths: Vec<PathBuf> = [
+            "src/é.rs",
+            "src/regular.rs",
+            "src/with space.rs",
+            "crates/é/Cargo.toml",
+            "crates/é/Cargo.lock",
+        ]
+        .into_iter()
+        .map(PathBuf::from)
+        .collect();
+        #[cfg(unix)]
+        let paths = {
+            use std::ffi::OsStr;
+            use std::os::unix::ffi::OsStrExt;
+            let mut paths = paths;
+            paths.extend(
+                [
+                    b"src/tab\tfile.rs".as_slice(),
+                    b"src/new\nline.rs",
+                    b"crates/tab\tparent/Cargo.toml",
+                    b"crates/new\nparent/Cargo.lock",
+                    b"src/bad-\xff.rs",
+                ]
+                .into_iter()
+                .map(|path| PathBuf::from(OsStr::from_bytes(path))),
             );
-        } else {
-            let error = result
-                .err()
-                .with_context(|| format!("untracked input {path:?} was admitted"))?;
-            let message = format!("{error:#}");
-            assert!(message.contains("untracked Rust inputs"));
-            assert!(message.contains(&format!("{:?}", path.as_os_str().to_string_lossy())));
-            assert_eq!(*calls.borrow(), 0);
-            assert!(!out_dir.join("receipt.json").exists());
-            assert!(!out_dir.join("diff.patch").exists());
-        }
-        fs::remove_dir_all(root)?;
-        Ok(())
-    }
-
-    #[test]
-    fn local_ripr_quoted_tracked_paths_reach_ready_feedback() -> Result<()> {
-        for path in [
-            "src/regular.rs",
-            "src/with space.rs",
-            "src/é.rs",
-            "crates/é/Cargo.toml",
-            "crates/é/Cargo.lock",
-        ] {
-            assert_local_ripr_path_admission(Path::new(path), true)?;
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn local_ripr_quoted_untracked_paths_fail_before_feedback() -> Result<()> {
-        for path in [
-            "src/regular.rs",
-            "src/with space.rs",
-            "src/é.rs",
-            "crates/é/Cargo.toml",
-            "crates/é/Cargo.lock",
-        ] {
-            assert_local_ripr_path_admission(Path::new(path), false)?;
-        }
-        Ok(())
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn local_ripr_quoted_control_and_non_utf8_paths_keep_input_boundaries() -> Result<()> {
-        use std::ffi::OsStr;
-        use std::os::unix::ffi::OsStrExt;
-
-        for path in [
-            b"src/tab\tfile.rs".as_slice(),
-            b"src/new\nline.rs",
-            b"crates/tab\tparent/Cargo.toml",
-            b"crates/new\nparent/Cargo.lock",
-            b"src/bad-\xff.rs",
-        ] {
+            paths
+        };
+        for path in paths {
             for tracked in [true, false] {
-                assert_local_ripr_path_admission(Path::new(OsStr::from_bytes(path)), tracked)?;
+                let root = initialized_test_repo("ripr-path-admission")?;
+                git_test(&root, &["config", "core.quotePath", "true"])?;
+                let file = root.join(&path);
+                fs::create_dir_all(file.parent().context("fixture path has no parent")?)?;
+                fs::write(&file, "initial\n")?;
+                if tracked {
+                    git_test(&root, &["add", "."])?;
+                    git_test(&root, &["commit", "-m", "path fixture"])?;
+                    fs::write(&file, "changed\n")?;
+                }
+                let calls = RefCell::new(0);
+                let result = run_local_ripr_with(
+                    &root,
+                    RiprOptions {
+                        base: "HEAD".to_owned(),
+                    },
+                    |_, args, _| {
+                        *calls.borrow_mut() += 1;
+                        let stdout = if args == ["--version"] {
+                            b"ripr 0.10.0\n".to_vec()
+                        } else if args.last().map(String::as_str) == Some("badge-json") {
+                            fake_badge(0, 0, 1)
+                        } else if args.last().map(String::as_str) == Some("json") {
+                            fake_detail(&["exposed"])
+                        } else {
+                            b"no exposure gaps\n".to_vec()
+                        };
+                        Ok(RiprInvocation {
+                            success: true,
+                            stdout,
+                            stderr: Vec::new(),
+                        })
+                    },
+                );
+                let out_dir = root.join("target/xtask/ripr");
+                if tracked {
+                    result?;
+                    assert_eq!(*calls.borrow(), 4, "tracked input {path:?} was skipped");
+                    let receipt: JsonValue =
+                        serde_json::from_slice(&fs::read(out_dir.join("receipt.json"))?)?;
+                    assert_eq!(receipt["status"], "completed");
+                    assert_eq!(
+                        fs::read(out_dir.join("diff.patch"))?,
+                        git_bytes(&root, &["diff", "--binary", "--no-ext-diff", "HEAD", "--"])?
+                    );
+                } else {
+                    let error = result
+                        .err()
+                        .with_context(|| format!("untracked input {path:?} was admitted"))?;
+                    let message = format!("{error:#}");
+                    assert!(message.contains("untracked Rust inputs"));
+                    assert!(message.contains(&format!("{:?}", path.as_os_str().to_string_lossy())));
+                    assert_eq!(*calls.borrow(), 0);
+                    assert!(!out_dir.join("receipt.json").exists());
+                    assert!(!out_dir.join("diff.patch").exists());
+                }
+                fs::remove_dir_all(root)?;
             }
         }
         Ok(())
@@ -2047,7 +2036,7 @@ mod tests {
         use std::os::unix::ffi::OsStrExt;
 
         let root = initialized_test_repo("ripr-git-path-bytes")?;
-        let mut expected: Vec<Vec<u8>> = [
+        let expected: Vec<Vec<u8>> = [
             b"src/\xc3\xa9.rs".as_slice(),
             b"src/tab\tfile.rs",
             b"src/new\nline.rs",
@@ -2061,16 +2050,67 @@ mod tests {
         for path in &expected {
             fs::write(root.join(OsStr::from_bytes(path)), "fixture\n")?;
         }
-        expected.sort();
         for quote_paths in ["true", "false"] {
             git_test(&root, &["config", "core.quotePath", quote_paths])?;
-            let mut paths =
-                git_paths(&root, &["ls-files", "-z", "--others", "--exclude-standard"])?;
-            paths.sort();
-            assert_eq!(paths, expected);
+            assert_eq!(
+                git_paths(&root, &["ls-files", "-z", "--others", "--exclude-standard"])?,
+                vec![
+                    b" leading.rs\n".to_vec(),
+                    b"notes.rs\ntrailing.md".to_vec(),
+                    b"src/bad-\xff.rs".to_vec(),
+                    b"src/new\nline.rs".to_vec(),
+                    b"src/tab\tfile.rs".to_vec(),
+                    b"src/\xc3\xa9.rs".to_vec(),
+                ]
+            );
+        }
+        git_test(&root, &["add", "."])?;
+        git_test(&root, &["commit", "-m", "path bytes"])?;
+        for path in &expected {
+            fs::write(root.join(OsStr::from_bytes(path)), "changed\n")?;
+        }
+        for quote_paths in ["true", "false"] {
+            git_test(&root, &["config", "core.quotePath", quote_paths])?;
+            assert_eq!(
+                git_paths(&root, &["diff", "--name-only", "-z", "HEAD", "--"])?,
+                vec![
+                    b" leading.rs\n".to_vec(),
+                    b"notes.rs\ntrailing.md".to_vec(),
+                    b"src/bad-\xff.rs".to_vec(),
+                    b"src/new\nline.rs".to_vec(),
+                    b"src/tab\tfile.rs".to_vec(),
+                    b"src/\xc3\xa9.rs".to_vec(),
+                ]
+            );
         }
         fs::remove_dir_all(root)?;
         Ok(())
+    }
+
+    #[test]
+    fn local_ripr_path_decoder_splits_only_nul_and_preserves_literal_bytes() {
+        assert_eq!(parse_git_paths(b""), Vec::<Vec<u8>>::new());
+        assert_eq!(parse_git_paths(b"\0\0"), Vec::<Vec<u8>>::new());
+        assert_eq!(
+            parse_git_paths(b"src/only.rs\0"),
+            vec![b"src/only.rs".to_vec()]
+        );
+        assert_eq!(
+            parse_git_paths(b" trailing.rs "),
+            vec![b" trailing.rs ".to_vec()]
+        );
+        assert_eq!(
+            parse_git_paths(
+                b"src/lib.rs\0src/with space.rs\0src/new\nline.rs\0src/bad-\xff.rs\0 trailing.rs\n\0"
+            ),
+            vec![
+                b"src/lib.rs".to_vec(),
+                b"src/with space.rs".to_vec(),
+                b"src/new\nline.rs".to_vec(),
+                b"src/bad-\xff.rs".to_vec(),
+                b" trailing.rs\n".to_vec(),
+            ]
+        );
     }
 
     #[cfg(unix)]
