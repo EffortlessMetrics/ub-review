@@ -439,6 +439,37 @@ mod tests {
         }
     }
 
+    #[test]
+    fn disabled_model_review_owes_no_lane_evidence() {
+        let mut terminal = test_terminal_state("artifact-only");
+        terminal.model_mode = "off".to_owned();
+        terminal.model_lanes = 8;
+        terminal.usable_model_lanes = 0;
+        let issues = [model_issue(
+            "tests",
+            "skipped",
+            "model call budget reached before lane execution",
+        )];
+
+        assert_eq!(
+            build_model_coverage(&terminal, &issues),
+            GateModelCoverage::default()
+        );
+        // Configured-lane diagnostics remain separate from applicable coverage.
+        assert_eq!(terminal.model_lanes, 8);
+
+        terminal.model_mode = "auto".to_owned();
+        assert_eq!(
+            build_model_coverage(&terminal, &issues),
+            GateModelCoverage {
+                lanes_total: 8,
+                lanes_usable: 0,
+                budget_exhausted_lanes: 1,
+                budget_exhausted: true,
+            }
+        );
+    }
+
     fn truth(
         plan: &Plan,
         terminal_state: &ReviewTerminalState,
