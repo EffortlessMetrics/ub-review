@@ -3076,6 +3076,89 @@ mod tests {
     }
 
     #[test]
+    fn portfolio_artifact_preserves_the_live_deadline_after_estimated_reservations() -> Result<()> {
+        let requests = [
+            proof_request("request-a", true),
+            proof_request("request-b", true),
+        ];
+        let tasks = [
+            focused_test_task("a", vec!["request-a".to_owned()], 30),
+            focused_test_task("b", vec!["request-b".to_owned()], 30),
+        ];
+        let budget = proof_budget_for_test(2, 120);
+        let selection = select_proof_portfolio(ProofPortfolioInput {
+            test_tasks: &tasks,
+            build_tasks: &[],
+            proof_requests: &requests,
+            proof_receipts: &[],
+            head: "HEAD",
+            budget,
+            runtime: portfolio_runtime_for_test(90, 4, Some(8_192), Some(20_000)),
+        });
+        let temp = tempfile::tempdir()?;
+        write_proof_portfolio_selection_artifact(
+            temp.path(),
+            &test_diff(),
+            budget,
+            &tasks,
+            &[],
+            &requests,
+            selection,
+        )?;
+        let artifact: serde_json::Value =
+            serde_json::from_slice(&fs::read(temp.path().join("review/proof_portfolio.json"))?)?;
+        // Reservation estimates constrain selection while the published runtime
+        // retains the live deadline supplied to this invocation.
+        assert_eq!(
+            artifact,
+            serde_json::json!({
+                "schema": "ub-review.proof_portfolio.v1",
+                "phase": "broker-final",
+                "head": "HEAD",
+                "budget_seconds": 120,
+                "remaining_seconds": 30,
+                "candidate_count": 2,
+                "candidate_tasks": [
+                    {
+                        "id": "a", "kind": "focused-red-green", "required": true,
+                        "estimated_cost_sec": 60, "request_ids": ["request-a"]
+                    },
+                    {
+                        "id": "b", "kind": "focused-red-green", "required": true,
+                        "estimated_cost_sec": 60, "request_ids": ["request-b"]
+                    }
+                ],
+                "selected_task_ids": ["a"],
+                "runtime": {
+                    "cpus": 4, "free_mem_mb": 8192, "free_disk_mb": 20000,
+                    "load_1m": 0.25, "github_actions": false,
+                    "deadline_remaining_seconds": 90,
+                    "lease": {
+                        "cpu": 1, "memory_mb": 512, "disk_mb": 64,
+                        "network": false, "scratch": true
+                    }
+                },
+                "decisions": [
+                    {
+                        "task_id": "a", "kind": "focused-red-green", "status": "selected",
+                        "reason": "selected for value-ranked execution; serves 1 request(s)",
+                        "required": true, "estimated_cost_sec": 60,
+                        "request_ids": ["request-a"], "receipt_ids": []
+                    },
+                    {
+                        "task_id": "b", "kind": "focused-red-green",
+                        "status": "deferred_by_safe_wind_down",
+                        "reason": "estimated task cost cannot fit the remaining hard-deadline wall time",
+                        "required": true, "estimated_cost_sec": 60,
+                        "request_ids": ["request-b"], "receipt_ids": []
+                    }
+                ]
+            })
+        );
+        Ok(())
+    }
+
+    #[test]
     fn portfolio_reasons_account_for_selected_work_and_file_reuse() -> Result<()> {
         let first = focused_test_task("a", Vec::new(), 30);
         let second = focused_test_task("b", Vec::new(), 30);
