@@ -66,6 +66,10 @@ fn run() -> Result<()> {
             let base = parse_smoke_base_options(args)?;
             println!("{}", resolve_smoke_base(&root, &base)?);
         }
+        "render-release-notes" => {
+            let options = RenderReleaseNotesOptions::parse(args)?;
+            run_render_release_notes(&root, &options)?;
+        }
         "help" | "-h" | "--help" => {
             reject_extra_args(args)?;
             print_help();
@@ -78,7 +82,7 @@ fn run() -> Result<()> {
         }
         other => {
             bail!(
-                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, ripr, smoke-base, calibration-report, or help"
+                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, ripr, smoke-base, calibration-report, render-release-notes, or help"
             )
         }
     }
@@ -105,6 +109,7 @@ cargo xtask commands
   cargo xtask ripr              reproduce hosted ripr ready-mode feedback locally
   cargo xtask smoke-base        select a non-empty local smoke diff base
   cargo xtask calibration-report <dir>  aggregate review/calibration.json files
+  cargo xtask render-release-notes --tag <tag> --output <path>  render offline release notes
 
 precommit options
 
@@ -117,6 +122,11 @@ ripr options
 smoke-base options
 
   --base <rev>                  smoke diff base (default: HEAD~1)
+
+render-release-notes options
+
+  --tag <tag>                   release tag (^v[0-9][A-Za-z0-9._-]*$)
+  --output <path>               output file (template is fixed at .github/release-notes.md)
 "
     );
 }
@@ -175,6 +185,137 @@ fn parse_resolved_smoke_sha(base: &str, stdout: &[u8]) -> Result<String> {
         bail!("git returned an invalid resolved smoke base for `{base}`");
     }
     Ok(sha.to_owned())
+}
+
+#[derive(Clone, Debug)]
+struct RenderReleaseNotesOptions {
+    tag: String,
+    output: PathBuf,
+}
+
+impl RenderReleaseNotesOptions {
+    fn parse(mut args: impl Iterator<Item = String>) -> Result<Self> {
+        let mut tag: Option<String> = None;
+        let mut output: Option<PathBuf> = None;
+        while let Some(arg) = args.next() {
+            match arg.as_str() {
+                "--tag" => {
+                    if tag.is_some() {
+                        bail!("duplicate --tag");
+                    }
+                    tag = Some(args.next().context("--tag requires a value")?);
+                }
+                "--output" => {
+                    if output.is_some() {
+                        bail!("duplicate --output");
+                    }
+                    let value = args.next().context("--output requires a value")?;
+                    output = Some(PathBuf::from(value));
+                }
+                other => bail!("unexpected render-release-notes argument `{other}`"),
+            }
+        }
+        let tag = tag.context("missing required --tag <tag>")?;
+        let output = output.context("missing required --output <path>")?;
+        if tag.trim().is_empty() {
+            bail!("--tag must not be empty");
+        }
+        if output.as_os_str().is_empty() {
+            bail!("--output must not be empty");
+        }
+        Ok(Self { tag, output })
+    }
+}
+
+fn is_valid_release_tag(tag: &str) -> bool {
+    let mut chars = tag.chars();
+    if chars.next() != Some('v') {
+        return false;
+    }
+    match chars.next() {
+        Some(next) if next.is_ascii_digit() => {}
+        _ => return false,
+    }
+    for next in chars {
+        if !(next.is_ascii_alphanumeric() || next == '.' || next == '_' || next == '-') {
+            return false;
+        }
+    }
+    true
+}
+
+fn render_release_notes(template: &str, tag: &str) -> Result<String> {
+    let mut rendered = String::with_capacity(template.len());
+    let mut index = 0;
+    let mut substitutions = 0usize;
+    let bytes = template.as_bytes();
+    while index < bytes.len() {
+        let remainder = &template[index..];
+        let Some(offset) = remainder.find('$') else {
+            rendered.push_str(remainder);
+            break;
+        };
+        let dollar = index + offset;
+        rendered.push_str(&template[index..dollar]);
+        let after = dollar + 1;
+        if after >= bytes.len() {
+            rendered.push('$');
+            index = after;
+            continue;
+        }
+        let next = bytes[after];
+        if next == b'{' {
+            let placeholder = match template[after..].find('}') {
+                Some(close) => &template[dollar..after + close + 1],
+                None => &template[dollar..],
+            };
+            bail!("unknown placeholder `{placeholder}`; expected only $TAG");
+        }
+        if next.is_ascii_alphabetic() || next == b'_' {
+            let mut end = after + 1;
+            while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
+                end += 1;
+            }
+            if &template[after..end] == "TAG" {
+                rendered.push_str(tag);
+                substitutions += 1;
+            } else {
+                bail!(
+                    "unknown placeholder `{}`; expected only $TAG",
+                    &template[dollar..end]
+                );
+            }
+            index = end;
+            continue;
+        }
+        rendered.push('$');
+        index = after;
+    }
+    if substitutions == 0 {
+        bail!("template contains no $TAG version slot");
+    }
+    Ok(rendered)
+}
+
+fn run_render_release_notes(root: &Path, options: &RenderReleaseNotesOptions) -> Result<()> {
+    if !is_valid_release_tag(&options.tag) {
+        bail!(
+            "invalid tag `{}`; expected ^v[0-9][A-Za-z0-9._-]*$",
+            options.tag
+        );
+    }
+    let template_path = root.join(".github/release-notes.md");
+    let template = fs::read_to_string(&template_path)
+        .with_context(|| format!("read {}", template_path.display()))?;
+    let rendered = render_release_notes(&template, &options.tag)?;
+    let output_path = if options.output.is_absolute() {
+        options.output.clone()
+    } else {
+        root.join(&options.output)
+    };
+    fs::write(&output_path, rendered)
+        .with_context(|| format!("write {}", output_path.display()))?;
+    Ok(())
 }
 
 const LOCAL_RIPR_VERSION: &str = "0.10.0";
