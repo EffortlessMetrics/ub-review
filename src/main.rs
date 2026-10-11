@@ -5270,7 +5270,9 @@ fn write_review_artifacts(
     // missing evidence.
     let mut missing_or_failed_model_evidence = model_lanes
         .iter()
-        .filter(|receipt| is_model_receipt_evidence_issue(receipt))
+        .filter(|receipt| {
+            matches!(args.model_mode, ModelMode::Auto) && is_model_receipt_evidence_issue(receipt)
+        })
         .map(model_issue_from_receipt)
         .collect::<Vec<_>>();
     let mut summary_only_findings = Vec::new();
