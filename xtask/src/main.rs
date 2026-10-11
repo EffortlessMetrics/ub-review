@@ -10,6 +10,8 @@ use serde_json::{Value as JsonValue, json};
 use toml::Value;
 use toml::map::Map;
 
+mod agent_workflow;
+
 fn main() {
     if let Err(error) = run() {
         eprintln!("error: {error:#}");
@@ -32,6 +34,17 @@ fn run() -> Result<()> {
     let root = env::current_dir().context("resolve current directory")?;
 
     match command.as_str() {
+        "agent-workflow-scenarios" => {
+            reject_extra_args(args)?;
+            agent_workflow::print_scenarios(&root)?;
+        }
+        "agent-workflow-check" => {
+            let answers = args
+                .next()
+                .context("agent-workflow-check requires an answers JSON path")?;
+            reject_extra_args(args)?;
+            agent_workflow::check_answers(&root, Path::new(&answers))?;
+        }
         "policy-check" => {
             reject_extra_args(args)?;
             let report = check_policy(&root)?;
@@ -78,7 +91,7 @@ fn run() -> Result<()> {
         }
         other => {
             bail!(
-                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, ripr, smoke-base, calibration-report, or help"
+                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, ripr, smoke-base, calibration-report, agent-workflow-scenarios, agent-workflow-check, or help"
             )
         }
     }
@@ -105,6 +118,8 @@ cargo xtask commands
   cargo xtask ripr              reproduce hosted ripr ready-mode feedback locally
   cargo xtask smoke-base        select a non-empty local smoke diff base
   cargo xtask calibration-report <dir>  aggregate review/calibration.json files
+  cargo xtask agent-workflow-scenarios  emit bounded agent decision scenarios
+  cargo xtask agent-workflow-check <answers.json>  check scenario decisions
 
 precommit options
 

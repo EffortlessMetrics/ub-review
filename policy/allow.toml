@@ -49,6 +49,17 @@ created = "2026-06-03"
 review_after = "2026-12-08"
 
 [[exception]]
+id = "non-rust-agent-skills"
+kind = "non-rust-file"
+glob = ".agents/skills/*/SKILL.md"
+category = "agent-operating-documentation"
+language = "markdown"
+owner = "ub-review/docs"
+reason = "Repository-owned delivery and independent review procedures use discoverable Markdown skills; live assignments and permissions remain in conversation/native GitHub state. Bounded decision regressions live in Rust xtask."
+created = "2026-10-11"
+review_after = "2027-01-11"
+
+[[exception]]
 id = "non-rust-config-toml"
 kind = "non-rust-file"
 glob = "{configs,profiles,runtime,policy}/**/*.toml"
