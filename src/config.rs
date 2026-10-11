@@ -2094,6 +2094,10 @@ unknown = true
         )?;
         assert_eq!(malformed.policy_errors.len(), 1);
         assert_eq!(malformed.policy_errors[0].section, "providers");
+        assert_eq!(
+            malformed.policy_errors[0].detail,
+            "invalid [providers] value \"disabled\"; expected a table with `policy`, `minimax`, and `opencode` keys"
+        );
         assert_eq!(malformed.providers.policy, "");
         assert_eq!(malformed.impact.resolved_mode(), "active");
 
