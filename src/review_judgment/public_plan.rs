@@ -3,13 +3,8 @@
 //! render lane prose, invoke a model, or prepare/post a production payload.
 //! Public-content admission/classification and delivery-subject authority are
 //! independently pinned caller obligations, not permissions minted here.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "policy/allow.toml#recorded-public-plan-shadow-1014"
-    )
-)]
+
+pub(crate) mod recorded_export;
 
 use std::collections::BTreeSet;
 use std::io::{self, Write};
