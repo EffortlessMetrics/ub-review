@@ -182,6 +182,10 @@ pub(crate) fn validate_prepared_payload(
         used.len() == review.comments.len(),
         "extra prepared comment slot"
     );
+    ensure!(
+        whole_body_claim.is_some() || !inline_claims.is_empty(),
+        "prepared payload requires a bound public slot"
+    );
     Ok(PreparedPayloadBinding {
         schema: "ub-review.recorded-prepared-payload-binding.v1",
         qualification: "shadow_direct_slots_only",
