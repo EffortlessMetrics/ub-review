@@ -153,6 +153,9 @@ fn rejected(output: Output, message: &str) {
     );
 }
 
+#[path = "recorded_review_cli/agent_result.rs"]
+mod agent_result;
+
 #[test]
 fn real_command_exports_exact_sources_and_replays_without_remote_confirmation() -> Result<()> {
     let f = Fixture::new()?;
