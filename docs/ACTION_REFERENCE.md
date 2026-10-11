@@ -106,7 +106,7 @@ ub-review setup-ci --print-pr \
 ```
 
 `setup-ci --open-pr` requires those inputs and GitHub authentication. Neither command
-changes branch protection. See [Getting started](QUICKSTART.md) .
+changes branch protection. See [Getting started](QUICKSTART.md).
 
 ## Outputs and authority
 
@@ -125,7 +125,7 @@ changes branch protection. See [Getting started](QUICKSTART.md) .
 
 `gate-conclusion` remains enforcement authority on the current Action. The intended
 finalized CI result is separately specified in
-[Product state](PRODUCT_STATE.md#ci-outcome-vocabulary) . In particular, additive
+[Product state](PRODUCT_STATE.md#ci-outcome-vocabulary). In particular, additive
 `gate-result: finding` is not automatically finalized `fail`.
 
 ## Installing the Action
