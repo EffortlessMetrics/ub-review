@@ -4787,15 +4787,20 @@ path = "src/lib.rs"
 
 #[test]
 fn model_auto_run_retries_transient_primary_failure_on_provider_fallback() -> Result<()> {
-    model_auto_run_provider_session_headers("openai-chat")
+    model_auto_run_provider_session_headers("openai-chat", 1)
 }
 
 #[test]
 fn model_auto_run_anthropic_fallback_sends_provider_session_headers() -> Result<()> {
-    model_auto_run_provider_session_headers("anthropic-messages")
+    model_auto_run_provider_session_headers("anthropic-messages", 1)
 }
 
-fn model_auto_run_provider_session_headers(endpoint_kind: &str) -> Result<()> {
+#[test]
+fn model_auto_run_reused_output_gets_fresh_provider_sessions() -> Result<()> {
+    model_auto_run_provider_session_headers("openai-chat", 2)
+}
+
+fn model_auto_run_provider_session_headers(endpoint_kind: &str, invocations: usize) -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
     let repo = temp.path().join("repo");
@@ -4804,56 +4809,59 @@ fn model_auto_run_provider_session_headers(endpoint_kind: &str) -> Result<()> {
 
     let primary_key = "dummy-primary-key-for-fallback-test";
     let fallback_key = "dummy-fallback-key-for-fallback-test";
-    let (primary_url, primary_provider) = spawn_fake_openai_provider_with_statuses(vec![503])?;
-    let (fallback_url, fallback_provider) = spawn_fake_openai_provider(2)?;
+    let (primary_url, primary_provider) =
+        spawn_fake_openai_provider_with_statuses(vec![503; invocations])?;
+    let (fallback_url, fallback_provider) = spawn_fake_openai_provider(2 * invocations)?;
     let out = temp.path().join("packet");
     let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
     let bin = env!("CARGO_BIN_EXE_ub-review");
-    run_with_env(
-        temp.path(),
-        bin,
-        &[
-            "run",
-            "--dry-run",
-            "--config",
-            path_str(&config)?,
-            "--root",
-            path_str(&repo)?,
-            "--base",
-            "HEAD~1",
-            "--head",
-            "HEAD",
-            "--out",
-            path_str(&out)?,
-            "--no-github-summary",
-            "--model-mode",
-            "auto",
-            "--provider-policy",
-            "primary-with-fallback",
-            "--minimax-provider-kind",
-            "openai",
-            "--opencode-endpoint-kind",
-            endpoint_kind,
-            "--lanes",
-            "correctness",
-            "--model-concurrency",
-            "1",
-            "--max-model-calls",
-            "1",
-            "--model-timeout-sec",
-            "10",
-        ],
-        &[
-            ("UB_REVIEW_MINIMAX_API_KEY", primary_key),
-            ("UB_REVIEW_MINIMAX_API_URL", primary_url.as_str()),
-            ("UB_REVIEW_OPENCODE_API_KEY", fallback_key),
-            ("UB_REVIEW_OPENCODE_API_URL", fallback_url.as_str()),
-        ],
-    )?;
+    for _ in 0..invocations {
+        run_with_env(
+            temp.path(),
+            bin,
+            &[
+                "run",
+                "--dry-run",
+                "--config",
+                path_str(&config)?,
+                "--root",
+                path_str(&repo)?,
+                "--base",
+                "HEAD~1",
+                "--head",
+                "HEAD",
+                "--out",
+                path_str(&out)?,
+                "--no-github-summary",
+                "--model-mode",
+                "auto",
+                "--provider-policy",
+                "primary-with-fallback",
+                "--minimax-provider-kind",
+                "openai",
+                "--opencode-endpoint-kind",
+                endpoint_kind,
+                "--lanes",
+                "correctness",
+                "--model-concurrency",
+                "1",
+                "--max-model-calls",
+                "1",
+                "--model-timeout-sec",
+                "10",
+            ],
+            &[
+                ("UB_REVIEW_MINIMAX_API_KEY", primary_key),
+                ("UB_REVIEW_MINIMAX_API_URL", primary_url.as_str()),
+                ("UB_REVIEW_OPENCODE_API_KEY", fallback_key),
+                ("UB_REVIEW_OPENCODE_API_URL", fallback_url.as_str()),
+            ],
+        )?;
+    }
     let primary_requests = join_fake_provider(primary_provider)?;
     let fallback_requests = join_fake_provider(fallback_provider)?;
-    assert_eq!(primary_requests.len(), 1);
-    assert_eq!(fallback_requests.len(), 2);
+    assert_eq!(primary_requests.len(), invocations);
+    assert_eq!(fallback_requests.len(), 2 * invocations);
     let header = |request: &str, name: &str| {
         request
             .split("\r\n\r\n")
@@ -4894,6 +4902,14 @@ fn model_auto_run_provider_session_headers(endpoint_kind: &str) -> Result<()> {
     assert_ne!(
         sessions[0], sessions[1],
         "preflight and lane are distinct conversations"
+    );
+    assert_eq!(
+        sessions
+            .iter()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        2 * invocations,
+        "new processes reusing the same output must start fresh sessions"
     );
 
     let preflights: serde_json::Value = serde_json::from_slice(&fs::read(
