@@ -223,6 +223,9 @@ fn main() -> Result<()> {
         Command::GateCheck(args) => cmd_gate_check(args),
         Command::GateWatchdog(args) => cmd_gate_watchdog(args),
         Command::Worker(args) => cmd_worker(args),
+        Command::RecordedReview(args) => {
+            review_judgment::public_plan::recorded_export::files::run(args)
+        }
     }
 }
 
