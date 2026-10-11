@@ -60,8 +60,8 @@ A small additional investment in review can be worth it when it catches somethin
 important. We measure that benefit alongside the extra cost rather than optimizing
 purely for the fewest model calls.
 
-The [perl-lsp-swarm #3627 review replay](docs/REVIEW_EXPERIENCE_FIXTURES.md) starts with existing
-parser-review threads. Instead of duplicating the finding, its expected public output
+The [perl-lsp-swarm #3627 review replay](docs/REVIEW_EXPERIENCE_FIXTURES.md)
+starts with existing parser-review threads. Instead of duplicating the finding, its expected public output
 replies to the relevant thread:
 
 > Confirmed by focused execution: the later subscript case fails before the patch and
