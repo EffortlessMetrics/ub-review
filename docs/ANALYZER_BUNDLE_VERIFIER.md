@@ -46,7 +46,7 @@ upstream validation evidence and the separately approved validator source SHA.
 This verifier does not reproduce that archive/version parser. #1347 retains
 badge0.5/0.6 admission; #1067 retains badge0.8/typed0.1/raw0.2 completeness and
 currentness migration. Existing badge or gate outcome schemas are untouched.
-#813/#1468/#1477 retain compatibility and corpus acceptance. #1469/#1479 retain
+Issues #813/#1468/#1477 retain compatibility and corpus acceptance. #1469/#1479 retain
 public ship and publication evidence. No dependency on downstream #1481.
 
 Recorded envelopes are a minimal selection-specific intake contract. They are
