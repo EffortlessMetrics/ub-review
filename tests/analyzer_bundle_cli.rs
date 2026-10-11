@@ -5,7 +5,9 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::time::Duration;
+use wait_timeout::ChildExt;
 
 fn hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
@@ -103,7 +105,7 @@ impl Fixture {
         }
         self.intake["bundle"] = write_json(self.dir.path(), "bundle", &self.bundle)?;
         let reference = write_json(self.dir.path(), "intake", &self.intake)?;
-        let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
+        let mut child = Command::new(env!("CARGO_BIN_EXE_ub-review"))
             .args([
                 "verify-analyzer-bundle",
                 "--intake",
@@ -113,7 +115,15 @@ impl Fixture {
                 "--evidence-root",
             ])
             .arg(self.dir.path())
-            .output()?;
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+        if child.wait_timeout(Duration::from_secs(5))?.is_none() {
+            child.kill()?;
+            child.wait()?;
+            anyhow::bail!("recorded selection CLI blocked on evidence");
+        }
+        let output = child.wait_with_output()?;
         let receipt: Value = serde_json::from_slice(&output.stdout)
             .with_context(|| String::from_utf8_lossy(&output.stderr).into_owned())?;
         ensure!(
@@ -127,6 +137,26 @@ impl Fixture {
         );
         Ok((output.status.success(), receipt))
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn nonregular_evidence_is_rejected_before_opening() -> Result<()> {
+    let mut f = Fixture::new()?;
+    let path = f.dir.path().join("candidate.crate");
+    fs::remove_file(&path)?;
+    ensure!(
+        Command::new("mkfifo").arg(&path).status()?.success(),
+        "FIFO fixture setup failed"
+    );
+    let (success, receipt) = f.run(false)?;
+    ensure!(
+        !success
+            && receipt["status"] == "contradictory_evidence"
+            && receipt["reason"] == "evidence is not a regular file",
+        "FIFO admitted: {receipt}"
+    );
+    Ok(())
 }
 
 #[test]

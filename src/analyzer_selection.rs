@@ -233,7 +233,8 @@ fn bytes(root: &Path, object: &ObjectRef, limit: u64) -> Checked<Vec<u8>> {
         "unsafe evidence path",
     )?;
     let mut path = root.to_path_buf();
-    for component in Path::new(&object.path).components() {
+    let components: Vec<_> = Path::new(&object.path).components().collect();
+    for (index, component) in components.iter().enumerate() {
         path.push(component);
         let metadata = fs::symlink_metadata(&path).map_err(|e| {
             failure(
@@ -245,6 +246,11 @@ fn bytes(root: &Path, object: &ObjectRef, limit: u64) -> Checked<Vec<u8>> {
             !metadata.file_type().is_symlink(),
             "symlink evidence rejected",
         )?;
+        if index + 1 == components.len() {
+            require(metadata.is_file(), "evidence is not a regular file")?;
+        } else {
+            require(metadata.is_dir(), "evidence parent is not a directory")?;
+        }
     }
     let file = fs::File::open(&path).map_err(|e| failure("missing_evidence", e.to_string()))?;
     require(
