@@ -128,3 +128,9 @@ covers installation, manual configuration, and the separate CI migration path.
   [Architecture](docs/ARCHITECTURE.md)
 - [Bun/native-boundary preset](docs/GH_RUNNER_BUN.md) ·
   [Current product state](docs/PRODUCT_STATE.md)
+
+The current verified Bun gate pin is
+`EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd`,
+validated by [EffortlessSteven/bun#49](https://github.com/EffortlessSteven/bun/pull/49).
+See the [Bun calibration ledger](docs/calibration/bun-ub-review-ledger.md#current-bun-gate-pin)
+for the retained evidence.
