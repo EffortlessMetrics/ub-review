@@ -1,6 +1,17 @@
 schema_version = "1"
 tool = "cargo-allow"
 
+[[exception]]
+id = "recorded-judgment-shadow-1013"
+kind = "rust-lint-suppression"
+path = "src/review_judgment.rs"
+lint = "dead_code"
+owner = "ub-review/review-final-1013"
+reason = "Pure recorded source-object validation precedes the #1335 export consumer; no runtime lead, compiler, delivery or CI authority. Remove when the recorded consumer lands."
+created = "2026-10-11"
+review_after = "2026-11-11"
+expires = "2026-12-11"
+
 # Default source-tree exception ledger. Keep this consolidated until real
 # exception volume proves that narrower ledgers improve reviewability.
 
