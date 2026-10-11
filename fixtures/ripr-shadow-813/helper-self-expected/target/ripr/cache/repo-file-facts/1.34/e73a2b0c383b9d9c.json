@@ -1,0 +1,243 @@
+{
+  "file_fact_cache_schema_version": "1.34",
+  "analyzer_version": "0.11.0+d64615529216153eedcd10ba64e4580aa1026ea1",
+  "file_path": "src/test_support.rs",
+  "content_hash": "ec3ff2d0753cb4d6",
+  "file_facts": {
+    "path": "src/test_support.rs",
+    "functions": [
+      {
+        "id": "src/test_support.rs::check_answer",
+        "name": "check_answer",
+        "file": "src/test_support.rs",
+        "start_line": 3,
+        "end_line": 7,
+        "body": {
+          "start": 31,
+          "len": 120
+        },
+        "calls": [
+          {
+            "line": 3,
+            "name": "check_answer",
+            "text": "fn check_answer() -> Result<()> {"
+          },
+          {
+            "line": 4,
+            "name": "answer",
+            "text": "let actual = super::answer();"
+          },
+          {
+            "line": 5,
+            "name": "answer",
+            "text": "ensure!(actual == super::answer());"
+          },
+          {
+            "line": 6,
+            "name": "Ok",
+            "text": "Ok(())"
+          }
+        ],
+        "returns": [
+          {
+            "line": 6,
+            "text": "Ok(())"
+          }
+        ],
+        "literals": [],
+        "source_role": "production",
+        "attrs": [],
+        "impl_attrs": [],
+        "nested_fn_names": [],
+        "let_bindings": [
+          {
+            "line": 1,
+            "name": "actual"
+          }
+        ],
+        "item": {
+          "container": {
+            "kind": "free"
+          },
+          "has_self_param": false,
+          "has_body": true
+        },
+        "impl_context": "Free"
+      },
+      {
+        "id": "src/test_support.rs::observes_answer",
+        "name": "observes_answer",
+        "file": "src/test_support.rs",
+        "start_line": 10,
+        "end_line": 12,
+        "body": {
+          "start": 161,
+          "len": 57
+        },
+        "calls": [
+          {
+            "line": 10,
+            "name": "observes_answer",
+            "text": "fn observes_answer() -> Result<()> {"
+          },
+          {
+            "line": 11,
+            "name": "check_answer",
+            "text": "check_answer()"
+          }
+        ],
+        "returns": [],
+        "literals": [],
+        "source_role": "test_attribute",
+        "attrs": [
+          "#[test]"
+        ],
+        "impl_attrs": [],
+        "nested_fn_names": [],
+        "let_bindings": [],
+        "item": {
+          "container": {
+            "kind": "free"
+          },
+          "has_self_param": false,
+          "has_body": true
+        },
+        "impl_context": "Free"
+      }
+    ],
+    "tests": [
+      {
+        "name": "observes_answer",
+        "file": "src/test_support.rs",
+        "start_line": 10,
+        "end_line": 12,
+        "body": {
+          "start": 161,
+          "len": 57
+        },
+        "calls": [
+          {
+            "line": 10,
+            "name": "observes_answer",
+            "text": "fn observes_answer() -> Result<()> {"
+          },
+          {
+            "line": 11,
+            "name": "check_answer",
+            "text": "check_answer()"
+          }
+        ],
+        "assertions": [],
+        "literals": [],
+        "attrs": [
+          "#[test]"
+        ],
+        "nested_fn_names": [],
+        "let_bindings": []
+      }
+    ],
+    "returns": [
+      {
+        "line": 6,
+        "text": "Ok(())"
+      }
+    ],
+    "literals": [],
+    "probe_shapes": [
+      {
+        "start_line": 4,
+        "end_line": 4,
+        "start_byte": 82,
+        "end_byte": 97,
+        "kind": "call_deletion",
+        "text": {
+          "start": 82,
+          "len": 15
+        },
+        "value_consumed": true
+      },
+      {
+        "start_line": 6,
+        "end_line": 6,
+        "start_byte": 143,
+        "end_byte": 149,
+        "kind": "call_deletion",
+        "text": {
+          "start": 143,
+          "len": 6
+        },
+        "value_consumed": true
+      },
+      {
+        "start_line": 6,
+        "end_line": 6,
+        "start_byte": 143,
+        "end_byte": 149,
+        "kind": "return_value",
+        "text": {
+          "start": 143,
+          "len": 6
+        }
+      },
+      {
+        "start_line": 11,
+        "end_line": 11,
+        "start_byte": 202,
+        "end_byte": 216,
+        "kind": "call_deletion",
+        "text": {
+          "start": 202,
+          "len": 14
+        },
+        "value_consumed": true
+      },
+      {
+        "start_line": 11,
+        "end_line": 11,
+        "start_byte": 202,
+        "end_byte": 216,
+        "kind": "return_value",
+        "text": {
+          "start": 202,
+          "len": 14
+        }
+      }
+    ],
+    "used_lexical_fallback": false,
+    "module_declarations": [],
+    "unresolved_property_macros": [],
+    "source": "use anyhow::{Result, ensure};\n\nfn check_answer() -> Result<()> {\n    let actual = super::answer();\n    ensure!(actual == super::answer());\n    Ok(())\n}\n\n#[test]\nfn observes_answer() -> Result<()> {\n    check_answer()\n}\n",
+    "item_scopes": {
+      "fns": [
+        {
+          "line": 3,
+          "name": "check_answer",
+          "item": "TopLevel",
+          "local_use": false,
+          "deferred_code": false,
+          "cfg": false,
+          "direct_calls": [
+            "Ok"
+          ],
+          "bound_names": []
+        },
+        {
+          "line": 10,
+          "name": "observes_answer",
+          "item": "TopLevel",
+          "local_use": false,
+          "deferred_code": false,
+          "cfg": false,
+          "direct_calls": [
+            "check_answer"
+          ],
+          "bound_names": []
+        }
+      ]
+    },
+    "macro_candidates": {
+      "Names": []
+    }
+  },
+  "payload_digest": "sha256:b7cc3e69f455b323e1508ba41f368325d1a3311368262be613881860cabfec56"
+}

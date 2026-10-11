@@ -1,0 +1,26 @@
+diff --git a/src/lib.rs b/src/lib.rs
+new file mode 100644
+--- /dev/null
++++ b/src/lib.rs
+@@ -0,0 +1,4 @@
++pub fn answer() -> u8 { 7 }
++
++#[path = "test_support.rs"]
++mod tests;
+diff --git a/src/test_support.rs b/src/test_support.rs
+new file mode 100644
+--- /dev/null
++++ b/src/test_support.rs
+@@ -0,0 +1,12 @@
++use anyhow::{Result, ensure};
++
++fn check_answer() -> Result<()> {
++    let actual = super::answer();
++    ensure!(actual == 7);
++    Ok(())
++}
++
++#[test]
++fn observes_answer() -> Result<()> {
++    check_answer()
++}
