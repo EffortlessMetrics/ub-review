@@ -466,6 +466,14 @@ fn rehearse(c: &mut Campaign) -> Result<()> {
     c.proven("no_compiler_source_fallback_or_remote_mutation")?;
     Ok(())
 }
+fn assert_preserved_inventory(root: &Path, expected: &BTreeMap<String, String>) -> Result<()> {
+    ensure!(
+        inventory(root)? == *expected,
+        "rollback changed unrelated bytes/inventory"
+    );
+    Ok(())
+}
+
 fn repository(c: &mut Campaign, bin: &Path, mixed: bool) -> Result<()> {
     let repo = c.root.join(if mixed {
         "mixed repo ; literal"
@@ -618,14 +626,6 @@ fn repository(c: &mut Campaign, bin: &Path, mixed: bool) -> Result<()> {
         &repo.join("later-unrelated.txt"),
         "post-setup unrelated state\n",
     )?;
-    for path in owned.iter().filter(|p| !p.ends_with('/')) {
-        fs::remove_file(repo.join(path))?;
-    }
-    let mut dirs: Vec<_> = owned.iter().filter(|p| p.ends_with('/')).collect();
-    dirs.sort_by_key(|p| std::cmp::Reverse(p.len()));
-    for path in dirs {
-        fs::remove_dir(repo.join(path))?;
-    }
     let mut expected = before;
     expected.insert(
         "later-unrelated.txt".into(),
@@ -634,10 +634,15 @@ fn repository(c: &mut Campaign, bin: &Path, mixed: bool) -> Result<()> {
             .context("late sentinel")?
             .clone(),
     );
-    ensure!(
-        inventory(&repo)? == expected,
-        "rollback changed unrelated bytes/inventory"
-    );
+    for path in owned.iter().filter(|p| !p.ends_with('/')) {
+        fs::remove_file(repo.join(path))?;
+    }
+    let mut dirs: Vec<_> = owned.iter().filter(|p| p.ends_with('/')).collect();
+    dirs.sort_by_key(|p| std::cmp::Reverse(p.len()));
+    for path in dirs {
+        fs::remove_dir(repo.join(path))?;
+    }
+    assert_preserved_inventory(&repo, &expected)?;
     write(
         &c.root.join(if mixed {
             "mixed-after.json"
@@ -733,6 +738,45 @@ fn inventories_detect_directory_mode_and_identity_rejects_substitutes() -> Resul
     ensure!(
         c.identity(&binary).is_err(),
         "symlink substitution accepted"
+    );
+    Ok(())
+}
+
+#[test]
+fn pre_cleanup_snapshot_rejects_later_sentinel_corruption() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let original = temp.path().join("original.txt");
+    let later = temp.path().join("later-unrelated.txt");
+    write(&original, b"original bytes")?;
+    write(&later, b"post-setup unrelated state\n")?;
+    fs::set_permissions(&later, fs::Permissions::from_mode(0o644))?;
+    let expected = inventory(temp.path())?;
+    assert_preserved_inventory(temp.path(), &expected)?;
+    write(&later, b"corrupted during cleanup\n")?;
+    ensure!(
+        assert_preserved_inventory(temp.path(), &expected).is_err(),
+        "sentinel byte corruption accepted"
+    );
+    write(&later, b"post-setup unrelated state\n")?;
+    assert_preserved_inventory(temp.path(), &expected)?;
+    fs::set_permissions(&later, fs::Permissions::from_mode(0o600))?;
+    ensure!(
+        assert_preserved_inventory(temp.path(), &expected).is_err(),
+        "sentinel mode corruption accepted"
+    );
+    fs::set_permissions(&later, fs::Permissions::from_mode(0o644))?;
+    assert_preserved_inventory(temp.path(), &expected)?;
+    fs::remove_file(&later)?;
+    ensure!(
+        assert_preserved_inventory(temp.path(), &expected).is_err(),
+        "sentinel deletion accepted"
+    );
+    write(&later, b"post-setup unrelated state\n")?;
+    fs::set_permissions(&later, fs::Permissions::from_mode(0o644))?;
+    write(&original, b"changed original bytes")?;
+    ensure!(
+        assert_preserved_inventory(temp.path(), &expected).is_err(),
+        "original file corruption accepted"
     );
     Ok(())
 }
