@@ -47,15 +47,15 @@ It tests manual `init --no-guide` and rolls it back before using the separate
 configuration. Both init/config conflict and enable replay refusal run twice,
 with byte/mode/path inventories compared. Tokenless `audit-ci` and local-only
 `setup-ci --print-pr` execute; no `--open-pr`, provider or post command is allowed.
-Rollback deletes only the exact generated path set, preserves original Git/CI/
+Harness-owned cleanup (not a production rollback command) deletes only the exact generated path set, preserves original Git/CI/
 source bytes and a file added after setup, and records before/after inventories.
 
 Negative controls run the production release resolver twice with unavailable
-assets and require failure with no outputs or source fallback. Production auto
-mode can choose PATH; the harness must reject that result. Replacing installed
+assets and mismatched checksum bytes and require failure with no outputs or source fallback. Production auto
+mode can choose PATH; the harness must reject that result. A same-byte workspace path is also rejected. Replacing installed
 bytes must fail the frozen executable digest guard before CLI execution.
 
-The versioned receipt records actual commands/exits, exact frozen input,
+The versioned receipt records actual attempted commands, spawn failures/timeouts and exits, exact frozen input,
 harness/Action digests and limits; logs and generated samples survive success or
 failure. `bounded_pass` covers only the enumerated first-slice scenarios.
 A failed/missing/omitted scenario is never a pass.

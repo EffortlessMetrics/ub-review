@@ -40,7 +40,10 @@ fn inventory(root: &Path) -> Result<BTreeMap<String, String>> {
                 "unexpected symlink: {relative}"
             );
             if metadata.is_dir() {
-                out.insert(format!("{relative}/"), "directory".into());
+                out.insert(
+                    format!("{relative}/"),
+                    format!("directory:{:o}", metadata.permissions().mode()),
+                );
                 visit(root, &path, out)?;
             } else {
                 out.insert(
@@ -94,6 +97,7 @@ struct Campaign {
     frozen: PathBuf,
     manifest: Value,
     rows: Vec<Value>,
+    scenarios: BTreeMap<String, Value>,
 }
 impl Campaign {
     // Each command gets a cleared environment, bounded wait and file-backed logs.
@@ -116,20 +120,31 @@ impl Campaign {
             .env("PATH", &self.path)
             .env("HOME", &self.root)
             .env("LC_ALL", "C")
+            .env("POISON_LOG", self.root.join("poison.log"))
             .stdin(Stdio::null())
             .stdout(stdout)
             .stderr(stderr);
         for (key, value) in env {
             cmd.env(key, value);
         }
-        let mut child = cmd
-            .spawn()
-            .with_context(|| format!("spawn {}", program.display()))?;
+        self.rows.push(json!({"program":program,"argv":args,"cwd":cwd,"state":"attempted","exit":null,"logs":format!("logs/{index}")}));
+        self.receipt("running", None)?;
+        let mut child = match cmd.spawn() {
+            Ok(child) => child,
+            Err(error) => {
+                self.rows[index]["state"] = json!("spawn_failed");
+                self.rows[index]["error"] = json!(error.to_string());
+                return Err(error).with_context(|| format!("spawn {}", program.display()));
+            }
+        };
         let status = match child.wait_timeout(Duration::from_secs(30))? {
             Some(status) => status,
             None => {
+                self.rows[index]["state"] = json!("timed_out");
                 child.kill()?;
-                child.wait()?;
+                let status = child.wait()?;
+                self.rows[index]["exit"] = json!(status.code());
+                self.rows[index]["reaped"] = json!(true);
                 anyhow::bail!("command timed out; logs at {}", logs.display());
             }
         };
@@ -138,9 +153,17 @@ impl Campaign {
             stdout: fs::read(logs.join("stdout"))?,
             stderr: fs::read(logs.join("stderr"))?,
         };
-        self.rows.push(json!({"program": program, "argv": args, "cwd": cwd, "exit":status.code(), "logs":format!("logs/{index}")}));
+        self.rows[index]["state"] = json!("exited");
+        self.rows[index]["exit"] = json!(status.code());
         self.receipt("running", None)?;
         Ok(output)
+    }
+    fn proven(&mut self, name: &str) -> Result<()> {
+        self.scenarios.insert(
+            name.to_owned(),
+            json!({"status":"proven", "through_command":self.rows.len()}),
+        );
+        self.receipt("running", None)
     }
     fn receipt(&self, status: &str, error: Option<String>) -> Result<()> {
         write(
@@ -149,7 +172,7 @@ impl Campaign {
                 "schema":"ub-review.archive_onboarding_rehearsal.v1", "phase":"preliminary_local_archive",
                 "distribution":"candidate_rehearsal", "platform":"Linux x86_64", "status":status,"error":error,
                 "frozen_manifest":self.manifest, "harness_sha256":digest(include_bytes!("archive_onboarding.rs")),
-                "action_sha256":digest(&fs::read(Path::new(SOURCE).join("action.yml"))?), "commands":self.rows,
+                "action_sha256":digest(&fs::read(Path::new(SOURCE).join("action.yml"))?), "commands":self.rows,"scenarios":self.scenarios,
                 "unproven":["final #816 archive", "public distribution", "previous supported release upgrade", "generated workflow execution", "live provider/delivery", "all #1340 leaf regression controls", "general process-tree containment"]
             }))?,
         )
@@ -265,11 +288,12 @@ while [ "$#" -gt 0 ]; do
   *) shift;;
  esac
 done
-[ "${ADAPTER_FAIL:-0}" = 0 ] || exit 22
+[ "${ADAPTER_FAIL:-0}" != 1 ] || exit 22
 asset=ub-review-x86_64-unknown-linux-gnu.tar.gz
 case "$url" in
  "https://archive.invalid/EffortlessMetrics/ub-review/releases/download/$TAG/$asset") cp "$FROZEN/$asset" "$out";;
- "https://archive.invalid/EffortlessMetrics/ub-review/releases/download/$TAG/$asset.sha256") cp "$FROZEN/$asset.sha256" "$out";;
+ "https://archive.invalid/EffortlessMetrics/ub-review/releases/download/$TAG/$asset.sha256")
+   if [ "${ADAPTER_FAIL:-0}" = checksum ]; then printf '%064d\n' 0 > "$out"; else cp "$FROZEN/$asset.sha256" "$out"; fi;;
  https://api.github.com/repos/EffortlessMetrics/ub-review/releases/latest)
    printf '{"tag_name":"%s","assets":[{"name":"%s"},{"name":"%s.sha256"}]}\n' "$TAG" "$asset" "$asset";;
  *) exit 92;;
@@ -294,6 +318,7 @@ fn frozen_archive_onboarding() -> Result<()> {
         frozen,
         manifest,
         rows: vec![],
+        scenarios: BTreeMap::new(),
     };
     let result = rehearse(&mut campaign);
     campaign.receipt(
@@ -362,13 +387,27 @@ fn rehearse(c: &mut Campaign) -> Result<()> {
             "#!/bin/bash\nprintf '%s\\n' \"$0 $*\" >> \"${POISON_LOG:?}\"\nexit 93\n",
         )?;
     }
-    for _ in 0..2 {
+    for attempt in 1..=2 {
         let failed = c.resolve("release", "1")?;
         ensure!(!failed.status.success(), "missing archive accepted");
         ensure!(
             fs::read_to_string(c.root.join("resolver-output"))?.is_empty(),
             "failed resolver emitted outputs"
         );
+        c.proven(&format!("unavailable_archive_refusal_{attempt}"))?;
+    }
+    for attempt in 1..=2 {
+        let failed = c.resolve("release", "checksum")?;
+        ensure!(!failed.status.success(), "bad checksum accepted");
+        ensure!(
+            String::from_utf8_lossy(&failed.stdout).contains("checksum mismatch"),
+            "checksum refusal not reached"
+        );
+        ensure!(
+            fs::read_to_string(c.root.join("resolver-output"))?.is_empty(),
+            "checksum rejection emitted outputs"
+        );
+        c.proven(&format!("checksum_mismatch_refusal_{attempt}"))?;
     }
     ensure!(
         !c.root.join("poison.log").exists(),
@@ -381,6 +420,14 @@ fn rehearse(c: &mut Campaign) -> Result<()> {
         c.selected().is_err(),
         "PATH substitution passed identity guard"
     );
+    c.proven("PATH_selection_rejected")?;
+    let workspace = c.root.join("workspace/target/release/ub-review");
+    executable(&workspace, "#!/bin/bash\nexit 94\n")?;
+    ensure!(
+        c.identity(&workspace).is_err(),
+        "workspace substitute accepted"
+    );
+    c.proven("workspace_selection_rejected")?;
     let positive = c.resolve("release", "0")?;
     success(&positive)?;
     let bin = c.selected()?;
@@ -395,6 +442,7 @@ fn rehearse(c: &mut Campaign) -> Result<()> {
             ),
         "binary version mismatch"
     );
+    c.proven("frozen_resolver_digest_and_version")?;
     // Replacing the installed bytes must be rejected before a command can execute.
     let original = fs::read(&bin)?;
     fs::write(&bin, b"substitute")?;
@@ -403,6 +451,7 @@ fn rehearse(c: &mut Campaign) -> Result<()> {
         "installed byte substitution accepted"
     );
     fs::write(&bin, &original)?;
+    c.proven("installed_byte_substitution_rejected")?;
     for mixed in [false, true] {
         repository(c, &bin, mixed)?;
     }
@@ -414,6 +463,7 @@ fn rehearse(c: &mut Campaign) -> Result<()> {
         !c.root.join("runtime/ub-review-action-src").exists(),
         "source fallback state exists"
     );
+    c.proven("no_compiler_source_fallback_or_remote_mutation")?;
     Ok(())
 }
 fn repository(c: &mut Campaign, bin: &Path, mixed: bool) -> Result<()> {
@@ -469,6 +519,7 @@ fn repository(c: &mut Campaign, bin: &Path, mixed: bool) -> Result<()> {
     ] {
         success(&c.command(&repo, Path::new("/usr/bin/git"), &args, &[])?)?;
     }
+    let shape = if mixed { "mixed" } else { "rust" };
     let before = inventory(&repo)?;
     write(
         &c.root.join(if mixed {
@@ -489,6 +540,7 @@ fn repository(c: &mut Campaign, bin: &Path, mixed: bool) -> Result<()> {
             "conflict altered original state"
         );
     }
+    c.proven(&format!("{shape}_manual_init_and_twice_conflict_refusal"))?;
     fs::remove_file(repo.join(".ub-review.toml"))?;
     ensure!(
         inventory(&repo)? == before,
@@ -515,7 +567,9 @@ fn repository(c: &mut Campaign, bin: &Path, mixed: bool) -> Result<()> {
         &[],
     )?)?;
     ensure!(
-        !String::from_utf8_lossy(&workflow).contains("bun"),
+        !String::from_utf8_lossy(&workflow)
+            .split_whitespace()
+            .any(|word| word == "bun" || word.starts_with("bun:")),
         "maintainer Bun default leaked"
     );
     write(
@@ -526,6 +580,7 @@ fn repository(c: &mut Campaign, bin: &Path, mixed: bool) -> Result<()> {
         }),
         &workflow,
     )?;
+    c.proven(&format!("{shape}_parsed_advisory_generation"))?;
     let enabled = inventory(&repo)?;
     for _ in 0..2 {
         refused(&c.cli(&repo, bin, &["enable", "--mode", "advisory", "--inspect"])?)?;
@@ -537,6 +592,9 @@ fn repository(c: &mut Campaign, bin: &Path, mixed: bool) -> Result<()> {
         bin,
         &["setup-ci", "--out", "owned audit ; literal", "--print-pr"],
     )?)?;
+    c.proven(&format!(
+        "{shape}_twice_enable_replay_refusal_and_audit_preview"
+    ))?;
     let audited = inventory(&repo)?;
     for (path, value) in &before {
         ensure!(
@@ -588,6 +646,7 @@ fn repository(c: &mut Campaign, bin: &Path, mixed: bool) -> Result<()> {
         }),
         serde_json::to_vec_pretty(&expected)?,
     )?;
+    c.proven(&format!("{shape}_harness_owned_rollback_exact_inventory"))?;
     Ok(())
 }
 
@@ -601,6 +660,79 @@ fn production_resolver_extraction_retains_release_failure_boundary() -> Result<(
     ensure!(
         shell.contains("version_output="),
         "version admission absent"
+    );
+    Ok(())
+}
+
+#[test]
+fn command_receipts_retain_spawn_failure_and_nonzero_exit() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let root = temp.path().to_path_buf();
+    let mut c = Campaign {
+        path: root.join("bin"),
+        frozen: root.join("frozen"),
+        root: root.clone(),
+        manifest: json!({}),
+        rows: vec![],
+        scenarios: BTreeMap::new(),
+    };
+    ensure!(
+        c.command(&root, &root.join("absent"), &[], &[]).is_err(),
+        "spawn failure accepted"
+    );
+    ensure!(c.rows[0]["state"] == "spawn_failed", "spawn failure lost");
+    let output = c.command(&root, Path::new("/bin/false"), &[], &[])?;
+    ensure!(!output.status.success(), "nonzero exit lost");
+    ensure!(
+        c.rows[1]["state"] == "exited" && c.rows[1]["exit"] == 1,
+        "nonzero receipt lost"
+    );
+    c.receipt("failed", Some("control".into()))?;
+    let parsed: Value = serde_json::from_slice(&fs::read(root.join("receipt.json"))?)?;
+    ensure!(
+        parsed["commands"].as_array().context("commands")?.len() == 2,
+        "attempt omitted"
+    );
+    Ok(())
+}
+
+#[test]
+fn inventories_detect_directory_mode_and_identity_rejects_substitutes() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let root = temp.path();
+    let dir = root.join("directory");
+    fs::create_dir(&dir)?;
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o755))?;
+    let before = inventory(root)?;
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))?;
+    ensure!(
+        inventory(root)? != before,
+        "directory mode mutation invisible"
+    );
+    let binary = root.join("runtime/ub-review-action-release/ub-review");
+    write(&binary, b"frozen bytes")?;
+    let c = Campaign {
+        root: root.to_path_buf(),
+        path: root.join("bin"),
+        frozen: root.join("frozen"),
+        manifest: json!({"binary_sha256":digest(b"frozen bytes")}),
+        rows: vec![],
+        scenarios: BTreeMap::new(),
+    };
+    c.identity(&binary)?;
+    let workspace = root.join("target/release/ub-review");
+    write(&workspace, b"frozen bytes")?;
+    ensure!(
+        c.identity(&workspace).is_err(),
+        "same-byte workspace substitution accepted"
+    );
+    write(&binary, b"different bytes")?;
+    ensure!(c.identity(&binary).is_err(), "digest substitution accepted");
+    fs::remove_file(&binary)?;
+    symlink(&workspace, &binary)?;
+    ensure!(
+        c.identity(&binary).is_err(),
+        "symlink substitution accepted"
     );
     Ok(())
 }
