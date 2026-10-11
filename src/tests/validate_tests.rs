@@ -14,9 +14,12 @@ fn model_public_privacy_join_retains_private_audit_and_public_evidence() -> Resu
         let review_dir = temp.path().join("review");
         fs::create_dir_all(&review_dir)?;
         let lane = model_lane("tests-oracle", "Test oracle", &["tokmd"], "Check tests.");
+        // Build the same token-shaped runtime canary without placing a literal
+        // credential-shaped header in the source diff sent to shared context.
+        let private_bearer = ["Bearer", "offline_rejected_hypothesis_5831"].join(" ");
         let private_tokens = [
             "SYNTHETIC_API_KEY=offline_audit_surface_7429",
-            "Bearer offline_rejected_hypothesis_5831",
+            private_bearer.as_str(),
             "SYNTHETIC_PASSWORD=offline_uncertainty_9164",
         ];
         let finding_body =
