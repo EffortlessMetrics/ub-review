@@ -92,6 +92,9 @@ fn accepted_submit_without_response_never_confirms_publication() -> Result<()> {
         assert_eq!(transport.accepted_submits, 1);
         assert!(transport.scripted.gets.is_empty());
         assert!(transport.scripted.sends.is_empty());
+        let transaction_value: serde_json::Value =
+            serde_json::from_slice(&fs::read(args.out.join("delivery-transaction.json"))?)?;
+        let transaction: DeliveryTransaction = serde_json::from_value(transaction_value.clone())?;
         if lose_response {
             let error = result
                 .err()
@@ -101,6 +104,21 @@ fn accepted_submit_without_response_never_confirms_publication() -> Result<()> {
                 "curl: authored lost accepted submit response"
             );
             assert_eq!(transport.cleanup_attempts, 1);
+            assert_eq!(transaction.state(), &DeliveryTransactionState::Failed);
+            assert_eq!(
+                transaction_value["failure"],
+                serde_json::json!({
+                    "stage":"submission",
+                    "reason":"curl: authored lost accepted submit response"
+                })
+            );
+            assert_eq!(
+                transaction_value["cleanup"],
+                serde_json::json!({
+                    "status":"failed",
+                    "reason":"pending review cleanup failed with HTTP status Some(500): scripted failure"
+                })
+            );
             assert!(!args.out.join("delivery-reconciliation.json").exists());
             assert!(!args.out.join("delivery-receipts.json").exists());
             let receipt = build_post_error_receipt(&args, &error);
@@ -136,6 +154,15 @@ fn accepted_submit_without_response_never_confirms_publication() -> Result<()> {
             assert_eq!(restarted["conclusion"], "pass");
         } else {
             assert_eq!(transport.cleanup_attempts, 0);
+            assert_eq!(
+                transaction.state(),
+                &DeliveryTransactionState::ReceiptsPersisted
+            );
+            assert_eq!(transaction_value["failure"], serde_json::Value::Null);
+            assert_eq!(
+                transaction_value["cleanup"],
+                serde_json::json!({"status":"not_attempted"})
+            );
             confirm_native_publication(&args, &publication, &review, &result?)?;
         }
     }
