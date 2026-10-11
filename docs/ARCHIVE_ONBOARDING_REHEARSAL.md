@@ -26,6 +26,9 @@ Supply a frozen directory containing:
   tag (`v` plus the exact binary version), binary_sha256, archive_sha256,
   checksum_sha256. Record build profile, preparation commands, byte lengths
   and environment in the retained preparation packet as well.
+  Source commit/tree/toolchain are preliminary manifest labels, not verified
+  cryptographic binary provenance. Archive/checksum/executable digests and the
+  executable's version are checked separately; final #816 must bind provenance.
 
 Run explicitly (the receipt directory must be new and absolute):
 
