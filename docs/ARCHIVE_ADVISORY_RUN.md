@@ -33,7 +33,13 @@ not a general process-tree containment claim.
 input diff/source hashes, verifier/harness hashes, exact argv, policy/provider
 configuration, stdout/stderr hashes, result artifacts, payload, transport logs
 and delivery receipts. A wrong expected conclusion must reject every emitted
-run result. The automatic test independently discriminates wrong result planes
+run result. Successful submission must retain pending review identity 987;
+pending creation is HTTP 201 and submission HTTP 200. A separate mismatched
+ID 988 control records legacy CLI acceptance but must be rejected by the
+campaign identity oracle. This does not qualify the legacy producer: #1317
+already owns production identity rejection. Git revision/diff commands must
+exit successfully before their output becomes input evidence; the ordinary
+regression checks all three operations against a real non-repository. The automatic test independently discriminates wrong result planes
 and rewritten imported outcome bytes. Failed campaign attempts retain their
 receipts and logs; intake errors reject before accepting any campaign evidence.
 
@@ -49,10 +55,18 @@ receipts and logs; intake errors reject before accepting any campaign evidence.
 | Delivery failure | Failed submit, cleanup path, nonzero strict post exit; original deterministic bytes unchanged | Existing error receipt reports `failure_stage: unknown` and null HTTP status despite adapter HTTP 500; producer gap remains open |
 
 The packet verifier is invoked for all six run packets. Five must succeed.
-The structured-finding case must retain the exact current
+For the selected binary SHA-256 below, the structured-finding case must fail
+with the exact current
 `resolved_candidates.json does not match candidates plus follow-up outputs and
-prior resolved candidates` rejection. Any other verifier failure fails the
-campaign. The final status is deliberately `bounded_observations_with_blockers`.
+prior resolved candidates` rejection. Verifier success also fails this frozen observation; changed binary bytes
+require refreshed expectations. The additive diagnostic imports the unchanged
+verifier and runs its full sequence, retaining only the exact reconciliation
+denial and the prepared-stage `neither post-result.json nor post-error.json
+exists` denial that the first failure previously masked. It executes the
+remainder of those functions and rejects every other failure. Its output says
+the full packet remains rejected. A copied structured packet with
+`CONTROL_INVALID_SCHEMA` must fail this diagnostic; an actual emitted-packet
+mutation independently proved the full campaign now rejects that corruption. The final status is deliberately `bounded_observations_with_blockers`.
 The prepared payload is checked before either synthetic post and already says
 `publication_result: posted`; this is an unsupported producer label, not delivery
 confirmation. A future producer fix must update this explicit observation and demonstrate
@@ -93,3 +107,32 @@ verifier self-tests passed. After the bounded review adjustments, the campaign
 and Clippy passed again. The archive test is intentionally ignored by ordinary
 Cargo test because the selected archive and strict-install evidence are explicit
 external inputs. The automatic oracle discrimination test runs ordinarily.
+
+
+## Review repair evidence, 2026-10-11
+
+Original head `e60f89125caf9a520453f2fc05eb376b62961fff` and the receipt table
+above remain historical evidence. The repaired harness preserves the selected
+archive/binary/strict-install digests and the preliminary source scope. Eight
+scenarios now execute 28 commands, including independent unaffected-contract
+and invalid-gate checks plus the mismatched identity observation. Five ordinary
+run packet verifications succeed; the structured packet's ordinary verification
+still rejects its exact documented reconciliation gap. The supplemental check
+retains the precise prepare-stage missing-post denial as an additional observed
+boundary, never a complete packet pass.
+
+Final repair campaign `/tmp/1391-repair-final-v2` passed in 5.42 seconds. Its
+receipt SHA-256 is
+`090b58a26df1f6272b76c67944bda6972e6ca8d4d20d49d049c707b863dc6ad5`;
+harness `2068491d977618a82817165159a6089cbc48ec4f5d4a4d3b4add1ad905570ac2`;
+transport adapter `f0d9dc76caeb02e61d64cba89c3da76681d8f8d7dc8b4b82e6f8507e538ff3a2`;
+supplemental driver `766ed2ed4e113d1cf8ce262d221406fdabfaf28d5cc818105492d56032416eb6`.
+
+Discriminating evidence: `/tmp/1391-invalid-gate-mutant.log` is RED with the
+exact invalid-schema rejection after mutating the actual structured output;
+`/tmp/1391-git-fail-open-mutant.log` is RED after bypassing Git exit checking.
+Both disposable mutations were restored. Ordinary tests also reject unexpected
+verifier success, an unrelated or additional denial, and widening the known
+gap to other modes. No production, verifier or strict-install code changed.
+HTTP-status extraction remains with the resumed #1370/#1317 owner task;
+its actual native HTTP500 regression is separately RED on owner87e28f8.

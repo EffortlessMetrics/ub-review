@@ -49,6 +49,53 @@ fn checked_result(actual: &Value, expected: &Value) -> Result<()> {
     }
     Ok(())
 }
+const RECONCILIATION_REJECTION: &str = "verify-bun-review-artifacts: review/resolved_candidates.json does not match candidates plus follow-up outputs and prior resolved candidates";
+fn packet_verdict(id: &str, verified: bool, output: &str) -> Result<()> {
+    if id == "provider-finding" {
+        ensure!(
+            !verified && output.trim() == RECONCILIATION_REJECTION,
+            "frozen structured packet must retain its exact reconciliation rejection: {output}"
+        );
+    } else {
+        ensure!(verified, "{id} packet contract failed: {output}");
+    }
+    Ok(())
+}
+fn copy_packet(from: &Path, to: &Path) -> Result<()> {
+    fs::create_dir(to)?;
+    for entry in fs::read_dir(from)? {
+        let entry = entry?;
+        let target = to.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_packet(&entry.path(), &target)?;
+        } else {
+            ensure!(
+                entry.file_type()?.is_file(),
+                "regular packet files required"
+            );
+            fs::copy(entry.path(), target)?;
+        }
+    }
+    Ok(())
+}
+// Additive diagnostic: the ordinary verifier must still reject this exact packet.
+// Continue only its documented reconciliation and prepare-only missing-post denials, retaining all other
+// checks (including the remainder of that function). No production verifier edit.
+const UNAFFECTED_CONTRACTS: &str = r#"
+import contextlib, importlib.util, io, pathlib, sys
+spec=importlib.util.spec_from_file_location('archive_contract',sys.argv[1])
+v=importlib.util.module_from_spec(spec); sys.modules[spec.name]=v; spec.loader.exec_module(v)
+original=v.fail; denials=[]
+def retained_failure(message):
+    if message in ('review/resolved_candidates.json does not match candidates plus follow-up outputs and prior resolved candidates','neither post-result.json nor post-error.json exists'):
+        denials.append(message)
+    else: original(message)
+v.fail=retained_failure
+with contextlib.redirect_stdout(io.StringIO()):
+    result=v.main(['archive_contract',sys.argv[2],'--expected-repo-kind','rust'])
+if result!=0 or denials!=['review/resolved_candidates.json does not match candidates plus follow-up outputs and prior resolved candidates','neither post-result.json nor post-error.json exists']: original('expected exact reconciliation and prepared-stage missing-post denials')
+print('unaffected contracts checked; reconciliation and prepared-stage missing-post denials retained; full packet remains rejected')
+"#;
 fn unchanged(before: &[u8], after: &[u8]) -> Result<()> {
     ensure!(
         before == after,
@@ -146,6 +193,11 @@ impl Campaign {
             ),
         ))
     }
+    fn fixture_git(&mut self, cwd: &Path, args: &[String]) -> Result<String> {
+        let (ok, text) = self.invoke(Path::new("/usr/bin/git"), cwd, args, &[])?;
+        ensure!(ok, "fixture git {args:?} failed: {text}");
+        Ok(text)
+    }
     fn cli(&mut self, args: &[String], env: &[(&str, String)]) -> Result<(bool, String)> {
         let bin = self.bin.clone();
         let root = self.root.clone();
@@ -169,11 +221,12 @@ if url=='https://provider.invalid/v1/chat/completions' and method=='POST':
     if s['provider']=='outage': status=503; result={'error':{'message':'synthetic unavailable'}}
     else: result={'choices':[{'message':{'content':s['content']}}]}
 elif url=='https://github.invalid/repos/example/repo/pulls/123' and method=='GET': result={'head':{'sha':s['head']}}
-elif url=='https://github.invalid/repos/example/repo/pulls/123/reviews' and method=='POST': result={'id':987,'state':'PENDING'}
+elif url=='https://github.invalid/repos/example/repo/pulls/123/reviews' and method=='POST': status=201; result={'id':987,'state':'PENDING'}
 elif '/reviews/987/comments' in url and url.startswith('https://github.invalid/') and method=='GET': result=[]
 elif url=='https://github.invalid/repos/example/repo/pulls/123/reviews/987/events' and method=='POST':
     if s['post']=='error': status=500; result={'message':'synthetic submit error'}
-    else: result={'id':988,'state':'COMMENTED','body':'synthetic submission'}
+    elif s['post']=='mismatched': result={'id':988,'state':'COMMENTED','body':'synthetic submission'}
+    else: result={'id':987,'state':'COMMENTED','body':'synthetic submission'}
 elif url=='https://github.invalid/repos/example/repo/pulls/123/reviews/987' and method=='DELETE': status=204; result={}
 else:
     print('unallowlisted transport: '+method+' '+url,file=sys.stderr); sys.exit(95)
@@ -306,15 +359,10 @@ fn campaign(c: &mut Campaign) -> Result<()> {
         let (ok, text) = c.invoke(git, &repo, &args, &[])?;
         ensure!(ok, "fixture git: {text}");
     }
-    let (_, head) = c.invoke(git, &repo, &strings(&["rev-parse", "HEAD"]), &[])?;
+    let head = c.fixture_git(&repo, &strings(&["rev-parse", "HEAD"]))?;
     let head = head.trim().to_owned();
-    let (_, base) = c.invoke(git, &repo, &strings(&["rev-parse", "HEAD~1"]), &[])?;
-    let (_, diff) = c.invoke(
-        git,
-        &repo,
-        &strings(&["diff", "--binary", "HEAD~1", "HEAD"]),
-        &[],
-    )?;
+    let base = c.fixture_git(&repo, &strings(&["rev-parse", "HEAD~1"]))?;
+    let diff = c.fixture_git(&repo, &strings(&["diff", "--binary", "HEAD~1", "HEAD"]))?;
     write(&c.root.join("input.patch"), diff.as_bytes())?;
     c.intake["input"] = json!({"base":base.trim(),"head":head,"diff_sha256":sha(diff.as_bytes()),"source_sha256":sha(&fs::read(repo.join("src/lib.rs"))?)});
     for id in CASES.iter().take(6) {
@@ -415,8 +463,37 @@ fn campaign(c: &mut Campaign) -> Result<()> {
             ],
             &[],
         )?;
-        if !verified {
-            ensure!(*id == "provider-finding" && verification.contains("review/resolved_candidates.json does not match candidates plus follow-up outputs and prior resolved candidates"), "{id} unexpected packet contract failure: {verification}");
+        packet_verdict(id, verified, &verification)?;
+        if *id == "provider-finding" {
+            ensure!(
+                c.manifest["binary_sha256"]
+                    == "7b0379029b108a264222e01cabf58a0f3c471ae845bb24b2cebea1f75750c8b6",
+                "known reconciliation observation is pinned to selected binary bytes; refresh expectations for other bytes"
+            );
+            c.intake["unaffected_contract_driver_sha256"] =
+                json!(sha(UNAFFECTED_CONTRACTS.as_bytes()));
+            let check = |packet: &Path| {
+                vec![
+                    "-c".to_owned(),
+                    UNAFFECTED_CONTRACTS.to_owned(),
+                    verifier.display().to_string(),
+                    packet.display().to_string(),
+                ]
+            };
+            let (ok, text) = c.invoke(Path::new("/usr/bin/python3"), &root, &check(&out), &[])?;
+            ensure!(ok, "unaffected structured packet contracts failed: {text}");
+            let corrupt = root.join("invalid-gate-control");
+            copy_packet(&out, &corrupt)?;
+            let path = corrupt.join("review/gate_outcome.json");
+            let mut gate = read(&path)?;
+            gate["schema"] = json!("CONTROL_INVALID_SCHEMA");
+            write(&path, serde_json::to_vec_pretty(&gate)?)?;
+            let (ok, text) =
+                c.invoke(Path::new("/usr/bin/python3"), &root, &check(&corrupt), &[])?;
+            ensure!(
+                !ok && text.contains("gate outcome has wrong schema: 'CONTROL_INVALID_SCHEMA'"),
+                "unrelated gate corruption escaped retained denial: {text}"
+            );
         }
         let gate = read(&out.join("review/gate_outcome.json"))?;
         let terminal = read(&out.join("review/terminal_state.json"))?;
@@ -491,7 +568,7 @@ fn campaign(c: &mut Campaign) -> Result<()> {
                 "text lane was not retained as degraded"
             );
         }
-        c.scenarios[*id] = json!({"status":if verified {"observed_current_contract"} else {"blocked_packet_contract"},"expected":expected,"gate":gate,"terminal":terminal,"config_sha256":sha(&fs::read(&cfg)?),"transport_sha256":sha(&fs::read(&transport)?),"transport_log_sha256":sha(calls.as_bytes()),"packet_path":out,"gate_sha256":sha(&fs::read(out.join("review/gate_outcome.json"))?),"terminal_sha256":sha(&fs::read(out.join("review/terminal_state.json"))?),"review_sha256":sha(&fs::read(out.join("review/review.json"))?),"wrong_outcome_rejected":true,"packet_contract_verified":verified,"packet_verifier_output":verification});
+        c.scenarios[*id] = json!({"status":if verified {"observed_current_contract"} else {"blocked_packet_contract"},"expected":expected,"gate":gate,"terminal":terminal,"config_sha256":sha(&fs::read(&cfg)?),"transport_sha256":sha(&fs::read(&transport)?),"transport_log_sha256":sha(calls.as_bytes()),"packet_path":out,"gate_sha256":sha(&fs::read(out.join("review/gate_outcome.json"))?),"terminal_sha256":sha(&fs::read(out.join("review/terminal_state.json"))?),"review_sha256":sha(&fs::read(out.join("review/review.json"))?),"wrong_outcome_rejected":true,"unaffected_contracts_checked":true,"invalid_gate_control_rejected":*id=="provider-finding","packet_contract_verified":verified,"packet_verifier_output":verification});
         c.receipt("running", None)?;
     }
     ensure!(
@@ -555,6 +632,15 @@ fn posts(c: &mut Campaign, out: &Path, head: &str) -> Result<()> {
                 json!({"schema_version":1,"status":"failed","failure_tolerated":false,"fail_on_post_error":true,"http_status":null,"error_kind":"failed","failure_stage":"unknown"})
             },
         )?;
+        let pending = read(&root.join("pending-review-stdout.json"))?;
+        checked_result(&pending, &json!({"id":987,"state":"PENDING"}))?;
+        if expected_ok {
+            checked_result(&receipt["response"], &json!({"id":987,"state":"COMMENTED"}))?;
+            ensure!(
+                receipt["response"]["id"] == pending["id"],
+                "submitted review identity does not match actual pending response"
+            );
+        }
         let calls = fs::read_to_string(&log)?;
         ensure!(
             calls.contains("reviews/987/events"),
@@ -592,7 +678,46 @@ fn posts(c: &mut Campaign, out: &Path, head: &str) -> Result<()> {
             );
         }
 
-        c.scenarios[id] = json!({"status":"observed_current_contract","post_receipt":receipt,"delivery_transaction":transaction,"delivery_transaction_sha256":sha(&fs::read(root.join("delivery-transaction.json"))?),"post_receipt_sha256":sha(&fs::read(root.join(if expected_ok {"post-result.json"} else {"post-error.json"}))?),"public_payload_sha256":sha(&fs::read(out.join("review/github-review.json"))?),"deterministic_bytes_unchanged":true,"transport_log_sha256":sha(calls.as_bytes()),"expected_exit_success":expected_ok});
+        if expected_ok {
+            let mismatch = root.join("mismatched-identity");
+            fs::create_dir(&mismatch)?;
+            let mismatch_config = mismatch.join("transport.json");
+            let mismatch_log = mismatch.join("transport.ndjson");
+            write(
+                &mismatch_config,
+                serde_json::to_vec(&json!({"head":head,"post":"mismatched"}))?,
+            )?;
+            let mut mismatch_args = args.clone();
+            let out_index = mismatch_args
+                .iter()
+                .position(|a| a == "--out")
+                .context("post output flag")?
+                + 1;
+            mismatch_args[out_index] = mismatch.display().to_string();
+            let (accepted, text) = c.cli(
+                &mismatch_args,
+                &[
+                    ("CAMPAIGN_TRANSPORT", mismatch_config.display().to_string()),
+                    ("CAMPAIGN_TRANSPORT_LOG", mismatch_log.display().to_string()),
+                ],
+            )?;
+            ensure!(
+                accepted,
+                "legacy mismatch observation changed; refresh against selected bytes: {text}"
+            );
+            let mismatched_receipt = read(&mismatch.join("post-result.json"))?;
+            ensure!(
+                checked_result(
+                    &mismatched_receipt["response"],
+                    &json!({"id":987,"state":"COMMENTED"})
+                )
+                .is_err(),
+                "mismatched review identity accepted by campaign oracle"
+            );
+            unchanged(&before, &fs::read(out.join("review/gate_outcome.json"))?)?;
+            c.intake["mismatched_identity_control"] = json!({"legacy_cli_accepted":true,"campaign_identity_oracle_rejected":true,"post_receipt":mismatched_receipt,"post_receipt_sha256":sha(&fs::read(mismatch.join("post-result.json"))?),"transport_log_sha256":sha(&fs::read(mismatch_log)?)});
+        }
+        c.scenarios[id] = json!({"status":"observed_current_contract","post_receipt":receipt,"pending_review":pending,"pending_review_sha256":sha(&fs::read(root.join("pending-review-stdout.json"))?),"delivery_transaction":transaction,"delivery_transaction_sha256":sha(&fs::read(root.join("delivery-transaction.json"))?),"post_receipt_sha256":sha(&fs::read(root.join(if expected_ok {"post-result.json"} else {"post-error.json"}))?),"public_payload_sha256":sha(&fs::read(out.join("review/github-review.json"))?),"deterministic_bytes_unchanged":true,"transport_log_sha256":sha(calls.as_bytes()),"expected_exit_success":expected_ok});
     }
     Ok(())
 }
@@ -660,6 +785,75 @@ fn campaign_oracle_rejects_wrong_result_and_delivery_rewrite() -> Result<()> {
     ensure!(
         unchanged(b"retained deterministic receipt", b"rewritten by delivery").is_err(),
         "delivery override survived"
+    );
+    Ok(())
+}
+
+#[test]
+fn fixture_identity_and_diff_fail_closed_on_real_git_errors() -> Result<()> {
+    let root = tempfile::tempdir()?;
+    let cwd = root.path().join("not-a-repository");
+    fs::create_dir(&cwd)?;
+    let mut c = Campaign {
+        root: root.path().to_owned(),
+        bin: root.path().join("unused-binary"),
+        manifest: json!({}),
+        intake: json!({}),
+        commands: vec![],
+        scenarios: json!({}),
+    };
+    for args in [
+        strings(&["rev-parse", "HEAD"]),
+        strings(&["rev-parse", "HEAD~1"]),
+        strings(&["diff", "--binary", "HEAD~1", "HEAD"]),
+    ] {
+        let result = c.fixture_git(&cwd, &args);
+        let error = match result {
+            Ok(text) => anyhow::bail!("failed Git output accepted as identity/patch: {text}"),
+            Err(error) => error,
+        };
+        ensure!(
+            error.to_string().contains("fixture git") && error.to_string().contains("failed:"),
+            "wrong failure route: {error}"
+        );
+        ensure!(
+            c.intake.get("input").is_none() && !root.path().join("input.patch").exists(),
+            "failed git accepted input evidence"
+        );
+    }
+    ensure!(
+        c.commands.len() == 3
+            && c.commands
+                .iter()
+                .all(|r| r["state"] == "exited" && r["exit"] != 0),
+        "failure command receipts omitted"
+    );
+    Ok(())
+}
+
+#[test]
+fn known_packet_denial_cannot_accept_success_or_unrelated_failures() -> Result<()> {
+    packet_verdict("provider-finding", false, RECONCILIATION_REJECTION)?;
+    ensure!(
+        packet_verdict("provider-finding", true, "").is_err(),
+        "changed expected success accepted"
+    );
+    ensure!(
+        packet_verdict("provider-finding", false, "gate outcome has wrong schema").is_err(),
+        "unrelated rejection accepted"
+    );
+    ensure!(
+        packet_verdict(
+            "provider-finding",
+            false,
+            &format!("{RECONCILIATION_REJECTION}\nextra error")
+        )
+        .is_err(),
+        "extra rejection masked"
+    );
+    ensure!(
+        packet_verdict("off", false, RECONCILIATION_REJECTION).is_err(),
+        "known gap widened to other modes"
     );
     Ok(())
 }
