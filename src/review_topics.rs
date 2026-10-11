@@ -822,6 +822,9 @@ fn push_unique(values: &mut Vec<String>, value: String) {
 }
 
 #[cfg(test)]
+mod replay_tests;
+
+#[cfg(test)]
 mod tests {
     use anyhow::{Result, ensure};
 
