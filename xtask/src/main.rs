@@ -296,7 +296,17 @@ where
             options.base
         );
     }
-    let changed = git_paths(root, &["diff", "--name-only", "-z", &merge_base, "--"])?;
+    let changed = git_paths(
+        root,
+        &[
+            "diff",
+            "--no-renames",
+            "--name-only",
+            "-z",
+            &merge_base,
+            "--",
+        ],
+    )?;
     let rust_changed = changed.iter().any(|path| is_rust_input(path));
     if changed.is_empty() || !rust_changed {
         let reason = if changed.is_empty() {
