@@ -649,6 +649,15 @@ fn receipt_relationships_conflicting_events_and_physical_ids_are_rejected() -> R
             "{shape}"
         );
     }
+    for (review, comment) in [("0987", "123"), ("987", "00123"), ("+987", "123")] {
+        let mut s = f.stream(&payload)?;
+        append(&mut s, "delivery-1", prepared())?;
+        append(&mut s, "delivery-1", f.confirmation(review, comment)?)?;
+        assert!(
+            invoke(&f, &s, &payload, &watermark(&s, 2, "latest")?, "latest").is_err(),
+            "noncanonical physical id {review}/{comment}"
+        );
+    }
     for duplicate in [prepared(), f.ambiguous()?, f.confirmation("987", "123")?] {
         let mut s = f.stream(&payload)?;
         append(&mut s, "delivery-1", prepared())?;
