@@ -16,6 +16,7 @@ struct Scenario {
     prompt: &'static str,
     actions: &'static [&'static str],
     optional: &'static [&'static str],
+    closure: &'static [&'static str],
     skill: &'static str,
 }
 
@@ -31,6 +32,7 @@ const SCENARIOS: &[Scenario] = &[
         ],
         skill: DELIVERY,
         optional: &[],
+        closure: &[],
     },
     Scenario {
         id: "checkpoint",
@@ -43,6 +45,7 @@ const SCENARIOS: &[Scenario] = &[
         ],
         skill: DELIVERY,
         optional: &["update_native_pr_evidence"],
+        closure: &[],
     },
     Scenario {
         id: "replacement",
@@ -55,6 +58,7 @@ const SCENARIOS: &[Scenario] = &[
         ],
         skill: DELIVERY,
         optional: &["publish_draft", "readback_candidate"],
+        closure: &[],
     },
     Scenario {
         id: "experiment",
@@ -68,6 +72,7 @@ const SCENARIOS: &[Scenario] = &[
         ],
         skill: REVIEW,
         optional: &[],
+        closure: &[],
     },
     Scenario {
         id: "evidence",
@@ -77,10 +82,10 @@ const SCENARIOS: &[Scenario] = &[
             "separate_local_hosted_review",
             "withhold_clearance",
             "reconcile_current_concern",
-            "record_integration_conditions",
         ],
         skill: DELIVERY,
         optional: &["continue_validation", "readback_candidate"],
+        closure: &["record_integration_conditions", "return_evidence_to_owner"],
     },
 ];
 
@@ -109,7 +114,13 @@ pub(super) fn print_scenarios(root: &Path) -> Result<()> {
     discover(root)?;
     let actions: BTreeSet<_> = SCENARIOS
         .iter()
-        .flat_map(|case| case.actions.iter().copied())
+        .flat_map(|case| {
+            case.actions
+                .iter()
+                .chain(case.optional.iter())
+                .chain(case.closure.iter())
+                .copied()
+        })
         .collect();
     let scenarios: Vec<_> = SCENARIOS
         .iter()
@@ -178,10 +189,19 @@ fn validate(answers: &Value) -> Result<()> {
             .actions
             .iter()
             .chain(case.optional.iter())
+            .chain(case.closure.iter())
             .copied()
+            .chain([
+                "read_native_workflow",
+                "return_evidence_to_owner",
+                "retain_historical_receipts",
+            ])
             .collect();
         ensure!(
-            expected.is_subset(&selected) && selected.is_subset(&allowed),
+            expected.is_subset(&selected)
+                && selected.is_subset(&allowed)
+                && (case.closure.is_empty()
+                    || case.closure.iter().any(|action| selected.contains(action))),
             "{id}: inappropriate or missing next action: {selected:?}"
         );
     }
@@ -194,7 +214,7 @@ mod tests {
 
     fn correct_answers() -> Value {
         Value::Array(SCENARIOS.iter().map(|case| json!({
-            "id": case.id, "actions": case.actions, "reason": "scenario control", "skill": case.skill
+            "id": case.id, "actions": case.actions.iter().chain(case.closure.first().into_iter()).copied().collect::<Vec<_>>(), "reason": "scenario control", "skill": case.skill
         })).collect())
     }
 
@@ -216,7 +236,42 @@ mod tests {
                     .context("actions")?
                     .push(json!(action));
             }
+            for action in [
+                "read_native_workflow",
+                "return_evidence_to_owner",
+                "retain_historical_receipts",
+            ] {
+                let actions = row["actions"].as_array_mut().context("actions")?;
+                if !actions.iter().any(|selected| selected == action) {
+                    actions.push(json!(action));
+                }
+            }
         }
+        validate(&answers)
+    }
+
+    #[test]
+    fn evidence_requires_condition_record_or_owner_handoff() -> Result<()> {
+        let mut answers = correct_answers();
+        let row = answers
+            .as_array_mut()
+            .context("array")?
+            .iter_mut()
+            .find(|row| row["id"] == "evidence")
+            .context("case")?;
+        let actions = row["actions"].as_array_mut().context("actions")?;
+        actions.retain(|action| action != "record_integration_conditions");
+        assert!(validate(&answers).is_err(), "missing closure accepted");
+        let row = answers
+            .as_array_mut()
+            .context("array")?
+            .iter_mut()
+            .find(|row| row["id"] == "evidence")
+            .context("case")?;
+        row["actions"]
+            .as_array_mut()
+            .context("actions")?
+            .push(json!("return_evidence_to_owner"));
         validate(&answers)
     }
 

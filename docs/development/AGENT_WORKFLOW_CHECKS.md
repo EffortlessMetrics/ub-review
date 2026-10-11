@@ -34,7 +34,11 @@ execute an agent, authenticate that it read a skill, assess free-text reasoning
 or establish real delivery/review behavior. Actual implementation still needs
 the native exact-head checks and independent review. A model run is bounded
 decision evidence only; each case requires its essential actions and permits
-named relevant follow-ups, rather than evaluating general natural language.
+named relevant follow-ups. Native guidance rereads, historical retention and
+owner handoff are valid common follow-ups. The evidence case requires explicit
+integration-condition recording or owner handoff, since the delivery skill's
+handoff includes those conditions. This is a bounded action oracle rather than
+a general natural-language evaluator.
 
 This harness runs without credentials or model calls in baseline tests. Model
 scenario runs are explicit exercises within the current permission/resource
