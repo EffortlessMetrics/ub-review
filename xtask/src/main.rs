@@ -1751,6 +1751,138 @@ mod tests {
         Ok(root)
     }
 
+    fn assert_local_ripr_path_admission(path: &Path, tracked: bool) -> Result<()> {
+        let root = initialized_test_repo("ripr-path-admission")?;
+        git_test(&root, &["config", "core.quotePath", "true"])?;
+        let file = root.join(path);
+        fs::create_dir_all(file.parent().context("fixture path has no parent")?)?;
+        fs::write(&file, "initial\n")?;
+        if tracked {
+            git_test(&root, &["add", "."])?;
+            git_test(&root, &["commit", "-m", "path fixture"])?;
+            fs::write(&file, "changed\n")?;
+        }
+        let calls = RefCell::new(0);
+        let result = run_local_ripr_with(
+            &root,
+            RiprOptions {
+                base: "HEAD".to_owned(),
+            },
+            |_, args, _| {
+                *calls.borrow_mut() += 1;
+                let stdout = if args == ["--version"] {
+                    b"ripr 0.10.0\n".to_vec()
+                } else if args.last().map(String::as_str) == Some("badge-json") {
+                    fake_badge(0, 0, 1)
+                } else if args.last().map(String::as_str) == Some("json") {
+                    fake_detail(&["exposed"])
+                } else {
+                    b"no exposure gaps\n".to_vec()
+                };
+                Ok(RiprInvocation {
+                    success: true,
+                    stdout,
+                    stderr: Vec::new(),
+                })
+            },
+        );
+        let out_dir = root.join("target/xtask/ripr");
+        if tracked {
+            result?;
+            assert_eq!(*calls.borrow(), 4, "tracked input {path:?} was skipped");
+            let receipt: JsonValue =
+                serde_json::from_slice(&fs::read(out_dir.join("receipt.json"))?)?;
+            assert_eq!(receipt["status"], "completed");
+            assert_eq!(
+                fs::read(out_dir.join("diff.patch"))?,
+                git_bytes(&root, &["diff", "--binary", "--no-ext-diff", "HEAD", "--"])?
+            );
+        } else {
+            let error = result
+                .err()
+                .with_context(|| format!("untracked input {path:?} was admitted"))?;
+            assert!(format!("{error:#}").contains("untracked Rust inputs"));
+            assert_eq!(*calls.borrow(), 0);
+            assert!(!out_dir.join("receipt.json").exists());
+            assert!(!out_dir.join("diff.patch").exists());
+        }
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn local_ripr_quoted_tracked_paths_reach_ready_feedback() -> Result<()> {
+        for path in [
+            "src/regular.rs",
+            "src/with space.rs",
+            "src/é.rs",
+            "crates/é/Cargo.toml",
+            "crates/é/Cargo.lock",
+        ] {
+            assert_local_ripr_path_admission(Path::new(path), true)?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn local_ripr_quoted_untracked_paths_fail_before_feedback() -> Result<()> {
+        for path in [
+            "src/regular.rs",
+            "src/with space.rs",
+            "src/é.rs",
+            "crates/é/Cargo.toml",
+            "crates/é/Cargo.lock",
+        ] {
+            assert_local_ripr_path_admission(Path::new(path), false)?;
+        }
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_ripr_quoted_control_and_non_utf8_paths_keep_input_boundaries() -> Result<()> {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        for path in [
+            b"src/tab\tfile.rs".as_slice(),
+            b"src/new\nline.rs",
+            b"crates/tab\tparent/Cargo.toml",
+            b"crates/new\nparent/Cargo.lock",
+            b"src/bad-\xff.rs",
+        ] {
+            for tracked in [true, false] {
+                assert_local_ripr_path_admission(Path::new(OsStr::from_bytes(path)), tracked)?;
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_ripr_embedded_rust_suffix_in_non_rust_path_stays_skipped() -> Result<()> {
+        let root = initialized_test_repo("ripr-non-rust-path-boundary")?;
+        let path = "notes.rs\ntrailing.md";
+        fs::write(root.join(path), "initial\n")?;
+        git_test(&root, &["add", "."])?;
+        git_test(&root, &["commit", "-m", "non-rust path"])?;
+        fs::write(root.join(path), "changed\n")?;
+        run_local_ripr_with(
+            &root,
+            RiprOptions {
+                base: "HEAD".to_owned(),
+            },
+            |_, _, _| Err(io::Error::other("non-Rust input invoked RIPR")),
+        )?;
+        let receipt: JsonValue = serde_json::from_slice(&fs::read(
+            root.join("target/xtask/ripr/receipt.json"),
+        )?)?;
+        assert_eq!(receipt["status"], "skipped");
+        assert_eq!(receipt["reason"], "no Rust inputs changed");
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
     #[test]
     fn smoke_base_rejects_shallow_and_empty_history_with_actionable_errors() -> Result<()> {
         assert_eq!(parse_smoke_base_options(std::iter::empty())?, "HEAD~1");
