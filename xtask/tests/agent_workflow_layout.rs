@@ -2,6 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
+use tempfile::TempDir;
 
 const NATIVE: &str = "docs/development/AGENTIC_WORKFLOW.md";
 const SKILLS: &[(&str, &str)] = &[
@@ -58,13 +59,8 @@ fn native_entrypoint_resolves_owned_workflows() -> Result<()> {
 
 #[test]
 fn missing_routes_files_and_invalid_metadata_are_rejected() -> Result<()> {
-    let root = std::env::temp_dir().join(format!(
-        "ub-agent-layout-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)?
-            .as_nanos()
-    ));
+    let fixture = TempDir::new().context("create layout fixture")?;
+    let root = fixture.path();
     fs::create_dir_all(root.join("docs/development"))?;
     let native_path = "docs/development/AGENTIC_WORKFLOW.md";
     fs::write(root.join(native_path), "native procedure")?;
@@ -83,112 +79,108 @@ fn missing_routes_files_and_invalid_metadata_are_rejected() -> Result<()> {
             format!("---\nname: {name}\ndescription: fixture control\n---\n"),
         )?;
     }
-    let result = (|| -> Result<()> {
-        check_layout(&root)?;
+    check_layout(root)?;
+    fs::write(
+        root.join("AGENTS.md"),
+        format!(
+            "`({native_path})`\n`(.agents/skills/deliver-change/SKILL.md)`\n`(.agents/skills/review-change/SKILL.md)`"
+        ),
+    )?;
+    check_layout(root)?;
+    fs::write(
+        root.join("AGENTS.md"),
+        routes.replace(native_path, "obsolete/native.md"),
+    )?;
+    assert_eq!(
+        check_layout(root)
+            .err()
+            .context("missing native route accepted")?
+            .to_string(),
+        format!("missing AGENTS.md route: {native_path}")
+    );
+    fs::write(root.join("AGENTS.md"), routes)?;
+    fs::remove_file(root.join(native_path))?;
+    assert_eq!(
+        check_layout(root)
+            .err()
+            .context("missing native file accepted")?
+            .to_string(),
+        format!("read routed file: {native_path}")
+    );
+    fs::write(root.join(native_path), "native procedure")?;
+    check_layout(root)?;
+    for (name, path) in fixture_skills {
         fs::write(
             root.join("AGENTS.md"),
-            format!(
-                "`({native_path})`\n`(.agents/skills/deliver-change/SKILL.md)`\n`(.agents/skills/review-change/SKILL.md)`"
-            ),
-        )?;
-        check_layout(&root)?;
-        fs::write(
-            root.join("AGENTS.md"),
-            routes.replace(native_path, "obsolete/native.md"),
+            routes.replace(path, "obsolete/SKILL.md"),
         )?;
         assert_eq!(
-            check_layout(&root)
+            check_layout(root)
                 .err()
-                .context("missing native route accepted")?
+                .with_context(|| format!("missing route accepted: {path}"))?
                 .to_string(),
-            format!("missing AGENTS.md route: {native_path}")
+            format!("missing AGENTS.md route: {path}")
         );
         fs::write(root.join("AGENTS.md"), routes)?;
-        fs::remove_file(root.join(native_path))?;
+        let original = fs::read_to_string(root.join(path))?;
+        fs::remove_file(root.join(path))?;
         assert_eq!(
-            check_layout(&root)
+            check_layout(root)
                 .err()
-                .context("missing native file accepted")?
+                .with_context(|| format!("missing file accepted: {path}"))?
                 .to_string(),
-            format!("read routed file: {native_path}")
+            format!("read routed file: {path}")
         );
-        fs::write(root.join(native_path), "native procedure")?;
-        check_layout(&root)?;
-        for (name, path) in fixture_skills {
-            fs::write(
-                root.join("AGENTS.md"),
-                routes.replace(path, "obsolete/SKILL.md"),
-            )?;
+        for (bad, error) in [
+            (
+                original.replace(&format!("name: {name}"), "name: obsolete"),
+                "skill name does not match directory",
+            ),
+            (
+                original.replace("description: fixture control", "description: "),
+                "missing skill description",
+            ),
+            (
+                original.replace(
+                    &format!("name: {name}"),
+                    &format!("name: {name}\nname: obsolete"),
+                ),
+                "duplicate skill name",
+            ),
+            (
+                original.replace(
+                    &format!("name: {name}"),
+                    &format!("name: obsolete\nname: {name}"),
+                ),
+                "duplicate skill name",
+            ),
+            (
+                original.replace(
+                    &format!("name: {name}"),
+                    &format!("name: {name}\nname: {name}"),
+                ),
+                "duplicate skill name",
+            ),
+            (
+                original.replace(
+                    "description: fixture control",
+                    "description: fixture control\ndescription: ",
+                ),
+                "duplicate skill description",
+            ),
+            ("no frontmatter".to_owned(), "missing skill frontmatter"),
+        ] {
+            fs::write(root.join(path), bad)?;
             assert_eq!(
-                check_layout(&root)
+                check_layout(root)
                     .err()
-                    .with_context(|| format!("missing route accepted: {path}"))?
+                    .with_context(|| format!("invalid metadata accepted: {path}"))?
                     .to_string(),
-                format!("missing AGENTS.md route: {path}")
+                format!("{error}: {path}")
             );
-            fs::write(root.join("AGENTS.md"), routes)?;
-            let original = fs::read_to_string(root.join(path))?;
-            fs::remove_file(root.join(path))?;
-            assert_eq!(
-                check_layout(&root)
-                    .err()
-                    .with_context(|| format!("missing file accepted: {path}"))?
-                    .to_string(),
-                format!("read routed file: {path}")
-            );
-            for (bad, error) in [
-                (
-                    original.replace(&format!("name: {name}"), "name: obsolete"),
-                    "skill name does not match directory",
-                ),
-                (
-                    original.replace("description: fixture control", "description: "),
-                    "missing skill description",
-                ),
-                (
-                    original.replace(
-                        &format!("name: {name}"),
-                        &format!("name: {name}\nname: obsolete"),
-                    ),
-                    "duplicate skill name",
-                ),
-                (
-                    original.replace(
-                        &format!("name: {name}"),
-                        &format!("name: obsolete\nname: {name}"),
-                    ),
-                    "duplicate skill name",
-                ),
-                (
-                    original.replace(
-                        &format!("name: {name}"),
-                        &format!("name: {name}\nname: {name}"),
-                    ),
-                    "duplicate skill name",
-                ),
-                (
-                    original.replace(
-                        "description: fixture control",
-                        "description: fixture control\ndescription: ",
-                    ),
-                    "duplicate skill description",
-                ),
-                ("no frontmatter".to_owned(), "missing skill frontmatter"),
-            ] {
-                fs::write(root.join(path), bad)?;
-                assert_eq!(
-                    check_layout(&root)
-                        .err()
-                        .with_context(|| format!("invalid metadata accepted: {path}"))?
-                        .to_string(),
-                    format!("{error}: {path}")
-                );
-            }
-            fs::write(root.join(path), original)?;
-            check_layout(&root)?;
         }
-        Ok(())
-    })();
-    fs::remove_dir_all(root)?;
-    result
+        fs::write(root.join(path), original)?;
+        check_layout(root)?;
+    }
+    Ok(())
 }

@@ -15,6 +15,10 @@ A duplicated delivery
 catalogue entry must fail the reviewer control rather than changing the fixture
 to omit that role too.
 
+The fixture uses an owned temporary-directory guard so setup errors and test
+unwinding attempt cleanup. Cleanup is best effort and cannot replace the
+original test diagnostic; it does not guarantee removal on a failing filesystem.
+
 The discovery contract is an actionable repository-relative path with a readable
 target, not a rendered Markdown hyperlink. The existing narrow check recognizes
 parenthesized path references in raw `AGENTS.md`; both links and inline code
