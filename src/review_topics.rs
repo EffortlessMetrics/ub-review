@@ -177,6 +177,7 @@ pub(crate) fn build_active_claim_graph(
                 push_unique(&mut topic.proof_requests, request.id.clone());
             }
         }
+        let receipt_evidence_start = topic.evidence.len();
         for receipt in proof_receipts {
             if !receipt.head.eq_ignore_ascii_case(head_sha) {
                 continue;
@@ -199,6 +200,14 @@ pub(crate) fn build_active_claim_graph(
                 });
             }
         }
+        // Independent proof records have no authoritative arrival order.
+        // Keep all attached details, including conflicting records sharing an
+        // ID, while preserving the original observation/inline evidence prefix.
+        topic.proof_requests.sort();
+        topic.proof_receipts.sort();
+        topic.evidence[receipt_evidence_start..].sort_by(|left, right| {
+            (&left.reference, &left.detail).cmp(&(&right.reference, &right.detail))
+        });
         topic.thread_disposition = thread_disposition(topic, &matching_threads);
         topic.planned_action = planned_action(topic);
         topic.planned_thread_id = if topic.planned_action == "reply" {
