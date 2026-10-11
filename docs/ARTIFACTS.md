@@ -1,8 +1,14 @@
 # Artifact packet
 
-`ub-review` retains the evidence and intermediate results behind a run. Files vary with selected sensors, model modes, proof, and posting; the inventory below is the existing packet surface, not a promise that every path exists in every run.
+`ub-review` retains the evidence and intermediate results behind a run. Files vary with
+selected sensors, model modes, proof, and posting; the inventory below is the existing
+packet surface, not a promise that every path exists in every run.
 
-For a first look, open `target/ub-review/running-summary.md` and `target/ub-review/review/review.md`. If a public review was prepared, inspect `review/github-review.json`; otherwise see `review/github-review-skip.json`. Posting receipts are separate from a prepared payload. The [review body contract](REVIEW_BODY_CONTRACT.md) explains what belongs on GitHub.
+For a first look, open `target/ub-review/running-summary.md` and
+`target/ub-review/review/review.md`. If a public review was prepared, inspect
+`review/github-review.json`; otherwise see `review/github-review-skip.json`. Posting
+receipts are separate from a prepared payload. The
+[review body contract](REVIEW_BODY_CONTRACT.md) explains what belongs on GitHub.
 
 ## Packet layout
 
@@ -115,4 +121,5 @@ target/ub-review/input/diff.patch
 unchanged, unresolved, unavailable, resolved, or conflicting candidate state
 after follow-up evidence; it is an audit receipt, not reviewer-facing text.
 
-See [Product state](PRODUCT_STATE.md) for the distinction between prepared review, confirmed delivery, and CI result authority.
+See [Product state](PRODUCT_STATE.md) for the distinction between prepared review,
+confirmed delivery, and CI result authority.
