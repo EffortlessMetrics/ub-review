@@ -539,3 +539,38 @@ fn real_cli_recovery_diagnostic_never_echoes_private_values_or_qualifies_bad_inp
     assert!(!diagnostic.contains("PRIVATE_"));
     Ok(())
 }
+
+#[test]
+fn real_cli_schema_only_watermark_change_keeps_generic_private_safe_rejection() -> Result<()> {
+    let mut h = History::new()?;
+    h.admit(4)?;
+    let original = h.f.invoke("agent-export", &[])?;
+    assert!(original.status.success());
+    let mut view: Value = serde_json::from_slice(&original.stdout)?;
+    let mut observations = decode_bytes(&view["observation_view_json"])?;
+    let original_watermark = observations["watermark"].clone();
+    observations["watermark"]["schema"] = json!("PRIVATE_CLAIM_AND_CI_SCHEMA_SENTINEL");
+    for field in ["name", "count", "chain_sha256", "observed_head_sha"] {
+        assert_eq!(observations["watermark"][field], original_watermark[field]);
+    }
+    view["observation_view_json"] = json!(serde_json::to_vec(&observations)?);
+    let changed = serde_json::to_vec(&view)?;
+    fs::write(h.f.root.path().join("schema-only-view.json"), &changed)?;
+    let output = h.f.invoke(
+        "agent-replay",
+        &[
+            "--view",
+            "schema-only-view.json",
+            "--view-sha256",
+            &hash(&changed),
+        ],
+    )?;
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    let diagnostic = String::from_utf8_lossy(&output.stderr);
+    assert!(diagnostic.contains("recorded agent replay rejected"));
+    assert!(!diagnostic.contains("watermark association mismatch"));
+    assert!(!diagnostic.contains("PRIVATE_"));
+    assert!(!diagnostic.contains("not_proven"));
+    Ok(())
+}

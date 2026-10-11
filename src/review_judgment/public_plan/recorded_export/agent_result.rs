@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::RecordedReviewExport;
 use crate::delivery_transaction::recorded_observations::{
-    ObservationInput, ObservationWatermark, RecordedObservationExport,
+    ObservationInput, ObservationWatermark, RecordedObservationExport, WATERMARK_SCHEMA,
     export_recorded_observations, replay_recorded_observations,
 };
 use crate::review_judgment::public_plan::payload::{
@@ -45,7 +45,9 @@ fn watermark(bytes: &[u8]) -> Option<ObservationWatermark> {
         return None;
     }
     let value: serde_json::Value = serde_json::from_slice(bytes).ok()?;
-    serde_json::from_value(value.get("watermark")?.clone()).ok()
+    let watermark: ObservationWatermark =
+        serde_json::from_value(value.get("watermark")?.clone()).ok()?;
+    (watermark.schema == WATERMARK_SCHEMA).then_some(watermark)
 }
 
 pub(super) fn export(
