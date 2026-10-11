@@ -12,6 +12,9 @@ use anyhow::{Context, Result, ensure};
 
 use crate::*;
 
+#[path = "tests/proof_budget_regressions.rs"]
+mod proof_budget_regressions;
+
 const BASE: &str = "origin/main";
 const HEAD: &str = "HEAD";
 const SHARED_CONTEXT_ID: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
