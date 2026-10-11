@@ -9,6 +9,11 @@ name/description metadata matches its directory:
 cargo test --locked -p xtask --test agent_workflow_layout
 ```
 
+Controls use independent delivery and review fixtures and exercise missing
+routes/files and malformed metadata for each role. A duplicated delivery
+catalogue entry must fail the reviewer control rather than changing the fixture
+to omit that role too.
+
 These are concrete layout checks. They do not establish that an agent discovers
 the guidance, continues work, or makes sound evidence judgments. A previous
 token-answer checker was removed after controls showed contradictory prose
