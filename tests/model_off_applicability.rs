@@ -19,6 +19,8 @@ enum Obligation {
     None,
     Sensor,
     UnsupportedProof,
+    DeterministicFailure,
+    PolicyViolation,
 }
 
 fn run_model_off_packet(root: &Path, obligation: Obligation) -> Result<PathBuf> {
@@ -90,6 +92,27 @@ enabled = true
 "#,
         );
     }
+    if matches!(obligation, Obligation::DeterministicFailure) {
+        config.push_str(
+            r#"
+[tools.changed-source-policy]
+id = "changed-source-policy"
+command = "changed-source-policy"
+class = "static"
+default = "always"
+enabled = true
+required = true
+timeout_sec = 10
+[profiles.gh-runner.guards]
+min_free_mem_mb = 0
+min_free_disk_mb = 0
+max_load_1m = 1000000.0
+"#,
+        );
+    }
+    if matches!(obligation, Obligation::PolicyViolation) {
+        config.push_str("\n[gate]\nrequired_check = true\n");
+    }
     let config_path = root.join("config.toml");
     fs::write(&config_path, config)?;
     let fake_bin = root.join("fake-bin");
@@ -100,6 +123,12 @@ enabled = true
         "#!/bin/sh\nprintf called > \"$MODEL_OFF_CURL_MARKER\"\nexit 99\n",
     )?;
     fs::set_permissions(&curl, fs::Permissions::from_mode(0o755))?;
+    let source_policy = fake_bin.join("changed-source-policy");
+    fs::write(
+        &source_policy,
+        "#!/bin/sh\nexec git diff --exit-code HEAD~1 HEAD -- src/lib.rs\n",
+    )?;
+    fs::set_permissions(&source_policy, fs::Permissions::from_mode(0o755))?;
     let marker = root.join("provider-called");
     let search_path = std::env::join_paths(std::iter::once(fake_bin).chain(
         std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()),
@@ -196,6 +225,20 @@ fn assert_disabled_model_receipts(out: &Path) -> Result<()> {
             .starts_with("model-coverage:")
     }));
     assert!(!out.join("review/github-review.json").exists());
+    let verifier =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/verify-bun-review-artifacts.py");
+    common::run(
+        out,
+        "python3",
+        &[
+            common::path_str(&verifier)?,
+            common::path_str(out)?,
+            "--expected-repo-kind",
+            "rust",
+            "--expected-review-profile",
+            "bun-ub-v0",
+        ],
+    )?;
     Ok(())
 }
 
@@ -297,5 +340,113 @@ fn model_off_keeps_required_proof_unproven() -> Result<()> {
     ensure!(requests.iter().any(|request| request["required"] == true
         && request["command"] == "unsupported-proof-command"
         && request["status"] == "unsupported"));
+    Ok(())
+}
+
+#[test]
+fn model_off_keeps_demonstrated_required_sensor_failure_blocking() -> Result<()> {
+    let _guard = common::cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let out = run_model_off_packet(temp.path(), Obligation::DeterministicFailure)?;
+    assert_disabled_model_receipts(&out)?;
+    let gate = read_json(&out.join("review/gate_outcome.json"))?;
+    assert_eq!(gate["conclusion"], "fail");
+    assert_eq!(gate["analysis_result"], "findings");
+    // The existing terminal producer marks required sensor failures
+    // failed-to-review, so publication and its additive gate stay unproven.
+    assert_eq!(gate["gate_result"], "not_proven");
+    assert_eq!(gate["publication_result"], "not_proven");
+    assert_eq!(gate["terminal_status"], "failed-to-review");
+    let coverage = gate["not_proven_reasons"]
+        .as_array()
+        .context("coverage reasons")?;
+    ensure!(coverage.iter().any(|reason| reason.as_str() == Some(
+        "publication: the run never reached a reviewable state, so whether a PR review was needed is unproven"
+    )));
+    assert_eq!(gate["evidence_gaps_blocking"], 0);
+    let reasons = gate["reasons"].as_array().context("gate reasons")?;
+    let finding = reasons
+        .iter()
+        .find(|reason| reason["kind"] == "sensor-finding")
+        .context("demonstrated sensor finding")?;
+    assert_eq!(finding["id"], "changed-source-policy");
+    assert_eq!(
+        finding["receipt"],
+        "sensors/changed-source-policy/ub-review-sensor-status.json"
+    );
+    let receipt =
+        read_json(&out.join("sensors/changed-source-policy/ub-review-sensor-status.json"))?;
+    assert_eq!(receipt["status"], "failed");
+    assert_eq!(receipt["exit_code"], 1);
+    let stdout = fs::read_to_string(out.join("sensors/changed-source-policy/stdout.txt"))?;
+    ensure!(
+        stdout.contains("-    41") && stdout.contains("+    42"),
+        "failure must demonstrate the changed source diff"
+    );
+    let enforced = common::run_expect_failure(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "gate-check",
+            "--gate-outcome",
+            common::path_str(&out.join("review/gate_outcome.json"))?,
+            "--fail-on-gate",
+            "true",
+            "--mode",
+            "intelligent-ci",
+        ],
+    )?;
+    ensure!(
+        enforced.contains("changed-source-policy"),
+        "demonstrated finding enforcement lost: {enforced}"
+    );
+    Ok(())
+}
+
+#[test]
+fn model_off_keeps_malformed_required_check_policy_blocking() -> Result<()> {
+    let _guard = common::cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let out = run_model_off_packet(temp.path(), Obligation::PolicyViolation)?;
+    assert_disabled_model_receipts(&out)?;
+    let gate = read_json(&out.join("review/gate_outcome.json"))?;
+    assert_eq!(gate["conclusion"], "fail");
+    assert_eq!(gate["analysis_result"], "findings");
+    assert_eq!(gate["gate_result"], "finding");
+    assert_eq!(gate["evidence_gaps_blocking"], 0);
+    let reasons = gate["reasons"].as_array().context("gate reasons")?;
+    assert_eq!(reasons.len(), 1);
+    assert_eq!(reasons[0]["kind"], "policy");
+    assert_eq!(reasons[0]["id"], "gate.required_check");
+    assert_eq!(reasons[0]["receipt"], "effective-config.json");
+    let config = read_json(&out.join("effective-config.json"))?;
+    let errors = config["policy_errors"]
+        .as_array()
+        .context("policy errors")?;
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0]["section"], "gate.required_check");
+    ensure!(
+        errors[0]["detail"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("invalid [gate] key `required_check`")
+    );
+    let enforced = common::run_expect_failure(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "gate-check",
+            "--gate-outcome",
+            common::path_str(&out.join("review/gate_outcome.json"))?,
+            "--fail-on-gate",
+            "true",
+            "--mode",
+            "intelligent-ci",
+        ],
+    )?;
+    ensure!(
+        enforced.contains("gate.required_check"),
+        "policy enforcement lost: {enforced}"
+    );
     Ok(())
 }
