@@ -6,8 +6,8 @@
   "files": [
     {
       "path": ".gitignore",
-      "bytes": 11,
-      "sha256": "62fa08358302c9f270dc6f31708007b0b01380986db370882f3e81e76a60cb15"
+      "bytes": 27,
+      "sha256": "87d9f61d948e51b48f652114d9d303ee0e3a1e1b76a14670d0b2573a6ec3185f"
     },
     {
       "path": "QUALIFICATION.md",
@@ -118,6 +118,21 @@
       "path": "production-lookalike/src/test_support.rs",
       "bytes": 205,
       "sha256": "221c32fa427e30497cbb2485b03e5ccaceadbf17472d281ec48a9eb36d4533d9"
+    },
+    {
+      "path": "receipt-verifier/README.md",
+      "bytes": 2081,
+      "sha256": "e484833ef33cf19654fd4b0d14213fa3415cf5da67956aa7b52cab5aa7721fb3"
+    },
+    {
+      "path": "receipt-verifier/test_verify.py",
+      "bytes": 4823,
+      "sha256": "8dc39c68cd2666903af5297dd4c2d77e880eff2f3fbcf6c9c4c2ea19846632a0"
+    },
+    {
+      "path": "receipt-verifier/verify.py",
+      "bytes": 6027,
+      "sha256": "c5988f981913bbea9c1a888a01ed97f710637f5e37a9a3404a193b9eb89861fa"
     }
   ]
 }
