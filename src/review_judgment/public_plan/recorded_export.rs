@@ -2,10 +2,7 @@
 //! This API consumes admitted typed source objects, not an arbitrary directory,
 //! Markdown, a transport transaction, or a model. It is not the final command
 //! or AgentReviewResult: delivery-event admission and its watermark are absent.
-#![cfg_attr(
-    not(test),
-    expect(dead_code, reason = "policy/allow.toml#recorded-export-shadow-1335")
-)]
+pub(crate) mod files;
 
 use anyhow::{Result, ensure};
 use serde::Serialize;

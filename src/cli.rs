@@ -72,6 +72,9 @@ pub(crate) enum Command {
     /// branch-protection step. Reads calibration data only; never changes
     /// branch protection.
     Promote(PromoteArgs),
+    /// Export or replay independently pinned recorded review source files.
+    /// Local-only; never runs models, posts reviews or computes a CI result.
+    RecordedReview(crate::review_judgment::public_plan::recorded_export::files::RecordedReviewArgs),
 }
 
 #[derive(Debug, Args)]
