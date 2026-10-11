@@ -2015,6 +2015,7 @@ fn validate_proof_intent(
     let target = intent.target.trim();
     let target_valid = !target.is_empty()
         && !target.starts_with('/')
+        && !target.starts_with('-')
         && !target.contains("..")
         && !target.contains(":/")
         && !has_shell_control_token(target)
@@ -2179,6 +2180,10 @@ mod receipt_reconsideration_tests {
                 "target",
                 "Model proof intent rejected: proof intent target is not a safe repository symbol, test, package, or route label. Use a repository-owned label without shell syntax or whitespace; this request did not execute.",
             ),
+            (
+                "option_target",
+                "Model proof intent rejected: proof intent target is not a safe repository symbol, test, package, or route label. Use a repository-owned label without shell syntax or whitespace; this request did not execute.",
+            ),
         ];
         for (field, expected) in cases {
             let mut intent = model_proof_intent("cli");
@@ -2186,6 +2191,7 @@ mod receipt_reconsideration_tests {
                 "claim_id" => intent.claim_id = " \t".to_owned(),
                 "question" => intent.question = " \n".to_owned(),
                 "expected_answer_shape" => intent.expected_answer_shape.clear(),
+                "option_target" => intent.target = "--package".to_owned(),
                 _ => intent.target = "cli; HOSTILE_TARGET_MARKER".to_owned(),
             }
             let observation = match validate_proof_intent(&proof_lane(), intent, 0, 7) {
