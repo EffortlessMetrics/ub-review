@@ -1,0 +1,12 @@
+Rebasing (1/10)Auto-merging src/main.rs
+Auto-merging src/review_judgment.rs
+CONFLICT (add/add): Merge conflict in src/review_judgment.rs
+Auto-merging src/revision_identity.rs
+CONFLICT (content): Merge conflict in src/revision_identity.rs
+error: could not apply 89c34323... feat(review): validate shadow recorded judgment source selections
+hint: Resolve all conflicts manually, mark them as resolved with
+hint: "git add/rm <conflicted_files>", then run "git rebase --continue".
+hint: You can instead skip this commit: run "git rebase --skip".
+hint: To abort and get back to the state before "git rebase", run "git rebase --abort".
+hint: Disable this message with "git config set advice.mergeConflict false"
+Could not apply 89c34323... # feat(review): validate shadow recorded judgment source selections
