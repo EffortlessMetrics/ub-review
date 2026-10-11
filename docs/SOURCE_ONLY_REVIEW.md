@@ -20,10 +20,10 @@ model hypothesis is not executable proof. A clean review within its admitted sco
 not a CI PASS, a whole-repository safety certificate, or a claim that the source was
 executed successfully.
 
-The operating economics are interesting: retain bounded repository context across PRs,
-use cheap static/model investigation, and avoid spinning up candidate-execution VMs
-just to perform first-line screening. Actual throughput, cost, false positives, and
-adversarial recall still have to be measured.
+Retaining bounded repository context across PRs and using inexpensive static/model
+investigation avoids allocating a fresh candidate-execution VM just for first-line
+screening. Actual throughput, cost, false positives, and adversarial recall still
+have to be measured.
 
 ## Execution and trust boundary
 
