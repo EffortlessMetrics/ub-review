@@ -14,10 +14,13 @@ ub-review verify-analyzer-bundle \
 ```
 
 Exit 0 means `selected_recorded_receipt`: all recorded selection obligations
-agree with independently pinned inputs. Nonzero emits one explicit
+agree with independently pinned inputs. Once evidence-root resolves, recorded
+validation failures emit one explicit
 `not_selected`, `missing_evidence`, `stale_evidence`, or
 `contradictory_evidence` receipt. Rejected bundles emit no validated tool list.
-Every result has `required_readiness=false`. This command is not live runtime
+CLI argument or evidence-root resolution failures can exit nonzero before a
+JSON receipt is created. Every emitted receipt has `required_readiness=false`.
+This command is not live runtime
 admission or public-candidate qualification; #1067 migration and #1068 installed
 triggering acceptance remain separate. The held #1385 packet is unchanged.
 
@@ -67,6 +70,13 @@ limited to 512 KiB; each archive/executable is limited to 32 MiB. Larger objects
 are rejected explicitly, not considered qualified. Inputs should be an immutable
 transferred snapshot; this portable reader does not claim elimination of
 concurrent filesystem substitution races.
+
+Selection-specific typed envelopes reject unknown fields, but this does not
+extend to every nested upstream type. The existing `RevisionRef` reader ignores
+unknown fields (including a resealed `authority_override`); its recognized fields
+are still shape-validated and compared to the independently pinned scope.
+The resolved-tools projection likewise leaves other plan fields to its owner.
+No nested unknown-field rejection or changed upstream parsing semantics is claimed.
 
 `ub-review.analyzer_selection_intake.v1` contains:
 
