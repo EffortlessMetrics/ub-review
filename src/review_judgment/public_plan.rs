@@ -268,8 +268,9 @@ pub(crate) fn validate_recorded_public_plan(
         Some(sha256_hex(plan_bytes).as_str()) == input.expected_plan_digest,
         "recorded plan bytes mismatch"
     );
-    // Legacy RevisionRef tolerates extras; PlannedDelivery's try_from wire is
-    // strict. Enforce strict RevisionRef fields locally, preserving its owner.
+    // Legacy RevisionRef and RawPlannedDelivery tolerate extras. Admit their
+    // fields strictly here before shared deserialization can discard them;
+    // preserve the existing identity/transport decoders' behavior.
     let value: serde_json::Value = serde_json::from_slice(plan_bytes)?;
     ensure!(
         value
@@ -280,6 +281,30 @@ pub(crate) fn validate_recorded_public_plan(
                     .all(|k| matches!(k.as_str(), "digest" | "semantics" | "reviewed_commit"))),
         "unknown plan revision field"
     );
+    if let Some(items) = value.get("items").and_then(serde_json::Value::as_array) {
+        for item in items {
+            if let Some(delivery) = item.pointer("/disposition/delivery") {
+                ensure!(
+                    delivery
+                        .as_object()
+                        .is_some_and(|fields| fields.keys().all(|key| {
+                            matches!(
+                                key.as_str(),
+                                "exact_head_sha"
+                                    | "claim_id"
+                                    | "action"
+                                    | "path"
+                                    | "line"
+                                    | "side"
+                                    | "source_thread_id"
+                                    | "expected_body_digest"
+                            )
+                        })),
+                    "unknown plan delivery field"
+                );
+            }
+        }
+    }
     let plan: PublicReviewPlan = serde_json::from_slice(plan_bytes)?;
     let public = input.public_source;
     ensure!(
