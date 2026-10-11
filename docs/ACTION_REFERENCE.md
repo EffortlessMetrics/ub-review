@@ -1,8 +1,8 @@
 # Action and CLI reference
 
-The [GitHub Action definition](../action.yml) is the source of truth for the full input
-and output list, defaults, and accepted values. This page keeps the useful operating
-boundaries and examples out of the [README](../README.md) .
+The [GitHub Action definition](../action.yml) owns the full input and output list,
+defaults, and accepted values. This reference covers operating behavior and result
+boundaries. Start with the [README](../README.md) for the product applications.
 
 ## Primary modes
 
