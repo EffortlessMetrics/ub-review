@@ -42,6 +42,7 @@ struct SourceExport<'a> {
     source_manifest_digest: &'a str,
     source_review_complete: bool,
     current_revision: crate::RevisionRef,
+    source_currentness: &'static str,
     judgment: JudgmentView<'a>,
     public_plan: &'a RecordedPublicPlan,
     public_plan_recorded_bytes: Option<&'a [u8]>,
@@ -93,6 +94,7 @@ pub(crate) fn export_recorded_review(input: PublicPlanInput<'_>) -> Result<Recor
         source_manifest_digest: source_digest,
         source_review_complete: source.review_complete,
         current_revision: current_revision.revision_ref(),
+        source_currentness: "matches_admitted_revision",
         judgment,
         public_plan_recorded_bytes: match &public_plan {
             RecordedPublicPlan::Validated { .. } => plan_bytes,
