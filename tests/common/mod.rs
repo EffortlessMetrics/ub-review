@@ -571,6 +571,8 @@ pub fn join_fake_provider(handle: thread::JoinHandle<Result<Vec<String>>>) -> Re
 /// specific planner branches, and inheriting `GITHUB_ACTIONS=true` can make an
 /// unrelated box guard run before the branch under test. Explicit per-test envs
 /// are applied afterwards and still win.
+/// Hosted event payloads belong to the outer PR, not the fixture repository;
+/// inheriting them contaminates provider prompts with unrelated PR prose.
 pub fn isolated_command(program: &str, cwd: &Path) -> Command {
     let mut command = Command::new(program);
     command.current_dir(cwd);
@@ -579,7 +581,7 @@ pub fn isolated_command(program: &str, cwd: &Path) -> Command {
         if name_string.starts_with("UB_REVIEW_")
             || matches!(
                 name_string.as_ref(),
-                "GITHUB_ACTIONS" | "RUNNER_ENVIRONMENT" | "RUNNER_NAME"
+                "GITHUB_ACTIONS" | "GITHUB_EVENT_PATH" | "RUNNER_ENVIRONMENT" | "RUNNER_NAME"
             )
         {
             command.env_remove(&name);
