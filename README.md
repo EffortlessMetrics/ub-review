@@ -15,8 +15,9 @@ need.
 
 ## Intelligent CI
 
-A PR needs the checks its repository requires. It doesn't need independent jobs and
-reviewers repeatedly discovering the same facts or running equivalent work.
+A PR needs its repository's Required checks, and independent reviews can find genuinely
+different problems. The reviewers don't each need to rediscover the same repository
+facts, and equivalent approved proof needn't execute over and over.
 
 We're designing the CI path to start Required work promptly, reuse approved executions
 and their evidence, and spend additional compute where static analysis or model
@@ -46,7 +47,7 @@ it.
 
 Hostile source is still hostile input to parsers, tools, and models. Containment and
 detection quality need their own evidence.
-[Source-only review design and status](docs/SOURCE_ONLY_REVIEW.md) .
+[Source-only review design and status](docs/SOURCE_ONLY_REVIEW.md).
 
 ## An excellent PR review from either path
 
