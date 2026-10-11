@@ -162,6 +162,15 @@ fn inventory_order_and_checkout_root_do_not_change_generation() -> Result<()> {
         digest(&packet)? == digest(&reordered)?,
         "order-dependent digest"
     );
+    // Force seal to restore both bindings before accepting reordered input.
+    reordered["payload_sha256"] = "stale digest".into();
+    reordered["generation"] = "stale generation".into();
+    seal(&mut reordered)?;
+    ensure!(
+        reordered["payload_sha256"] == packet["payload_sha256"]
+            && reordered["generation"] == packet["generation"],
+        "resealing did not restore canonical bindings"
+    );
     audit(&reordered)?;
     // Canonical inputs contain repository-relative paths only; no checkout root.
     ensure!(
@@ -196,7 +205,6 @@ fn resealed_invalid_selection_claims_are_rejected() -> Result<()> {
             "source_only" => {
                 invalid["payload"]["tools"][index]["candidate"]["source"] =
                     "workspace/path binary".into();
-                invalid["payload"]["tools"][index]["disposition"] = "selected_required".into();
             }
             "wrong_digest" => {
                 invalid["payload"]["tools"][index]["current"]["checksum"] =
@@ -230,8 +238,45 @@ fn resealed_invalid_selection_claims_are_rejected() -> Result<()> {
             _ => anyhow::bail!("unknown case"),
         }
         seal(&mut invalid)?;
-        ensure!(audit(&invalid).is_err(), "packet audit admitted {case}");
+        let hash = digest(&invalid)?;
+        ensure!(
+            invalid["payload_sha256"] == hash
+                && invalid["generation"] == format!("1066-preparatory-blocked-{hash}"),
+            "resealing failed for {case}"
+        );
+        let expected = match case {
+            "source_only" | "unknown_as_zero" => "unverified candidate evidence introduced",
+            "wrong_digest" => "stable public identity conflict",
+            "mismatched_public_tag" => "public crate/tag source conflict",
+            "missing_compatibility" => "selection claim in blocked packet",
+            "incompatible_rollback" => "rollback falsely qualified",
+            "missing_row" => "missing/duplicate/unknown row",
+            "threshold" => "strict-zero changed",
+            "readiness" => "blocked scope changed",
+            _ => anyhow::bail!("unknown case"),
+        };
+        let error = audit(&invalid).err().context("invalid packet admitted")?;
+        ensure!(
+            error.to_string() == expected,
+            "wrong rejection for {case}: {error}"
+        );
     }
+    Ok(())
+}
+
+#[test]
+fn generation_only_tamper_is_rejected() -> Result<()> {
+    let mut packet: Value = serde_json::from_str(PACKET)?;
+    packet["generation"] = "1066-preparatory-blocked-wrong-generation".into();
+    ensure!(
+        packet["payload_sha256"] == digest(&packet)?,
+        "payload changed"
+    );
+    let error = audit(&packet).err().context("generation tamper admitted")?;
+    ensure!(
+        error.to_string() == "generation mismatch",
+        "wrong rejection: {error}"
+    );
     Ok(())
 }
 
