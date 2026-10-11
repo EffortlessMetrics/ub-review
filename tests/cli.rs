@@ -3957,6 +3957,40 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
 }
 
 #[test]
+fn model_provider_fixture_ignores_ambient_event_body() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let event = temp.path().join("ambient-event.json");
+    fs::write(
+        &event,
+        serde_json::to_vec(&serde_json::json!({
+            "pull_request": {
+                "number": 1376,
+                "title": "unrelated hosted PR",
+                "body": (["unrelated-event-canary", "Bearer"].join(" "))
+            }
+        }))?,
+    )?;
+    // Reuse the actual provider fixture and all its auth-confidentiality
+    // assertions under a polluted parent environment, without changing process
+    // globals or recursively invoking this wrapper.
+    let output = Command::new(std::env::current_exe()?)
+        .args([
+            "model_auto_run_hits_fake_minimax_provider_and_writes_artifacts",
+            "--exact",
+            "--nocapture",
+        ])
+        .env("GITHUB_EVENT_PATH", &event)
+        .output()?;
+    assert!(
+        output.status.success(),
+        "ambient-event provider fixture failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Ok(())
+}
+
+#[test]
 fn model_auto_run_hits_fake_minimax_provider_and_writes_artifacts() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
