@@ -390,6 +390,65 @@ fn duplicate_locations_forged_subjects_and_reference_tampering_fail() -> Result<
 }
 
 #[test]
+fn nested_delivery_firewall_preserves_exact_positive_bytes() -> Result<()> {
+    let f = Fixture::new()?;
+    let materials = f.materials();
+    let anchors = f.anchors();
+    let ci_before = f.ci.clone();
+    let ci_digest_before = sha256_hex(&ci_before);
+    let validated = invoke(&f, &materials, &anchors, |_| {})?;
+    let RecordedPublicPlan::Validated { plan, plan_digest } = validated else {
+        anyhow::bail!("expected valid recorded plan");
+    };
+    assert_eq!(
+        plan_digest,
+        "0e175b97ebc061a8ebf54398d13b03e658f40dc80c0afd3722867306995a706d"
+    );
+    let expected = f.inline("A", &f.body_a_digest)?;
+    let bytes = serde_json::to_vec(&expected)?;
+    let roundtrip: PlannedDelivery = serde_json::from_slice(&bytes)?;
+    assert_eq!(roundtrip, expected);
+    assert_eq!(serde_json::to_vec(&roundtrip)?, bytes);
+    assert!(
+        matches!(&plan.items[0].disposition, PublicDisposition::Inline { delivery, .. } if *delivery == expected)
+    );
+    assert_eq!(f.ci, ci_before);
+    assert_eq!(sha256_hex(&f.ci), ci_digest_before);
+    for field in [
+        "ci_evidence_result",
+        "required",
+        "policy",
+        "dispatch",
+        "argv",
+        "delivery_confirmation",
+        "check_exit_status",
+        "private_audit",
+        "arbitrary_unknown",
+        "nested_unknown",
+    ] {
+        for payload in [json!("forged"), json!({"nested": {"authority": true}})] {
+            rejection(
+                invoke(&f, &materials, &anchors, |p| {
+                    p["items"][0]["disposition"]["delivery"][field] = payload;
+                }),
+                "unknown plan delivery field",
+            );
+        }
+    }
+    for field in ["source_thread_id", "action", "expected_body_digest", "line"] {
+        assert!(
+            invoke(&f, &materials, &anchors, |p| {
+                p["items"][0]["disposition"]["delivery"][field] =
+                    json!({"arbitrary": {"unknown": true}});
+            })
+            .is_err(),
+            "nested object accepted in {field}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn private_and_operational_material_require_qualified_withholding() -> Result<()> {
     let f = Fixture::new()?;
     let anchors = f.anchors();
