@@ -69,7 +69,7 @@ impl Fixture {
             identities.push(identity);
         }
         for (side, index) in [("candidate", 0), ("rollback", 1)] {
-            records.insert(format!("{side}-compatibility"),json!({"schema":"ub-review.analyzer_compatibility.v1","owner":"fixture-compatibility-owner","tool_id":"fixture-analyzer","scope":scope,"candidate_artifact_sha256":identities[index]["artifact"]["sha256"],"candidate_executable_sha256":identities[index]["executable"]["sha256"],"baseline_artifact_sha256":identities[1]["artifact"]["sha256"],"decision":"accepted","rollback_qualified":true}));
+            records.insert(format!("{side}-compatibility"),json!({"schema":"ub-review.analyzer_compatibility.v1","owner":"fixture-compatibility-owner","tool_id":"fixture-analyzer","scope":scope,"candidate_artifact_sha256":identities[index]["artifact"]["sha256"],"candidate_executable_sha256":identities[index]["executable"]["sha256"],"baseline_artifact_sha256":identities[1]["artifact"]["sha256"],"decision":"accepted","rollback_qualified":true,"rollback_from_artifact_sha256":identities[0]["artifact"]["sha256"]}));
         }
         let resolved = write_json(
             root,
@@ -224,6 +224,11 @@ fn actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence() -> R
         ),
         ("inventory", "contradictory_evidence", "inventory mismatch"),
         (
+            "rollback_transition",
+            "contradictory_evidence",
+            "rollback transition differs",
+        ),
+        (
             "validator",
             "contradictory_evidence",
             "package identity validator provenance",
@@ -296,6 +301,12 @@ fn actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence() -> R
             }
             "inventory" => {
                 f.bundle["tools"].as_array_mut().context("rows")?.clear();
+            }
+            "rollback_transition" => {
+                f.records
+                    .get_mut("rollback-compatibility")
+                    .context("compatibility")?["rollback_from_artifact_sha256"] =
+                    "9".repeat(64).into();
             }
             "validator" => {
                 f.records.get_mut("candidate-install").context("install")?["package_validator_source"] =
