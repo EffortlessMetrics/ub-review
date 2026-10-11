@@ -311,3 +311,52 @@ fn reports_targeted_negative_diagnostics() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn rejects_flag_like_tag_value_with_missing_value_diagnostic() -> Result<()> {
+    let fixture = Fixture::create("flag-tag")?;
+    fixture.write_template(LITERAL_TEMPLATE)?;
+    fixture.write_sentinel()?;
+    let args: Vec<String> = vec![
+        "render-release-notes".to_owned(),
+        "--tag".to_owned(),
+        "--output".to_owned(),
+        "notes.md".to_owned(),
+    ];
+    let output = fixture.run(&args)?;
+    assert!(
+        !output.status.success(),
+        "flag-like --tag value unexpectedly succeeded"
+    );
+    assert_eq!(fixture.read_output()?, SENTINEL);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("--tag requires a value"),
+        "flag-like --tag diagnostic must report missing value: {stderr}"
+    );
+    Ok(())
+}
+
+#[test]
+fn accepts_flag_like_output_path() -> Result<()> {
+    let fixture = Fixture::create("flag-output")?;
+    fixture.write_template(LITERAL_TEMPLATE)?;
+    let args: Vec<String> = vec![
+        "render-release-notes".to_owned(),
+        "--output".to_owned(),
+        "--tag".to_owned(),
+        "--tag".to_owned(),
+        "v1".to_owned(),
+    ];
+    let output = fixture.run(&args)?;
+    if !output.status.success() {
+        bail!(
+            "flag-like output render failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let bytes = fs::read_to_string(fixture.root.join("--tag"))?;
+    assert!(!bytes.is_empty());
+    assert_eq!(bytes, "# ub-review v1\n\nVersion v1 is ready.\n");
+    Ok(())
+}
