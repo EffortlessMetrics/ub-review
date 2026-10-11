@@ -9,6 +9,10 @@ use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
+// Pure recorded contract proposal; #1335 owns later consumer admission.
+#[cfg(test)]
+pub(crate) mod recorded_observations;
+
 pub const DELIVERY_TRANSACTION_SCHEMA: &str = "ub-review.delivery_transaction.v1";
 pub const DELIVERY_RECEIPT_SCHEMA: &str = "ub-review.delivery_receipt.v1";
 pub const DELIVERY_RECONCILIATION_SCHEMA: &str = "ub-review.delivery_reconciliation.v1";
