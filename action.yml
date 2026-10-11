@@ -1,8 +1,8 @@
 name: UB Review
 
 description: >-
-  Build a box-aware UB/native-boundary evidence packet, run bounded model review
-  lanes when configured, and optionally post one grouped pull request review.
+  Build bounded evidence packets with configured model review and optional
+  GitHub delivery of one grouped pull request review.
 
 branding:
   icon: search
@@ -78,15 +78,15 @@ inputs:
     default: 'false'
     required: false
   posting:
-    description: 'Posting mode: artifact-only or review.'
+    description: 'Posting mode: artifact-only or review. Default: review (compatibility). Initial evaluation should explicitly select artifact-only; local artifacts are not successful remote delivery.'
     default: review
     required: false
   mode:
-    description: 'Execution mode: review-byok or intelligent-ci. Legacy review-direct is accepted as an alias.'
+    description: 'Execution mode: review-byok or intelligent-ci. Default: review-byok (compatibility). Legacy review-direct is accepted as an alias.'
     default: review-byok
     required: false
   review-mode:
-    description: 'User-facing review posture. When set, overrides mode/fail-on-gate/[gate].review_forward (with a per-knob warning). advisory = comment only, never blocks; gate = deterministic-floor required check (recommended); strict = + reporter verdict can block. Unset (default) uses the legacy knobs below unchanged.'
+    description: 'User-facing review posture. When set, overrides mode/fail-on-gate/[gate].review_forward (with a per-knob warning). Recommended initial evaluation: advisory with posting=artifact-only and model-mode=off, preserving existing required CI. gate = opt-in deterministic-floor check; strict = + reporter verdict can block. Gate/strict enforce the legacy conclusion, not shadow result authority. Unset (default) preserves compatibility knobs: mode=review-byok, model-mode=auto, posting=review, fail-on-gate=auto.'
     default: ''
     required: false
   run-pass:
@@ -150,7 +150,7 @@ inputs:
     default: auto
     required: false
   model-mode:
-    description: 'Model mode: auto or off.'
+    description: 'Model mode: auto or off. Default: auto (compatibility). Explicit off is recommended for initial evaluation; semantic review was not performed and this is not a clean model judgment.'
     default: auto
     required: false
   depth:
@@ -230,7 +230,7 @@ inputs:
     default: 'false'
     required: false
   fail-on-gate:
-    description: 'Gate enforcement: auto, true, or false. The final Enforce gate outcome step runs `ub-review gate-check`, which exits non-zero when review/gate_outcome.json does not record an exact pass conclusion and this resolves to true; artifacts, the job summary, and PR review posting always complete first. auto resolves to true for mode=intelligent-ci and false otherwise.'
+    description: 'Gate enforcement: auto, true, or false. Default: auto. The final Enforce gate outcome step runs `ub-review gate-check`, which exits non-zero when review/gate_outcome.json does not record an exact pass legacy conclusion and this resolves to true; artifacts, the job summary, and PR review posting always complete first. auto resolves to true for mode=intelligent-ci and false otherwise. Shadow results do not replace this enforcement authority.'
     default: auto
     required: false
   github-summary:
