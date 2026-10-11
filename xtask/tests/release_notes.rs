@@ -46,11 +46,11 @@ impl Fixture {
     }
 
     fn run(&self, args: &[String]) -> Result<Output> {
-        Ok(Command::new(env!("CARGO_BIN_EXE_xtask"))
+        Command::new(env!("CARGO_BIN_EXE_xtask"))
             .args(args)
             .current_dir(&self.root)
             .output()
-            .context("run xtask render-release-notes")?)
+            .context("run xtask render-release-notes")
     }
 }
 
