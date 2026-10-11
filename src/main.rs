@@ -3550,14 +3550,29 @@ fn normalize_lane_model_array_field(
 }
 
 fn normalize_lane_model_array_item(field: &str, value: &mut serde_json::Value) -> bool {
-    if !matches!(field, "observations" | "failed_objections") {
-        return false;
-    }
     let Some(object) = value.as_object_mut() else {
         return false;
     };
     if let Some(evidence) = object.get_mut("evidence") {
-        return normalize_string_array_field(evidence);
+        if matches!(field, "observations" | "failed_objections") {
+            return normalize_string_array_field(evidence);
+        }
+        // Finding evidence is prose, not a proof command or identity. Recover
+        // only a nonempty list of strings, preserving each witness boundary.
+        // Mixed/nested values stay malformed; proof fields stay strictly typed.
+        if matches!(
+            field,
+            "inline_comments" | "candidate_findings" | "summary_only_findings"
+        ) && let serde_json::Value::Array(items) = evidence
+            && !items.is_empty()
+            && let Some(witnesses) = items
+                .iter()
+                .map(serde_json::Value::as_str)
+                .collect::<Option<Vec<_>>>()
+        {
+            *evidence = serde_json::Value::String(witnesses.join("\n"));
+            return true;
+        }
     }
     false
 }

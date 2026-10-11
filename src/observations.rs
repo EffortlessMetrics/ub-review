@@ -324,6 +324,210 @@ pub(crate) fn lane_output_malformed_content_observation(
 mod tests {
     use super::*;
 
+    #[test]
+    fn finding_evidence_string_arrays_recover_with_degradation() -> Result<()> {
+        for field in [
+            "inline_comments",
+            "candidate_findings",
+            "summary_only_findings",
+        ] {
+            let candidate = serde_json::json!({
+                "severity": "medium", "confidence": "high",
+                "path": "src/lib.rs", "line": 7, "body": "check ownership",
+                "reason": "check ownership", "evidence": ["first witness", "second witness"]
+            });
+            let raw = serde_json::json!({field: [candidate]}).to_string();
+            let (output, degraded) = parse_fixture(&raw)?;
+            assert!(degraded, "{field} shape repair must be visible");
+            assert!(output.degraded);
+            let evidence = match field {
+                "inline_comments" => &output.inline_comments[0].evidence,
+                "candidate_findings" => &output.candidate_findings[0].evidence,
+                _ => &output.summary_only_findings[0].evidence,
+            };
+            assert_eq!(evidence, "first witness\nsecond witness");
+            assert!(output.proof_requests.is_empty() && output.proof_intents.is_empty());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn finding_evidence_invalid_arrays_fail_closed() -> Result<()> {
+        for evidence in [
+            serde_json::json!([]),
+            serde_json::json!(["witness", 7]),
+            serde_json::json!(["witness", null]),
+            serde_json::json!([{"command": "cargo test"}]),
+            serde_json::json!([["witness"]]),
+        ] {
+            let raw = serde_json::json!({"candidate_findings": [{
+                "severity": "medium", "confidence": "high", "path": "src/lib.rs",
+                "line": 7, "body": "check ownership", "evidence": evidence
+            }]})
+            .to_string();
+            assert!(serde_json::from_str::<LaneModelOutput>(&raw).is_err());
+            let (output, degraded) = parse_fixture(&raw)?;
+            assert!(degraded && output.degraded);
+            assert!(output.candidate_findings.is_empty());
+            assert!(output.proof_requests.is_empty() && output.proof_intents.is_empty());
+            assert_eq!(output.observations.len(), 1);
+            assert_eq!(
+                output.observations[0].kind.as_deref(),
+                Some("missing-evidence")
+            );
+            assert_eq!(output.observations[0].status.as_deref(), Some("open"));
+            assert!(output.observations[0].path.is_none());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn evidence_recovery_does_not_coerce_proof_contract_fields() -> Result<()> {
+        let request = serde_json::json!({
+            "command": "cargo test", "reason": "answer claim", "cost": "focused-test",
+            "timeout_sec": 30, "required": false
+        });
+        let intent = serde_json::json!({
+            "claim_id": "claim-1", "question": "does ownership hold?",
+            "expected_answer_shape": "terminal receipt", "proof_kind": "focused-test",
+            "target": "ownership_test", "estimated_value": "high", "timeout_sec": 30
+        });
+        for (field, original, keys) in [
+            (
+                "proof_requests",
+                request,
+                vec!["command", "reason", "cost", "timeout_sec", "required"],
+            ),
+            (
+                "proof_intents",
+                intent,
+                vec![
+                    "claim_id",
+                    "question",
+                    "expected_answer_shape",
+                    "proof_kind",
+                    "target",
+                    "estimated_value",
+                    "timeout_sec",
+                ],
+            ),
+        ] {
+            for key in keys {
+                let mut item = original.clone();
+                item[key] = serde_json::json!([item[key].clone()]);
+                let raw = serde_json::json!({field: [item], "observations": [{
+                    "claim": "review scope", "evidence": "scalar witness"
+                }]})
+                .to_string();
+                assert!(
+                    serde_json::from_str::<LaneModelOutput>(&raw).is_err(),
+                    "{field}.{key}"
+                );
+                let (output, degraded) = parse_fixture(&raw)?;
+                assert!(degraded && output.degraded);
+                assert!(output.proof_requests.is_empty() && output.proof_intents.is_empty());
+                assert!(output.inline_comments.is_empty() && output.candidate_findings.is_empty());
+                assert_eq!(output.observations.len(), 1);
+                assert_eq!(
+                    output.observations[0].kind.as_deref(),
+                    Some("missing-evidence")
+                );
+                assert_eq!(output.observations[0].status.as_deref(), Some("open"));
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn evidence_recovery_preserves_canonical_proof_fields() -> Result<()> {
+        let raw = r#"{
+          "candidate_findings": [{"severity":"medium","confidence":"high",
+            "path":"src/lib.rs","line":7,"body":"ownership concern",
+            "evidence":["witness one","witness two"]}],
+          "proof_requests": [{"command":"cargo test ownership_test",
+            "reason":"answer claim","cost":"focused-test","timeout_sec":30,"required":false}],
+          "proof_intents": [{"claim_id":"claim-1","question":"does ownership hold?",
+            "expected_answer_shape":"terminal receipt","proof_kind":"focused-test",
+            "target":"ownership_test","estimated_value":"high","timeout_sec":30}]
+        }"#;
+        let (output, degraded) = parse_fixture(raw)?;
+        assert!(degraded && output.degraded);
+        assert_eq!(output.proof_requests.len(), 1);
+        assert_eq!(
+            output.proof_requests[0].command,
+            "cargo test ownership_test"
+        );
+        assert_eq!(output.proof_requests[0].required, Some(false));
+        assert_eq!(output.proof_requests[0].timeout_sec, Some(30));
+        assert_eq!(output.proof_intents.len(), 1);
+        assert_eq!(output.proof_intents[0].claim_id, "claim-1");
+        assert_eq!(output.proof_intents[0].target, "ownership_test");
+        assert_eq!(output.proof_intents[0].proof_kind, ProofKind::FocusedTest);
+        Ok(())
+    }
+
+    #[test]
+    fn evidence_recovery_does_not_coerce_finding_identity_or_summary() -> Result<()> {
+        for key in ["severity", "confidence", "path", "line", "body"] {
+            let mut item = serde_json::json!({"severity":"medium","confidence":"high",
+                "path":"src/lib.rs","line":7,"body":"ownership concern",
+                "evidence":["witness one","witness two"]});
+            item[key] = serde_json::json!([item[key].clone()]);
+            let raw = serde_json::json!({"candidate_findings":[item]}).to_string();
+            assert!(
+                serde_json::from_str::<LaneModelOutput>(&raw).is_err(),
+                "{key}"
+            );
+            let (output, degraded) = parse_fixture(&raw)?;
+            assert!(degraded && output.degraded);
+            assert!(output.candidate_findings.is_empty());
+            assert_eq!(
+                output.observations[0].kind.as_deref(),
+                Some("missing-evidence")
+            );
+        }
+        let (output, degraded) = parse_fixture(r#"{"summary":["all checks passed"]}"#)?;
+        assert!(degraded && output.degraded);
+        assert!(output.summary.is_none());
+        assert_eq!(output.observations[0].status.as_deref(), Some("open"));
+        Ok(())
+    }
+
+    #[test]
+    fn producer_prompt_evidence_shapes_match_wire_contract() -> Result<()> {
+        let lane = model_lane("contract-fixture", "review", &[], "check shapes");
+        let spec = ProviderSpec {
+            provider: ModelProvider::MiniMaxDirect,
+            model: "fixture".to_owned(),
+            endpoint_kind: ProviderEndpointKind::OpenAiChat,
+        };
+        let prompt = render_lane_model_task_prompt(&lane, &spec);
+        let raw = prompt
+            .split_once("Return only one strict JSON object:\n")
+            .context("prompt JSON example missing")?
+            .1
+            .split_once("\n\nHard caps:")
+            .context("prompt caps missing")?
+            .0;
+        let mut value: serde_json::Value = serde_json::from_str(raw)?;
+        for field in ["candidate_findings", "summary_only_findings"] {
+            assert!(value[field][0]["evidence"].is_string(), "{field}");
+        }
+        for field in ["observations", "failed_objections"] {
+            assert!(value[field][0]["evidence"].is_array(), "{field}");
+        }
+        // The example uses an enum vocabulary descriptor; pick one advertised
+        // variant to check its concrete wire shape without changing the prompt.
+        value["proof_intents"][0]["proof_kind"] = serde_json::json!("focused-test");
+        let (output, degraded) = parse_fixture(&value.to_string())?;
+        assert!(!degraded && !output.degraded);
+        assert_eq!(output.candidate_findings.len(), 1);
+        assert_eq!(output.observations.len(), 1);
+        assert_eq!(output.proof_requests.len(), 1);
+        assert_eq!(output.proof_intents.len(), 1);
+        Ok(())
+    }
+
     fn parse_fixture(raw: &str) -> Result<(LaneModelOutput, bool)> {
         let temp = tempfile::tempdir()?;
         parse_lane_model_output_or_degrade(raw, &temp.path().join("content.json"))
