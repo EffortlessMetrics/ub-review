@@ -126,7 +126,7 @@ pub struct VerifiedPublication {
     packet_sha256: String,
     archive: Box<[u8]>,
     checksum: Box<[u8]>,
-    authorization: Authorization,
+    validated_authority: Authorization,
 }
 impl VerifiedPublication {
     pub fn packet(&self) -> &Packet {
@@ -142,12 +142,12 @@ impl VerifiedPublication {
         &self.checksum
     }
     pub fn authorization(&self) -> &Authorization {
-        &self.authorization
+        &self.validated_authority
     }
     pub fn valid_until(&self) -> u64 {
         self.packet
             .retained_until
-            .min(self.authorization.expires_at)
+            .min(self.validated_authority.expires_at)
     }
     pub fn ensure_current(&self, now: u64) -> Result<(), Rejection> {
         if now >= self.valid_until() {
@@ -326,7 +326,7 @@ pub fn validate(
         packet_sha256: digest,
         archive: archive.into(),
         checksum: checksum.into(),
-        authorization: auth.clone(),
+        validated_authority: auth.clone(),
     })
 }
 fn valid_version(value: &str) -> bool {
@@ -643,6 +643,7 @@ mod tests {
         Ok(())
     }
     fn rejected(result: Result<VerifiedPublication, Rejection>, expected: Rejection) {
+        assert_eq!(result.as_ref().err(), Some(&expected));
         let mut publisher = RecordingPublisher::default();
         assert_eq!(publisher.consume(result), Err(expected));
         assert!(publisher.calls.is_empty());
@@ -656,6 +657,8 @@ mod tests {
         let second = fixture.admit();
         assert_eq!(first, second);
         if let Ok(verified) = first {
+            assert_eq!(verified.archive(), fixture.archive);
+            assert_eq!(verified.checksum(), fixture.checksum);
             let old_archive = verified.archive().to_vec();
             let old_checksum = verified.checksum().to_vec();
             fixture.archive[0] ^= 1;
