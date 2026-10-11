@@ -272,6 +272,34 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
             false,
             "archive must contain exactly one root-level ub-review executable",
         ),
+        (
+            "malformed-archive",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "malformed",
+            false,
+            "release binary archive listing failed",
+        ),
+        (
+            "interrupted-archive",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "truncated",
+            false,
+            "release binary archive listing failed",
+        ),
+        (
+            "escaping-entry",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "escaping",
+            false,
+            "archive must contain exactly one root-level ub-review executable",
+        ),
+        (
+            "checksum-mismatch",
+            "printf '%s\\n' 'ub-review 0.1.0'",
+            "root",
+            false,
+            "release binary checksum mismatch",
+        ),
     ];
 
     for (name, version_body, layout, expected_success, expected_error) in cases {
@@ -319,6 +347,12 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
                 .to_str()
                 .ok_or_else(|| anyhow::anyhow!("candidate path is not UTF-8"))?,
         ]);
+        if layout == "escaping" {
+            archive_command.args([
+                "--absolute-names",
+                "--transform=s#^ub-review$#../ub-review#",
+            ]);
+        }
         match layout {
             "root" | "nested" => {
                 archive_command.arg(if layout == "root" {
@@ -352,12 +386,27 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
             "missing" => {
                 archive_command.arg("README");
             }
+            "truncated" | "escaping" => {
+                archive_command.arg("ub-review");
+            }
+            "malformed" => {}
             _ => bail!("unknown fixture layout {layout}"),
         }
-        let archive_status = archive_command
-            .status()
-            .context("create release fixture archive")?;
-        anyhow::ensure!(archive_status.success(), "tar failed for fixture {name}");
+        if layout == "malformed" {
+            fs::write(&archive, b"not a gzip or tar archive")?;
+        } else if layout == "truncated" {
+            let status = archive_command
+                .status()
+                .context("create release fixture archive")?;
+            anyhow::ensure!(status.success(), "tar failed for fixture {name}");
+            let bytes = fs::read(&archive)?;
+            fs::write(&archive, &bytes[..bytes.len().min(24)])?;
+        } else {
+            let archive_status = archive_command
+                .status()
+                .context("create release fixture archive")?;
+            anyhow::ensure!(archive_status.success(), "tar failed for fixture {name}");
+        }
         if layout == "root-and-directory" {
             let listing = Command::new("tar")
                 .args([
@@ -388,6 +437,12 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
             "sha256sum failed for {name}"
         );
         fs::write(&checksum, checksum_output.stdout)?;
+        if name == "checksum-mismatch" {
+            fs::write(
+                &checksum,
+                format!("{}  interrupted.tar.gz\n", "0".repeat(64)),
+            )?;
+        }
 
         let runner_path = temp.path().join(format!("runner-{name}.sh"));
         fs::write(&runner_path, format!("set -euo pipefail\n{runner}\n"))?;
