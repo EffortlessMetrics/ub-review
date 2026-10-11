@@ -24,22 +24,30 @@ struct Fixture {
 impl Fixture {
     /// Create a GitHub-shaped fixture with inert release discovery.
     fn new() -> Result<Self> {
+        Self::new_with_writer(|path, contents| fs::write(path, contents))
+    }
+
+    /// Create a fixture while permitting tests to interpose on source writes.
+    fn new_with_writer(mut write: impl FnMut(&Path, &[u8]) -> std::io::Result<()>) -> Result<Self> {
         let temp = tempfile::tempdir()?;
         let root = temp.path().join("repository with spaces");
         let tools = temp.path().join("tools");
         fs::create_dir_all(root.join(".github/workflows"))?;
         fs::create_dir_all(root.join("src"))?;
         fs::create_dir(&tools)?;
-        fs::write(root.join(".github/workflows/ci.yml"), ORIGINAL_CI)?;
-        fs::write(
-            root.join("Cargo.toml"),
-            "[package]\nname = \"onboarding-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n",
+        write(
+            &root.join(".github/workflows/ci.yml"),
+            ORIGINAL_CI.as_bytes(),
         )?;
-        fs::write(root.join("src/lib.rs"), "pub fn value() -> u8 { 7 }\n")?;
+        write(
+            &root.join("Cargo.toml"),
+            b"[package]\nname = \"onboarding-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n",
+        )?;
+        write(&root.join("src/lib.rs"), b"pub fn value() -> u8 { 7 }\n")?;
         let curl = tools.join("curl");
-        fs::write(
+        write(
             &curl,
-            "#!/bin/sh\nset -eu\nprintf 'lookup\\n' >> \"$FIXTURE_CURL_MARKER\"\nprintf '%s\\n' '{\"tag_name\":\"v0.1.1\",\"assets\":[{\"name\":\"ub-review-x86_64-unknown-linux-gnu.tar.gz\"},{\"name\":\"ub-review-x86_64-unknown-linux-gnu.tar.gz.sha256\"}]}'\n",
+            b"#!/bin/sh\nset -eu\nprintf 'lookup\\n' >> \"$FIXTURE_CURL_MARKER\"\nprintf '%s\\n' '{\"tag_name\":\"v0.1.1\",\"assets\":[{\"name\":\"ub-review-x86_64-unknown-linux-gnu.tar.gz\"},{\"name\":\"ub-review-x86_64-unknown-linux-gnu.tar.gz.sha256\"}]}'\n",
         )?;
         fs::set_permissions(&curl, fs::Permissions::from_mode(0o755))?;
         let mut paths = vec![tools];
@@ -383,6 +391,36 @@ fn fixture_new_writes_exact_sources_and_inert_release_metadata() -> Result<()> {
         fs::read_to_string(fixture.temp.path().join("curl-called"))?,
         "lookup\n"
     );
+    Ok(())
+}
+
+/// Constructor writes must propagate real target errors and release the fixture.
+#[test]
+fn fixture_new_reports_manifest_and_curl_write_errors_and_cleans_up() -> Result<()> {
+    for target_name in ["Cargo.toml", "curl"] {
+        let mut target_path = None;
+        let mut temp_path = None;
+        let result = Fixture::new_with_writer(|path, contents| {
+            if path.file_name().and_then(|name| name.to_str()) == Some(target_name) {
+                fs::create_dir(path)?;
+                target_path = Some(path.to_owned());
+                temp_path = path.parent().and_then(Path::parent).map(Path::to_owned);
+            }
+            fs::write(path, contents)
+        });
+        let error = result.err().context("target write error was swallowed")?;
+        assert_eq!(
+            error
+                .downcast_ref::<std::io::Error>()
+                .map(std::io::Error::kind),
+            Some(std::io::ErrorKind::IsADirectory),
+            "unexpected {target_name} write error: {error:#}"
+        );
+        let target_path = target_path.context("target write was not reached")?;
+        let temp_path = temp_path.context("fixture temporary path was not captured")?;
+        assert!(target_path.starts_with(&temp_path));
+        assert!(!temp_path.exists(), "failed fixture was not cleaned up");
+    }
     Ok(())
 }
 
