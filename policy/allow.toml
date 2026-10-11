@@ -1,17 +1,6 @@
 schema_version = "1"
 tool = "cargo-allow"
 
-[[exception]]
-id = "recorded-export-shadow-1335"
-kind = "rust-lint-suppression"
-path = "src/review_judgment/public_plan/recorded_export.rs"
-lint = "dead_code"
-owner = "ub-review/review-result-1335"
-reason = "Pure recorded export/replay API remains unconnected to CLI/production. Remove when an admitted command consumes it; grants no public or delivery authority."
-created = "2026-10-11"
-review_after = "2026-11-11"
-expires = "2026-12-11"
-
 # Default source-tree exception ledger. Keep this consolidated until real
 # exception volume proves that narrower ledgers improve reviewability.
 
