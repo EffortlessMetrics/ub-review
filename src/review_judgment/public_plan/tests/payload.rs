@@ -294,3 +294,35 @@ fn multiple_summary_fragments_require_actual_compiler_provenance() -> Result<()>
     );
     Ok(())
 }
+
+#[test]
+fn all_withheld_empty_payload_is_rejected_but_inline_only_remains_valid() -> Result<()> {
+    let f = Fixture::new()?;
+    let mut materials = f.materials();
+    materials[0].class = MaterialClass::Operational;
+    materials[1].class = MaterialClass::Operational;
+    assert!(
+        case(
+            &f,
+            &materials,
+            &[],
+            json!({"event":"COMMENT","body":"","comments":[]}),
+            |p, _, _, _, _| {
+                for item in p["items"].as_array_mut().into_iter().flatten() {
+                    item["disposition"] = json!({"kind":"withheld","reason":"operational"});
+                }
+            }
+        )
+        .is_err()
+    );
+    materials[0].class = MaterialClass::Public;
+    let anchors = f.anchors();
+    let binding = case(&f, &materials, &anchors, mixed_review(), |p, r, _, _, _| {
+        p["items"][1]["disposition"] = json!({"kind":"withheld","reason":"operational"});
+        r["body"] = json!("");
+    })?;
+    let value = serde_json::to_value(binding)?;
+    assert!(value["whole_body_claim"].is_null());
+    assert_eq!(value["inline_claims"], json!(["A"]));
+    Ok(())
+}
