@@ -108,6 +108,22 @@ impl Campaign {
         args: &[&str],
         env: &[(&str, &str)],
     ) -> Result<Output> {
+        self.command_with_timeout(cwd, program, args, env, Duration::from_secs(30), |_, _| {
+            Ok(())
+        })
+    }
+    // The observer lets the control handshake and inspect physical reap before
+    // test-side cleanup; ordinary campaign commands use the no-op observer.
+    fn command_with_timeout(
+        &mut self,
+        cwd: &Path,
+        program: &Path,
+        args: &[&str],
+        env: &[(&str, &str)],
+        timeout: Duration,
+        mut observe: impl FnMut(&mut std::process::Child, &Value) -> Result<()>,
+    ) -> Result<Output> {
+        use std::os::unix::process::ExitStatusExt;
         let index = self.rows.len();
         let logs = self.root.join(format!("logs/{index}"));
         fs::create_dir_all(&logs)?;
@@ -137,15 +153,21 @@ impl Campaign {
                 return Err(error).with_context(|| format!("spawn {}", program.display()));
             }
         };
-        let status = match child.wait_timeout(Duration::from_secs(30))? {
+        self.rows[index]["pid"] = json!(child.id());
+        observe(&mut child, &self.rows[index])?;
+        let status = match child.wait_timeout(timeout)? {
             Some(status) => status,
             None => {
                 self.rows[index]["state"] = json!("timed_out");
                 child.kill()?;
                 let status = child.wait()?;
                 self.rows[index]["exit"] = json!(status.code());
+                self.rows[index]["signal"] = json!(status.signal());
                 self.rows[index]["reaped"] = json!(true);
-                anyhow::bail!("command timed out; logs at {}", logs.display());
+                observe(&mut child, &self.rows[index])?;
+                let error = format!("command timed out; logs at {}", logs.display());
+                self.receipt("failed", Some(error.clone()))?;
+                anyhow::bail!(error);
             }
         };
         let output = Output {
@@ -777,6 +799,117 @@ fn pre_cleanup_snapshot_rejects_later_sentinel_corruption() -> Result<()> {
     ensure!(
         assert_preserved_inventory(temp.path(), &expected).is_err(),
         "original file corruption accepted"
+    );
+    Ok(())
+}
+
+#[test]
+fn ready_child_timeout_is_killed_reaped_and_retained() -> Result<()> {
+    use std::io::Read;
+    use std::os::unix::net::UnixListener;
+    use std::time::Instant;
+
+    let temp = tempfile::tempdir()?;
+    let root = temp.path().to_path_buf();
+    let socket = root.join("ready.sock");
+    let listener = UnixListener::bind(&socket)?;
+    listener.set_nonblocking(true)?;
+    let mut c = Campaign {
+        path: root.join("bin"),
+        frozen: root.join("frozen"),
+        root: root.clone(),
+        manifest: json!({}),
+        rows: vec![],
+        scenarios: BTreeMap::new(),
+    };
+    // Readiness is signalled before blocking. The socket timeout self-terminates
+    // the child if a disposable mutation omits kill; there are no descendants.
+    let script = "import socket,sys; s=socket.socket(socket.AF_UNIX); s.connect(sys.argv[1]); s.sendall(b'READY'); s.settimeout(2); s.recv(1); sys.exit(42)";
+    let mut ready = false;
+    let mut connection = None;
+    let result = c.command_with_timeout(
+        &root,
+        Path::new("/usr/bin/python3"),
+        &["-c", script, socket.to_str().context("socket path")?],
+        &[],
+        Duration::from_millis(50),
+        |child, row| {
+            let checked = (|| -> Result<()> {
+                if row["state"] == "attempted" {
+                    let deadline = Instant::now() + Duration::from_secs(2);
+                    let (mut stream, _) = loop {
+                        match listener.accept() {
+                            Ok(connection) => break connection,
+                            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                                ensure!(
+                                    Instant::now() < deadline,
+                                    "child readiness handshake timed out"
+                                );
+                                std::thread::yield_now();
+                            }
+                            Err(error) => return Err(error.into()),
+                        }
+                    };
+                    stream.set_read_timeout(Some(Duration::from_secs(1)))?;
+                    let mut message = [0; 5];
+                    stream.read_exact(&mut message)?;
+                    ensure!(&message == b"READY", "wrong child readiness handshake");
+                    ready = true;
+                    connection = Some(stream);
+                } else {
+                    ensure!(ready, "timeout occurred before readiness");
+                    ensure!(row["state"] == "timed_out", "wrong timeout receipt state");
+                    ensure!(
+                        row["signal"] == 9 && row["exit"].is_null(),
+                        "timeout child not killed by SIGKILL"
+                    );
+                    ensure!(row["reaped"] == true, "timeout reap receipt missing");
+                    ensure!(
+                        !Path::new(&format!("/proc/{}", child.id())).exists(),
+                        "timeout child was not physically reaped"
+                    );
+                }
+                Ok(())
+            })();
+            // Inspect before cleanup. Even failing mutation controls leave no child.
+            if checked.is_err() || row["state"] != "attempted" {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+            checked
+        },
+    );
+    ensure!(ready, "fixture never reached ready state");
+    ensure!(
+        result
+            .as_ref()
+            .err()
+            .is_some_and(|error| error.to_string().contains("command timed out")),
+        "timeout failure missing or wrong: {result:?}"
+    );
+    let receipt: Value = serde_json::from_slice(&fs::read(root.join("receipt.json"))?)?;
+    let row = &receipt["commands"][0];
+    ensure!(
+        receipt["status"] == "failed" && row["state"] == "timed_out",
+        "retained timeout status wrong"
+    );
+    ensure!(
+        row["signal"] == 9 && row["reaped"] == true && row["exit"].is_null(),
+        "retained timeout kill/reap missing"
+    );
+    ensure!(
+        receipt["error"]
+            .as_str()
+            .is_some_and(|s| s.contains("command timed out")),
+        "retained timeout error missing"
+    );
+    ensure!(
+        fs::read(root.join("logs/0/stdout"))?.is_empty(),
+        "unexpected child output"
+    );
+    println!(
+        "timeout_control_receipt: {}",
+        serde_json::to_string(&receipt)?
     );
     Ok(())
 }

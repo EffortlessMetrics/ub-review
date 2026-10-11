@@ -16,6 +16,13 @@ cleared environment, no credentials and file-backed logs with 30-second waits.
 Python 3 with PyYAML is a declared harness prerequisite for independent YAML
 parsing. The harness timeout kills/reaps its direct child, not a general process
 tree containment guarantee.
+The automatic timeout control waits for a Unix-socket readiness handshake,
+then exercises the same runner timeout arm with a 50 ms deadline. It checks
+SIGKILL, absence of the direct child's `/proc` entry before test-side cleanup,
+and a physically persisted failed/timed-out/reaped receipt. The Python fixture
+has no descendants and self-exits on a bounded socket timeout if kill is omitted;
+negative controls still perform test-side kill/reap after inspecting the result.
+This is runner-oracle coverage, not a production process-containment repair.
 
 Supply a frozen directory containing:
 
