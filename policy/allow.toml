@@ -1,17 +1,6 @@
 schema_version = "1"
 tool = "cargo-allow"
 
-[[exception]]
-id = "recorded-prepared-payload-shadow-1014"
-kind = "rust-lint-suppression"
-path = "src/review_judgment/public_plan/payload.rs"
-lint = "dead_code"
-owner = "ub-review/review-final-1014"
-reason = "Pure whole-body/comment-slot recorded payload binding precedes its consumer; no production compiler/transport or delivery authority. Remove when the recorded consumer uses it."
-created = "2026-10-11"
-review_after = "2026-11-11"
-expires = "2026-12-11"
-
 # Default source-tree exception ledger. Keep this consolidated until real
 # exception volume proves that narrower ledgers improve reviewability.
 

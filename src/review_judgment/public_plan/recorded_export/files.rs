@@ -36,6 +36,10 @@ enum Operation {
     Export(Inputs),
     /// Revalidate sources and compare an independently pinned prior view.
     Replay(Replay),
+    /// Print a pure source/payload/observation projection at a pinned watermark.
+    AgentExport(Inputs),
+    /// Independently replay a recorded agent projection; performs no publication.
+    AgentReplay(Replay),
 }
 
 #[derive(Debug, Args)]
@@ -113,6 +117,17 @@ struct Intake {
     anchors: Vec<Anchor>,
     answer: Option<FilePin>,
     plan: Option<FilePin>,
+    observations: Option<ObservationFiles>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ObservationFiles {
+    payload: FilePin,
+    payload_source_digest: String,
+    stream: FilePin,
+    watermark: FilePin,
+    watermark_name: String,
 }
 
 /// Decode the existing graph wire without changing its static schema/mode
@@ -198,9 +213,15 @@ fn read_pin(root: &Path, pin: &FilePin, limit: usize) -> Result<Vec<u8>> {
 }
 
 pub(crate) fn run(args: RecordedReviewArgs) -> Result<()> {
+    let agent = matches!(
+        &args.command,
+        Operation::AgentExport(_) | Operation::AgentReplay(_)
+    );
     let (inputs, replay) = match &args.command {
-        Operation::Export(inputs) => (inputs, None),
-        Operation::Replay(replay) => (&replay.inputs, Some(replay)),
+        Operation::Export(inputs) | Operation::AgentExport(inputs) => (inputs, None),
+        Operation::Replay(replay) | Operation::AgentReplay(replay) => {
+            (&replay.inputs, Some(replay))
+        }
     };
     let root_metadata =
         fs::symlink_metadata(&inputs.evidence_root).context("inspect evidence root")?;
@@ -222,7 +243,13 @@ pub(crate) fn run(args: RecordedReviewArgs) -> Result<()> {
     )?;
     let intake: Intake = json(&intake_bytes, "intake")?;
     ensure!(
-        intake.schema == "ub-review.recorded-file-input.v1",
+        intake.schema
+            == if agent {
+                "ub-review.recorded-agent-file-input.v1"
+            } else {
+                "ub-review.recorded-file-input.v1"
+            }
+            && intake.observations.is_some() == agent,
         "unsupported recorded intake schema"
     );
     ensure!(
@@ -361,7 +388,69 @@ pub(crate) fn run(args: RecordedReviewArgs) -> Result<()> {
         plan: plan.as_deref(),
         expected_plan_digest: intake.plan.as_ref().map(|p| p.sha256.as_str()),
     };
-    let output = if let Some(replay) = replay {
+    let output = if agent {
+        use crate::delivery_transaction::recorded_observations::ObservationInput;
+        use crate::review_judgment::public_plan::payload::RecordedPreparedPayload;
+        let pins = intake
+            .observations
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("observation intake absent"))?;
+        let payload = read_pin(&root, &pins.payload, OBJECT_LIMIT)?;
+        let stream = read_pin(&root, &pins.stream, CONTEXT_LIMIT)?;
+        let watermark = read_pin(&root, &pins.watermark, 4096)?;
+        let revision_ref = revision.revision_ref();
+        let prepared = RecordedPreparedPayload {
+            subject: &intake.subject,
+            delivery_subject: &intake.delivery_subject,
+            revision: &revision_ref,
+            judgment_digest: input
+                .expected_answer_digest
+                .ok_or_else(|| anyhow::anyhow!("recorded lead absent"))?,
+            public_plan_digest: input
+                .expected_plan_digest
+                .ok_or_else(|| anyhow::anyhow!("recorded plan absent"))?,
+            payload_digest: &pins.payload.sha256,
+            bytes: &payload,
+        };
+        let observation = ObservationInput {
+            source: input,
+            payload: &payload,
+            payload_sha256: &pins.payload.sha256,
+            stream: &stream,
+            stream_sha256: &pins.stream.sha256,
+            watermark: &watermark,
+            watermark_sha256: &pins.watermark.sha256,
+            watermark_name: &pins.watermark_name,
+        };
+        if let Some(replay) = replay {
+            let prior = read_pin(
+                &root,
+                &FilePin {
+                    path: replay.view.clone(),
+                    sha256: replay.view_sha256.clone(),
+                },
+                16 * CONTEXT_LIMIT,
+            )?;
+            super::agent_result::replay(
+                observation,
+                &prepared,
+                &pins.payload_source_digest,
+                &prior,
+                &replay.view_sha256,
+            )
+            .map_err(|_| anyhow::anyhow!("recorded agent replay rejected"))?;
+            let mut bytes = serde_json::to_vec(&serde_json::json!({
+                "schema":"ub-review.recorded-agent-file-replay.v1", "status":"replayed_recorded_sources_and_prefix",
+                "view_sha256":replay.view_sha256, "qualification":"shadow_recorded_only_pending_dependency_review",
+                "remote_authenticity":"unverified", "whole_review_delivery":"not_qualified"
+            }))?;
+            bytes.push(b'\n');
+            bytes
+        } else {
+            super::agent_result::export(observation, &prepared, &pins.payload_source_digest)
+                .map_err(|_| anyhow::anyhow!("recorded agent validation rejected"))?
+        }
+    } else if let Some(replay) = replay {
         let view_json = read_pin(
             &root,
             &FilePin {

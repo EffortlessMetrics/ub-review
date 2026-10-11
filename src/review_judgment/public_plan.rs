@@ -136,6 +136,7 @@ pub(crate) enum RecordedPublicPlan {
     },
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct PublicPlanInput<'a> {
     pub(crate) judgment_source: &'a RecordedJudgmentSource<'a>,
     pub(crate) current_revision: &'a RevisionIdentity,

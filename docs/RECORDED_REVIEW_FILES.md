@@ -108,3 +108,49 @@ Executable controls are in `tests/recorded_review_cli.rs`; canonical API control
 remain in the source modules. New documentation uses the existing
 `policy/allow.toml#non-rust-docs-and-templates` receipt. No lint or CI-policy exception
 is added; the obsolete shadow export dead-code receipt is removed.
+
+## Pending recorded AgentReviewResult composition (#1335)
+
+The separate `recorded-review agent-export` and `agent-replay` commands compose
+#1396's direct prepared-payload slot binding with #1397's recorded observation
+prefix. This integration is a shadow draft while both dependency reviews are
+pending. Their exact source commits are retained as ancestors; normal pure module
+admission does not activate the publication writer or qualify either contract.
+
+Use the same command flags as source export/replay. The intake schema is
+`ub-review.recorded-agent-file-input.v1`, with an additional strict `observations`
+object: `payload`, `stream` and `watermark` each carry root-relative `path` and
+independently retained `sha256`; `payload_source_digest` pins the #1396 canonical
+payload metadata; `watermark_name` is the independently requested prefix name.
+The metadata binds the intake's subject, delivery subject, canonical revision,
+answer/plan byte pins and payload byte pin. Do not learn these expected pins from
+an exported result. Source-only commands reject this intake and its observations.
+
+The output schema `ub-review.recorded-agent-review-result.v1` preserves exact
+component objects as JSON byte arrays `source_view_json` and
+`observation_view_json`; decode each array as UTF-8 JSON. The source component
+retains original judgment and public-plan bytes and the imported CI digest. CI
+bytes remain in their original pinned file. The separate
+`prepared_payload_binding` records whole-body/comment-slot correspondence; it
+cannot prove compiler origin, remote authenticity or summary delivery. The
+observation component retains each attempt's local failure and recorded inline
+confirmation, and distinguishes historical head status at its named watermark.
+The immutable source component continues to describe its original admitted
+revision; historical currentness comes from the observation component.
+
+Qualification remains `shadow_recorded_only_pending_dependency_review`.
+`accepted_intent` is `not_admitted`, `remote_authenticity` is `unverified`, and
+`whole_review_delivery` is `not_qualified`. Even with an exact summary payload
+binding, the observation owner's summary correspondence remains `unverified`:
+there is no identity-bound physical summary receipt. Multiple summary fragments,
+quiet payloads, replies, suggestions and topic graphs remain outside this subset.
+No clean verdict, CI result, remote absence, posting permission or architecture
+adoption is inferred. A later confirming observation does not erase local failure.
+
+Admission uses existing file checks and bounds: payload 256KiB, stream 1MiB,
+watermark 4KiB; the byte-array wrapper/view is capped at 16MiB. Replay independently
+re-executes both validators and observation replay and compares the entire exact
+wrapper, including qualifications and the binding. A repinned modified wrapper
+is rejected. No live append, retry, model call, config/provider loading, network
+or persistent writer is added. Source and owner reviews and hosted gates remain
+separate prerequisites to acceptance.

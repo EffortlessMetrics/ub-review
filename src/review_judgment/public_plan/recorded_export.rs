@@ -2,6 +2,7 @@
 //! This API consumes admitted typed source objects, not an arbitrary directory,
 //! Markdown, a transport transaction, or a model. It is not the final command
 //! or AgentReviewResult: delivery-event admission and its watermark are absent.
+mod agent_result;
 pub(crate) mod files;
 
 use anyhow::{Result, ensure};

@@ -2,14 +2,6 @@
 //! existing GitHubReview bytes. No rendering or prose/claim inference occurs.
 //! One Summary material may own the whole body slot; fragmented/multiple-summary
 //! joins need compiler-owned provenance and are deliberately unsupported here.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "policy/allow.toml#recorded-prepared-payload-shadow-1014"
-    )
-)]
-
 use anyhow::{Result, ensure};
 use serde::Serialize;
 use std::collections::BTreeSet;
