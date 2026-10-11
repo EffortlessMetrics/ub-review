@@ -177,6 +177,16 @@ const CHANGED_PATHS_DOMAIN: &str = "ub-review.revision-identity.changed-paths.v1
 const DIFF_DIGEST_DOMAIN: &str = "ub-review.revision-identity.diff.v1";
 
 impl RevisionIdentity {
+    /// Derive a reference from the validated full identity, never a producer's
+    /// claimed digest. Pure recorded judgment validation uses this exact join.
+    pub(crate) fn revision_ref(&self) -> RevisionRef {
+        RevisionRef {
+            digest: self.identity_digest(),
+            semantics: self.semantics.as_str().to_owned(),
+            reviewed_commit: self.reviewed.commit_oid().to_owned(),
+        }
+    }
+
     /// Validates and constructs an identity from resolved object ids.
     ///
     /// All object ids must share one width (all sha1 or all sha256): mixing
