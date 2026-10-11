@@ -687,6 +687,10 @@ pub(crate) fn render_claim_prompt(diff: &DiffContext) -> String {
 }
 
 #[cfg(test)]
+#[path = "lane_packets_lifecycle_tests.rs"]
+mod lifecycle_receipt_tests;
+
+#[cfg(test)]
 mod tests {
     use super::{
         CommandProcessObservation, CommandRun, TerminateAndReap, reconcile_command_timeout,
