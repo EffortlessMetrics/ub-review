@@ -115,6 +115,12 @@ fn audit(packet: &Value) -> Result<()> {
             && ripr["current"]["source_sha"] == p["public_observations"]["crate_vcs_sha"],
         "stable public identity conflict"
     );
+    let crate_vcs = &p["public_observations"]["crate_vcs_sha"];
+    let public_tag = &p["public_observations"]["public_v0_10_0_tag_sha"];
+    // Missing observations remain unknown in this blocked inventory.
+    if !crate_vcs.is_null() && !public_tag.is_null() {
+        ensure!(crate_vcs == public_tag, "public crate/tag source conflict");
+    }
     ensure!(
         p["public_observations"]["candidate_0_11_0_present"] == false
             && p["public_observations"]["clean_install"] == "not_run",
@@ -177,6 +183,7 @@ fn resealed_invalid_selection_claims_are_rejected() -> Result<()> {
     for case in [
         "source_only",
         "wrong_digest",
+        "mismatched_public_tag",
         "missing_compatibility",
         "incompatible_rollback",
         "unknown_as_zero",
@@ -194,6 +201,10 @@ fn resealed_invalid_selection_claims_are_rejected() -> Result<()> {
             "wrong_digest" => {
                 invalid["payload"]["tools"][index]["current"]["checksum"] =
                     "wrong digest with version 0.10.0".into();
+            }
+            "mismatched_public_tag" => {
+                invalid["payload"]["public_observations"]["public_v0_10_0_tag_sha"] =
+                    "0000000000000000000000000000000000000000".into();
             }
             "missing_compatibility" => {
                 invalid["payload"]["tools"][index]["disposition"] = "selected_required".into();
