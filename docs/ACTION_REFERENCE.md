@@ -95,9 +95,9 @@ The post step has its own success/error receipts. Current `publication-result=po
 may mean a review payload was prepared before GitHub confirmed delivery. Don't infer
 delivered comments from that value alone.
 
-To render the four new files for an accepted CI migration, `setup-ci --print-pr`
-requires at least one audited job with a maintainer-supplied command and a reviewed
-Action commit:
+To render the [four new files](specs/UB-REVIEW-SPEC-0008-setup-ci.md) for an
+accepted CI migration, `setup-ci --print-pr` requires at least one audited job
+with a maintainer-supplied command and a reviewed Action commit:
 
 ```bash
 ub-review setup-ci --print-pr \
