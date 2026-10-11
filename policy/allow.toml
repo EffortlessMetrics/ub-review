@@ -55,7 +55,7 @@ glob = ".agents/skills/*/SKILL.md"
 category = "agent-operating-documentation"
 language = "markdown"
 owner = "ub-review/docs"
-reason = "Repository-owned delivery and independent review procedures use discoverable Markdown skills; live assignments and permissions remain in conversation/native GitHub state. Bounded decision regressions live in Rust xtask."
+reason = "Repository-owned delivery and independent review procedures use discoverable Markdown skills; live assignments and permissions remain in conversation/native GitHub state. Rust layout/metadata checks protect discoverability; blind exercises retain observed behavior separately."
 created = "2026-10-11"
 review_after = "2027-01-11"
 

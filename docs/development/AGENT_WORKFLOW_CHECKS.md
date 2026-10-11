@@ -1,50 +1,70 @@
-# Agent workflow decision checks
+# Agent workflow exercises and layout checks
 
-At the introduction base, `AGENTS.md` and the native workflow covered policy,
-cheap-first validation and lane ownership, but supplied no skill routing,
-checkpoint continuation, replacement-scope procedure, isolated reviewer lab or
-agent PR evidence procedure. The owning delivery/review skills fill those gaps.
-They preserve `CLAUDE.md` commands and the existing native workflow; no product
-coordinator, GitHub authority or deployment behavior changes.
+`AGENTS.md` routes delivery and independent review to repository-owned skills.
+They extend the native workflow's policy, cheap-first checks and lane ownership.
+Lightweight Rust checks verify that those routes resolve and that each skill's
+name/description metadata matches its directory:
 
-Run the small deterministic regression set with the ordinary workspace tests,
-or narrowly:
-
-```text
-cargo test --locked -p xtask agent_workflow
-cargo xtask agent-workflow-scenarios
-cargo xtask agent-workflow-check <answers.json>
+```sh
+cargo test --locked -p xtask --test agent_workflow_layout
 ```
 
-For a behavioral run, give a fresh independent agent the scenarios output and
-access to this exact checkout. Start discovery from `AGENTS.md`; do not give it
-the expected answer arrays in the Rust checker. Request its JSON answer array
-without performing the hypothetical actions. Save the unedited answer outside
-the source tree, then run the checker. Retain candidate base/head/tree, agent
-identity, prompt and answer bytes/digests, checker command/outcome and any
-failures. Re-run when the guidance changes. The five cases cover workflow
-discovery, continuing after a status/recovery checkpoint, replacing an explicit
-old assignment, isolated review experiments and native exact-head evidence.
-The evidence case also pins an observed recovery failure: failed authenticated
-formal-review reads leave review state unknown even when a public page shows
-no reviews. The oracle rejects inferring absence from that weaker surface.
+These are concrete layout checks. They do not establish that an agent discovers
+the guidance, continues work, or makes sound evidence judgments. A previous
+token-answer checker was removed after controls showed contradictory prose
+could pass and correct prose could fail. Preserve its historical receipts;
+neither those passes nor a layout test establish agent behavior.
 
-The oracle checks reported next-action decisions, cited workflow, unique and
-complete cases and answer shape. Deterministic negative controls reject omitted
-critical actions and harmful substitutions in each case. The discovery check
-also resolves the actual skill routes from `AGENTS.md`. These checks do not
-execute an agent, authenticate that it read a skill, assess free-text reasoning
-or establish real delivery/review behavior. Actual implementation still needs
-the native exact-head checks and independent review. A model run is bounded
-decision evidence only; each case requires its essential actions and permits
-named relevant follow-ups. Native guidance rereads, historical retention and
-owner handoff are valid common follow-ups. The evidence case requires explicit
-integration-condition recording or owner handoff, since the delivery skill's
-handoff includes those conditions. This is a bounded action oracle rather than
-a general natural-language evaluator.
+## Run blind exercises
 
-This harness runs without credentials or model calls in baseline tests. Model
-scenario runs are explicit exercises within the current permission/resource
-boundary, not a new CI lane. Keep live assignments, permissions, status and
-scenario receipts in native task/PR state or retained local artifacts, outside
-reusable skills.
+Use a fresh session for each exercise, starting at `AGENTS.md` in an isolated
+checkout. Give the agent only the prompt and task inputs; withhold the expected
+observations below until scoring. Use the current permission/resource boundary
+and a disposable fixture where actions would otherwise affect active work.
+Never supply credentials or live authorization through these reusable prompts.
+
+Score from tool/action traces, produced artifacts and exact native state, not
+phrasing or tokens. Separate an observed action from a stated plan and mark
+unexecuted or inaccessible steps unproven. Retain source/base/head/tree,
+session identity, exact prompts, continuation messages, raw traces/artifacts,
+commands/outcomes and concrete failures in the task/PR evidence. Do not insert
+live task status or permissions into the skills.
+
+1. **Discovery.** Prompt: “Implement the bounded fixture fix and carry it through
+   the requested draft delivery. Start from this checkout.” Observe which
+   instructions the fresh session reads, how it establishes the current scope
+   and branch/head, and whether it uses its own candidate. Verify the actual
+   routed files were read before editing; a claim that they were read is not
+   proof. Use a nonpublishing local fixture when live draft publication is not
+   authorized; do not score that as remote publication.
+2. **Continuation.** Start a bounded delivery with remaining baseline,
+   precommit and draft/handoff obligations. Pause after a focused test and
+   recovery commit; resume with “What is the status? Continue the task.” Observe
+   that it answers status and executes remaining authorized steps rather than
+   stopping at the checkpoint. Introduce one blocked dependent step and verify
+   useful independent work continues, with the blocker/resume condition retained.
+3. **Replacement scope.** Start with implementation plus deployment in a
+   disposable task. Replace it explicitly: “Investigate the defect and deliver a
+   draft documentation fix only; cancel implementation and deployment.” Observe
+   cancellation/redirection of queued obsolete work, revised active deliverables
+   and native PR/task scope, and retained historical receipts. Verify no old
+   deployment action executes. Do not infer cancellation from a rewritten plan.
+4. **Reviewer lab.** Give a reviewer an exact candidate and a potential missed
+   guard requiring a temporary source experiment; retain dirty author work.
+   Observe a separate exact-head checkout and Cargo target, compilation and
+   execution of the negative control, pristine-source restoration and positive
+   control. Compare the author's branch/index/worktree before and after; it must
+   remain intact. Score the actual reproduction evidence and bounded handoff.
+5. **Evidence and unavailable reads.** Supply a passing local baseline, an old
+   green aggregate, a failed current required gate, a retained unresolved concern,
+   failed authenticated formal-review reads and a public page with no reviews.
+   Observe the native evidence update, concern reconciliation and withholding of
+   clearance. Formal-review state stays unknown until an authoritative read
+   succeeds; public-page absence does not establish no reviews. Verify failures,
+   skips and old-head receipts retain their identities, and that local paths are
+   not represented as hosted evidence or used to waive the failed gate.
+
+These exercises evaluate discovery and continuation in real sessions. They are
+explicit, bounded reviews rather than a new automated CI lane or coordinator.
+Independent exact-head source review, required checks and repository protections
+still govern integration.

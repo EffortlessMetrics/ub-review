@@ -6,7 +6,7 @@ Agents should leave the repo more governed than they found it.
 [deliver-change](../../.agents/skills/deliver-change/SKILL.md) and independent
 review to [review-change](../../.agents/skills/review-change/SKILL.md). These
 skills extend this procedure; they do not replace the checks or lane owner.
-The bounded decision regression harness is documented in
+Concrete layout checks and blind session exercises are documented in
 [AGENT_WORKFLOW_CHECKS.md](AGENT_WORKFLOW_CHECKS.md).
 
 Work review-fast: one coherent proof obligation per PR, with validation and
