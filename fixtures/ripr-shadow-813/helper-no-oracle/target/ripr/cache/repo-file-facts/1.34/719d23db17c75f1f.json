@@ -1,0 +1,102 @@
+{
+  "file_fact_cache_schema_version": "1.34",
+  "analyzer_version": "0.11.0+d64615529216153eedcd10ba64e4580aa1026ea1",
+  "file_path": "src/lib.rs",
+  "content_hash": "93f41e7e50bb7c1c",
+  "file_facts": {
+    "path": "src/lib.rs",
+    "functions": [
+      {
+        "id": "src/lib.rs::answer",
+        "name": "answer",
+        "file": "src/lib.rs",
+        "start_line": 1,
+        "end_line": 1,
+        "body": {
+          "start": 4,
+          "len": 23
+        },
+        "calls": [
+          {
+            "line": 1,
+            "name": "answer",
+            "text": "fn answer() -> u8 { 7 }"
+          }
+        ],
+        "returns": [],
+        "literals": [
+          {
+            "line": 1,
+            "value": "7"
+          }
+        ],
+        "source_role": "production",
+        "attrs": [],
+        "impl_attrs": [],
+        "nested_fn_names": [],
+        "let_bindings": [],
+        "item": {
+          "container": {
+            "kind": "free"
+          },
+          "has_self_param": false,
+          "has_body": true
+        },
+        "impl_context": "Free"
+      }
+    ],
+    "tests": [],
+    "returns": [],
+    "literals": [
+      {
+        "line": 1,
+        "value": "7"
+      }
+    ],
+    "probe_shapes": [
+      {
+        "start_line": 1,
+        "end_line": 1,
+        "start_byte": 24,
+        "end_byte": 25,
+        "kind": "return_value",
+        "text": {
+          "start": 24,
+          "len": 1
+        }
+      }
+    ],
+    "used_lexical_fallback": false,
+    "module_declarations": [
+      {
+        "name": "tests",
+        "line": 5,
+        "path_target": {
+          "kind": "literal",
+          "path": "test_support.rs"
+        },
+        "requires_test": true
+      }
+    ],
+    "unresolved_property_macros": [],
+    "source": "pub fn answer() -> u8 { 7 }\n\n#[cfg(test)]\n#[path = \"test_support.rs\"]\nmod tests;\n",
+    "item_scopes": {
+      "fns": [
+        {
+          "line": 1,
+          "name": "answer",
+          "item": "TopLevel",
+          "local_use": false,
+          "deferred_code": false,
+          "cfg": false,
+          "direct_calls": [],
+          "bound_names": []
+        }
+      ]
+    },
+    "macro_candidates": {
+      "Names": []
+    }
+  },
+  "payload_digest": "sha256:6f14794d977967cf168d2d6f7c2416b52217ee62087add0b05bd46b97e97b162"
+}
