@@ -110,6 +110,7 @@ fn replay_rejects_repinned_tampering_and_ci_whitespace_changes() -> Result<()> {
         "remote_effects",
         "observation_watermark",
         "source_manifest_digest",
+        "source_currentness",
     ] {
         let mut view: Value = serde_json::from_slice(&export.view_json)?;
         view[key] = json!("forged");
@@ -182,6 +183,7 @@ fn export_missingness_never_becomes_clean_or_remote_absence() -> Result<()> {
         assert_eq!(view["public_plan"]["availability"], expected_plan);
         assert!(view["public_plan_recorded_bytes"].is_null());
         assert_eq!(view["remote_effects"], "unknown");
+        assert_eq!(view["source_currentness"], "matches_admitted_revision");
         if expected != "validated" {
             assert!(view["judgment"]["judgment"].is_null());
             assert!(view["judgment"]["recorded_bytes"].is_null());
@@ -258,6 +260,146 @@ fn export_entrypoint_rejects_altered_source_objects_and_authority() -> Result<()
         |mut input| {
             input.expected_public_source_digest = "forged";
             assert!(export_recorded_review(input).is_err());
+            Ok(())
+        },
+    )?;
+    let moved =
+        RevisionIdentity::from_canonical(&f.canonical.replace(&"a".repeat(40), &"f".repeat(40)))?;
+    with_input(
+        &f,
+        true,
+        true,
+        |_| {},
+        |_| {},
+        |input| {
+            assert!(
+                export_recorded_review(PublicPlanInput {
+                    current_revision: &moved,
+                    ..input
+                })
+                .is_err()
+            );
+            Ok(())
+        },
+    )?;
+    for field in [
+        "ci_evidence_result",
+        "required",
+        "policy",
+        "dispatch",
+        "argv",
+        "delivery_confirmation",
+        "check_exit_status",
+        "private_audit",
+        "arbitrary_unknown",
+    ] {
+        assert!(
+            with_input(
+                &f,
+                true,
+                true,
+                |_| {},
+                |plan| {
+                    plan["items"][0]["disposition"]["delivery"][field] = json!({"nested":true});
+                },
+                export_recorded_review
+            )
+            .is_err()
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn quiet_clean_limited_and_fresh_same_head_pass_remain_distinct() -> Result<()> {
+    let mut f = Fixture::new()?;
+    for claim in &mut f.graph.claims {
+        claim.state = ClaimState::Refuted;
+    }
+    let clean = with_input(
+        &f,
+        true,
+        true,
+        |lead| {
+            lead["review_result"] = json!("clean");
+            lead["selections"] = json!([]);
+        },
+        |plan| {
+            plan["quiet"] = json!(true);
+            plan["items"] = json!([]);
+        },
+        export_recorded_review,
+    )?;
+    let view: Value = serde_json::from_slice(&clean.view_json)?;
+    assert_eq!(view["judgment"]["judgment"]["review_result"], "clean");
+    assert_eq!(view["public_plan"]["plan"]["quiet"], true);
+    assert_eq!(view["remote_effects"], "unknown");
+    let mut f = Fixture::new()?;
+    let limited = with_input(
+        &f,
+        true,
+        true,
+        |lead| lead["review_result"] = json!("limited"),
+        |_| {},
+        export_recorded_review,
+    )?;
+    let view: Value = serde_json::from_slice(&limited.view_json)?;
+    assert_eq!(view["judgment"]["judgment"]["review_result"], "limited");
+    assert_eq!(
+        view["public_plan"]["plan"]["items"]
+            .as_array()
+            .map(Vec::len),
+        Some(2)
+    );
+    f.subject.pass_id = "fresh-pass-2".into();
+    assert!(
+        with_input(
+            &f,
+            true,
+            true,
+            |lead| lead["review_result"] = json!("limited"),
+            |_| {},
+            |input| {
+                replay_recorded_review_export(input, &limited, &sha256_hex(&limited.view_json))
+            }
+        )
+        .is_err()
+    );
+    Ok(())
+}
+
+#[test]
+fn absent_ci_stays_absent_without_a_gate_result() -> Result<()> {
+    let f = Fixture::new()?;
+    with_input(
+        &f,
+        false,
+        false,
+        |_| {},
+        |_| {},
+        |input| {
+            let original = input.judgment_source;
+            let source = RecordedJudgmentSource {
+                subject: original.subject,
+                revision_canonical: original.revision_canonical,
+                graph: original.graph,
+                review_complete: original.review_complete,
+                evidence: original.evidence,
+                imported_ci: None,
+            };
+            let digest = source_manifest_digest(&source)?;
+            let export = export_recorded_review(PublicPlanInput {
+                judgment_source: &source,
+                expected_source_digest: &digest,
+                observed_ci: None,
+                ..input
+            })?;
+            let view: Value = serde_json::from_slice(&export.view_json)?;
+            assert!(export.imported_ci_bytes.is_none());
+            assert!(view["imported_ci_digest"].is_null());
+            assert_eq!(view["judgment"]["availability"], "absent");
+            assert!(view.get("ci_result").is_none());
+            assert_eq!(view["remote_effects"], "unknown");
             Ok(())
         },
     )
