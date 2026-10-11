@@ -25,6 +25,18 @@ fn check_layout(root: &Path) -> Result<()> {
             .and_then(|rest| rest.split_once("\n---\n"))
             .map(|(metadata, _)| metadata)
             .with_context(|| format!("missing skill frontmatter: {path}"))?;
+        for key in ["name", "description"] {
+            ensure!(
+                metadata
+                    .lines()
+                    .filter(|line| line
+                        .split_once(':')
+                        .is_some_and(|(field, _)| field.trim() == key))
+                    .count()
+                    <= 1,
+                "duplicate skill {key}: {path}"
+            );
+        }
         ensure!(
             metadata.lines().any(|line| line == format!("name: {name}")),
             "skill name does not match directory: {path}"
@@ -54,17 +66,16 @@ fn missing_routes_files_and_invalid_metadata_are_rejected() -> Result<()> {
             .as_nanos()
     ));
     fs::create_dir_all(root.join("docs/development"))?;
-    fs::write(root.join(NATIVE), "native procedure")?;
+    let native_path = "docs/development/AGENTIC_WORKFLOW.md";
+    fs::write(root.join(native_path), "native procedure")?;
     // Fixture inputs are independent of the catalogue under test. Otherwise a
     // duplicate delivery entry can erase review routing from both sides.
     let fixture_skills = [
         ("deliver-change", ".agents/skills/deliver-change/SKILL.md"),
         ("review-change", ".agents/skills/review-change/SKILL.md"),
     ];
-    let routes = format!(
-        "[native]({NATIVE})\n[delivery](.agents/skills/deliver-change/SKILL.md)\n[review](.agents/skills/review-change/SKILL.md)"
-    );
-    fs::write(root.join("AGENTS.md"), &routes)?;
+    let routes = "[native](docs/development/AGENTIC_WORKFLOW.md)\n[delivery](.agents/skills/deliver-change/SKILL.md)\n[review](.agents/skills/review-change/SKILL.md)";
+    fs::write(root.join("AGENTS.md"), routes)?;
     for (name, path) in fixture_skills {
         fs::create_dir_all(root.join(path).parent().context("parent")?)?;
         fs::write(
@@ -73,6 +84,35 @@ fn missing_routes_files_and_invalid_metadata_are_rejected() -> Result<()> {
         )?;
     }
     let result = (|| -> Result<()> {
+        check_layout(&root)?;
+        fs::write(
+            root.join("AGENTS.md"),
+            format!(
+                "`({native_path})`\n`(.agents/skills/deliver-change/SKILL.md)`\n`(.agents/skills/review-change/SKILL.md)`"
+            ),
+        )?;
+        check_layout(&root)?;
+        fs::write(
+            root.join("AGENTS.md"),
+            routes.replace(native_path, "obsolete/native.md"),
+        )?;
+        assert_eq!(
+            check_layout(&root)
+                .err()
+                .context("missing native route accepted")?
+                .to_string(),
+            format!("missing AGENTS.md route: {native_path}")
+        );
+        fs::write(root.join("AGENTS.md"), routes)?;
+        fs::remove_file(root.join(native_path))?;
+        assert_eq!(
+            check_layout(&root)
+                .err()
+                .context("missing native file accepted")?
+                .to_string(),
+            format!("read routed file: {native_path}")
+        );
+        fs::write(root.join(native_path), "native procedure")?;
         check_layout(&root)?;
         for (name, path) in fixture_skills {
             fs::write(
@@ -86,7 +126,7 @@ fn missing_routes_files_and_invalid_metadata_are_rejected() -> Result<()> {
                     .to_string(),
                 format!("missing AGENTS.md route: {path}")
             );
-            fs::write(root.join("AGENTS.md"), &routes)?;
+            fs::write(root.join("AGENTS.md"), routes)?;
             let original = fs::read_to_string(root.join(path))?;
             fs::remove_file(root.join(path))?;
             assert_eq!(
@@ -104,6 +144,34 @@ fn missing_routes_files_and_invalid_metadata_are_rejected() -> Result<()> {
                 (
                     original.replace("description: fixture control", "description: "),
                     "missing skill description",
+                ),
+                (
+                    original.replace(
+                        &format!("name: {name}"),
+                        &format!("name: {name}\nname: obsolete"),
+                    ),
+                    "duplicate skill name",
+                ),
+                (
+                    original.replace(
+                        &format!("name: {name}"),
+                        &format!("name: obsolete\nname: {name}"),
+                    ),
+                    "duplicate skill name",
+                ),
+                (
+                    original.replace(
+                        &format!("name: {name}"),
+                        &format!("name: {name}\nname: {name}"),
+                    ),
+                    "duplicate skill name",
+                ),
+                (
+                    original.replace(
+                        "description: fixture control",
+                        "description: fixture control\ndescription: ",
+                    ),
+                    "duplicate skill description",
                 ),
                 ("no frontmatter".to_owned(), "missing skill frontmatter"),
             ] {

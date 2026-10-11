@@ -10,9 +10,20 @@ cargo test --locked -p xtask --test agent_workflow_layout
 ```
 
 Controls use independent delivery and review fixtures and exercise missing
-routes/files and malformed metadata for each role. A duplicated delivery
+native guidance and missing routes/files and malformed metadata for each role.
+A duplicated delivery
 catalogue entry must fail the reviewer control rather than changing the fixture
 to omit that role too.
+
+The discovery contract is an actionable repository-relative path with a readable
+target, not a rendered Markdown hyperlink. The existing narrow check recognizes
+parenthesized path references in raw `AGENTS.md`; both links and inline code
+such as `(.agents/skills/review-change/SKILL.md)` satisfy it. It is not a general
+path-discovery parser and does not validate rendering, instruction meaning or
+whether an agent follows the reference. Owned skills use simple one-line
+frontmatter fields: one matching `name` and one nonempty `description`; duplicate
+keys are rejected even when their values agree. This is a layout/metadata
+convention, not a Markdown or general YAML parser.
 
 These are concrete layout checks. They do not establish that an agent discovers
 the guidance, continues work, or makes sound evidence judgments. A previous
