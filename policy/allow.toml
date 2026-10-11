@@ -10,18 +10,9 @@ owner = "ub-review/core"
 reason = "Issue #1477 uses local Git index/worktree comparisons before and after existing precommit checks and real CLI/Cargo regression fixtures. Fixtures own their child environment and native analyzer ledger; Unix presence controls link real Cargo/Git/linker and cargo-allow executables into an ignored tool directory. Reject differing tracked or nonignored untracked inputs; retain the checked index tree. No network, remote writes or new execution authority."
 created = "2026-10-16"
 review_after = "2027-01-16"
-=======
-id = "recorded-export-shadow-1335"
-kind = "rust-lint-suppression"
-path = "src/review_judgment/public_plan/recorded_export.rs"
-lint = "dead_code"
-owner = "ub-review/review-result-1335"
-reason = "Pure recorded export/replay API remains unconnected to CLI/production. Remove when an admitted command consumes it; grants no public or delivery authority."
-created = "2026-10-11"
-review_after = "2026-11-11"
-expires = "2026-12-11"
->>>>>>> b887e266 (wip(review): preserve independent recorded export facade)
 
+=======
+>>>>>>> 4279e190 (wip(review): checkpoint recorded file export/replay CLI)
 # Default source-tree exception ledger. Keep this consolidated until real
 # exception volume proves that narrower ledgers improve reviewability.
 
