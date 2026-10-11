@@ -65,7 +65,8 @@ side effects. Its reason bytes are hashed and retained in input but never copied
 into the observation view. Confirmation uses existing `ObservedDelivery`,
 `DeliveryReconciliation` and `DeliveryReceipt`, recomputes `reconcile_deliveries`,
 and requires exact equality to the original receipt relationship. This subset
-also requires positive numeric physical GitHub IDs. Reuse of an identical receipt
+also requires canonical positive decimal physical GitHub IDs (no signs or leading
+zero aliases). Reuse of an identical receipt
 by a reconciled retry is allowed; one physical comment cannot acquire conflicting
 review/claim/head/body metadata. Canonical legacy codecs are roundtrip-checked to
 reject ignored nested unknown fields.

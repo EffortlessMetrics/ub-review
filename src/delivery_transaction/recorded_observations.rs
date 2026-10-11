@@ -413,12 +413,17 @@ pub(crate) fn export_recorded_observations(
                 )?;
                 ensure!(receipt == derived, "recorded reconciliation mismatch");
                 ensure!(
-                    receipt.review_id.parse::<u64>().is_ok_and(|n| n > 0),
+                    receipt
+                        .review_id
+                        .parse::<u64>()
+                        .is_ok_and(|n| n > 0 && n.to_string() == receipt.review_id),
                     "invalid recorded review id"
                 );
                 for item in &receipt.receipts {
                     ensure!(
-                        item.comment_id.parse::<u64>().is_ok_and(|n| n > 0),
+                        item.comment_id
+                            .parse::<u64>()
+                            .is_ok_and(|n| n > 0 && n.to_string() == item.comment_id),
                         "invalid recorded comment id"
                     );
                     ensure!(
