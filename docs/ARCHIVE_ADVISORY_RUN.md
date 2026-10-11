@@ -136,3 +136,21 @@ verifier success, an unrelated or additional denial, and widening the known
 gap to other modes. No production, verifier or strict-install code changed.
 HTTP-status extraction remains with the resumed #1370/#1317 owner task;
 its actual native HTTP500 regression is separately RED on owner87e28f8.
+
+
+## Identity-negative specificity follow-up
+
+The negative observation now requires exactly `988/COMMENTED`, then checks
+rejection against identity `987` alone. `987/PENDING` and `987/COMMENTED` both
+match that identity and cannot count as an identity-negative control; the
+automatic regression rejects both as negative evidence, and also rejects
+`988/PENDING`. Restoring the old combined identity/state predicate is RED on
+`987/PENDING` (`/tmp/1391-identity-specificity-old-oracle-red.log`), then restored
+GREEN. No production or other campaign behavior changed.
+
+The complete eight-scenario/28-command campaign remains
+`bounded_observations_with_blockers` at
+`/tmp/1391-identity-specificity-campaign`. Receipt SHA-256
+`c1142c7c013903f653385caf0af93a257d813df0a6d3cd565f6893d4fcccc78e`; harness
+`7969c613b54071f382fb7496bf0e9a40ce4aee999fb0baa67d0abb2c7f5b37c1`. Four automatic tests,
+focused Clippy and fmt passed. Previous b7a41619 evidence is preserved above.

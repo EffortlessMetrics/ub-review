@@ -49,6 +49,15 @@ fn checked_result(actual: &Value, expected: &Value) -> Result<()> {
     }
     Ok(())
 }
+fn require_identity_negative_control(response: &Value) -> Result<()> {
+    checked_result(response, &json!({"id":988,"state":"COMMENTED"}))?;
+    ensure!(
+        checked_result(response, &json!({"id":987})).is_err(),
+        "mismatched review identity accepted by campaign oracle"
+    );
+    Ok(())
+}
+
 const RECONCILIATION_REJECTION: &str = "verify-bun-review-artifacts: review/resolved_candidates.json does not match candidates plus follow-up outputs and prior resolved candidates";
 fn packet_verdict(id: &str, verified: bool, output: &str) -> Result<()> {
     if id == "provider-finding" {
@@ -706,14 +715,7 @@ fn posts(c: &mut Campaign, out: &Path, head: &str) -> Result<()> {
                 "legacy mismatch observation changed; refresh against selected bytes: {text}"
             );
             let mismatched_receipt = read(&mismatch.join("post-result.json"))?;
-            ensure!(
-                checked_result(
-                    &mismatched_receipt["response"],
-                    &json!({"id":987,"state":"COMMENTED"})
-                )
-                .is_err(),
-                "mismatched review identity accepted by campaign oracle"
-            );
+            require_identity_negative_control(&mismatched_receipt["response"])?;
             unchanged(&before, &fs::read(out.join("review/gate_outcome.json"))?)?;
             c.intake["mismatched_identity_control"] = json!({"legacy_cli_accepted":true,"campaign_identity_oracle_rejected":true,"post_receipt":mismatched_receipt,"post_receipt_sha256":sha(&fs::read(mismatch.join("post-result.json"))?),"transport_log_sha256":sha(&fs::read(mismatch_log)?)});
         }
@@ -855,5 +857,23 @@ fn known_packet_denial_cannot_accept_success_or_unrelated_failures() -> Result<(
         packet_verdict("off", false, RECONCILIATION_REJECTION).is_err(),
         "known gap widened to other modes"
     );
+    Ok(())
+}
+
+#[test]
+fn identity_negative_control_requires_exact_mismatch_and_submitted_state() -> Result<()> {
+    require_identity_negative_control(&json!({"id":988,"state":"COMMENTED"}))?;
+    for response in [
+        json!({"id":987,"state":"PENDING"}),
+        json!({"id":987,"state":"COMMENTED"}),
+        json!({"id":988,"state":"PENDING"}),
+    ] {
+        ensure!(
+            require_identity_negative_control(&response).is_err(),
+            "wrong identity/state control accepted as identity-negative evidence: {response}"
+        );
+    }
+    checked_result(&json!({"id":987,"state":"PENDING"}), &json!({"id":987}))?;
+    checked_result(&json!({"id":987,"state":"COMMENTED"}), &json!({"id":987}))?;
     Ok(())
 }
