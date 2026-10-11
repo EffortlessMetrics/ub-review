@@ -3058,4 +3058,7 @@ mod tests {
         );
         Ok(())
     }
+
+    #[path = "github_delivery_recovery_tests.rs"]
+    mod recovery_tests;
 }
