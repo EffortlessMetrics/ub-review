@@ -416,3 +416,126 @@ fn real_cli_replay_rejects_repinned_projection_authority_and_erased_history() ->
     }
     Ok(())
 }
+
+#[test]
+fn real_cli_prefix_association_hint_rejects_wrong_pair_and_correct_pair_replays() -> Result<()> {
+    let mut h = History::new()?;
+    let originals = ["answer.json", "plan.json", "ci.bin"]
+        .map(|p| fs::read(h.f.root.path().join(p)))
+        .into_iter()
+        .collect::<std::io::Result<Vec<_>>>()?;
+    h.admit(4)?;
+    let exported = h.f.invoke("agent-export", &[])?;
+    assert!(exported.status.success());
+    fs::write(
+        h.f.root.path().join("historical-view.json"),
+        &exported.stdout,
+    )?;
+    let view_pin = hash(&exported.stdout);
+    h.admit(1)?;
+    let rejected = h.f.invoke(
+        "agent-replay",
+        &["--view", "historical-view.json", "--view-sha256", &view_pin],
+    )?;
+    assert!(!rejected.status.success());
+    assert!(rejected.stdout.is_empty());
+    let diagnostic = String::from_utf8_lossy(&rejected.stderr);
+    assert!(diagnostic.contains("watermark association mismatch"));
+    assert!(diagnostic.contains("name/count/chain_sha256/observed_head_sha"));
+    assert!(diagnostic.contains("matching independently pinned pair"));
+    assert!(diagnostic.contains("do not rewrite pins from the view"));
+    assert!(!diagnostic.contains("PRIVATE_SENTINEL"));
+    h.admit(4)?;
+    let replay = h.f.invoke(
+        "agent-replay",
+        &["--view", "historical-view.json", "--view-sha256", &view_pin],
+    )?;
+    assert!(
+        replay.status.success(),
+        "{}",
+        String::from_utf8_lossy(&replay.stderr)
+    );
+    let receipt: Value = serde_json::from_slice(&replay.stdout)?;
+    assert_eq!(receipt["whole_review_delivery"], "not_qualified");
+    assert_eq!(receipt["remote_authenticity"], "unverified");
+    assert_eq!(receipt["view_sha256"], view_pin);
+    let repeat = h.f.invoke("agent-export", &[])?;
+    assert_eq!(repeat.stdout, exported.stdout);
+    for (i, name) in ["answer.json", "plan.json", "ci.bin"]
+        .into_iter()
+        .enumerate()
+    {
+        assert_eq!(fs::read(h.f.root.path().join(name))?, originals[i]);
+    }
+    Ok(())
+}
+
+#[test]
+fn real_cli_recovery_diagnostic_never_echoes_private_values_or_qualifies_bad_inputs() -> Result<()>
+{
+    let mut h = History::new()?;
+    h.admit(4)?;
+    let original = h.f.invoke("agent-export", &[])?;
+    assert!(original.status.success());
+    let mut private: Value = serde_json::from_slice(&original.stdout)?;
+    let mut observed = decode_bytes(&private["observation_view_json"])?;
+    observed["watermark"]["name"] = json!("PRIVATE_CLAIM_WATERMARK_SENTINEL");
+    observed["private_claim"] = json!("PRIVATE_CLAIM_CONTENT_SENTINEL");
+    observed["raw_ci"] = json!("PRIVATE_CI_CONTENT_SENTINEL");
+    private["observation_view_json"] = json!(serde_json::to_vec(&observed)?);
+    let bytes = serde_json::to_vec(&private)?;
+    fs::write(h.f.root.path().join("retained-private-view.json"), &bytes)?;
+    let pin = hash(&bytes);
+    let reject = h.f.invoke(
+        "agent-replay",
+        &[
+            "--view",
+            "retained-private-view.json",
+            "--view-sha256",
+            &pin,
+        ],
+    )?;
+    assert!(!reject.status.success());
+    assert!(reject.stdout.is_empty());
+    let diagnostic = String::from_utf8_lossy(&reject.stderr);
+    assert!(diagnostic.contains("watermark association mismatch"));
+    assert!(!diagnostic.contains("PRIVATE_"));
+    // A matching watermark cannot turn this repinned, altered view into a replay.
+    observed["watermark"]["name"] = json!("latest");
+    private["observation_view_json"] = json!(serde_json::to_vec(&observed)?);
+    let bytes = serde_json::to_vec(&private)?;
+    fs::write(h.f.root.path().join("retained-private-view.json"), &bytes)?;
+    let reject = h.f.invoke(
+        "agent-replay",
+        &[
+            "--view",
+            "retained-private-view.json",
+            "--view-sha256",
+            &hash(&bytes),
+        ],
+    )?;
+    assert!(!reject.status.success());
+    assert!(reject.stdout.is_empty());
+    let diagnostic = String::from_utf8_lossy(&reject.stderr);
+    assert!(diagnostic.contains("recorded agent replay rejected"));
+    assert!(!diagnostic.contains("watermark association mismatch"));
+    assert!(!diagnostic.contains("PRIVATE_"));
+    // Invalid selected input is not diagnosed from unqualified view metadata.
+    h.admit(1)?;
+    h.f.intake["subject"]["pass_id"] = json!("PRIVATE_CLAIM_CONTENT_SENTINEL");
+    let reject = h.f.invoke(
+        "agent-replay",
+        &[
+            "--view",
+            "retained-private-view.json",
+            "--view-sha256",
+            &hash(&bytes),
+        ],
+    )?;
+    assert!(!reject.status.success());
+    assert!(reject.stdout.is_empty());
+    let diagnostic = String::from_utf8_lossy(&reject.stderr);
+    assert!(!diagnostic.contains("watermark association mismatch"));
+    assert!(!diagnostic.contains("PRIVATE_"));
+    Ok(())
+}
