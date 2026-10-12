@@ -1,0 +1,73 @@
+diff --git a/src/executable_fixture.rs b/src/executable_fixture.rs
+new file mode 100644
+index 0000000..f2f99c8
+--- /dev/null
++++ b/src/executable_fixture.rs
+@@ -0,0 +1,48 @@
++//! Keep writable executable fixtures out of concurrently created children.
++//!
++//! CLOEXEC closes a descriptor at exec, not at fork/clone. Another test's
++//! child can inherit a script's writer and keep its inode writable after
++//! fs::write returns, making the fixture's next exec fail with ETXTBSY.
++//! Readers allow concurrent process creation; only executable materialization
++//! is exclusive. Release the reader before waiting for the child.
++
++#[cfg(unix)]
++use std::fs;
++use std::io;
++#[cfg(unix)]
++use std::path::Path;
++use std::process::{Child, Command, ExitStatus, Output, Stdio};
++use std::sync::RwLock;
++
++static EXECUTABLE_FIXTURE_LAUNCH: RwLock<()> = RwLock::new(());
++
++pub trait FixtureCommandExt {
++    /// Every launch in a fixture test process must participate, including
++    /// launches unrelated to the executable being written.
++    fn fixture_spawn(&mut self) -> io::Result<Child>;
++    /// Capture with null stdin and piped output. Fixture callers use these
++    /// defaults; this deliberately does not support custom stdio configuration.
++    fn fixture_output(&mut self) -> io::Result<Output>;
++    fn fixture_status(&mut self) -> io::Result<ExitStatus>;
++}
++
++impl FixtureCommandExt for Command {
++    fn fixture_spawn(&mut self) -> io::Result<Child> {
++        let _guard = EXECUTABLE_FIXTURE_LAUNCH
++            .read()
++            .unwrap_or_else(std::sync::PoisonError::into_inner);
++        self.spawn()
++    }
++
++    fn fixture_output(&mut self) -> io::Result<Output> {
++        self.stdin(Stdio::null())
++            .stdout(Stdio::piped())
++            .stderr(Stdio::piped())
++            .fixture_spawn()?
++            .wait_with_output()
++    }
++
++    fn fixture_status(&mut self) -> io::Result<ExitStatus> {
++        self.fixture_spawn()?.wait()
++    }
++}
+diff --git a/src/lib.rs b/src/lib.rs
+new file mode 100644
+index 0000000..bbab8f8
+--- /dev/null
++++ b/src/lib.rs
+@@ -0,0 +1,13 @@
++#[cfg(test)]
++mod executable_fixture;
++#[test]
++fn real_capture_keeps_literal_stdout_and_native_status() -> std::io::Result<()> {
++    use executable_fixture::FixtureCommandExt;
++    let output = std::process::Command::new("/bin/sh")
++        .args(["-c", "printf 'role-control-byte\n'; exit 7"])
++        .fixture_output()?;
++    assert_eq!(output.stdout, b"role-control-byte\n");
++    assert_eq!(output.status.code(), Some(7));
++    assert!(output.stderr.is_empty());
++    Ok(())
++}

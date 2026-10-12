@@ -1,0 +1,71 @@
+[
+  {
+    "argv": [
+      "/workspace/scratch/813-shadow-target/debug/ripr",
+      "check",
+      "--root",
+      ".",
+      "--diff",
+      "diff.patch",
+      "--mode",
+      "ready",
+      "--format",
+      "json"
+    ],
+    "cwd": "/workspace/scratch/813-pr1401/fixtures/ripr-shadow-813/source-role-1401/production-test-name",
+    "exit_code": 0,
+    "seconds": 0.05345214000044507,
+    "stdout_sha256": "de4c6951418e91cedfddfa13f7c740257e0e44da3097a2dd870068392e16c341",
+    "stderr_sha256": "61ea98845a7d34c08665c6ca3fa37059cb06b32ac0af1630d0ccaf15f0ea703b",
+    "source": "75ecb7fdade48665aa48d01235fd9f7dfc0a3898",
+    "binary_sha256": "79ad5381ee8973228cfa2651c172c7d9ebc94ca74ec8cab73d303bc25cfcce73",
+    "findings_bytes_requested": 8388608,
+    "findings_bytes_effective": 8388608
+  },
+  {
+    "argv": [
+      "/workspace/scratch/813-shadow-target/debug/ripr",
+      "check",
+      "--root",
+      ".",
+      "--diff",
+      "diff.patch",
+      "--mode",
+      "ready",
+      "--format",
+      "json"
+    ],
+    "cwd": "/workspace/scratch/813-pr1401/fixtures/ripr-shadow-813/source-role-1401/production-test-name",
+    "exit_code": 0,
+    "seconds": 0.042401393000545795,
+    "stdout_sha256": "de4c6951418e91cedfddfa13f7c740257e0e44da3097a2dd870068392e16c341",
+    "stderr_sha256": "61ea98845a7d34c08665c6ca3fa37059cb06b32ac0af1630d0ccaf15f0ea703b",
+    "source": "75ecb7fdade48665aa48d01235fd9f7dfc0a3898",
+    "binary_sha256": "79ad5381ee8973228cfa2651c172c7d9ebc94ca74ec8cab73d303bc25cfcce73",
+    "findings_bytes_requested": 8388608,
+    "findings_bytes_effective": 8388608
+  },
+  {
+    "argv": [
+      "/workspace/scratch/813-shadow-target/debug/ripr",
+      "check",
+      "--root",
+      ".",
+      "--diff",
+      "diff.patch",
+      "--mode",
+      "ready",
+      "--format",
+      "badge-json"
+    ],
+    "cwd": "/workspace/scratch/813-pr1401/fixtures/ripr-shadow-813/source-role-1401/production-test-name",
+    "exit_code": 0,
+    "seconds": 0.03595997599950351,
+    "stdout_sha256": "0fcda3166b385c73cdc6a2e13731f96ae86fb5b7950ef95c0e597ce63734d5bb",
+    "stderr_sha256": "61ea98845a7d34c08665c6ca3fa37059cb06b32ac0af1630d0ccaf15f0ea703b",
+    "source": "75ecb7fdade48665aa48d01235fd9f7dfc0a3898",
+    "binary_sha256": "79ad5381ee8973228cfa2651c172c7d9ebc94ca74ec8cab73d303bc25cfcce73",
+    "findings_bytes_requested": 8388608,
+    "findings_bytes_effective": null
+  }
+]

@@ -1,0 +1,664 @@
+[
+  {
+    "case": "test-layout",
+    "summary": {
+      "changed_rust_files": 3,
+      "probes": 0,
+      "findings": 0,
+      "exposed": 0,
+      "weakly_exposed": 0,
+      "reachable_unrevealed": 0,
+      "no_static_path": 0,
+      "infection_unknown": 0,
+      "propagation_unknown": 0,
+      "static_unknown": 0,
+      "changed_files_by_language": [
+        {
+          "language": "rust",
+          "files": 3
+        }
+      ]
+    },
+    "badge_counts": {
+      "unsuppressed_exposure_gaps": 0,
+      "unsuppressed_test_efficiency_findings": 0,
+      "intentional_test_efficiency_findings": 0,
+      "suppressed_exposure_gaps": 0,
+      "suppressed_test_efficiency_findings": 0,
+      "unknowns": 0,
+      "unknowns_test_efficiency": 0,
+      "analyzed_findings": 0,
+      "analyzed_seams": 0,
+      "analyzed_gap_records": 0,
+      "analyzed_tests": 0
+    },
+    "outcome": {
+      "analysis_complete": true,
+      "outcome": {
+        "schema_version": "0.1",
+        "kind": "no_behavioral_candidates",
+        "identity": {
+          "repository_identity": null,
+          "root_identity": null,
+          "config_identity": null,
+          "base_revision": null,
+          "input_identity": "sha256:f74168f8b7a240fc4342702b1a10eb63ceffdb8a80cbdd7d0bea223116c0aeca",
+          "snapshot_identity": null,
+          "git_candidate_subject": null
+        },
+        "counts": {
+          "changed_file_count": 3,
+          "changed_line_count": 62,
+          "candidate_line_count": 0,
+          "probe_count": 0,
+          "finding_count": 0
+        },
+        "limitations": [],
+        "claim_boundary": "Static analysis outcome only; no correctness, test-adequacy, runtime-execution, or merge-readiness claim."
+      }
+    },
+    "findings": []
+  },
+  {
+    "case": "cfg-test-module",
+    "summary": {
+      "changed_rust_files": 2,
+      "probes": 0,
+      "findings": 0,
+      "exposed": 0,
+      "weakly_exposed": 0,
+      "reachable_unrevealed": 0,
+      "no_static_path": 0,
+      "infection_unknown": 0,
+      "propagation_unknown": 0,
+      "static_unknown": 0,
+      "changed_files_by_language": [
+        {
+          "language": "rust",
+          "files": 2
+        }
+      ]
+    },
+    "badge_counts": {
+      "unsuppressed_exposure_gaps": 0,
+      "unsuppressed_test_efficiency_findings": 0,
+      "intentional_test_efficiency_findings": 0,
+      "suppressed_exposure_gaps": 0,
+      "suppressed_test_efficiency_findings": 0,
+      "unknowns": 0,
+      "unknowns_test_efficiency": 0,
+      "analyzed_findings": 0,
+      "analyzed_seams": 0,
+      "analyzed_gap_records": 0,
+      "analyzed_tests": 0
+    },
+    "outcome": {
+      "analysis_complete": true,
+      "outcome": {
+        "schema_version": "0.1",
+        "kind": "no_behavioral_candidates",
+        "identity": {
+          "repository_identity": null,
+          "root_identity": null,
+          "config_identity": null,
+          "base_revision": null,
+          "input_identity": "sha256:52d3b8e2dfa145b251151d455768447fcb4ba7461b78790eeca764533d05aafc",
+          "snapshot_identity": null,
+          "git_candidate_subject": null
+        },
+        "counts": {
+          "changed_file_count": 2,
+          "changed_line_count": 61,
+          "candidate_line_count": 0,
+          "probe_count": 0,
+          "finding_count": 0
+        },
+        "limitations": [],
+        "claim_boundary": "Static analysis outcome only; no correctness, test-adequacy, runtime-execution, or merge-readiness claim."
+      }
+    },
+    "findings": []
+  },
+  {
+    "case": "production-normal",
+    "summary": {
+      "changed_rust_files": 2,
+      "probes": 14,
+      "findings": 14,
+      "exposed": 0,
+      "weakly_exposed": 2,
+      "reachable_unrevealed": 1,
+      "no_static_path": 4,
+      "infection_unknown": 0,
+      "propagation_unknown": 0,
+      "static_unknown": 7,
+      "changed_files_by_language": [
+        {
+          "language": "rust",
+          "files": 2
+        }
+      ]
+    },
+    "badge_counts": {
+      "unsuppressed_exposure_gaps": 7,
+      "unsuppressed_test_efficiency_findings": 0,
+      "intentional_test_efficiency_findings": 0,
+      "suppressed_exposure_gaps": 0,
+      "suppressed_test_efficiency_findings": 0,
+      "unknowns": 7,
+      "unknowns_test_efficiency": 0,
+      "analyzed_findings": 14,
+      "analyzed_seams": 0,
+      "analyzed_gap_records": 0,
+      "analyzed_tests": 1
+    },
+    "outcome": {
+      "analysis_complete": true,
+      "outcome": {
+        "schema_version": "0.1",
+        "kind": "complete_with_findings",
+        "identity": {
+          "repository_identity": null,
+          "root_identity": null,
+          "config_identity": null,
+          "base_revision": null,
+          "input_identity": "sha256:399bc01986b96d022c546b76a5899d15855dc373ca6178c98e8a86ac76477306",
+          "snapshot_identity": null,
+          "git_candidate_subject": null
+        },
+        "counts": {
+          "changed_file_count": 2,
+          "changed_line_count": 60,
+          "candidate_line_count": 13,
+          "probe_count": 14,
+          "finding_count": 14
+        },
+        "limitations": [],
+        "claim_boundary": "Static analysis outcome only; no correctness, test-adequacy, runtime-execution, or merge-readiness claim."
+      }
+    },
+    "findings": [
+      {
+        "id": "probe:src_executable_fixture.rs:static_unknown:2c0b7d70",
+        "classification": "static_unknown",
+        "family": "static_unknown",
+        "file": "./src/executable_fixture.rs",
+        "line": 17,
+        "probe": {
+          "id": "probe:src_executable_fixture.rs:static_unknown:2c0b7d70",
+          "family": "static_unknown",
+          "delta": "unknown",
+          "file": "./src/executable_fixture.rs",
+          "line": 17,
+          "expression": "static EXECUTABLE_FIXTURE_LAUNCH: RwLock<()> = RwLock::new(());"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture.rs:static_unknown:49134d5b",
+        "classification": "static_unknown",
+        "family": "static_unknown",
+        "file": "./src/executable_fixture.rs",
+        "line": 19,
+        "probe": {
+          "id": "probe:src_executable_fixture.rs:static_unknown:49134d5b",
+          "family": "static_unknown",
+          "delta": "unknown",
+          "file": "./src/executable_fixture.rs",
+          "line": 19,
+          "expression": "pub trait FixtureCommandExt {"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture.rs:static_unknown:66b66160",
+        "classification": "static_unknown",
+        "family": "static_unknown",
+        "file": "./src/executable_fixture.rs",
+        "line": 22,
+        "probe": {
+          "id": "probe:src_executable_fixture.rs:static_unknown:66b66160",
+          "family": "static_unknown",
+          "delta": "unknown",
+          "file": "./src/executable_fixture.rs",
+          "line": 22,
+          "expression": "fn fixture_spawn(&mut self) -> io::Result<Child>;"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture.rs:static_unknown:5c061ec0",
+        "classification": "static_unknown",
+        "family": "static_unknown",
+        "file": "./src/executable_fixture.rs",
+        "line": 25,
+        "probe": {
+          "id": "probe:src_executable_fixture.rs:static_unknown:5c061ec0",
+          "family": "static_unknown",
+          "delta": "unknown",
+          "file": "./src/executable_fixture.rs",
+          "line": 25,
+          "expression": "fn fixture_output(&mut self) -> io::Result<Output>;"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture.rs:static_unknown:bebb4b84",
+        "classification": "no_static_path",
+        "family": "static_unknown",
+        "file": "./src/executable_fixture.rs",
+        "line": 26,
+        "probe": {
+          "id": "probe:src_executable_fixture.rs:static_unknown:bebb4b84",
+          "family": "static_unknown",
+          "delta": "unknown",
+          "file": "./src/executable_fixture.rs",
+          "line": 26,
+          "expression": "fn fixture_status(&mut self) -> io::Result<ExitStatus>;"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture.rs:static_unknown:be9634dc",
+        "classification": "static_unknown",
+        "family": "static_unknown",
+        "file": "./src/executable_fixture.rs",
+        "line": 29,
+        "probe": {
+          "id": "probe:src_executable_fixture.rs:static_unknown:be9634dc",
+          "family": "static_unknown",
+          "delta": "unknown",
+          "file": "./src/executable_fixture.rs",
+          "line": 29,
+          "expression": "impl FixtureCommandExt for Command {"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture.rs:static_unknown:135a614d",
+        "classification": "static_unknown",
+        "family": "static_unknown",
+        "file": "./src/executable_fixture.rs",
+        "line": 31,
+        "probe": {
+          "id": "probe:src_executable_fixture.rs:static_unknown:135a614d",
+          "family": "static_unknown",
+          "delta": "unknown",
+          "file": "./src/executable_fixture.rs",
+          "line": 31,
+          "expression": "let _guard = EXECUTABLE_FIXTURE_LAUNCH"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture.rs:call_deletion:d423898a",
+        "classification": "no_static_path",
+        "family": "call_deletion",
+        "file": "./src/executable_fixture.rs",
+        "line": 32,
+        "probe": {
+          "id": "probe:src_executable_fixture.rs:call_deletion:d423898a",
+          "family": "call_deletion",
+          "delta": "effect",
+          "file": "./src/executable_fixture.rs",
+          "line": 32,
+          "expression": ".read()"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture.rs:call_deletion:8567f555",
+        "classification": "weakly_exposed",
+        "family": "call_deletion",
+        "file": "./src/executable_fixture.rs",
+        "line": 33,
+        "probe": {
+          "id": "probe:src_executable_fixture.rs:call_deletion:8567f555",
+          "family": "call_deletion",
+          "delta": "effect",
+          "file": "./src/executable_fixture.rs",
+          "line": 33,
+          "expression": ".unwrap_or_else(std::sync::PoisonError::into_inner);"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture.rs:error_path:0a92d291",
+        "classification": "reachable_unrevealed",
+        "family": "error_path",
+        "file": "./src/executable_fixture.rs",
+        "line": 33,
+        "probe": {
+          "id": "probe:src_executable_fixture.rs:error_path:0a92d291",
+          "family": "error_path",
+          "delta": "value",
+          "file": "./src/executable_fixture.rs",
+          "line": 33,
+          "expression": ".unwrap_or_else(std::sync::PoisonError::into_inner);"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture.rs:return_value:a945ffe9",
+        "classification": "no_static_path",
+        "family": "return_value",
+        "file": "./src/executable_fixture.rs",
+        "line": 34,
+        "probe": {
+          "id": "probe:src_executable_fixture.rs:return_value:a945ffe9",
+          "family": "return_value",
+          "delta": "value",
+          "file": "./src/executable_fixture.rs",
+          "line": 34,
+          "expression": "self.spawn()"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture.rs:return_value:ea86593b",
+        "classification": "weakly_exposed",
+        "family": "return_value",
+        "file": "./src/executable_fixture.rs",
+        "line": 38,
+        "probe": {
+          "id": "probe:src_executable_fixture.rs:return_value:ea86593b",
+          "family": "return_value",
+          "delta": "value",
+          "file": "./src/executable_fixture.rs",
+          "line": 38,
+          "expression": "self.stdin(Stdio::null())\n            .stdout(Stdio::piped())\n            .stderr(Stdio::piped())\n            .fixture_spawn()?\n            .wait_with_output()"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture.rs:return_value:5e4f200c",
+        "classification": "no_static_path",
+        "family": "return_value",
+        "file": "./src/executable_fixture.rs",
+        "line": 46,
+        "probe": {
+          "id": "probe:src_executable_fixture.rs:return_value:5e4f200c",
+          "family": "return_value",
+          "delta": "value",
+          "file": "./src/executable_fixture.rs",
+          "line": 46,
+          "expression": "self.fixture_spawn()?.wait()"
+        }
+      },
+      {
+        "id": "probe:src_lib.rs:static_unknown:ee653bff",
+        "classification": "static_unknown",
+        "family": "static_unknown",
+        "file": "./src/lib.rs",
+        "line": 1,
+        "probe": {
+          "id": "probe:src_lib.rs:static_unknown:ee653bff",
+          "family": "static_unknown",
+          "delta": "unknown",
+          "file": "./src/lib.rs",
+          "line": 1,
+          "expression": "pub mod executable_fixture;"
+        }
+      }
+    ]
+  },
+  {
+    "case": "production-test-name",
+    "summary": {
+      "changed_rust_files": 2,
+      "probes": 14,
+      "findings": 14,
+      "exposed": 0,
+      "weakly_exposed": 2,
+      "reachable_unrevealed": 1,
+      "no_static_path": 4,
+      "infection_unknown": 0,
+      "propagation_unknown": 0,
+      "static_unknown": 7,
+      "changed_files_by_language": [
+        {
+          "language": "rust",
+          "files": 2
+        }
+      ]
+    },
+    "badge_counts": {
+      "unsuppressed_exposure_gaps": 7,
+      "unsuppressed_test_efficiency_findings": 0,
+      "intentional_test_efficiency_findings": 0,
+      "suppressed_exposure_gaps": 0,
+      "suppressed_test_efficiency_findings": 0,
+      "unknowns": 7,
+      "unknowns_test_efficiency": 0,
+      "analyzed_findings": 14,
+      "analyzed_seams": 0,
+      "analyzed_gap_records": 0,
+      "analyzed_tests": 1
+    },
+    "outcome": {
+      "analysis_complete": true,
+      "outcome": {
+        "schema_version": "0.1",
+        "kind": "complete_with_findings",
+        "identity": {
+          "repository_identity": null,
+          "root_identity": null,
+          "config_identity": null,
+          "base_revision": null,
+          "input_identity": "sha256:68ea562c682aa4b72d2671d6479e8589a54a849733ea143fc14d76cf503c3e72",
+          "snapshot_identity": null,
+          "git_candidate_subject": null
+        },
+        "counts": {
+          "changed_file_count": 2,
+          "changed_line_count": 60,
+          "candidate_line_count": 13,
+          "probe_count": 14,
+          "finding_count": 14
+        },
+        "limitations": [],
+        "claim_boundary": "Static analysis outcome only; no correctness, test-adequacy, runtime-execution, or merge-readiness claim."
+      }
+    },
+    "findings": [
+      {
+        "id": "probe:src_executable_fixture_tests.rs:static_unknown:8b425771",
+        "classification": "static_unknown",
+        "family": "static_unknown",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 17,
+        "probe": {
+          "id": "probe:src_executable_fixture_tests.rs:static_unknown:8b425771",
+          "family": "static_unknown",
+          "delta": "unknown",
+          "file": "./src/executable_fixture_tests.rs",
+          "line": 17,
+          "expression": "static EXECUTABLE_FIXTURE_LAUNCH: RwLock<()> = RwLock::new(());"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture_tests.rs:static_unknown:e7e8d45c",
+        "classification": "static_unknown",
+        "family": "static_unknown",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 19,
+        "probe": {
+          "id": "probe:src_executable_fixture_tests.rs:static_unknown:e7e8d45c",
+          "family": "static_unknown",
+          "delta": "unknown",
+          "file": "./src/executable_fixture_tests.rs",
+          "line": 19,
+          "expression": "pub trait FixtureCommandExt {"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture_tests.rs:static_unknown:6e13bc05",
+        "classification": "static_unknown",
+        "family": "static_unknown",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 22,
+        "probe": {
+          "id": "probe:src_executable_fixture_tests.rs:static_unknown:6e13bc05",
+          "family": "static_unknown",
+          "delta": "unknown",
+          "file": "./src/executable_fixture_tests.rs",
+          "line": 22,
+          "expression": "fn fixture_spawn(&mut self) -> io::Result<Child>;"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture_tests.rs:static_unknown:04b13bee",
+        "classification": "static_unknown",
+        "family": "static_unknown",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 25,
+        "probe": {
+          "id": "probe:src_executable_fixture_tests.rs:static_unknown:04b13bee",
+          "family": "static_unknown",
+          "delta": "unknown",
+          "file": "./src/executable_fixture_tests.rs",
+          "line": 25,
+          "expression": "fn fixture_output(&mut self) -> io::Result<Output>;"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture_tests.rs:static_unknown:245941a4",
+        "classification": "no_static_path",
+        "family": "static_unknown",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 26,
+        "probe": {
+          "id": "probe:src_executable_fixture_tests.rs:static_unknown:245941a4",
+          "family": "static_unknown",
+          "delta": "unknown",
+          "file": "./src/executable_fixture_tests.rs",
+          "line": 26,
+          "expression": "fn fixture_status(&mut self) -> io::Result<ExitStatus>;"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture_tests.rs:static_unknown:4e6881f4",
+        "classification": "static_unknown",
+        "family": "static_unknown",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 29,
+        "probe": {
+          "id": "probe:src_executable_fixture_tests.rs:static_unknown:4e6881f4",
+          "family": "static_unknown",
+          "delta": "unknown",
+          "file": "./src/executable_fixture_tests.rs",
+          "line": 29,
+          "expression": "impl FixtureCommandExt for Command {"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture_tests.rs:static_unknown:7841a390",
+        "classification": "static_unknown",
+        "family": "static_unknown",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 31,
+        "probe": {
+          "id": "probe:src_executable_fixture_tests.rs:static_unknown:7841a390",
+          "family": "static_unknown",
+          "delta": "unknown",
+          "file": "./src/executable_fixture_tests.rs",
+          "line": 31,
+          "expression": "let _guard = EXECUTABLE_FIXTURE_LAUNCH"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture_tests.rs:call_deletion:cdbebe81",
+        "classification": "no_static_path",
+        "family": "call_deletion",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 32,
+        "probe": {
+          "id": "probe:src_executable_fixture_tests.rs:call_deletion:cdbebe81",
+          "family": "call_deletion",
+          "delta": "effect",
+          "file": "./src/executable_fixture_tests.rs",
+          "line": 32,
+          "expression": ".read()"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture_tests.rs:call_deletion:af42281c",
+        "classification": "weakly_exposed",
+        "family": "call_deletion",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 33,
+        "probe": {
+          "id": "probe:src_executable_fixture_tests.rs:call_deletion:af42281c",
+          "family": "call_deletion",
+          "delta": "effect",
+          "file": "./src/executable_fixture_tests.rs",
+          "line": 33,
+          "expression": ".unwrap_or_else(std::sync::PoisonError::into_inner);"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture_tests.rs:error_path:037b2c8a",
+        "classification": "reachable_unrevealed",
+        "family": "error_path",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 33,
+        "probe": {
+          "id": "probe:src_executable_fixture_tests.rs:error_path:037b2c8a",
+          "family": "error_path",
+          "delta": "value",
+          "file": "./src/executable_fixture_tests.rs",
+          "line": 33,
+          "expression": ".unwrap_or_else(std::sync::PoisonError::into_inner);"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture_tests.rs:return_value:64f5bad6",
+        "classification": "no_static_path",
+        "family": "return_value",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 34,
+        "probe": {
+          "id": "probe:src_executable_fixture_tests.rs:return_value:64f5bad6",
+          "family": "return_value",
+          "delta": "value",
+          "file": "./src/executable_fixture_tests.rs",
+          "line": 34,
+          "expression": "self.spawn()"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture_tests.rs:return_value:4c0141a1",
+        "classification": "weakly_exposed",
+        "family": "return_value",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 38,
+        "probe": {
+          "id": "probe:src_executable_fixture_tests.rs:return_value:4c0141a1",
+          "family": "return_value",
+          "delta": "value",
+          "file": "./src/executable_fixture_tests.rs",
+          "line": 38,
+          "expression": "self.stdin(Stdio::null())\n            .stdout(Stdio::piped())\n            .stderr(Stdio::piped())\n            .fixture_spawn()?\n            .wait_with_output()"
+        }
+      },
+      {
+        "id": "probe:src_executable_fixture_tests.rs:return_value:b6f24486",
+        "classification": "no_static_path",
+        "family": "return_value",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 46,
+        "probe": {
+          "id": "probe:src_executable_fixture_tests.rs:return_value:b6f24486",
+          "family": "return_value",
+          "delta": "value",
+          "file": "./src/executable_fixture_tests.rs",
+          "line": 46,
+          "expression": "self.fixture_spawn()?.wait()"
+        }
+      },
+      {
+        "id": "probe:src_lib.rs:static_unknown:4d52f8e2",
+        "classification": "static_unknown",
+        "family": "static_unknown",
+        "file": "./src/lib.rs",
+        "line": 1,
+        "probe": {
+          "id": "probe:src_lib.rs:static_unknown:4d52f8e2",
+          "family": "static_unknown",
+          "delta": "unknown",
+          "file": "./src/lib.rs",
+          "line": 1,
+          "expression": "pub mod executable_fixture_tests;"
+        }
+      }
+    ]
+  }
+]
