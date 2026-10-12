@@ -51,6 +51,12 @@ class SourceRoleCase(unittest.TestCase):
         contract = verify.load(ROOT / "evidence/manifest.json")
         verify.verify_comparison_contract(contract)
         self.assertIsNone(contract["case_approver"])
+        manifest = verify.load(ROOT / "FILE_MANIFEST.json")
+        for member in manifest["files"]:
+            self.assertNotIn("target", Path(member["path"]).parts)
+            content = (ROOT / member["path"]).read_bytes()
+            self.assertEqual(len(content), member["bytes"])
+            self.assertEqual(hashlib.sha256(content).hexdigest(), member["sha256"])
 
     def test_even_consistent_zero_counts_cannot_hide_production_helper(self):
         out = ROOT / "evidence/fixture-packets/production-normal/candidate"
