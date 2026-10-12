@@ -131,8 +131,8 @@ struct ObservationFiles {
 }
 
 /// Decode the existing graph wire without changing its static schema/mode
-/// representation. This bounded subset rejects topic-bearing graphs explicitly;
-/// it never drops active topics or takes over their compiler/transport owner.
+/// representation. Native topics remain source context; their recorded delivery
+/// and planned-action strings confer no publisher or execution authority.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct GraphFile {
@@ -140,7 +140,7 @@ struct GraphFile {
     head_sha: String,
     revision: RevisionRef,
     claims: Vec<ClaimNode>,
-    topics: Vec<serde_json::Value>,
+    topics: Vec<crate::ReviewTopic>,
     conflicts: Vec<ConflictRecord>,
     evidence_gaps: Vec<ClaimEvidenceGap>,
     mode: String,
@@ -269,11 +269,10 @@ pub(crate) fn run(args: RecordedReviewArgs) -> Result<()> {
         "unsupported recorded graph schema/mode"
     );
     ensure!(
-        wire.topics.is_empty(),
-        "recorded file subset does not admit topic-bearing graphs"
-    );
-    ensure!(
-        wire.claims.len() <= 128 && wire.conflicts.len() <= 128 && wire.evidence_gaps.len() <= 128,
+        wire.claims.len() <= 128
+            && wire.topics.len() <= 128
+            && wire.conflicts.len() <= 128
+            && wire.evidence_gaps.len() <= 128,
         "recorded graph exceeds row limit"
     );
     let graph = ClaimGraph {
@@ -281,7 +280,7 @@ pub(crate) fn run(args: RecordedReviewArgs) -> Result<()> {
         head_sha: wire.head_sha,
         revision: Some(wire.revision),
         claims: wire.claims,
-        topics: vec![],
+        topics: wire.topics,
         conflicts: wire.conflicts,
         evidence_gaps: wire.evidence_gaps,
         mode: "active",
@@ -290,6 +289,38 @@ pub(crate) fn run(args: RecordedReviewArgs) -> Result<()> {
         serde_json::to_value(&graph)? == json::<serde_json::Value>(&graph_bytes, "claim graph")?,
         "recorded graph has unsupported or discarded fields"
     );
+    let mut topic_ids = std::collections::BTreeSet::new();
+    for topic in &graph.topics {
+        ensure!(
+            topic.evidence.len() <= 128
+                && topic.existing_threads.len() <= 128
+                && topic.stale_threads.len() <= 128
+                && topic.proof_requests.len() <= 128
+                && topic.proof_receipts.len() <= 128,
+            "recorded topic exceeds row limit"
+        );
+        ensure!(
+            topic.head_sha == graph.head_sha && topic_ids.insert(&topic.claim_id),
+            "recorded topic identity mismatch"
+        );
+        let claim = graph
+            .claims
+            .iter()
+            .find(|claim| claim.id == topic.claim_id)
+            .ok_or_else(|| anyhow::anyhow!("recorded topic claim absent"))?;
+        for edge in &topic.evidence {
+            ensure!(
+                claim
+                    .supporting_evidence
+                    .iter()
+                    .chain(&claim.contradicting_evidence)
+                    .any(|candidate| candidate.class == edge.class
+                        && candidate.reference == edge.reference
+                        && candidate.detail == edge.detail),
+                "recorded topic evidence binding mismatch"
+            );
+        }
+    }
     let mut budget = CONTEXT_LIMIT;
     let evidence_bytes = intake
         .evidence

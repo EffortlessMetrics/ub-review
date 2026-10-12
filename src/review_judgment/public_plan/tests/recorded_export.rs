@@ -404,3 +404,79 @@ fn absent_ci_stays_absent_without_a_gate_result() -> Result<()> {
         },
     )
 }
+
+// Golden captured from the actual builder; CLI consumes the same native wire.
+#[test]
+fn production_builder_topic_serialization_matches_recorded_fixture() -> Result<()> {
+    use anyhow::ensure;
+    let mut f = Fixture::new()?;
+    let native_fixture =
+        include_bytes!("../../../../fixtures/review-experience/perl-lsp-3627.json");
+    let fixture: Value = serde_json::from_slice(native_fixture)?;
+    let body = fixture["threads"][0]["body"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("native fixture body absent"))?;
+    let summary = crate::SummaryOnlyFinding {
+        lane: "recorded-repro".into(),
+        severity: "high".into(),
+        confidence: "high".into(),
+        reason: body.into(),
+        evidence: "repository-owned Perl-LSP review fixture".into(),
+    };
+    f.graph = crate::build_active_claim_graph(
+        &f.delivery.head_sha,
+        &[],
+        &[],
+        &[summary],
+        &[],
+        &[],
+        &crate::absent_pr_thread_context(0),
+    );
+    f.graph.revision = Some(f.identity.revision_ref());
+    ensure!(
+        f.graph.topics.len() == 1 && f.graph.claims.len() == 1,
+        "production graph absent"
+    );
+    ensure!(
+        f.graph.topics[0].claim_id == f.graph.claims[0].id,
+        "native identity link changed"
+    );
+    ensure!(
+        f.graph.topics[0].evidence[0].reference == "summary-only-finding",
+        "native reference changed"
+    );
+    let evidence_hash = sha256_hex(native_fixture);
+    let evidence = [RecordedEvidence {
+        reference: "summary-only-finding",
+        digest: &evidence_hash,
+        bytes: native_fixture,
+    }];
+    let source = f.source(&evidence);
+    let source_digest = source_manifest_digest(&source)?;
+    let public = f.public(&[], &[]);
+    let public_digest = public_source_digest(&public)?;
+    let pure = export_recorded_review(PublicPlanInput {
+        judgment_source: &source,
+        current_revision: &f.identity,
+        expected_source_digest: &source_digest,
+        answer: None,
+        expected_answer_digest: None,
+        observed_ci: Some(&f.ci),
+        public_source: &public,
+        expected_public_source_digest: &public_digest,
+        plan: None,
+        expected_plan_digest: None,
+    })?;
+    let pure_view: Value = serde_json::from_slice(&pure.view_json)?;
+    ensure!(
+        pure_view["judgment"]["availability"] == "absent",
+        "missing lead became verdict"
+    );
+    let expected = include_bytes!("../../../../fixtures/recorded-native-topic-graph.json");
+    ensure!(
+        serde_json::to_vec(&f.graph)?.as_slice()
+            == expected.strip_suffix(b"\n").unwrap_or(expected),
+        "native builder wire changed"
+    );
+    Ok(())
+}

@@ -155,6 +155,8 @@ fn rejected(output: Output, message: &str) {
 
 #[path = "recorded_review_cli/agent_result.rs"]
 mod agent_result;
+#[path = "recorded_review_cli/native_topics.rs"]
+mod native_topics;
 
 #[test]
 fn real_command_exports_exact_sources_and_replays_without_remote_confirmation() -> Result<()> {
@@ -338,10 +340,7 @@ fn unsafe_paths_directories_parent_files_and_unsupported_graphs_are_rejected() -
     let bytes = serde_json::to_vec(&graph)?;
     fs::write(&graph_path, &bytes)?;
     f.intake["graph"]["sha256"] = json!(hash(&bytes));
-    rejected(
-        f.invoke("export", &[])?,
-        "does not admit topic-bearing graphs",
-    );
+    rejected(f.invoke("export", &[])?, "invalid claim graph JSON");
     graph["topics"] = json!([]);
     graph["revision"]["dispatch"] = json!("forged");
     let bytes = serde_json::to_vec(&graph)?;

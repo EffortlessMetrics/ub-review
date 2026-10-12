@@ -59,10 +59,12 @@ claimed.
 The graph decoder reuses existing ClaimNode/evidence/state/conflict/gap types;
 their serialization and production behavior are unchanged. It requires exact
 active schema and a strong revision, and rejects any fields dropped by a legacy
-decoder. This first file subset **rejects nonempty topics** rather than discarding
-the active topic compiler's data. It accepts existing enum wire spelling, not the
-different display `key()` spellings. Topic-bearing graph admission remains with
-the canonical topic owner; no Markdown conversion or alternate adjudicator exists.
+decoder. Native `ReviewTopic` values are strictly decoded and retained as source
+context. Topic heads/unique claim identities and evidence class/reference/detail
+must bind to the corresponding claim; topics and nested reference lists are
+bounded at 128 rows. Existing enum spelling is preserved; no Markdown conversion,
+alternate adjudicator or proof-link normalization occurs in admission. Recorded
+`delivery`/`planned_action` strings confer no publisher or execution authority.
 
 File sizes: intake/revision/answer/plan <=256KiB each; graph/diff/imported CI
 <=1MiB each; all evidence bytes combined <=1MiB; each material body <=6000 bytes.
@@ -143,7 +145,7 @@ Qualification remains `shadow_recorded_only_pending_dependency_review`.
 `whole_review_delivery` is `not_qualified`. Even with an exact summary payload
 binding, the observation owner's summary correspondence remains `unverified`:
 there is no identity-bound physical summary receipt. Multiple summary fragments,
-quiet payloads, replies, suggestions and topic graphs remain outside this subset.
+quiet payloads, replies and suggestions remain outside this subset.
 No clean verdict, CI result, remote absence, posting permission or architecture
 adoption is inferred. A later confirming observation does not erase local failure.
 
