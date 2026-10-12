@@ -1104,6 +1104,56 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn symlink_target_is_part_of_the_admitted_tree_and_repeats_stably() -> Result<()> {
+        use std::os::unix::fs::symlink;
+
+        let repo = init_repo()?;
+        commit_file(&repo, "src/a.rs", "base\n", "base")?;
+
+        symlink("target-a", repo.root().join("link"))?;
+        git(&repo, &["add", "link"])?;
+        git(&repo, &["commit", "-q", "-m", "link target a"])?;
+        let first_commit = git(&repo, &["rev-parse", "HEAD"])?.trim().to_owned();
+        let files = vec!["link".to_owned()];
+        let first_patch = "symlink target-a\n";
+        let first = admit_revision(repo.root(), "HEAD~1", "HEAD", None, &files, first_patch)?;
+        let repeated = admit_revision(
+            repo.root(),
+            "HEAD~1",
+            &first_commit,
+            None,
+            &files,
+            first_patch,
+        )?;
+        assert_eq!(first.identity_digest, repeated.identity_digest);
+        assert_eq!(first.identity_canonical, repeated.identity_canonical);
+
+        fs::remove_file(repo.root().join("link"))?;
+        symlink("target-b", repo.root().join("link"))?;
+        let dirty = admit_revision(repo.root(), "HEAD~1", "HEAD", None, &files, first_patch)?;
+        assert!(dirty.worktree_dirty);
+        assert_eq!(first.identity_digest, dirty.identity_digest);
+        git(&repo, &["add", "link"])?;
+        git(&repo, &["commit", "-q", "-m", "link target b"])?;
+        let first_tree = git(&repo, &["show", "-s", "--format=%T", &first_commit])?;
+        let second_tree = git(&repo, &["show", "-s", "--format=%T", "HEAD"])?;
+        assert_ne!(first_tree.trim(), second_tree.trim());
+        let second = admit_revision(repo.root(), "HEAD~2", "HEAD", None, &files, first_patch)?;
+
+        // Git stores a symlink's target as its blob contents. The link path
+        // stays fixed, but both its tree and the admitted identity must move.
+        assert_ne!(first.identity_digest, second.identity_digest);
+        assert_ne!(first.identity_canonical, second.identity_canonical);
+        assert!(
+            first
+                .identity_canonical
+                .contains("semantics=candidate_head")
+        );
+        Ok(())
+    }
+
     #[test]
     fn candidate_and_merge_packets_stay_distinct_end_to_end() -> Result<()> {
         let repo = init_repo()?;

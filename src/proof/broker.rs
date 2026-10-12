@@ -443,10 +443,25 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
             } else {
                 "declined_for_higher_value_proof"
             };
+            let remaining_allocation = input.budget.max_total_seconds.saturating_sub(used_seconds);
+            let remaining_deadline = input
+                .runtime
+                .deadline_remaining_seconds
+                .saturating_sub(used_seconds);
             let reason = if !fits_box {
                 "proof lease does not fit the current runner capacity"
-            } else if effective_max_seconds == 0 || deadline_cannot_fit {
+            } else if input.runtime.deadline_remaining_seconds == 0 {
                 "hard deadline has expired; proof was safely wound down"
+            } else if remaining_allocation == 0 {
+                "proof-time allocation is exhausted"
+            } else if used_tasks >= input.budget.max_focused_tests {
+                "proof task capacity is exhausted"
+            } else if !file_available {
+                "focused test-file capacity is exhausted"
+            } else if candidate_task.estimated_cost_sec > remaining_deadline {
+                "estimated task cost cannot fit the remaining hard-deadline wall time"
+            } else if candidate_task.estimated_cost_sec > remaining_allocation {
+                "estimated task cost cannot fit the remaining proof-time allocation"
             } else if candidate_task.required {
                 "required floor could not fit inside the remaining safe proof budget"
             } else {
@@ -2641,10 +2656,7 @@ mod tests {
             .ok_or_else(|| anyhow::anyhow!("merged portfolio lost primary task-a"))?;
         ensure!(decision_a.required);
         ensure!(decision_a.status == "deferred_by_safe_wind_down");
-        ensure!(
-            decision_a.reason
-                == "required floor could not fit inside the remaining safe proof budget"
-        );
+        ensure!(decision_a.reason == "proof task capacity is exhausted");
         ensure!(
             snapshot
                 .decisions
@@ -2678,7 +2690,7 @@ mod tests {
         ensure!(summary.contains("task-a"), "{summary}");
         ensure!(summary.contains("req-a"), "{summary}");
         ensure!(
-            summary.contains("required floor could not fit inside the remaining safe proof budget"),
+            summary.contains("proof task capacity is exhausted"),
             "{summary}"
         );
         ensure!(summary.contains("receipts: none"), "{summary}");
@@ -2885,7 +2897,487 @@ mod tests {
             .first()
             .ok_or_else(|| anyhow::anyhow!("missing deadline decision"))?;
         ensure!(decision.status == "deferred_by_safe_wind_down");
-        ensure!(decision.reason.contains("hard deadline"));
+        ensure!(
+            decision.reason
+                == "estimated task cost cannot fit the remaining hard-deadline wall time"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn portfolio_reports_the_actual_safe_wind_down_constraint() -> Result<()> {
+        let test = focused_test_task("parser", vec!["request".to_owned()], 30);
+        let cases = [
+            (
+                proof_budget_for_test(1, 0),
+                portfolio_runtime_for_test(3_406, 4, Some(8_192), Some(20_000)),
+                "proof-time allocation is exhausted",
+                "deferred_by_safe_wind_down",
+            ),
+            (
+                proof_budget_for_test(1, 60),
+                portfolio_runtime_for_test(0, 4, Some(8_192), Some(20_000)),
+                "hard deadline has expired; proof was safely wound down",
+                "deferred_by_safe_wind_down",
+            ),
+            (
+                proof_budget_for_test(1, 60),
+                portfolio_runtime_for_test(59, 4, Some(8_192), Some(20_000)),
+                "estimated task cost cannot fit the remaining hard-deadline wall time",
+                "deferred_by_safe_wind_down",
+            ),
+            (
+                proof_budget_for_test(1, 59),
+                portfolio_runtime_for_test(3_406, 4, Some(8_192), Some(20_000)),
+                "estimated task cost cannot fit the remaining proof-time allocation",
+                "declined_for_higher_value_proof",
+            ),
+            (
+                proof_budget_for_test(0, 60),
+                portfolio_runtime_for_test(60, 4, Some(8_192), Some(20_000)),
+                "proof task capacity is exhausted",
+                "deferred_by_safe_wind_down",
+            ),
+            (
+                ProofBudget {
+                    max_focused_test_files: 0,
+                    ..proof_budget_for_test(1, 60)
+                },
+                portfolio_runtime_for_test(60, 4, Some(8_192), Some(20_000)),
+                "focused test-file capacity is exhausted",
+                "deferred_by_safe_wind_down",
+            ),
+            (
+                proof_budget_for_test(1, 60),
+                portfolio_runtime_for_test(60, 0, Some(8_192), Some(20_000)),
+                "proof lease does not fit the current runner capacity",
+                "declined_for_box_capacity",
+            ),
+            (
+                proof_budget_for_test(1, 60),
+                portfolio_runtime_for_test(60, 4, Some(511), Some(20_000)),
+                "proof lease does not fit the current runner capacity",
+                "declined_for_box_capacity",
+            ),
+            (
+                proof_budget_for_test(1, 60),
+                portfolio_runtime_for_test(60, 4, Some(8_192), Some(63)),
+                "proof lease does not fit the current runner capacity",
+                "declined_for_box_capacity",
+            ),
+            // Resource, deadline, allocation, task, and file constraints retain
+            // their deterministic precedence when several apply together.
+            (
+                proof_budget_for_test(0, 0),
+                portfolio_runtime_for_test(0, 0, Some(0), Some(0)),
+                "proof lease does not fit the current runner capacity",
+                "declined_for_box_capacity",
+            ),
+            (
+                proof_budget_for_test(0, 0),
+                portfolio_runtime_for_test(0, 4, Some(8_192), Some(20_000)),
+                "hard deadline has expired; proof was safely wound down",
+                "deferred_by_safe_wind_down",
+            ),
+            (
+                ProofBudget {
+                    max_focused_test_files: 0,
+                    ..proof_budget_for_test(0, 0)
+                },
+                portfolio_runtime_for_test(3_406, 4, Some(8_192), Some(20_000)),
+                "proof-time allocation is exhausted",
+                "deferred_by_safe_wind_down",
+            ),
+            (
+                ProofBudget {
+                    max_focused_test_files: 0,
+                    ..proof_budget_for_test(0, 60)
+                },
+                portfolio_runtime_for_test(59, 4, Some(8_192), Some(20_000)),
+                "proof task capacity is exhausted",
+                "deferred_by_safe_wind_down",
+            ),
+            (
+                ProofBudget {
+                    max_focused_test_files: 0,
+                    ..proof_budget_for_test(1, 60)
+                },
+                portfolio_runtime_for_test(59, 4, Some(8_192), Some(20_000)),
+                "focused test-file capacity is exhausted",
+                "deferred_by_safe_wind_down",
+            ),
+        ];
+
+        for (budget, runtime, expected_reason, expected_status) in cases {
+            for required in [false, true] {
+                let request = proof_request("request", required);
+                let selection = select_proof_portfolio(ProofPortfolioInput {
+                    test_tasks: std::slice::from_ref(&test),
+                    build_tasks: &[],
+                    proof_requests: std::slice::from_ref(&request),
+                    proof_receipts: &[],
+                    head: "head",
+                    budget,
+                    runtime,
+                });
+                ensure!(selection.test_tasks.is_empty());
+                let decision = selection
+                    .decisions
+                    .first()
+                    .ok_or_else(|| anyhow::anyhow!("missing safe-wind-down decision"))?;
+                ensure!(decision.status == expected_status, "{decision:?}");
+                ensure!(decision.required == required);
+                ensure!(decision.receipt_ids.is_empty());
+                ensure!(decision.estimated_cost_sec == 60);
+                ensure!(
+                    decision.reason == expected_reason,
+                    "expected {expected_reason:?}, got {:?}",
+                    decision.reason
+                );
+                let temp = tempfile::tempdir()?;
+                let out = temp.path().join("out");
+                write_proof_portfolio_selection_artifact(
+                    &out,
+                    &test_diff(),
+                    budget,
+                    std::slice::from_ref(&test),
+                    &[],
+                    std::slice::from_ref(&request),
+                    selection,
+                )?;
+                let snapshot =
+                    serde_json::from_slice(&fs::read(out.join("review/proof_portfolio.json"))?)?;
+                let accounting = crate::gate::build_planner_required_proof_accounting(
+                    &snapshot,
+                    &[],
+                    0,
+                    Some("constraint-digest"),
+                );
+                ensure!(accounting.total == usize::from(required));
+                ensure!(accounting.proven == 0);
+                ensure!(accounting.unproven == usize::from(required));
+                if required {
+                    ensure!(accounting.unproven_tasks[0].reason == expected_reason);
+                    fs::write(out.join("review/metrics.json"), "{}")?;
+                    fs::write(
+                        out.join("review/gate_outcome.json"),
+                        serde_json::to_vec(&serde_json::json!({
+                            "planner_required_proofs": accounting,
+                        }))?,
+                    )?;
+                    let mut summary = String::new();
+                    crate::render_review_efficiency_section(&mut summary, &out);
+                    ensure!(summary.contains(expected_reason), "{summary}");
+                    ensure!(summary.contains("receipts: none"), "{summary}");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn portfolio_artifact_preserves_the_live_deadline_after_estimated_reservations() -> Result<()> {
+        let requests = [
+            proof_request("request-a", true),
+            proof_request("request-b", true),
+        ];
+        let tasks = [
+            focused_test_task("a", vec!["request-a".to_owned()], 30),
+            focused_test_task("b", vec!["request-b".to_owned()], 30),
+        ];
+        let budget = proof_budget_for_test(2, 120);
+        let selection = select_proof_portfolio(ProofPortfolioInput {
+            test_tasks: &tasks,
+            build_tasks: &[],
+            proof_requests: &requests,
+            proof_receipts: &[],
+            head: "HEAD",
+            budget,
+            runtime: portfolio_runtime_for_test(90, 4, Some(8_192), Some(20_000)),
+        });
+        let temp = tempfile::tempdir()?;
+        write_proof_portfolio_selection_artifact(
+            temp.path(),
+            &test_diff(),
+            budget,
+            &tasks,
+            &[],
+            &requests,
+            selection,
+        )?;
+        let artifact: serde_json::Value =
+            serde_json::from_slice(&fs::read(temp.path().join("review/proof_portfolio.json"))?)?;
+        // Reservation estimates constrain selection while the published runtime
+        // retains the live deadline supplied to this invocation.
+        assert_eq!(
+            artifact,
+            serde_json::json!({
+                "schema": "ub-review.proof_portfolio.v1",
+                "phase": "broker-final",
+                "head": "HEAD",
+                "budget_seconds": 120,
+                "remaining_seconds": 30,
+                "candidate_count": 2,
+                "candidate_tasks": [
+                    {
+                        "id": "a", "kind": "focused-red-green", "required": true,
+                        "estimated_cost_sec": 60, "request_ids": ["request-a"]
+                    },
+                    {
+                        "id": "b", "kind": "focused-red-green", "required": true,
+                        "estimated_cost_sec": 60, "request_ids": ["request-b"]
+                    }
+                ],
+                "selected_task_ids": ["a"],
+                "runtime": {
+                    "cpus": 4, "free_mem_mb": 8192, "free_disk_mb": 20000,
+                    "load_1m": 0.25, "github_actions": false,
+                    "deadline_remaining_seconds": 90,
+                    "lease": {
+                        "cpu": 1, "memory_mb": 512, "disk_mb": 64,
+                        "network": false, "scratch": true
+                    }
+                },
+                "decisions": [
+                    {
+                        "task_id": "a", "kind": "focused-red-green", "status": "selected",
+                        "reason": "selected for value-ranked execution; serves 1 request(s)",
+                        "required": true, "estimated_cost_sec": 60,
+                        "request_ids": ["request-a"], "receipt_ids": []
+                    },
+                    {
+                        "task_id": "b", "kind": "focused-red-green",
+                        "status": "deferred_by_safe_wind_down",
+                        "reason": "estimated task cost cannot fit the remaining hard-deadline wall time",
+                        "required": true, "estimated_cost_sec": 60,
+                        "request_ids": ["request-b"], "receipt_ids": []
+                    }
+                ]
+            })
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn portfolio_reasons_account_for_selected_work_and_file_reuse() -> Result<()> {
+        let first = focused_test_task("a", Vec::new(), 30);
+        let second = focused_test_task("b", Vec::new(), 30);
+        for (max_tasks, allocation, deadline, max_files, shared_file, expected_reason) in [
+            (
+                2,
+                60,
+                3_406,
+                2,
+                false,
+                Some("proof-time allocation is exhausted"),
+            ),
+            (
+                2,
+                90,
+                3_406,
+                2,
+                false,
+                Some("estimated task cost cannot fit the remaining proof-time allocation"),
+            ),
+            (
+                2,
+                120,
+                90,
+                2,
+                false,
+                Some("estimated task cost cannot fit the remaining hard-deadline wall time"),
+            ),
+            (
+                2,
+                120,
+                60,
+                2,
+                false,
+                Some("estimated task cost cannot fit the remaining hard-deadline wall time"),
+            ),
+            (
+                1,
+                120,
+                3_406,
+                2,
+                false,
+                Some("proof task capacity is exhausted"),
+            ),
+            (
+                2,
+                120,
+                3_406,
+                1,
+                false,
+                Some("focused test-file capacity is exhausted"),
+            ),
+            (2, 120, 3_406, 1, true, None),
+        ] {
+            let mut tasks = [first.clone(), second.clone()];
+            if shared_file {
+                tasks[1].file = first.file.clone();
+            }
+            let selection = select_proof_portfolio(ProofPortfolioInput {
+                test_tasks: &tasks,
+                build_tasks: &[],
+                proof_requests: &[],
+                proof_receipts: &[],
+                head: "head",
+                budget: ProofBudget {
+                    max_focused_test_files: max_files,
+                    ..proof_budget_for_test(max_tasks, allocation)
+                },
+                runtime: portfolio_runtime_for_test(deadline, 4, Some(8_192), Some(20_000)),
+            });
+            ensure!(selection.decisions[0].status == "selected");
+            ensure!(
+                selection.remaining_seconds
+                    == allocation
+                        .min(deadline)
+                        .saturating_sub(if expected_reason.is_some() { 60 } else { 120 })
+            );
+            if let Some(reason) = expected_reason {
+                ensure!(selection.test_tasks.len() == 1);
+                ensure!(
+                    selection.decisions[1].reason == reason,
+                    "{:?}",
+                    selection.decisions
+                );
+                ensure!(
+                    selection.decisions[1].status
+                        == if deadline < allocation {
+                            "deferred_by_safe_wind_down"
+                        } else {
+                            "declined_for_higher_value_proof"
+                        }
+                );
+            } else {
+                ensure!(selection.test_tasks.len() == 2);
+                ensure!(selection.decisions[1].status == "selected");
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn portfolio_build_and_exact_receipt_bypass_test_file_capacity() -> Result<()> {
+        let request = proof_request("request", true);
+        let test = focused_test_task("parser", vec![request.id.clone()], 30);
+        let build = focused_build_task("build", Vec::new(), 30);
+        let receipt = test_receipt(&test.id, test.request_ids.clone(), "head_passed");
+        let mut stale = receipt.clone();
+        stale.head = "other-head".to_owned();
+        let disjoint = test_receipt(
+            "other-task",
+            vec!["other-request".to_owned()],
+            "head_passed",
+        );
+        for (receipts, expected_status) in [
+            (vec![stale, disjoint], "deferred_by_safe_wind_down"),
+            (vec![receipt], "answered_by_existing_receipt"),
+        ] {
+            let selection = select_proof_portfolio(ProofPortfolioInput {
+                test_tasks: std::slice::from_ref(&test),
+                build_tasks: std::slice::from_ref(&build),
+                proof_requests: std::slice::from_ref(&request),
+                proof_receipts: &receipts,
+                head: "head",
+                budget: ProofBudget {
+                    max_focused_test_files: 0,
+                    ..proof_budget_for_test(1, 60)
+                },
+                runtime: portfolio_runtime_for_test(60, 4, Some(8_192), Some(20_000)),
+            });
+            ensure!(selection.test_tasks.is_empty());
+            ensure!(selection.build_tasks.len() == 1);
+            ensure!(selection.decisions[0].required);
+            ensure!(selection.decisions[0].status == expected_status);
+            ensure!(selection.decisions[1].status == "selected");
+            ensure!(selection.remaining_seconds == 30);
+            if expected_status == "answered_by_existing_receipt" {
+                ensure!(selection.decisions[0].receipt_ids == vec![test.id.clone()]);
+            } else {
+                ensure!(selection.decisions[0].reason == "focused test-file capacity is exhausted");
+                ensure!(selection.decisions[0].receipt_ids.is_empty());
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn portfolio_receipt_precedes_exhausted_allocation_deadline_and_resources() -> Result<()> {
+        let test = focused_test_task("parser", Vec::new(), 30);
+        let receipt = test_receipt(&test.id, Vec::new(), "head_passed");
+        let selection = select_proof_portfolio(ProofPortfolioInput {
+            test_tasks: std::slice::from_ref(&test),
+            build_tasks: &[],
+            proof_requests: &[],
+            proof_receipts: std::slice::from_ref(&receipt),
+            head: "head",
+            budget: proof_budget_for_test(0, 0),
+            runtime: portfolio_runtime_for_test(0, 0, Some(0), Some(0)),
+        });
+        ensure!(selection.test_tasks.is_empty());
+        ensure!(selection.remaining_seconds == 0);
+        ensure!(selection.decisions[0].status == "answered_by_existing_receipt");
+        ensure!(selection.decisions[0].receipt_ids == vec![test.id]);
+        Ok(())
+    }
+
+    #[test]
+    fn portfolio_deadline_cost_boundary_is_inclusive_and_saturating() -> Result<()> {
+        for (cost, allocation, deadline, selected) in [
+            (30, 100, 60, true),
+            (30, 100, 59, false),
+            (30, 60, 3_406, true),
+            (30, 59, 3_406, false),
+            (u64::MAX, u64::MAX, u64::MAX, true),
+            (u64::MAX, u64::MAX, u64::MAX - 1, false),
+        ] {
+            let test = focused_test_task("parser", Vec::new(), cost);
+            let selection = select_proof_portfolio(ProofPortfolioInput {
+                test_tasks: std::slice::from_ref(&test),
+                build_tasks: &[],
+                proof_requests: &[],
+                proof_receipts: &[],
+                head: "head",
+                budget: ProofBudget {
+                    per_command_timeout_sec: u64::MAX,
+                    ..proof_budget_for_test(1, allocation)
+                },
+                runtime: portfolio_runtime_for_test(deadline, 4, Some(8_192), Some(20_000)),
+            });
+            ensure!((!selection.test_tasks.is_empty()) == selected);
+            ensure!(selection.decisions[0].estimated_cost_sec == cost.saturating_mul(2));
+            ensure!(
+                selection.remaining_seconds
+                    == if selected {
+                        0
+                    } else {
+                        allocation.min(deadline)
+                    }
+            );
+        }
+        // Preserve existing saturating estimated-cost admission, including
+        // addition after an earlier selected task; these are not elapsed times.
+        let tasks = [
+            focused_test_task("small", Vec::new(), 1),
+            focused_test_task("saturating", Vec::new(), u64::MAX),
+        ];
+        let selection = select_proof_portfolio(ProofPortfolioInput {
+            test_tasks: &tasks,
+            build_tasks: &[],
+            proof_requests: &[],
+            proof_receipts: &[],
+            head: "head",
+            budget: ProofBudget {
+                per_command_timeout_sec: u64::MAX,
+                ..proof_budget_for_test(2, u64::MAX)
+            },
+            runtime: portfolio_runtime_for_test(u64::MAX, 4, Some(8_192), Some(20_000)),
+        });
+        ensure!(selection.test_tasks.len() == 2);
+        ensure!(selection.remaining_seconds == 0);
         Ok(())
     }
 

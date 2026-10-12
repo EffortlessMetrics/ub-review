@@ -2,6 +2,13 @@
 
 This repo is Rust-first and policy-ledger governed.
 
+Start with [the native workflow](docs/development/AGENTIC_WORKFLOW.md). For a
+change to carry through validation and draft publication, read
+[deliver-change](.agents/skills/deliver-change/SKILL.md). For independent review
+or reproduction, read [review-change](.agents/skills/review-change/SKILL.md).
+Read the relevant skill on continuation too; it supplies procedure, while the
+current conversation and native issue/PR state supply scope and authority.
+
 - Use Rust and durable `cargo`/`xtask`-style automation for repo checks where practical.
 - Treat `policy/allow.toml` as the default source-tree exception ledger.
 - Do not add non-Rust files, panic-family calls, lint suppressions, generated files, scripts, workflows, or other controlled surfaces anonymously.
