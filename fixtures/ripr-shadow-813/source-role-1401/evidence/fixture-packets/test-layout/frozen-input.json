@@ -1,0 +1,8 @@
+{
+  "Cargo.lock": "636131988793daeed43719bb92a6596f5228e5185c3e54b755e3fa94f1faa0a3",
+  "Cargo.toml": "cb23ee1fb30b2204c63dedae7ef32f130dc1e01e40f2845ad37f00c2faf289bb",
+  "diff.patch": "f74168f8b7a240fc4342702b1a10eb63ceffdb8a80cbdd7d0bea223116c0aeca",
+  "src/lib.rs": "f1a4a71081a778f2767782ae83fa9173a267341def367c2dc151dd97f6207457",
+  "tests/common/executable_fixture.rs": "e04650b6cf3ee9d8f29d804a3fb78ec79469fc8ece749553902960c637595df9",
+  "tests/route.rs": "cf5365434efbc823543c7aabd800cc89089efa1931f18b7fbcef20427aba4460"
+}
