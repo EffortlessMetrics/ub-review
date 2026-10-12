@@ -1,6 +1,9 @@
 """#813 owner evidence checks; not analyzer qualification or promotion."""
 import copy
 import hashlib
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 import verify
@@ -24,6 +27,28 @@ def retained_production(raw, badge):
 
 
 class SourceRoleCase(unittest.TestCase):
+    def test_documented_auditor_uses_only_committed_checkout_inputs(self):
+        repo = Path(__file__).resolve().parents[3]
+        evidence = ROOT / "evidence"
+        relative = evidence.relative_to(repo)
+        tracked = subprocess.check_output(
+            ["git", "ls-files", "-z", "--", str(relative)], cwd=repo
+        ).decode().split("\0")
+        with tempfile.TemporaryDirectory() as scratch:
+            fresh = Path(scratch)
+            # Recreate files only: untracked empty directories cannot leak
+            # from the author's workspace into the fresh-checkout proof.
+            for name in filter(None, tracked):
+                source = repo / name
+                destination = fresh / source.relative_to(evidence)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(source.read_bytes())
+            result = subprocess.run(
+                [sys.executable, str(Path(verify.__file__)), str(fresh)],
+                capture_output=True, text=True, timeout=15,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_same_helper_bytes_and_production_capture_subjects_are_retained(self):
         helper = (ROOT / "original-helper-prefix.rs").read_bytes()
         self.assertEqual(hashlib.sha256(helper).hexdigest(), "e04650b6cf3ee9d8f29d804a3fb78ec79469fc8ece749553902960c637595df9")
