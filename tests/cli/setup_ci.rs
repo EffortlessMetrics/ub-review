@@ -398,6 +398,8 @@ fn setup_ci_print_pr_rejects_malformed_existing_config_before_outputs() -> Resul
         let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
             .current_dir(temp.path())
             .env_clear()
+            // Keep LLVM output outside the fixture without inheriting CLI configuration.
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .args(["setup-ci", "--print-pr", "--out"])
             .arg(&out)
             .arg("--config")
@@ -448,6 +450,8 @@ fn setup_ci_print_pr_rejects_unreadable_existing_config_before_outputs() -> Resu
         let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
             .current_dir(temp.path())
             .env_clear()
+            // Keep LLVM output outside the fixture without inheriting CLI configuration.
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .args(["setup-ci", "--print-pr", "--out"])
             .arg(&out)
             .arg("--config")
@@ -503,6 +507,8 @@ fn setup_ci_print_pr_preserves_missing_and_valid_config_semantics() -> Result<()
         command
             .current_dir(temp.path())
             .env_clear()
+            // Keep LLVM output outside the fixture without inheriting CLI configuration.
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .args(["setup-ci", "--print-pr", "--out"])
             .arg(&out)
             .arg("--config")

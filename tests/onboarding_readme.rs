@@ -73,7 +73,16 @@ impl Fixture {
     }
 
     /// Run a bounded child without inherited credentials or shell parsing.
-    fn execute(&self, mut command: Command) -> Result<(ExitStatus, String)> {
+    fn execute(&self, command: Command) -> Result<(ExitStatus, String)> {
+        self.execute_with_timeout(command, Duration::from_secs(20))
+    }
+
+    /// Permit timeout controls to exercise cleanup without the onboarding wait.
+    fn execute_with_timeout(
+        &self,
+        mut command: Command,
+        timeout: Duration,
+    ) -> Result<(ExitStatus, String)> {
         let stdout = tempfile::NamedTempFile::new_in(self.temp.path())?;
         let stderr = tempfile::NamedTempFile::new_in(self.temp.path())?;
         command
@@ -88,12 +97,12 @@ impl Fixture {
             .stdout(stdout.reopen()?)
             .stderr(stderr.reopen()?);
         let mut child = command.spawn()?;
-        let status = match child.wait_timeout(Duration::from_secs(20))? {
+        let status = match child.wait_timeout(timeout)? {
             Some(status) => status,
             None => {
                 child.kill()?;
                 child.wait()?;
-                bail!("onboarding fixture command exceeded 20 seconds");
+                bail!("onboarding fixture command exceeded {timeout:?}");
             }
         };
         let output = format!(
@@ -397,18 +406,26 @@ fn fixture_new_writes_exact_sources_and_inert_release_metadata() -> Result<()> {
 /// Constructor writes must propagate real target errors and release the fixture.
 #[test]
 fn fixture_new_reports_manifest_and_curl_write_errors_and_cleans_up() -> Result<()> {
-    for target_name in ["Cargo.toml", "curl"] {
+    for (target_name, temp_depth) in [
+        (".github/workflows/ci.yml", 4),
+        ("Cargo.toml", 2),
+        ("src/lib.rs", 3),
+        ("tools/curl", 2),
+    ] {
         let mut target_path = None;
         let mut temp_path = None;
         let result = Fixture::new_with_writer(|path, contents| {
-            if path.file_name().and_then(|name| name.to_str()) == Some(target_name) {
+            if path.ends_with(target_name) {
                 fs::create_dir(path)?;
                 target_path = Some(path.to_owned());
-                temp_path = path.parent().and_then(Path::parent).map(Path::to_owned);
+                // Include the repository/tools directory, not just nested parents.
+                temp_path = path.ancestors().nth(temp_depth).map(Path::to_owned);
             }
             fs::write(path, contents)
         });
-        let error = result.err().context("target write error was swallowed")?;
+        let error = result
+            .err()
+            .with_context(|| format!("{target_name} write error was swallowed"))?;
         assert_eq!(
             error
                 .downcast_ref::<std::io::Error>()
@@ -503,13 +520,10 @@ fn execute_timeout_terminates_reaps_and_cleans_its_owned_child() -> Result<()> {
         "-c",
         "printf '%s' \"$$\" > timeout-child.pid; exec sleep 60",
     ]);
-    let result = fixture.execute(child);
+    let result = fixture.execute_with_timeout(child, Duration::from_secs(1));
     assert!(result.is_err(), "timeout unexpectedly completed");
     let error = result.err().context("timeout was swallowed")?;
-    assert_eq!(
-        error.to_string(),
-        "onboarding fixture command exceeded 20 seconds"
-    );
+    assert_eq!(error.to_string(), "onboarding fixture command exceeded 1s");
     let pid_text = fs::read_to_string(fixture.root.join("timeout-child.pid"))?;
     let pid: u32 = pid_text.parse()?;
     assert_ne!(pid, std::process::id());
