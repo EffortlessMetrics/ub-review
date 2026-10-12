@@ -15,7 +15,7 @@ warning: unused import: `std::path::Path`
 
 warning: `role-control-production-normal` (lib) generated 2 warnings (run `cargo fix --lib -p role-control-production-normal` to apply 2 suggestions)
 warning: `role-control-production-normal` (lib test) generated 2 warnings (2 duplicates)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.51s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.66s
      Running unittests src/lib.rs (fixtures/ripr-shadow-813/source-role-1401/production-normal/target/debug/deps/role_control_production_normal-538d42f456651c82)
 
 running 1 test

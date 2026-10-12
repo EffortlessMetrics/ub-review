@@ -25,7 +25,7 @@ warning: method `fixture_status` is never used
    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
 
 warning: `role-control-cfg-test-module` (lib test) generated 3 warnings (run `cargo fix --lib -p role-control-cfg-test-module --tests` to apply 2 suggestions)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.53s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.36s
      Running unittests src/lib.rs (fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/target/debug/deps/role_control_cfg_test_module-8f11752fa1768ded)
 
 running 1 test

@@ -27,7 +27,7 @@
     {
       "path": "cfg-test-module/runtime.stdout",
       "bytes": 1546,
-      "sha256": "82352efe9cd541abdcb1f3f922ec274fba9484ea181f3c0b5bd112264279bd04"
+      "sha256": "37850944ad36c2dd2f25af8e74436173fb5b719512bef2e5265a266d893c6474"
     },
     {
       "path": "cfg-test-module/src/executable_fixture.rs",
@@ -38,16 +38,6 @@
       "path": "cfg-test-module/src/lib.rs",
       "bytes": 473,
       "sha256": "34785ef1057ca06ac62a83cb652535d8b2ddd621f745cd2284966e407c4ab43d"
-    },
-    {
-      "path": "cfg-test-module/target/ripr/cache/repo-file-facts/1.34/3cd518c1163c9c72.json",
-      "bytes": 15595,
-      "sha256": "aaff01258450c3a4cf552efaeffeacaa6249905c623bb3c8c5b9ede4777bba6e"
-    },
-    {
-      "path": "cfg-test-module/target/ripr/cache/repo-file-facts/1.34/5732138a8afe6c64.json",
-      "bytes": 8293,
-      "sha256": "1e1ec84ace7c1f1739e4cc077d15dc844ce08c4c91d9a47c4469fa0c81adcc26"
     },
     {
       "path": "evidence/fixture-packets/cfg-test-module/candidate/badge.stderr",
@@ -242,7 +232,7 @@
     {
       "path": "production-normal/runtime.stdout",
       "bytes": 1282,
-      "sha256": "77f9667b543aa6a002799451b4c68eea777c10b704a576dc82fab4ebc4bb5ae8"
+      "sha256": "0e0cb1e5ec5c74da3f9269c66206bdf6afa6ca90c650811f1c67b8ff0bd1378e"
     },
     {
       "path": "production-normal/src/executable_fixture.rs",
@@ -253,16 +243,6 @@
       "path": "production-normal/src/lib.rs",
       "bytes": 464,
       "sha256": "4e198a099a8206acc323145b95c1ab959f11f4fa5ac8afccc67c3db5a43fae81"
-    },
-    {
-      "path": "production-normal/target/ripr/cache/repo-file-facts/1.34/3cd518c1163c9c72.json",
-      "bytes": 15595,
-      "sha256": "aaff01258450c3a4cf552efaeffeacaa6249905c623bb3c8c5b9ede4777bba6e"
-    },
-    {
-      "path": "production-normal/target/ripr/cache/repo-file-facts/1.34/de904035d64c2d8f.json",
-      "bytes": 8274,
-      "sha256": "2ebdc522afb9fa55df37d5185a1c0f043ae587e0cb4379119d2be523b083599f"
     },
     {
       "path": "production-test-name/Cargo.lock",
@@ -282,7 +262,7 @@
     {
       "path": "production-test-name/runtime.stdout",
       "bytes": 2132,
-      "sha256": "0db8258e7dda24defa8e629a6edd0f5b24b78958f08ebd41494a11a8a99d8869"
+      "sha256": "a1f36eb2ccd409e648a35c915a757473355d8053314af8925da9bf86cc0ac08e"
     },
     {
       "path": "production-test-name/src/executable_fixture_tests.rs",
@@ -293,16 +273,6 @@
       "path": "production-test-name/src/lib.rs",
       "bytes": 476,
       "sha256": "46ec6a8476242806f3592cdd746b2e5a50fdd62b084ebc6d9abb234247fcd38b"
-    },
-    {
-      "path": "production-test-name/target/ripr/cache/repo-file-facts/1.34/23d99c8cbb7c6220.json",
-      "bytes": 8292,
-      "sha256": "87d8390e54f2352e8b562489edf902c597d604bd017861f3501c73916b0ee1b3"
-    },
-    {
-      "path": "production-test-name/target/ripr/cache/repo-file-facts/1.34/87dd9609b344c218.json",
-      "bytes": 15679,
-      "sha256": "88c9cf242bbacf0b4c3ea72cd2783e7af03902a707f0c6929262ed2a7702a406"
     },
     {
       "path": "results.json",
@@ -327,27 +297,12 @@
     {
       "path": "test-layout/runtime.stdout",
       "bytes": 1788,
-      "sha256": "829ea87ebc89cc68b3059277a8a7d9bbd29c03613e0e024684498e94001c928c"
+      "sha256": "5d8c73c8e5ad8d99ec94b830d27a2d3cf396f589e586d72f0a7489a34d1b0542"
     },
     {
       "path": "test-layout/src/lib.rs",
       "bytes": 60,
       "sha256": "f1a4a71081a778f2767782ae83fa9173a267341def367c2dc151dd97f6207457"
-    },
-    {
-      "path": "test-layout/target/ripr/cache/repo-file-facts/1.34/7eae84db27c5c161.json",
-      "bytes": 709,
-      "sha256": "abb392918cee617823eee99c02437728b15c08b8262dac5986a4f035154f9bfe"
-    },
-    {
-      "path": "test-layout/target/ripr/cache/repo-file-facts/1.34/83e9b5d73bc6639e.json",
-      "bytes": 8394,
-      "sha256": "353aa073eca583fe93c13a6bac80ad0429aa85f9c3657c09488ca5bf7332f874"
-    },
-    {
-      "path": "test-layout/target/ripr/cache/repo-file-facts/1.34/db9bf818f5aecb73.json",
-      "bytes": 15721,
-      "sha256": "2b4eb591381371035854817b7ef01466e5f6c679bcaa67813bcdfbfcf77d1443"
     },
     {
       "path": "test-layout/tests/common/executable_fixture.rs",
