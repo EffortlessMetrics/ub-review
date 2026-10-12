@@ -34460,3 +34460,51 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_broker.rs:field_construction:b7c7aae0"
 owner = "ub-review/core"
 reason = "RIPR discriminate false-negative on #4271 round-4 the fresh parameter binding in merge_proof_portfolio_candidate_tasks (twin of the round-2b decisions-merge parameter probe 859c91d4): the extended follow_up_write_preserves_required_flag_on_shared_task_id drives both merge arms and asserts the merged candidate record's required flag and request_ids equal the merged decision record exactly, so the construction outcome is pinned; ripr's assertion linker misses parameter bindings. Re-verify after any edit to proof/broker.rs."
+
+# PR #1354 / issue #1356: source-only evidence disposition 2026-10-12.
+# Exact original source cc5e8e8, 7 normalized RIPR entries, 12/12 normal and
+# coverage onboarding tests (gate 38189009420). Every finding has its own
+# reason and evidence; review again on source changes or RIPR upgrade.
+# File-level review dating remains with existing policy/allow.toml receipt.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_onboarding_readme.rs:error_path:9028b98a"
+owner = "ub-review/tests"
+reason = "CI-workflow fixture write error (L41). The cc5e8e8 test fixture_new_reports_manifest_and_curl_write_errors_and_cleans_up forces .github/workflows/ci.yml to a directory before real fs::write; asserts exact IsADirectory, target reach and TempDir removal. Gate 38189009420 reports 12/12 onboarding tests passing in normal and coverage modes. RIPR 0.10.0's lexical discriminator misses this error-result assertion. No claim of a separate killed CI-write mutant; review again after any source edit or RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_onboarding_readme.rs:error_path:9028b98a.2"
+owner = "ub-review/tests"
+reason = "Cargo manifest fixture write error (L45). The same cc5e8e8 test forces Cargo.toml to a directory before real fs::write and asserts IsADirectory, reached target and TempDir cleanup. The isolated Cargo-write error-swallowing mutant was killed (PR #1354 receipt 6114963055); cc5e8e8 ordinary and coverage onboarding tests pass in gate 38189009420. The lexical discriminator fails to associate the outcome assertion; recheck after source edit or RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_onboarding_readme.rs:error_path:9028b98a.3"
+owner = "ub-review/tests"
+reason = "Fake curl fixture write error (L51). The same cc5e8e8 test forces tools/curl to a directory before real fs::write and asserts IsADirectory, reached target and TempDir cleanup. The isolated curl-write error-swallowing mutant was killed (PR #1354 receipt 6114963055); cc5e8e8 ordinary and coverage onboarding tests pass in gate 38189009420. The lexical discriminator misses the behavioral oracle; recheck on source edit or RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_onboarding_readme.rs:match_arm:5e0285b5"
+owner = "ub-review/tests"
+reason = "wait_timeout Some/None dispatch (L100). cc5e8e8 tests execute_preserves_exit_status_streams_and_clears_credentials and execute_timeout_terminates_reaps_and_cleans_its_owned_child require distinct successful/nonzero (0,7) and one-second timeout outcomes, exact output, and owned-child cleanup; both pass in gate 38189009420 normal and coverage modes. RIPR 0.10.0 associates unrelated compilation-target tests with this private fixture helper (ripr-swarm #7415). Does not cover arbitrary wait I/O failures or process-tree containment; recheck on source edit or RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_onboarding_readme.rs:match_arm:f589f860"
+owner = "ub-review/tests"
+reason = "wait_timeout completed Some(status) arm (L101). cc5e8e8 completed-child test requires exact exit0 and exit7, stdout and stderr markers, cleared environment and restored temporary-file count. A recorded completed-child forced-success mutant was killed (PR #1354 receipt 6114963055); normal and coverage suites pass at gate 38189009420. RIPR 0.10.0 misattributes unrelated compilation targets to this private helper (ripr-swarm #7415); recheck after source edit or RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_onboarding_readme.rs:match_arm:6f23333f"
+owner = "ub-review/tests"
+reason = "wait_timeout None timeout arm (L102). cc5e8e8 timeout test starts a controlled exec-sleep child, forces a one-second deadline, asserts exact timeout message, captured PID no longer live and temporary-file and TempDir cleanup. Normal and coverage suites pass at gate 38189009420. Earlier timeout mutation controls are recorded in PR #1354 receipt 6114820533; one outer mutant experiment left a zombie, so this is not arbitrary descendant-containment proof. RIPR's assertion linker misses the outcome oracle; recheck after source edit or RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_onboarding_readme.rs:return_value:2902e83d"
+owner = "ub-review/tests"
+reason = "protected-file sentinel Ok(()) return (L133). cc5e8e8 test original_files_are_unchanged_detects_each_corrupted_sentinel requires success on untouched/restored files and independent exact CI/source corruption errors. Its prior isolated forced-error mutant was killed (PR #1354 receipt 6114963055); ordinary and coverage tests pass in gate 38189009420. RIPR 0.10.0 cannot associate this output oracle with return expression and misattributes other compilation targets (ripr-swarm #7415); recheck on source edit or upgrade."
