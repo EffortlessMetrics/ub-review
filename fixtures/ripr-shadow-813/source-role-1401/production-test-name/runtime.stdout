@@ -1,0 +1,56 @@
+   Compiling role-control-production-test-name v0.0.0 (/workspace/scratch/813-pr1401/fixtures/ripr-shadow-813/source-role-1401/production-test-name)
+warning: unused import: `std::fs`
+  --> src/executable_fixture_tests.rs:10:5
+   |
+10 | use std::fs;
+   |     ^^^^^^^
+   |
+help: if this is a test module, consider adding a `#[cfg(test)]` to the containing module
+  --> src/lib.rs:1:1
+   |
+ 1 | pub mod executable_fixture_tests;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::path::Path`
+  --> src/executable_fixture_tests.rs:13:5
+   |
+13 | use std::path::Path;
+   |     ^^^^^^^^^^^^^^^
+   |
+help: if this is a test module, consider adding a `#[cfg(test)]` to the containing module
+  --> src/lib.rs:1:1
+   |
+ 1 | pub mod executable_fixture_tests;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::fs`
+  --> src/executable_fixture_tests.rs:10:5
+   |
+10 | use std::fs;
+   |     ^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::path::Path`
+  --> src/executable_fixture_tests.rs:13:5
+   |
+13 | use std::path::Path;
+   |     ^^^^^^^^^^^^^^^
+
+warning: `role-control-production-test-name` (lib) generated 2 warnings (run `cargo fix --lib -p role-control-production-test-name` to apply 2 suggestions)
+warning: `role-control-production-test-name` (lib test) generated 2 warnings (run `cargo fix --lib -p role-control-production-test-name --tests` to apply 2 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.45s
+     Running unittests src/lib.rs (fixtures/ripr-shadow-813/source-role-1401/production-test-name/target/debug/deps/role_control_production_test_name-74ba13d4d667022c)
+
+running 1 test
+test real_capture_keeps_literal_stdout_and_native_status ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests role_control_production_test_name
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

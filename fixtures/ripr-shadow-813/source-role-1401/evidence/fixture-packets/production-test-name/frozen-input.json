@@ -1,0 +1,7 @@
+{
+  "Cargo.lock": "b522edbeb37307bd96de9d2c54a36e01c339bda651758576fd3023de6ac5a5f1",
+  "Cargo.toml": "e18d8575851fbac3da5d2d6a89ebfb1dfee8dbfaca77cc5308ce7ce452f435bf",
+  "diff.patch": "68ea562c682aa4b72d2671d6479e8589a54a849733ea143fc14d76cf503c3e72",
+  "src/executable_fixture_tests.rs": "e04650b6cf3ee9d8f29d804a3fb78ec79469fc8ece749553902960c637595df9",
+  "src/lib.rs": "46ec6a8476242806f3592cdd746b2e5a50fdd62b084ebc6d9abb234247fcd38b"
+}

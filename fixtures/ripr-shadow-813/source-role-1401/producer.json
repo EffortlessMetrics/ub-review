@@ -1,0 +1,34 @@
+{
+  "source_sha": "75ecb7fdade48665aa48d01235fd9f7dfc0a3898",
+  "source_tree": "60d408f81071da60aa4f5000cf9e78a71dd69d2f",
+  "binary_sha256": "79ad5381ee8973228cfa2651c172c7d9ebc94ca74ec8cab73d303bc25cfcce73",
+  "kind": "new_workspace_shadow_control_build",
+  "package_provenance": null,
+  "public_qualified": false,
+  "features": "default",
+  "toolchain": "1.95.0",
+  "platform": "x86_64-unknown-linux-gnu",
+  "cargo_lock_sha256": "646c5b301c99cd3e0c88c5a7b767fb91fb8a80a67a243365299d69b563eecc16",
+  "build_argv": [
+    "cargo",
+    "build",
+    "-p",
+    "ripr",
+    "--bin",
+    "ripr",
+    "--locked"
+  ],
+  "attempts": [
+    {
+      "offline": true,
+      "exit_code": 101,
+      "reason": "oxc_allocator missing from offline cache",
+      "log_sha256": "a824674c8adf3e994577667d721e2196ac1e5151727ac6625305f1b82ce76dae"
+    },
+    {
+      "offline": false,
+      "exit_code": 0,
+      "log_sha256": "c48e4b9761979d31488cbea1d984e80a4e24daf4569fc6e18715a757d08db948"
+    }
+  ]
+}

@@ -1,0 +1,1064 @@
+{
+  "schema_version": "0.2",
+  "tool": "ripr",
+  "mode": "ready",
+  "root": ".",
+  "summary": {"changed_rust_files":2,"probes":14,"findings":14,"exposed":0,"weakly_exposed":2,"reachable_unrevealed":1,"no_static_path":4,"infection_unknown":0,"propagation_unknown":0,"static_unknown":7,"changed_files_by_language":[{"language":"rust","files":2}]},
+  "analysis_outcome": {
+    "analysis_complete": true,
+    "outcome": {"schema_version":"0.1","kind":"complete_with_findings","identity":{"repository_identity":null,"root_identity":null,"config_identity":null,"base_revision":null,"input_identity":"sha256:68ea562c682aa4b72d2671d6479e8589a54a849733ea143fc14d76cf503c3e72","snapshot_identity":null,"git_candidate_subject":null},"counts":{"changed_file_count":2,"changed_line_count":60,"candidate_line_count":13,"probe_count":14,"finding_count":14},"limitations":[],"claim_boundary":"Static analysis outcome only; no correctness, test-adequacy, runtime-execution, or merge-readiness claim."}
+  },
+  "findings": [
+    {
+      "id": "probe:src_executable_fixture_tests.rs:static_unknown:8b425771",
+      "classification": "static_unknown",
+      "severity": "note",
+      "confidence": 0.20,
+      "probe": {
+        "id": "probe:src_executable_fixture_tests.rs:static_unknown:8b425771",
+        "family": "static_unknown",
+        "delta": "unknown",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 17,
+        "expression": "static EXECUTABLE_FIXTURE_LAUNCH: RwLock<()> = RwLock::new(());"
+       },
+      "ripr": {
+        "reach": {"state":"no","confidence":"medium","summary":"No static test path found for the changed owner"},
+        "infect": {"state":"unknown","confidence":"unknown","summary":"Changed syntax is not mapped to a high-confidence probe family"},
+        "propagate": {"state":"unknown","confidence":"low","summary":"No propagation model is available for this changed syntax"},
+        "observe": {"state":"no","confidence":"medium","summary":"No reachable test oracle found"},
+        "discriminate": {"state":"no","confidence":"medium","summary":"No assertion can discriminate the changed behavior without a reachable test"}
+       },
+      "evidence_path": ["reach no: No static test path found for the changed owner", "infection unknown: Changed syntax is not mapped to a high-confidence probe family", "propagation unknown: No propagation model is available for this changed syntax", "observation no: No reachable test oracle found", "discriminator no: No assertion can discriminate the changed behavior without a reachable test", "local flow reaches unknown sink: unknown sink (line 17)"],
+      "flow_sinks": [
+        {"kind":"unknown","text":"unknown sink","line":17}
+      ],
+      "evidence": ["Changed syntax is not mapped to a high-confidence probe family", "No assertion can discriminate the changed behavior without a reachable test", "No propagation model is available for this changed syntax", "No reachable test oracle found", "No static test path found for the changed owner"],
+      "missing": ["No relevant oracle was detected", "No strong discriminator was detected", "Syntax-first analysis cannot classify this change; use deep mode or real mutation"],
+      "assertion_texts": {
+      },
+      "activation": {
+        "observed_values": [
+        ],
+        "missing_discriminators": [
+        ]
+      },
+      "observed_values": [
+      ],
+      "missing_discriminators": [
+      ],
+      "related_tests_total": 0,
+      "related_tests": [
+      ],
+      "stop_reasons": ["no_changed_rust_line"],
+      "oracle_kind": "unknown",
+      "oracle_strength": "none",
+      "recommended_next_step": "No static test path reaches this change (a test may still reach it through macros, dynamic dispatch, or integration tests that static evidence does not follow). Add or point to a test that exercises it and asserts the result first; deep mode and real mutation testing need a reaching test to say more.",
+      "suggested_next_action": "No static test path reaches this change (a test may still reach it through macros, dynamic dispatch, or integration tests that static evidence does not follow). Add or point to a test that exercises it and asserts the result first; deep mode and real mutation testing need a reaching test to say more.",
+      "language": "rust",
+      "source_currentness": "candidate_current"
+    },
+    {
+      "id": "probe:src_executable_fixture_tests.rs:static_unknown:e7e8d45c",
+      "classification": "static_unknown",
+      "severity": "note",
+      "confidence": 0.20,
+      "probe": {
+        "id": "probe:src_executable_fixture_tests.rs:static_unknown:e7e8d45c",
+        "family": "static_unknown",
+        "delta": "unknown",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 19,
+        "expression": "pub trait FixtureCommandExt {"
+       },
+      "ripr": {
+        "reach": {"state":"no","confidence":"medium","summary":"No static test path found for the changed owner"},
+        "infect": {"state":"unknown","confidence":"unknown","summary":"Changed syntax is not mapped to a high-confidence probe family"},
+        "propagate": {"state":"unknown","confidence":"low","summary":"No propagation model is available for this changed syntax"},
+        "observe": {"state":"no","confidence":"medium","summary":"No reachable test oracle found"},
+        "discriminate": {"state":"no","confidence":"medium","summary":"No assertion can discriminate the changed behavior without a reachable test"}
+       },
+      "evidence_path": ["reach no: No static test path found for the changed owner", "infection unknown: Changed syntax is not mapped to a high-confidence probe family", "propagation unknown: No propagation model is available for this changed syntax", "observation no: No reachable test oracle found", "discriminator no: No assertion can discriminate the changed behavior without a reachable test", "local flow reaches unknown sink: unknown sink (line 19)"],
+      "flow_sinks": [
+        {"kind":"unknown","text":"unknown sink","line":19}
+      ],
+      "evidence": ["Changed syntax is not mapped to a high-confidence probe family", "No assertion can discriminate the changed behavior without a reachable test", "No propagation model is available for this changed syntax", "No reachable test oracle found", "No static test path found for the changed owner"],
+      "missing": ["No relevant oracle was detected", "No strong discriminator was detected", "Syntax-first analysis cannot classify this change; use deep mode or real mutation"],
+      "assertion_texts": {
+      },
+      "activation": {
+        "observed_values": [
+        ],
+        "missing_discriminators": [
+        ]
+      },
+      "observed_values": [
+      ],
+      "missing_discriminators": [
+      ],
+      "related_tests_total": 0,
+      "related_tests": [
+      ],
+      "stop_reasons": ["no_changed_rust_line"],
+      "oracle_kind": "unknown",
+      "oracle_strength": "none",
+      "recommended_next_step": "No static test path reaches this change (a test may still reach it through macros, dynamic dispatch, or integration tests that static evidence does not follow). Add or point to a test that exercises it and asserts the result first; deep mode and real mutation testing need a reaching test to say more.",
+      "suggested_next_action": "No static test path reaches this change (a test may still reach it through macros, dynamic dispatch, or integration tests that static evidence does not follow). Add or point to a test that exercises it and asserts the result first; deep mode and real mutation testing need a reaching test to say more.",
+      "language": "rust",
+      "source_currentness": "candidate_current"
+    },
+    {
+      "id": "probe:src_executable_fixture_tests.rs:static_unknown:6e13bc05",
+      "canonical_gap_id": "gap:rust:src/executable_fixture_tests.rs:fixture_spawn:static_unknown:static_unknown:fn_fixture_spawn_mut_self->io_result<child>",
+      "canonical_gap_group_size": 1,
+      "canonical_gap": {
+        "id": "gap:rust:src/executable_fixture_tests.rs:fixture_spawn:static_unknown:static_unknown:fn_fixture_spawn_mut_self->io_result<child>",
+        "language": "rust",
+        "file": "src/executable_fixture_tests.rs",
+        "owner": "fixture_spawn",
+        "behavior_kind": "static_unknown",
+        "probe_kind": "static_unknown",
+        "normalized_discriminator": "fn_fixture_spawn_mut_self->io_result<child>"
+
+      },
+      "classification": "static_unknown",
+      "severity": "note",
+      "confidence": 0.20,
+      "probe": {
+        "id": "probe:src_executable_fixture_tests.rs:static_unknown:6e13bc05",
+        "family": "static_unknown",
+        "delta": "unknown",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 22,
+        "expression": "fn fixture_spawn(&mut self) -> io::Result<Child>;"
+       },
+      "ripr": {
+        "reach": {"state":"no","confidence":"medium","summary":"No static test path found for the changed owner"},
+        "infect": {"state":"unknown","confidence":"unknown","summary":"Changed syntax is not mapped to a high-confidence probe family"},
+        "propagate": {"state":"unknown","confidence":"low","summary":"No propagation model is available for this changed syntax"},
+        "observe": {"state":"no","confidence":"medium","summary":"No reachable test oracle found"},
+        "discriminate": {"state":"no","confidence":"medium","summary":"No assertion can discriminate the changed behavior without a reachable test"}
+       },
+      "evidence_path": ["reach no: No static test path found for the changed owner", "infection unknown: Changed syntax is not mapped to a high-confidence probe family", "propagation unknown: No propagation model is available for this changed syntax", "observation no: No reachable test oracle found", "discriminator no: No assertion can discriminate the changed behavior without a reachable test", "local flow reaches unknown sink: unknown sink (line 22)"],
+      "flow_sinks": [
+        {"kind":"unknown","text":"unknown sink","line":22}
+      ],
+      "evidence": ["Changed syntax is not mapped to a high-confidence probe family", "No assertion can discriminate the changed behavior without a reachable test", "No propagation model is available for this changed syntax", "No reachable test oracle found", "No static test path found for the changed owner"],
+      "missing": ["No relevant oracle was detected", "No strong discriminator was detected", "Syntax-first analysis cannot classify this change; use deep mode or real mutation"],
+      "assertion_texts": {
+      },
+      "activation": {
+        "observed_values": [
+        ],
+        "missing_discriminators": [
+        ]
+      },
+      "observed_values": [
+      ],
+      "missing_discriminators": [
+      ],
+      "related_tests_total": 0,
+      "related_tests": [
+      ],
+      "stop_reasons": ["async_boundary_opaque"],
+      "oracle_kind": "unknown",
+      "oracle_strength": "none",
+      "recommended_next_step": "No static test path reaches this change (a test may still reach it through macros, dynamic dispatch, or integration tests that static evidence does not follow). Add or point to a test that exercises it and asserts the result first; deep mode and real mutation testing need a reaching test to say more.",
+      "suggested_next_action": "No static test path reaches this change (a test may still reach it through macros, dynamic dispatch, or integration tests that static evidence does not follow). Add or point to a test that exercises it and asserts the result first; deep mode and real mutation testing need a reaching test to say more.",
+      "language": "rust",
+      "source_currentness": "candidate_current"
+    },
+    {
+      "id": "probe:src_executable_fixture_tests.rs:static_unknown:04b13bee",
+      "canonical_gap_id": "gap:rust:src/executable_fixture_tests.rs:fixture_output:static_unknown:static_unknown:fn_fixture_output_mut_self->io_result<output>",
+      "canonical_gap_group_size": 1,
+      "canonical_gap": {
+        "id": "gap:rust:src/executable_fixture_tests.rs:fixture_output:static_unknown:static_unknown:fn_fixture_output_mut_self->io_result<output>",
+        "language": "rust",
+        "file": "src/executable_fixture_tests.rs",
+        "owner": "fixture_output",
+        "behavior_kind": "static_unknown",
+        "probe_kind": "static_unknown",
+        "normalized_discriminator": "fn_fixture_output_mut_self->io_result<output>"
+
+      },
+      "classification": "static_unknown",
+      "severity": "note",
+      "confidence": 0.38,
+      "probe": {
+        "id": "probe:src_executable_fixture_tests.rs:static_unknown:04b13bee",
+        "family": "static_unknown",
+        "delta": "unknown",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 25,
+        "expression": "fn fixture_output(&mut self) -> io::Result<Output>;"
+       },
+      "ripr": {
+        "reach": {"state":"yes","confidence":"medium","summary":"Related tests appear to reach fixture_output: real_capture_keeps_literal_stdout_and_native_status"},
+        "infect": {"state":"unknown","confidence":"unknown","summary":"Changed syntax is not mapped to a high-confidence probe family"},
+        "propagate": {"state":"unknown","confidence":"low","summary":"No propagation model is available for this changed syntax"},
+        "observe": {"state":"no","confidence":"medium","summary":"Related tests were found, but no assertion appears to observe the changed value, error, field, or effect"},
+        "discriminate": {"state":"no","confidence":"medium","summary":"No assertion found on related tests"}
+       },
+      "evidence_path": ["reach yes: Related tests appear to reach fixture_output: real_capture_keeps_literal_stdout_and_native_status", "infection unknown: Changed syntax is not mapped to a high-confidence probe family", "propagation unknown: No propagation model is available for this changed syntax", "observation no: Related tests were found, but no assertion appears to observe the changed value, error, field, or effect", "discriminator no: No assertion found on related tests", "local flow reaches unknown sink: unknown sink (line 25)", "related test src/lib.rs:3 real_capture_keeps_literal_stdout_and_native_status uses none unknown oracle: assert_eq!(output.stdout, b\"role-control-byte\\n\");", "source assertion argument value \"role-control-byte\\n\" at line 8", "source assertion argument value 7 at line 9"],
+      "flow_sinks": [
+        {"kind":"unknown","text":"unknown sink","line":25}
+      ],
+      "evidence": ["Changed syntax is not mapped to a high-confidence probe family", "No assertion found on related tests", "No propagation model is available for this changed syntax", "Related tests appear to reach fixture_output: real_capture_keeps_literal_stdout_and_native_status", "Related tests were found, but no assertion appears to observe the changed value, error, field, or effect"],
+      "missing": ["No relevant oracle was detected", "No strong discriminator was detected", "Syntax-first analysis cannot classify this change; use deep mode or real mutation"],
+      "assertion_texts": {
+        "8": "assert_eq!(output.stdout, b\"role-control-byte\\n\");",
+        "9": "assert_eq!(output.status.code(), Some(7));"
+      },
+      "activation": {
+        "observed_values": [
+          {
+            "line": 8,
+            "value": "\"role-control-byte\\n\"",
+            "context": "assertion_argument"
+          },
+          {
+            "line": 9,
+            "value": "7",
+            "context": "assertion_argument"
+          }
+        ],
+        "missing_discriminators": [
+        ]
+      },
+      "observed_values": [
+        {
+          "line": 8,
+          "value": "\"role-control-byte\\n\"",
+          "context": "assertion_argument"
+        },
+        {
+          "line": 9,
+          "value": "7",
+          "context": "assertion_argument"
+        }
+      ],
+      "missing_discriminators": [
+      ],
+      "related_tests_total": 1,
+      "related_tests": [
+        {
+          "name": "real_capture_keeps_literal_stdout_and_native_status",
+          "file": "src/lib.rs",
+          "line": 3,
+          "oracle_strength": "none",
+          "oracle_kind": "unknown",
+          "oracle": "assert_eq!(output.stdout, b\"role-control-byte\\n\");",
+          "relation_reason": "direct_owner_call",
+          "relation_confidence": "high",
+          "miss": "assertion_not_observing",
+          "why": "asserts, but not on the changed value"
+        }
+      ],
+      "stop_reasons": ["fixture_opaque"],
+      "oracle_kind": "unknown",
+      "oracle_strength": "none",
+      "recommended_next_step": "Escalate to real mutation testing or deep static analysis for this probe.",
+      "suggested_next_action": "Escalate to real mutation testing or deep static analysis for this probe.",
+      "language": "rust",
+      "source_currentness": "candidate_current"
+    },
+    {
+      "id": "probe:src_executable_fixture_tests.rs:static_unknown:245941a4",
+      "canonical_gap_id": "gap:rust:src/executable_fixture_tests.rs:fixture_status:static_unknown:static_unknown:fn_fixture_status_mut_self->io_result<exitstatus>",
+      "canonical_gap_group_size": 1,
+      "canonical_gap": {
+        "id": "gap:rust:src/executable_fixture_tests.rs:fixture_status:static_unknown:static_unknown:fn_fixture_status_mut_self->io_result<exitstatus>",
+        "language": "rust",
+        "file": "src/executable_fixture_tests.rs",
+        "owner": "fixture_status",
+        "behavior_kind": "static_unknown",
+        "probe_kind": "static_unknown",
+        "normalized_discriminator": "fn_fixture_status_mut_self->io_result<exitstatus>"
+
+      },
+      "classification": "no_static_path",
+      "severity": "warning",
+      "confidence": 0.35,
+      "probe": {
+        "id": "probe:src_executable_fixture_tests.rs:static_unknown:245941a4",
+        "family": "static_unknown",
+        "delta": "unknown",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 26,
+        "expression": "fn fixture_status(&mut self) -> io::Result<ExitStatus>;"
+       },
+      "ripr": {
+        "reach": {"state":"no","confidence":"medium","summary":"No static test path found for the changed owner"},
+        "infect": {"state":"unknown","confidence":"unknown","summary":"Changed syntax is not mapped to a high-confidence probe family"},
+        "propagate": {"state":"unknown","confidence":"low","summary":"No propagation model is available for this changed syntax"},
+        "observe": {"state":"no","confidence":"medium","summary":"No reachable test oracle found"},
+        "discriminate": {"state":"no","confidence":"medium","summary":"No assertion can discriminate the changed behavior without a reachable test"}
+       },
+      "evidence_path": ["reach no: No static test path found for the changed owner", "infection unknown: Changed syntax is not mapped to a high-confidence probe family", "propagation unknown: No propagation model is available for this changed syntax", "observation no: No reachable test oracle found", "discriminator no: No assertion can discriminate the changed behavior without a reachable test", "local flow reaches unknown sink: unknown sink (line 26)"],
+      "flow_sinks": [
+        {"kind":"unknown","text":"unknown sink","line":26}
+      ],
+      "evidence": ["Changed syntax is not mapped to a high-confidence probe family", "No assertion can discriminate the changed behavior without a reachable test", "No propagation model is available for this changed syntax", "No reachable test oracle found", "No static test path found for the changed owner"],
+      "missing": ["No relevant oracle was detected", "No static test path reaches the changed owner", "No strong discriminator was detected"],
+      "assertion_texts": {
+      },
+      "activation": {
+        "observed_values": [
+        ],
+        "missing_discriminators": [
+        ]
+      },
+      "observed_values": [
+      ],
+      "missing_discriminators": [
+      ],
+      "related_tests_total": 0,
+      "related_tests": [
+      ],
+      "stop_reasons": [],
+      "oracle_kind": "unknown",
+      "oracle_strength": "none",
+      "recommended_next_step": "ripr found no static test path to this change — this is not a coverage assessment. A test may already exercise it through macros, helper-call chains, or integration tests that ripr's static model does not yet trace. If none does, add a co-located test that reaches and observes the changed behavior so a discriminator exists.",
+      "suggested_next_action": "ripr found no static test path to this change — this is not a coverage assessment. A test may already exercise it through macros, helper-call chains, or integration tests that ripr's static model does not yet trace. If none does, add a co-located test that reaches and observes the changed behavior so a discriminator exists.",
+      "language": "rust",
+      "source_currentness": "candidate_current"
+    },
+    {
+      "id": "probe:src_executable_fixture_tests.rs:static_unknown:4e6881f4",
+      "classification": "static_unknown",
+      "severity": "note",
+      "confidence": 0.20,
+      "probe": {
+        "id": "probe:src_executable_fixture_tests.rs:static_unknown:4e6881f4",
+        "family": "static_unknown",
+        "delta": "unknown",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 29,
+        "expression": "impl FixtureCommandExt for Command {"
+       },
+      "ripr": {
+        "reach": {"state":"no","confidence":"medium","summary":"No static test path found for the changed owner"},
+        "infect": {"state":"unknown","confidence":"unknown","summary":"Changed syntax is not mapped to a high-confidence probe family"},
+        "propagate": {"state":"unknown","confidence":"low","summary":"No propagation model is available for this changed syntax"},
+        "observe": {"state":"no","confidence":"medium","summary":"No reachable test oracle found"},
+        "discriminate": {"state":"no","confidence":"medium","summary":"No assertion can discriminate the changed behavior without a reachable test"}
+       },
+      "evidence_path": ["reach no: No static test path found for the changed owner", "infection unknown: Changed syntax is not mapped to a high-confidence probe family", "propagation unknown: No propagation model is available for this changed syntax", "observation no: No reachable test oracle found", "discriminator no: No assertion can discriminate the changed behavior without a reachable test", "local flow reaches unknown sink: unknown sink (line 29)"],
+      "flow_sinks": [
+        {"kind":"unknown","text":"unknown sink","line":29}
+      ],
+      "evidence": ["Changed syntax is not mapped to a high-confidence probe family", "No assertion can discriminate the changed behavior without a reachable test", "No propagation model is available for this changed syntax", "No reachable test oracle found", "No static test path found for the changed owner"],
+      "missing": ["No relevant oracle was detected", "No strong discriminator was detected", "Syntax-first analysis cannot classify this change; use deep mode or real mutation"],
+      "assertion_texts": {
+      },
+      "activation": {
+        "observed_values": [
+        ],
+        "missing_discriminators": [
+        ]
+      },
+      "observed_values": [
+      ],
+      "missing_discriminators": [
+      ],
+      "related_tests_total": 0,
+      "related_tests": [
+      ],
+      "stop_reasons": ["no_changed_rust_line"],
+      "oracle_kind": "unknown",
+      "oracle_strength": "none",
+      "recommended_next_step": "No static test path reaches this change (a test may still reach it through macros, dynamic dispatch, or integration tests that static evidence does not follow). Add or point to a test that exercises it and asserts the result first; deep mode and real mutation testing need a reaching test to say more.",
+      "suggested_next_action": "No static test path reaches this change (a test may still reach it through macros, dynamic dispatch, or integration tests that static evidence does not follow). Add or point to a test that exercises it and asserts the result first; deep mode and real mutation testing need a reaching test to say more.",
+      "language": "rust",
+      "source_currentness": "candidate_current"
+    },
+    {
+      "id": "probe:src_executable_fixture_tests.rs:static_unknown:7841a390",
+      "canonical_gap_id": "gap:rust:src/executable_fixture_tests.rs:impl FixtureCommandExt for Command::fixture_spawn:static_unknown:static_unknown:let__guard=executable_fixture_launch",
+      "canonical_gap_group_size": 1,
+      "canonical_gap": {
+        "id": "gap:rust:src/executable_fixture_tests.rs:impl FixtureCommandExt for Command::fixture_spawn:static_unknown:static_unknown:let__guard=executable_fixture_launch",
+        "language": "rust",
+        "file": "src/executable_fixture_tests.rs",
+        "owner": "impl FixtureCommandExt for Command::fixture_spawn",
+        "behavior_kind": "static_unknown",
+        "probe_kind": "static_unknown",
+        "normalized_discriminator": "let__guard=executable_fixture_launch"
+
+      },
+      "classification": "static_unknown",
+      "severity": "note",
+      "confidence": 0.20,
+      "probe": {
+        "id": "probe:src_executable_fixture_tests.rs:static_unknown:7841a390",
+        "family": "static_unknown",
+        "delta": "unknown",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 31,
+        "expression": "let _guard = EXECUTABLE_FIXTURE_LAUNCH"
+       },
+      "ripr": {
+        "reach": {"state":"no","confidence":"medium","summary":"No static test path found for the changed owner"},
+        "infect": {"state":"unknown","confidence":"unknown","summary":"Changed syntax is not mapped to a high-confidence probe family"},
+        "propagate": {"state":"unknown","confidence":"low","summary":"No propagation model is available for this changed syntax"},
+        "observe": {"state":"no","confidence":"medium","summary":"No reachable test oracle found"},
+        "discriminate": {"state":"no","confidence":"medium","summary":"No assertion can discriminate the changed behavior without a reachable test"}
+       },
+      "evidence_path": ["reach no: No static test path found for the changed owner", "infection unknown: Changed syntax is not mapped to a high-confidence probe family", "propagation unknown: No propagation model is available for this changed syntax", "observation no: No reachable test oracle found", "discriminator no: No assertion can discriminate the changed behavior without a reachable test", "local flow reaches unknown sink: unknown sink (line 31)"],
+      "flow_sinks": [
+        {"kind":"unknown","text":"unknown sink","line":31}
+      ],
+      "evidence": ["Changed syntax is not mapped to a high-confidence probe family", "No assertion can discriminate the changed behavior without a reachable test", "No propagation model is available for this changed syntax", "No reachable test oracle found", "No static test path found for the changed owner"],
+      "missing": ["No relevant oracle was detected", "No strong discriminator was detected", "Syntax-first analysis cannot classify this change; use deep mode or real mutation"],
+      "assertion_texts": {
+      },
+      "activation": {
+        "observed_values": [
+        ],
+        "missing_discriminators": [
+        ]
+      },
+      "observed_values": [
+      ],
+      "missing_discriminators": [
+      ],
+      "related_tests_total": 0,
+      "related_tests": [
+      ],
+      "stop_reasons": ["static_probe_unknown"],
+      "oracle_kind": "unknown",
+      "oracle_strength": "none",
+      "recommended_next_step": "No static test path reaches this change (a test may still reach it through macros, dynamic dispatch, or integration tests that static evidence does not follow). Add or point to a test that exercises it and asserts the result first; deep mode and real mutation testing need a reaching test to say more.",
+      "suggested_next_action": "No static test path reaches this change (a test may still reach it through macros, dynamic dispatch, or integration tests that static evidence does not follow). Add or point to a test that exercises it and asserts the result first; deep mode and real mutation testing need a reaching test to say more.",
+      "language": "rust",
+      "source_currentness": "candidate_current"
+    },
+    {
+      "id": "probe:src_executable_fixture_tests.rs:call_deletion:cdbebe81",
+      "classification": "no_static_path",
+      "severity": "warning",
+      "confidence": 0.48,
+      "probe": {
+        "id": "probe:src_executable_fixture_tests.rs:call_deletion:cdbebe81",
+        "family": "call_deletion",
+        "delta": "effect",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 32,
+        "expression": ".read()"
+       },
+      "ripr": {
+        "reach": {"state":"no","confidence":"medium","summary":"No static test path found for the changed owner"},
+        "infect": {"state":"unknown","confidence":"low","summary":"No reachable tests were found, so infection cannot be established"},
+        "propagate": {"state":"yes","confidence":"medium","summary":"Changed behavior appears to influence call effect: .read()"},
+        "observe": {"state":"no","confidence":"medium","summary":"No reachable test oracle found"},
+        "discriminate": {"state":"no","confidence":"medium","summary":"No assertion can discriminate the changed behavior without a reachable test"}
+       },
+      "evidence_path": ["reach no: No static test path found for the changed owner", "infection unknown: No reachable tests were found, so infection cannot be established", "propagation yes: Changed behavior appears to influence call effect: .read()", "observation no: No reachable test oracle found", "discriminator no: No assertion can discriminate the changed behavior without a reachable test", "local flow reaches call effect: .read() (line 32)"],
+      "flow_sinks": [
+        {"kind":"call_effect","text":".read()","line":32}
+      ],
+      "evidence": ["Changed behavior appears to influence call effect: .read()", "No assertion can discriminate the changed behavior without a reachable test", "No reachable test oracle found", "No reachable tests were found, so infection cannot be established", "No static test path found for the changed owner", "ripr saw a test reaching public API that may call toward this change through a transitive path it does not fully trace (pub to pub(crate) helper chains, macros, or generics). This is not a coverage assessment -- ripr cannot confirm or deny that the change is observed.", "For example, the test `real_capture_keeps_literal_stdout_and_native_status` (src/lib.rs:3) calls `fixture_output`, an entry point that may lead here. Inspect it to judge whether this change is observed.", "limitation_last_established_edge: test `real_capture_keeps_literal_stdout_and_native_status` (src/lib.rs:3) -> entry `fixture_output`", "limitation_first_unresolved_edge: entry `fixture_output` -> owner `fixture_spawn` through a transitive Rust helper path", "limitation_analyzer_route: analysis/rust-public-api-transitive-reach", "limitation_non_claim: named limitation only; ripr cannot confirm or deny that this path observes the change"],
+      "missing": ["No relevant oracle was detected", "No static test path reaches the changed owner", "No strong discriminator was detected"],
+      "assertion_texts": {
+      },
+      "activation": {
+        "observed_values": [
+        ],
+        "missing_discriminators": [
+        ]
+      },
+      "observed_values": [
+      ],
+      "missing_discriminators": [
+      ],
+      "related_tests_total": 0,
+      "related_tests": [
+      ],
+      "stop_reasons": ["transitive_reach_unresolved"],
+      "oracle_kind": "unknown",
+      "oracle_strength": "none",
+      "recommended_next_step": "ripr found no static test path to this change — this is not a coverage assessment. A test may already exercise it through macros, helper-call chains, or integration tests that ripr's static model does not yet trace. If none does, add a co-located test that reaches and observes the changed behavior so a discriminator exists.",
+      "suggested_next_action": "ripr found no static test path to this change — this is not a coverage assessment. A test may already exercise it through macros, helper-call chains, or integration tests that ripr's static model does not yet trace. If none does, add a co-located test that reaches and observes the changed behavior so a discriminator exists.",
+      "language": "rust",
+      "static_limit_kind": "rust_transitive_reach_unresolved",
+      "static_limitation": {
+        "analyzer_route": "analysis/rust-public-api-transitive-reach",
+        "first_unresolved_edge": "entry `fixture_output` -> owner `fixture_spawn` through a transitive Rust helper path",
+        "kind": "rust_transitive_reach_unresolved",
+        "last_established_edge": "test `real_capture_keeps_literal_stdout_and_native_status` (src/lib.rs:3) -> entry `fixture_output`",
+        "non_claim": "named limitation only; ripr cannot confirm or deny that this path observes the change"
+      },
+      "source_currentness": "candidate_current"
+    },
+    {
+      "id": "probe:src_executable_fixture_tests.rs:call_deletion:af42281c",
+      "classification": "weakly_exposed",
+      "severity": "warning",
+      "confidence": 0.66,
+      "probe": {
+        "id": "probe:src_executable_fixture_tests.rs:call_deletion:af42281c",
+        "family": "call_deletion",
+        "delta": "effect",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 33,
+        "expression": ".unwrap_or_else(std::sync::PoisonError::into_inner);"
+       },
+      "ripr": {
+        "reach": {"state":"weak","confidence":"low","summary":"No test is seen calling fixture_spawn; tests share only its file or a name token: real_capture_keeps_literal_stdout_and_native_status"},
+        "infect": {"state":"yes","confidence":"medium","summary":"Reachable tests can plausibly activate this changed behavior"},
+        "propagate": {"state":"yes","confidence":"medium","summary":"Changed behavior appears to influence call effect: .unwrap_or_else(std::sync::PoisonError::into_inner)"},
+        "observe": {"state":"yes","confidence":"medium","summary":"A related test observes a value or effect near the changed behavior"},
+        "discriminate": {"state":"weak","confidence":"medium","summary":"Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified)"}
+       },
+      "evidence_path": ["reach weak: No test is seen calling fixture_spawn; tests share only its file or a name token: real_capture_keeps_literal_stdout_and_native_status", "infection yes: Reachable tests can plausibly activate this changed behavior", "propagation yes: Changed behavior appears to influence call effect: .unwrap_or_else(std::sync::PoisonError::into_inner)", "observation yes: A related test observes a value or effect near the changed behavior", "discriminator weak: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified)", "local flow reaches call effect: .unwrap_or_else(std::sync::PoisonError::into_inner) (line 33)", "related test src/lib.rs:3 real_capture_keeps_literal_stdout_and_native_status uses strong exact value oracle: assert_eq!(output.stdout, b\"role-control-byte\\n\");", "related test src/lib.rs:3 real_capture_keeps_literal_stdout_and_native_status uses strong exact value oracle: assert_eq!(output.status.code(), Some(7));", "related test src/lib.rs:3 real_capture_keeps_literal_stdout_and_native_status uses weak relational check oracle: assert!(output.stderr.is_empty());", "source assertion argument value \"role-control-byte\\n\" at line 8", "source assertion argument value 7 at line 9"],
+      "flow_sinks": [
+        {"kind":"call_effect","text":".unwrap_or_else(std::sync::PoisonError::into_inner)","line":33}
+      ],
+      "evidence": ["A related test observes a value or effect near the changed behavior", "Changed behavior appears to influence call effect: .unwrap_or_else(std::sync::PoisonError::into_inner)", "Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified)", "No test is seen calling fixture_spawn; tests share only its file or a name token: real_capture_keeps_literal_stdout_and_native_status", "Reachable tests can plausibly activate this changed behavior", "ripr saw a test reaching public API that may call toward this change through a transitive path it does not fully trace (pub to pub(crate) helper chains, macros, or generics). This is not a coverage assessment -- ripr cannot confirm or deny that the change is observed.", "For example, the test `real_capture_keeps_literal_stdout_and_native_status` (src/lib.rs:3) calls `fixture_output`, an entry point that may lead here. Inspect it to judge whether this change is observed.", "limitation_last_established_edge: test `real_capture_keeps_literal_stdout_and_native_status` (src/lib.rs:3) -> entry `fixture_output`", "limitation_first_unresolved_edge: entry `fixture_output` -> owner `fixture_spawn` through a transitive Rust helper path", "limitation_analyzer_route: analysis/rust-public-api-transitive-reach", "limitation_non_claim: named limitation only; ripr cannot confirm or deny that this path observes the change"],
+      "missing": ["A test may reach this change through an internal helper-call chain ripr cannot fully trace (macros, generics, trait dispatch, or depth greater than 5). This is a named limitation, not a coverage claim."],
+      "assertion_texts": {
+        "8": "assert_eq!(output.stdout, b\"role-control-byte\\n\");",
+        "9": "assert_eq!(output.status.code(), Some(7));"
+      },
+      "activation": {
+        "observed_values": [
+          {
+            "line": 8,
+            "value": "\"role-control-byte\\n\"",
+            "context": "assertion_argument"
+          },
+          {
+            "line": 9,
+            "value": "7",
+            "context": "assertion_argument"
+          }
+        ],
+        "missing_discriminators": [
+        ]
+      },
+      "observed_values": [
+        {
+          "line": 8,
+          "value": "\"role-control-byte\\n\"",
+          "context": "assertion_argument"
+        },
+        {
+          "line": 9,
+          "value": "7",
+          "context": "assertion_argument"
+        }
+      ],
+      "missing_discriminators": [
+      ],
+      "related_tests_total": 3,
+      "related_tests": [
+        {
+          "name": "real_capture_keeps_literal_stdout_and_native_status",
+          "file": "src/lib.rs",
+          "line": 3,
+          "oracle_strength": "strong",
+          "oracle_kind": "exact_value",
+          "oracle": "assert_eq!(output.stdout, b\"role-control-byte\\n\");",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low",
+          "miss": "observation_unconfirmed",
+          "why": "ripr could not confirm that this assertion observes the changed behavior"
+        },
+        {
+          "name": "real_capture_keeps_literal_stdout_and_native_status",
+          "file": "src/lib.rs",
+          "line": 3,
+          "oracle_strength": "strong",
+          "oracle_kind": "exact_value",
+          "oracle": "assert_eq!(output.status.code(), Some(7));",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low",
+          "miss": "observation_unconfirmed",
+          "why": "ripr could not confirm that this assertion observes the changed behavior"
+        },
+        {
+          "name": "real_capture_keeps_literal_stdout_and_native_status",
+          "file": "src/lib.rs",
+          "line": 3,
+          "oracle_strength": "weak",
+          "oracle_kind": "relational_check",
+          "oracle": "assert!(output.stderr.is_empty());",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low",
+          "miss": "weak_assertion",
+          "why": "assertion too weak to tell the old behavior from the new"
+        }
+      ],
+      "stop_reasons": ["fixture_opaque", "transitive_reach_unresolved"],
+      "oracle_kind": "exact_value",
+      "oracle_strength": "strong",
+      "recommended_next_step": "Check whether `real_capture_keeps_literal_stdout_and_native_status`, which may reach `fixture_spawn` through `fixture_output`, asserts on the changed behavior; ripr does not trace that path, so this limitation does not establish a missing test.",
+      "suggested_next_action": "Check whether `real_capture_keeps_literal_stdout_and_native_status`, which may reach `fixture_spawn` through `fixture_output`, asserts on the changed behavior; ripr does not trace that path, so this limitation does not establish a missing test.",
+      "language": "rust",
+      "static_limit_kind": "rust_transitive_reach_unresolved",
+      "static_limitation": {
+        "analyzer_route": "analysis/rust-public-api-transitive-reach",
+        "first_unresolved_edge": "entry `fixture_output` -> owner `fixture_spawn` through a transitive Rust helper path",
+        "kind": "rust_transitive_reach_unresolved",
+        "last_established_edge": "test `real_capture_keeps_literal_stdout_and_native_status` (src/lib.rs:3) -> entry `fixture_output`",
+        "non_claim": "named limitation only; ripr cannot confirm or deny that this path observes the change"
+      },
+      "source_currentness": "candidate_current"
+    },
+    {
+      "id": "probe:src_executable_fixture_tests.rs:error_path:037b2c8a",
+      "canonical_gap_id": "gap:rust:src/executable_fixture_tests.rs:impl FixtureCommandExt for Command::fixture_spawn:error_variant:error_path:.unwrap_or_else_std_sync_poisonerror_into_inner",
+      "canonical_gap_group_size": 1,
+      "canonical_gap": {
+        "id": "gap:rust:src/executable_fixture_tests.rs:impl FixtureCommandExt for Command::fixture_spawn:error_variant:error_path:.unwrap_or_else_std_sync_poisonerror_into_inner",
+        "language": "rust",
+        "file": "src/executable_fixture_tests.rs",
+        "owner": "impl FixtureCommandExt for Command::fixture_spawn",
+        "behavior_kind": "error_variant",
+        "probe_kind": "error_path",
+        "normalized_discriminator": ".unwrap_or_else_std_sync_poisonerror_into_inner"
+
+      },
+      "classification": "reachable_unrevealed",
+      "severity": "warning",
+      "confidence": 0.66,
+      "probe": {
+        "id": "probe:src_executable_fixture_tests.rs:error_path:037b2c8a",
+        "family": "error_path",
+        "delta": "value",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 33,
+        "expression": ".unwrap_or_else(std::sync::PoisonError::into_inner);"
+       },
+      "ripr": {
+        "reach": {"state":"weak","confidence":"low","summary":"No test is seen calling fixture_spawn; tests share only its file or a name token: real_capture_keeps_literal_stdout_and_native_status"},
+        "infect": {"state":"yes","confidence":"medium","summary":"Reachable tests can plausibly activate this changed behavior"},
+        "propagate": {"state":"yes","confidence":"high","summary":"Complete propagation witness reaches error variant: .unwrap_or_else(std::sync::PoisonError::into_inner)"},
+        "observe": {"state":"no","confidence":"medium","summary":"Related tests were found, but no assertion appears to observe the changed value, error, field, or effect"},
+        "discriminate": {"state":"no","confidence":"medium","summary":"No assertion found on related tests"}
+       },
+      "evidence_path": ["reach weak: No test is seen calling fixture_spawn; tests share only its file or a name token: real_capture_keeps_literal_stdout_and_native_status", "infection yes: Reachable tests can plausibly activate this changed behavior", "propagation yes: Complete propagation witness reaches error variant: .unwrap_or_else(std::sync::PoisonError::into_inner)", "observation no: Related tests were found, but no assertion appears to observe the changed value, error, field, or effect", "discriminator no: No assertion found on related tests", "local flow reaches error variant: .unwrap_or_else(std::sync::PoisonError::into_inner) (line 33)", "related test src/lib.rs:3 real_capture_keeps_literal_stdout_and_native_status uses none unknown oracle: assert_eq!(output.stdout, b\"role-control-byte\\n\");", "source assertion argument value \"role-control-byte\\n\" at line 8", "source assertion argument value 7 at line 9"],
+      "flow_sinks": [
+        {"kind":"error_variant","text":".unwrap_or_else(std::sync::PoisonError::into_inner)","line":33}
+      ],
+      "evidence": ["Complete propagation witness reaches error variant: .unwrap_or_else(std::sync::PoisonError::into_inner)", "No assertion found on related tests", "No test is seen calling fixture_spawn; tests share only its file or a name token: real_capture_keeps_literal_stdout_and_native_status", "Reachable tests can plausibly activate this changed behavior", "Related tests were found, but no assertion appears to observe the changed value, error, field, or effect"],
+      "missing": ["No detected assertion observes the changed value, error, field, or effect", "No exact error variant discriminator was detected", "No relevant oracle was detected"],
+      "assertion_texts": {
+        "8": "assert_eq!(output.stdout, b\"role-control-byte\\n\");",
+        "9": "assert_eq!(output.status.code(), Some(7));"
+      },
+      "activation": {
+        "observed_values": [
+          {
+            "line": 8,
+            "value": "\"role-control-byte\\n\"",
+            "context": "assertion_argument"
+          },
+          {
+            "line": 9,
+            "value": "7",
+            "context": "assertion_argument"
+          }
+        ],
+        "missing_discriminators": [
+        ]
+      },
+      "observed_values": [
+        {
+          "line": 8,
+          "value": "\"role-control-byte\\n\"",
+          "context": "assertion_argument"
+        },
+        {
+          "line": 9,
+          "value": "7",
+          "context": "assertion_argument"
+        }
+      ],
+      "missing_discriminators": [
+      ],
+      "related_tests_total": 1,
+      "related_tests": [
+        {
+          "name": "real_capture_keeps_literal_stdout_and_native_status",
+          "file": "src/lib.rs",
+          "line": 3,
+          "oracle_strength": "none",
+          "oracle_kind": "unknown",
+          "oracle": "assert_eq!(output.stdout, b\"role-control-byte\\n\");",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low",
+          "miss": "assertion_not_observing",
+          "why": "asserts, but not on the changed value"
+        }
+      ],
+      "stop_reasons": ["fixture_opaque"],
+      "oracle_kind": "unknown",
+      "oracle_strength": "none",
+      "recommended_next_step": "Add a meaningful assertion that observes the changed value, branch, error, field, event, or side effect.",
+      "suggested_next_action": "Add a meaningful assertion that observes the changed value, branch, error, field, event, or side effect.",
+      "language": "rust",
+      "source_currentness": "candidate_current"
+    },
+    {
+      "id": "probe:src_executable_fixture_tests.rs:return_value:64f5bad6",
+      "classification": "no_static_path",
+      "severity": "warning",
+      "confidence": 0.48,
+      "probe": {
+        "id": "probe:src_executable_fixture_tests.rs:return_value:64f5bad6",
+        "family": "return_value",
+        "delta": "value",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 34,
+        "expression": "self.spawn()"
+       },
+      "ripr": {
+        "reach": {"state":"no","confidence":"medium","summary":"No static test path found for the changed owner"},
+        "infect": {"state":"unknown","confidence":"low","summary":"No reachable tests were found, so infection cannot be established"},
+        "propagate": {"state":"yes","confidence":"high","summary":"Complete propagation witness reaches returned value: self.spawn()"},
+        "observe": {"state":"no","confidence":"medium","summary":"No reachable test oracle found"},
+        "discriminate": {"state":"no","confidence":"medium","summary":"No assertion can discriminate the changed behavior without a reachable test"}
+       },
+      "evidence_path": ["reach no: No static test path found for the changed owner", "infection unknown: No reachable tests were found, so infection cannot be established", "propagation yes: Complete propagation witness reaches returned value: self.spawn()", "observation no: No reachable test oracle found", "discriminator no: No assertion can discriminate the changed behavior without a reachable test", "local flow reaches returned value: self.spawn() (line 34)"],
+      "flow_sinks": [
+        {"kind":"return_value","text":"self.spawn()","line":34}
+      ],
+      "evidence": ["Complete propagation witness reaches returned value: self.spawn()", "No assertion can discriminate the changed behavior without a reachable test", "No reachable test oracle found", "No reachable tests were found, so infection cannot be established", "No static test path found for the changed owner", "ripr saw a test reaching public API that may call toward this change through a transitive path it does not fully trace (pub to pub(crate) helper chains, macros, or generics). This is not a coverage assessment -- ripr cannot confirm or deny that the change is observed.", "For example, the test `real_capture_keeps_literal_stdout_and_native_status` (src/lib.rs:3) calls `fixture_output`, an entry point that may lead here. Inspect it to judge whether this change is observed.", "limitation_last_established_edge: test `real_capture_keeps_literal_stdout_and_native_status` (src/lib.rs:3) -> entry `fixture_output`", "limitation_first_unresolved_edge: entry `fixture_output` -> owner `fixture_spawn` through a transitive Rust helper path", "limitation_analyzer_route: analysis/rust-public-api-transitive-reach", "limitation_non_claim: named limitation only; ripr cannot confirm or deny that this path observes the change"],
+      "missing": ["No relevant oracle was detected", "No static test path reaches the changed owner", "No strong discriminator was detected"],
+      "assertion_texts": {
+      },
+      "activation": {
+        "observed_values": [
+        ],
+        "missing_discriminators": [
+        ]
+      },
+      "observed_values": [
+      ],
+      "missing_discriminators": [
+      ],
+      "related_tests_total": 0,
+      "related_tests": [
+      ],
+      "stop_reasons": ["async_boundary_opaque", "transitive_reach_unresolved"],
+      "oracle_kind": "unknown",
+      "oracle_strength": "none",
+      "recommended_next_step": "ripr found no static test path to this change — this is not a coverage assessment. A test may already exercise it through macros, helper-call chains, or integration tests that ripr's static model does not yet trace. If none does, add a co-located test that reaches and observes the changed behavior so a discriminator exists.",
+      "suggested_next_action": "ripr found no static test path to this change — this is not a coverage assessment. A test may already exercise it through macros, helper-call chains, or integration tests that ripr's static model does not yet trace. If none does, add a co-located test that reaches and observes the changed behavior so a discriminator exists.",
+      "language": "rust",
+      "static_limit_kind": "rust_transitive_reach_unresolved",
+      "static_limitation": {
+        "analyzer_route": "analysis/rust-public-api-transitive-reach",
+        "first_unresolved_edge": "entry `fixture_output` -> owner `fixture_spawn` through a transitive Rust helper path",
+        "kind": "rust_transitive_reach_unresolved",
+        "last_established_edge": "test `real_capture_keeps_literal_stdout_and_native_status` (src/lib.rs:3) -> entry `fixture_output`",
+        "non_claim": "named limitation only; ripr cannot confirm or deny that this path observes the change"
+      },
+      "source_currentness": "candidate_current"
+    },
+    {
+      "id": "probe:src_executable_fixture_tests.rs:return_value:4c0141a1",
+      "canonical_gap_id": "gap:rust:src/executable_fixture_tests.rs:impl FixtureCommandExt for Command::fixture_output:return_value:return_value:self.stdin_stdio_null_.stdout_stdio_piped_.stderr_stdio_piped_.fixture_spawn_.wait_with_output",
+      "canonical_gap_group_size": 1,
+      "canonical_gap": {
+        "id": "gap:rust:src/executable_fixture_tests.rs:impl FixtureCommandExt for Command::fixture_output:return_value:return_value:self.stdin_stdio_null_.stdout_stdio_piped_.stderr_stdio_piped_.fixture_spawn_.wait_with_output",
+        "language": "rust",
+        "file": "src/executable_fixture_tests.rs",
+        "owner": "impl FixtureCommandExt for Command::fixture_output",
+        "behavior_kind": "return_value",
+        "probe_kind": "return_value",
+        "normalized_discriminator": "self.stdin_stdio_null_.stdout_stdio_piped_.stderr_stdio_piped_.fixture_spawn_.wait_with_output"
+
+      },
+      "classification": "weakly_exposed",
+      "severity": "warning",
+      "confidence": 0.66,
+      "probe": {
+        "id": "probe:src_executable_fixture_tests.rs:return_value:4c0141a1",
+        "family": "return_value",
+        "delta": "value",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 38,
+        "expression": "self.stdin(Stdio::null())\n            .stdout(Stdio::piped())\n            .stderr(Stdio::piped())\n            .fixture_spawn()?\n            .wait_with_output()"
+       },
+      "ripr": {
+        "reach": {"state":"weak","confidence":"low","summary":"No test is seen calling fixture_output; tests share only its file or a name token: real_capture_keeps_literal_stdout_and_native_status"},
+        "infect": {"state":"yes","confidence":"medium","summary":"Reachable tests can plausibly activate this changed behavior"},
+        "propagate": {"state":"yes","confidence":"high","summary":"Complete propagation witness reaches returned value: self.stdin(Stdio::null())\n            .stdout(Stdio::piped())\n            .stderr(Stdio::piped())\n            .fixture_spawn()?\n            .wait_with_output()"},
+        "observe": {"state":"yes","confidence":"medium","summary":"A related test observes a value or effect near the changed behavior"},
+        "discriminate": {"state":"yes","confidence":"medium","summary":"Strong oracle found: exact value or pattern assertion"}
+       },
+      "evidence_path": ["reach weak: No test is seen calling fixture_output; tests share only its file or a name token: real_capture_keeps_literal_stdout_and_native_status", "infection yes: Reachable tests can plausibly activate this changed behavior", "propagation yes: Complete propagation witness reaches returned value: self.stdin(Stdio::null())\n            .stdout(Stdio::piped())\n            .stderr(Stdio::piped())\n            .fixture_spawn()?\n            .wait_with_output()", "observation yes: A related test observes a value or effect near the changed behavior", "discriminator not established (weakly_exposed); related oracle: Strong oracle found: exact value or pattern assertion", "local flow reaches returned value: self.stdin(Stdio::null())\n            .stdout(Stdio::piped())\n            .stderr(Stdio::piped())\n            .fixture_spawn()?\n            .wait_with_output() (line 38)", "related test src/lib.rs:3 real_capture_keeps_literal_stdout_and_native_status uses strong exact value oracle: assert_eq!(output.stdout, b\"role-control-byte\\n\");", "related test src/lib.rs:3 real_capture_keeps_literal_stdout_and_native_status uses strong exact value oracle: assert_eq!(output.status.code(), Some(7));", "related test src/lib.rs:3 real_capture_keeps_literal_stdout_and_native_status uses weak relational check oracle: assert!(output.stderr.is_empty());", "source assertion argument value \"role-control-byte\\n\" at line 8", "source assertion argument value 7 at line 9"],
+      "flow_sinks": [
+        {"kind":"return_value","text":"self.stdin(Stdio::null())\n            .stdout(Stdio::piped())\n            .stderr(Stdio::piped())\n            .fixture_spawn()?\n            .wait_with_output()","line":38}
+      ],
+      "evidence": ["A related test observes a value or effect near the changed behavior", "Complete propagation witness reaches returned value: self.stdin(Stdio::null())\n            .stdout(Stdio::piped())\n            .stderr(Stdio::piped())\n            .fixture_spawn()?\n            .wait_with_output()", "No test is seen calling fixture_output; tests share only its file or a name token: real_capture_keeps_literal_stdout_and_native_status", "Reachable tests can plausibly activate this changed behavior", "Strong oracle found: exact value or pattern assertion"],
+      "missing": [],
+      "assertion_texts": {
+        "8": "assert_eq!(output.stdout, b\"role-control-byte\\n\");",
+        "9": "assert_eq!(output.status.code(), Some(7));"
+      },
+      "activation": {
+        "observed_values": [
+          {
+            "line": 8,
+            "value": "\"role-control-byte\\n\"",
+            "context": "assertion_argument"
+          },
+          {
+            "line": 9,
+            "value": "7",
+            "context": "assertion_argument"
+          }
+        ],
+        "missing_discriminators": [
+        ]
+      },
+      "observed_values": [
+        {
+          "line": 8,
+          "value": "\"role-control-byte\\n\"",
+          "context": "assertion_argument"
+        },
+        {
+          "line": 9,
+          "value": "7",
+          "context": "assertion_argument"
+        }
+      ],
+      "missing_discriminators": [
+      ],
+      "related_tests_total": 3,
+      "related_tests": [
+        {
+          "name": "real_capture_keeps_literal_stdout_and_native_status",
+          "file": "src/lib.rs",
+          "line": 3,
+          "oracle_strength": "strong",
+          "oracle_kind": "exact_value",
+          "oracle": "assert_eq!(output.stdout, b\"role-control-byte\\n\");",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "real_capture_keeps_literal_stdout_and_native_status",
+          "file": "src/lib.rs",
+          "line": 3,
+          "oracle_strength": "strong",
+          "oracle_kind": "exact_value",
+          "oracle": "assert_eq!(output.status.code(), Some(7));",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "real_capture_keeps_literal_stdout_and_native_status",
+          "file": "src/lib.rs",
+          "line": 3,
+          "oracle_strength": "weak",
+          "oracle_kind": "relational_check",
+          "oracle": "assert!(output.stderr.is_empty());",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low",
+          "miss": "weak_assertion",
+          "why": "assertion too weak to tell the old behavior from the new"
+        }
+      ],
+      "stop_reasons": ["async_boundary_opaque", "fixture_opaque"],
+      "oracle_kind": "exact_value",
+      "oracle_strength": "strong",
+      "recommended_next_step": "Replace broad assertions with exact equality or a property that constrains the changed returned value.",
+      "suggested_next_action": "Replace broad assertions with exact equality or a property that constrains the changed returned value.",
+      "language": "rust",
+      "source_currentness": "candidate_current"
+    },
+    {
+      "id": "probe:src_executable_fixture_tests.rs:return_value:b6f24486",
+      "canonical_gap_id": "gap:rust:src/executable_fixture_tests.rs:impl FixtureCommandExt for Command::fixture_status:return_value:return_value:self.fixture_spawn_.wait",
+      "canonical_gap_group_size": 1,
+      "canonical_gap": {
+        "id": "gap:rust:src/executable_fixture_tests.rs:impl FixtureCommandExt for Command::fixture_status:return_value:return_value:self.fixture_spawn_.wait",
+        "language": "rust",
+        "file": "src/executable_fixture_tests.rs",
+        "owner": "impl FixtureCommandExt for Command::fixture_status",
+        "behavior_kind": "return_value",
+        "probe_kind": "return_value",
+        "normalized_discriminator": "self.fixture_spawn_.wait"
+
+      },
+      "classification": "no_static_path",
+      "severity": "warning",
+      "confidence": 0.48,
+      "probe": {
+        "id": "probe:src_executable_fixture_tests.rs:return_value:b6f24486",
+        "family": "return_value",
+        "delta": "value",
+        "file": "./src/executable_fixture_tests.rs",
+        "line": 46,
+        "expression": "self.fixture_spawn()?.wait()"
+       },
+      "ripr": {
+        "reach": {"state":"no","confidence":"medium","summary":"No static test path found for the changed owner"},
+        "infect": {"state":"unknown","confidence":"low","summary":"No reachable tests were found, so infection cannot be established"},
+        "propagate": {"state":"yes","confidence":"high","summary":"Complete propagation witness reaches returned value: self.fixture_spawn()?.wait()"},
+        "observe": {"state":"no","confidence":"medium","summary":"No reachable test oracle found"},
+        "discriminate": {"state":"no","confidence":"medium","summary":"No assertion can discriminate the changed behavior without a reachable test"}
+       },
+      "evidence_path": ["reach no: No static test path found for the changed owner", "infection unknown: No reachable tests were found, so infection cannot be established", "propagation yes: Complete propagation witness reaches returned value: self.fixture_spawn()?.wait()", "observation no: No reachable test oracle found", "discriminator no: No assertion can discriminate the changed behavior without a reachable test", "local flow reaches returned value: self.fixture_spawn()?.wait() (line 46)"],
+      "flow_sinks": [
+        {"kind":"return_value","text":"self.fixture_spawn()?.wait()","line":46}
+      ],
+      "evidence": ["Complete propagation witness reaches returned value: self.fixture_spawn()?.wait()", "No assertion can discriminate the changed behavior without a reachable test", "No reachable test oracle found", "No reachable tests were found, so infection cannot be established", "No static test path found for the changed owner"],
+      "missing": ["No relevant oracle was detected", "No static test path reaches the changed owner", "No strong discriminator was detected"],
+      "assertion_texts": {
+      },
+      "activation": {
+        "observed_values": [
+        ],
+        "missing_discriminators": [
+        ]
+      },
+      "observed_values": [
+      ],
+      "missing_discriminators": [
+      ],
+      "related_tests_total": 0,
+      "related_tests": [
+      ],
+      "stop_reasons": ["async_boundary_opaque"],
+      "oracle_kind": "unknown",
+      "oracle_strength": "none",
+      "recommended_next_step": "ripr found no static test path to this change — this is not a coverage assessment. A test may already exercise it through macros, helper-call chains, or integration tests that ripr's static model does not yet trace. If none does, add a co-located test that reaches and observes the changed behavior so a discriminator exists.",
+      "suggested_next_action": "ripr found no static test path to this change — this is not a coverage assessment. A test may already exercise it through macros, helper-call chains, or integration tests that ripr's static model does not yet trace. If none does, add a co-located test that reaches and observes the changed behavior so a discriminator exists.",
+      "language": "rust",
+      "source_currentness": "candidate_current"
+    },
+    {
+      "id": "probe:src_lib.rs:static_unknown:4d52f8e2",
+      "classification": "static_unknown",
+      "severity": "note",
+      "confidence": 0.30,
+      "probe": {
+        "id": "probe:src_lib.rs:static_unknown:4d52f8e2",
+        "family": "static_unknown",
+        "delta": "unknown",
+        "file": "./src/lib.rs",
+        "line": 1,
+        "expression": "pub mod executable_fixture_tests;"
+       },
+      "ripr": {
+        "reach": {"state":"weak","confidence":"low","summary":"No test is seen calling changed owner; tests share only its file or a name token: real_capture_keeps_literal_stdout_and_native_status"},
+        "infect": {"state":"unknown","confidence":"unknown","summary":"Changed syntax is not mapped to a high-confidence probe family"},
+        "propagate": {"state":"unknown","confidence":"low","summary":"No propagation model is available for this changed syntax"},
+        "observe": {"state":"no","confidence":"medium","summary":"Related tests were found, but no assertion appears to observe the changed value, error, field, or effect"},
+        "discriminate": {"state":"no","confidence":"medium","summary":"No assertion found on related tests"}
+       },
+      "evidence_path": ["reach weak: No test is seen calling changed owner; tests share only its file or a name token: real_capture_keeps_literal_stdout_and_native_status", "infection unknown: Changed syntax is not mapped to a high-confidence probe family", "propagation unknown: No propagation model is available for this changed syntax", "observation no: Related tests were found, but no assertion appears to observe the changed value, error, field, or effect", "discriminator no: No assertion found on related tests", "local flow reaches unknown sink: unknown sink (line 1)", "related test src/lib.rs:3 real_capture_keeps_literal_stdout_and_native_status uses none unknown oracle: assert_eq!(output.stdout, b\"role-control-byte\\n\");", "source function argument value \"/bin/sh\" at line 5", "source function argument value \"-c\" at line 6", "source function argument value \"printf 'role-control-byte\\n'; exit 7\" at line 6", "source assertion argument value \"role-control-byte\\n\" at line 8", "source assertion argument value 7 at line 9", "source function argument value 7 at line 9"],
+      "flow_sinks": [
+        {"kind":"unknown","text":"unknown sink","line":1}
+      ],
+      "evidence": ["Changed syntax is not mapped to a high-confidence probe family", "No assertion found on related tests", "No propagation model is available for this changed syntax", "No test is seen calling changed owner; tests share only its file or a name token: real_capture_keeps_literal_stdout_and_native_status", "Related tests were found, but no assertion appears to observe the changed value, error, field, or effect"],
+      "missing": ["No relevant oracle was detected", "No strong discriminator was detected", "Syntax-first analysis cannot classify this change; use deep mode or real mutation"],
+      "assertion_texts": {
+        "5": "let output = std::process::Command::new(\"/bin/sh\")",
+        "6": ".args([\"-c\", \"printf 'role-control-byte\\n'; exit 7\"])",
+        "8": "assert_eq!(output.stdout, b\"role-control-byte\\n\");",
+        "9": "assert_eq!(output.status.code(), Some(7));"
+      },
+      "activation": {
+        "observed_values": [
+          {
+            "line": 5,
+            "value": "\"/bin/sh\"",
+            "context": "function_argument"
+          },
+          {
+            "line": 6,
+            "value": "\"-c\"",
+            "context": "function_argument"
+          },
+          {
+            "line": 6,
+            "value": "\"printf 'role-control-byte\\n'; exit 7\"",
+            "context": "function_argument"
+          },
+          {
+            "line": 8,
+            "value": "\"role-control-byte\\n\"",
+            "context": "assertion_argument"
+          },
+          {
+            "line": 9,
+            "value": "7",
+            "context": "assertion_argument"
+          },
+          {
+            "line": 9,
+            "value": "7",
+            "context": "function_argument"
+          }
+        ],
+        "missing_discriminators": [
+        ]
+      },
+      "observed_values": [
+        {
+          "line": 5,
+          "value": "\"/bin/sh\"",
+          "context": "function_argument"
+        },
+        {
+          "line": 6,
+          "value": "\"-c\"",
+          "context": "function_argument"
+        },
+        {
+          "line": 6,
+          "value": "\"printf 'role-control-byte\\n'; exit 7\"",
+          "context": "function_argument"
+        },
+        {
+          "line": 8,
+          "value": "\"role-control-byte\\n\"",
+          "context": "assertion_argument"
+        },
+        {
+          "line": 9,
+          "value": "7",
+          "context": "assertion_argument"
+        },
+        {
+          "line": 9,
+          "value": "7",
+          "context": "function_argument"
+        }
+      ],
+      "missing_discriminators": [
+      ],
+      "related_tests_total": 1,
+      "related_tests": [
+        {
+          "name": "real_capture_keeps_literal_stdout_and_native_status",
+          "file": "src/lib.rs",
+          "line": 3,
+          "oracle_strength": "none",
+          "oracle_kind": "unknown",
+          "oracle": "assert_eq!(output.stdout, b\"role-control-byte\\n\");",
+          "relation_reason": "same_test_file",
+          "relation_confidence": "medium",
+          "miss": "assertion_not_observing",
+          "why": "asserts, but not on the changed value"
+        }
+      ],
+      "stop_reasons": ["fixture_opaque", "no_changed_rust_line"],
+      "oracle_kind": "unknown",
+      "oracle_strength": "none",
+      "recommended_next_step": "Escalate to real mutation testing or deep static analysis for this probe.",
+      "suggested_next_action": "Escalate to real mutation testing or deep static analysis for this probe.",
+      "language": "rust",
+      "source_currentness": "candidate_current"
+    }
+  ],
+  "canonical_next_action": {"schema_version":"canonical_next_action.v1","producer":"check_top_result","subject":{"root":".","diff_source":{"committed":{"base":null,"head":null}},"item":"probe:src_executable_fixture_tests.rs:return_value:4c0141a1"},"currentness":{"head_expected":null,"head_observed":null,"config_expected":null,"config_observed":null},"action_class":"inspect_details","stop":{"kind":"check_triage","case":"top_gap","detail_route":"ripr explain --root /workspace/scratch/813-pr1401/fixtures/ripr-shadow-813/source-role-1401/production-test-name --diff /workspace/scratch/813-pr1401/fixtures/ripr-shadow-813/source-role-1401/production-test-name/diff.patch --mode ready probe:src_executable_fixture_tests.rs:return_value:4c0141a1"},"alternatives":[{"label":"considered finding probe:src_executable_fixture_tests.rs:static_unknown:8b425771","route":"ripr explain --root /workspace/scratch/813-pr1401/fixtures/ripr-shadow-813/source-role-1401/production-test-name --diff /workspace/scratch/813-pr1401/fixtures/ripr-shadow-813/source-role-1401/production-test-name/diff.patch --mode ready probe:src_executable_fixture_tests.rs:static_unknown:8b425771"},{"label":"considered finding probe:src_executable_fixture_tests.rs:static_unknown:e7e8d45c","route":"ripr explain --root /workspace/scratch/813-pr1401/fixtures/ripr-shadow-813/source-role-1401/production-test-name --diff /workspace/scratch/813-pr1401/fixtures/ripr-shadow-813/source-role-1401/production-test-name/diff.patch --mode ready probe:src_executable_fixture_tests.rs:static_unknown:e7e8d45c"}],"non_claim":"Advisory selection from producer-bound state; it does not execute, complete, or prove the repair, and the display string is never execution authority."}
+}
