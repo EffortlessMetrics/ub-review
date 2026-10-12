@@ -6,8 +6,8 @@
   "files": [
     {
       "path": "ADJUDICATION.md",
-      "bytes": 7273,
-      "sha256": "258c2f34a7cd2967b411ee963f2a9894256498bfbd026b62a131fac61189a580"
+      "bytes": 7805,
+      "sha256": "5163b392a6dd1287bb2a9569815ee6bfb81ecd808247d01fe5329c0e0094d61b"
     },
     {
       "path": "cfg-test-module/Cargo.lock",
@@ -203,6 +203,11 @@
       "path": "evidence/manifest.json",
       "bytes": 650,
       "sha256": "ab0824b07887498958945093b510f80b53b77bf82ae2efcb01ef566cc95f31cc"
+    },
+    {
+      "path": "evidence/packets/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
       "path": "original-helper-prefix.rs",

@@ -86,12 +86,20 @@ the existing receipt verifier is reused without changing its implementation.
 
 Run the existing auditor and the additive independent claim guards:
 
+The committed `evidence/packets/.gitkeep` preserves the intentionally empty
+real-consumer packet category required by this auditor in a fresh checkout.
+The real #1401 replay is reused through the cited owner receipt; the marker
+supplies no producer run, private evidence or acceptance. No untracked directory
+or producer build is needed to execute these commands after checkout.
+
 ```text
 python3 fixtures/ripr-shadow-813/receipt-verifier/verify.py fixtures/ripr-shadow-813/source-role-1401/evidence
 python3 -m unittest discover -s fixtures/ripr-shadow-813/receipt-verifier -p 'test_*.py' -v
 ```
 
-All16 claim-guard tests pass. New data-only negative controls reject a fabricated
+All17 claim-guard tests pass. A fresh-checkout regression reconstructs only
+Git-tracked inputs and invokes the documented auditor; it rejects dependence on
+an untracked empty directory. Data-only negative controls reject a fabricated
 all-zero production denominator even when unknown accounting reconciles, and
 reject a production report that replaces the capture subject with an unrelated
 return while preserving counts. These are receipt-oracle controls, not compiled
