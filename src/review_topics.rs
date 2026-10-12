@@ -10,7 +10,8 @@ use std::collections::BTreeMap;
 
 use crate::*;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct ReviewTopic {
     pub(crate) claim_id: String,
     pub(crate) head_sha: String,
