@@ -5993,6 +5993,9 @@ def require_resource_lease_artifacts(
                 f"lease={lease!r} receipt={receipt!r}"
             )
         expected = expected_lease_statuses_for_proof_result(receipt["result"])
+        if any(command.get("status") in {"passed", "failed", "timed_out"}
+               for command in receipt.get("commands", [])) and lease["status"] != "granted":
+            fail("executed proof command requires granted lease")
         if lease["status"] not in expected:
             fail(
                 "focused proof lease status does not match receipt result: "
@@ -9188,7 +9191,19 @@ def require_proof_receipt_schema(root: pathlib.Path, receipt: dict) -> None:
         fail(f"proof receipt commands is not a non-empty array: {receipt!r}")
     for command in commands:
         require_proof_command_receipt_schema(root, receipt["id"], command)
+    expected_mode = "base-plus-tests" if receipt["kind"] == "focused-red-green" else "head-only"
+    if receipt["test_patch_mode"] != expected_mode:
+        fail("proof receipt kind/mode mismatch")
+    sides = [command["side"] for command in commands]
+    allowed_sides = [["head"], ["head", "base-plus-tests"]] if receipt["kind"] == "focused-red-green" else [["head"]]
+    if sides not in allowed_sides:
+        fail("proof receipt command sides contradict kind or cardinality")
+    if len(commands) == 2 and commands[0]["status"] != "passed":
+        fail("proof receipt command roles require passed HEAD before baseline")
     if receipt["result"] == "skipped_unresolved":
+        statuses = [command["status"] for command in commands]
+        if statuses != (["skipped"] if len(commands) == 1 else ["passed", "skipped"]):
+            fail("unresolved proof receipt command roles contradict nonexecution")
         # A completed HEAD can precede an unresolved baseline. The unresolved
         # side itself never executed; accepting a failed command here would
         # hide real failure behind the newly admitted compatibility result.
@@ -10990,10 +11005,11 @@ def self_test_skipped_unresolved_receipt_contract() -> None:
             "result": "skipped_unresolved", "reason": command["reason"],
         }
         for kind in ("focused-head", "focused-red-green", "focused-build"):
-            require_proof_receipt_schema(root, dict(receipt, kind=kind))
+            require_proof_receipt_schema(root, dict(receipt, kind=kind,
+                test_patch_mode="base-plus-tests" if kind == "focused-red-green" else "head-only"))
         for label, updates, expected in (
-            ("nonzero completed command", {"status": "failed", "exit_code": 101}, "unresolved proof receipt contradicts nonexecution"),
-            ("only successful commands", {"status": "passed", "exit_code": 0}, "unresolved proof receipt contradicts nonexecution"),
+            ("nonzero completed command", {"status": "failed", "exit_code": 101}, "unresolved proof receipt command roles"),
+            ("only successful commands", {"status": "passed", "exit_code": 0}, "unresolved proof receipt command roles"),
             ("skipped zero exit", {"exit_code": 0}, "skipped proof command must retain unavailable exit"),
             ("skipped duration", {"duration_ms": 1}, "skipped proof command must retain unavailable exit"),
             ("skipped timeout", {"timeout_sec": 1}, "unresolved proof receipt contradicts nonexecution"),
@@ -11049,6 +11065,97 @@ def self_test_skipped_unresolved_receipt_contract() -> None:
             "unresolved lease cannot prove baseline discrimination", "lease status does not match receipt result",
             lambda: require_resource_lease_artifacts(root, [dict(receipt, result="discriminating")], [lease]),
         )
+
+
+def self_test_unresolved_side_and_lease_contract() -> None:
+    import copy
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as temporary:
+        root = pathlib.Path(temporary)
+        (root / "review").mkdir()
+        commands = {}
+        for side in ("head", "base-plus-tests"):
+            directory = root / "proof" / "proof-sides" / side
+            directory.mkdir(parents=True)
+            for stream in ("stdout", "stderr"):
+                (directory / f"{stream}.txt").write_text("", encoding="utf-8")
+            commands[side] = {
+                "side": side, "command": "cargo test controlled_fixture", "env": {},
+                "status": "skipped", "exit_code": None, "timed_out": False,
+                "timeout_sec": 0, "duration_ms": 0,
+                "stdout": f"proof/proof-sides/{side}/stdout.txt",
+                "stderr": f"proof/proof-sides/{side}/stderr.txt", "reason": "controlled unresolved",
+            }
+        head, baseline = commands["head"], commands["base-plus-tests"]
+        passed = dict(head, status="passed", exit_code=0, timeout_sec=30, duration_ms=1)
+        receipt = {
+            "schema": "ub-review.proof_receipt.v1", "id": "proof-sides", "kind": "focused-head",
+            "base": "base", "head": "head", "test_patch_mode": "head-only",
+            "requested_by": ["tests-oracle"], "request_ids": ["request-sides"],
+            "commands": [head], "result": "skipped_unresolved", "reason": "controlled unresolved",
+        }
+
+        def verify(probe: dict) -> None:
+            (root / "review/proof_receipts.json").write_text(json.dumps([probe]), encoding="utf-8")
+            (root / "proof_receipts.ndjson").write_text(json.dumps(probe) + "\n", encoding="utf-8")
+            require_proof_receipt_ndjson(root, load_json(root / "review/proof_receipts.json"))
+
+        def lease_verify(probe: dict, status: str, include: bool = True) -> None:
+            lease = {
+                "schema": "ub-review.resource_lease.v1", "id": "lease-proof-sides",
+                "kind": "focused-build" if probe["kind"] == "focused-build" else "focused-test",
+                "consumer": probe["id"], "status": status, "reason": "controlled grant",
+                "cpu": 0, "memory_mb": 0, "disk_mb": 0, "timeout_sec": 30,
+                "network": False, "scratch": False, "worktree": None, "command": None,
+            }
+            rows = [lease] if include else []
+            (root / "review/resource_leases.json").write_text(json.dumps(rows), encoding="utf-8")
+            (root / "resource_leases.ndjson").write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+            (root / "review/resource_plan.md").write_text(
+                "# Resource lease plan\n\n## Focused proof leases\n", encoding="utf-8",
+            )
+            require_resource_lease_artifacts(root, [probe], rows)
+
+        for kind in ("focused-head", "focused-build", "focused-red-green"):
+            current = dict(receipt, kind=kind,
+                test_patch_mode="base-plus-tests" if kind == "focused-red-green" else "head-only")
+            verify(current)
+            lease_verify(current, "absent")
+            lease_verify(current, "granted")
+            for rows in ([head, head], [head, baseline, baseline], [baseline], [baseline, head]):
+                expect_self_test_failure(f"{kind} extra/duplicate/reordered sides", "command sides",
+                    lambda rows=rows, current=current: verify(dict(current, commands=rows)))
+            wrong_mode = dict(current, test_patch_mode="head-only" if kind == "focused-red-green" else "base-plus-tests")
+            expect_self_test_failure(f"{kind} mismatched mode", "kind/mode", lambda: verify(wrong_mode))
+            unknown = dict(head, side="unknown")
+            expect_self_test_failure(f"{kind} unknown side", "unsupported side",
+                lambda current=current: verify(dict(current, commands=[unknown])))
+            if kind != "focused-red-green":
+                expect_self_test_failure(f"{kind} successful HEAD plus fake skipped baseline", "command sides",
+                    lambda current=current: verify(dict(current, commands=[passed, baseline])))
+            else:
+                expect_self_test_failure("red-green skipped HEAD plus skipped baseline", "command roles",
+                    lambda current=current: verify(dict(current, commands=[head, baseline])))
+                expect_self_test_failure("red-green completed HEAD labelled unresolved without baseline", "command roles",
+                    lambda current=current: verify(dict(current, commands=[passed])))
+        red_green = dict(receipt, kind="focused-red-green", test_patch_mode="base-plus-tests",
+                         commands=[passed, baseline])
+        verify(red_green)
+        lease_verify(red_green, "granted")
+        expect_self_test_failure("executed HEAD with absent lease", "executed proof command requires granted lease",
+            lambda: lease_verify(red_green, "absent"))
+        expect_self_test_failure("executed HEAD with missing lease", "lacks resource lease",
+            lambda: lease_verify(red_green, "granted", include=False))
+        # The same grant invariant applies when a completed HEAD precedes an
+        # unavailable profile/tool baseline, not only the new unresolved tag.
+        profile = dict(red_green, result="skipped_profile")
+        lease_verify(profile, "granted")
+        expect_self_test_failure("profile-deferred executed HEAD with absent lease", "executed proof command requires granted lease",
+            lambda: lease_verify(profile, "absent"))
+        streamed = copy.deepcopy(red_green)
+        streamed["commands"] = [passed, dict(passed)]
+        expect_self_test_failure("streamed duplicate HEAD", "command sides", lambda: verify(streamed))
 
 
 def self_test_proof_command_exit_contract() -> None:
@@ -16123,6 +16230,7 @@ def run_self_tests() -> None:
     self_test_non_discriminating_routes_as_missing_evidence()
     self_test_skipped_unresolved_receipt_contract()
     self_test_proof_command_exit_contract()
+    self_test_unresolved_side_and_lease_contract()
     self_test_absent_resource_lease_contract()
     self_test_receipt_route_source_anchor_contract()
     self_test_follow_up_resolved_away_filter_matches_rust_contract()
