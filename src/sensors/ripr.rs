@@ -787,3 +787,79 @@ mod tests {
         Ok(())
     }
 }
+
+// #1067 proposal: characterize existing adapter seams; production unchanged.
+#[cfg(test)]
+mod currentness_seam_1067 {
+    use super::ripr_exposure_gap_details_from_value;
+    use anyhow::Result;
+    use serde_json::json;
+
+    #[test]
+    fn currentness_1067_existing_adapter_retains_raw_gaps_but_drops_currentness() -> Result<()> {
+        let raw = json!({"schema_version":"0.2","tool":"ripr","mode":"ready",
+        "summary":{"findings":3}, "findings":[
+            {"id":"current","classification":"weakly_exposed","source_currentness":"candidate_current","probe":{"file":"src/lib.rs","line":1}},
+            {"id":"deleted","classification":"weakly_exposed","source_currentness":"base_deleted","probe":{"file":"src/lib.rs","line":2}},
+            {"id":"moved","classification":"weakly_exposed","source_currentness":"moved_or_renamed","probe":{"file":"src/lib.rs","line":3}}
+        ]});
+        let detail = ripr_exposure_gap_details_from_value(&raw)?;
+        assert_eq!(detail["total_raw_gap_findings"], 3);
+        assert_eq!(detail["semantics"], "raw_pre_policy");
+        let entries = detail["entries"]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("missing entries"))?;
+        assert_eq!(
+            entries.iter().map(|row| &row["id"]).collect::<Vec<_>>(),
+            vec![&json!("current"), &json!("deleted"), &json!("moved")]
+        );
+        assert!(
+            entries
+                .iter()
+                .all(|row| row.get("source_currentness").is_none())
+        );
+        // Positive characterization of the current loss, not migration proof.
+        Ok(())
+    }
+
+    #[test]
+    fn currentness_1067_existing_adapter_does_not_resolve_candidate_unknowns() -> Result<()> {
+        for currentness in [
+            json!(null),
+            json!("unresolved_subject"),
+            json!("unsupported"),
+        ] {
+            let raw = json!({"schema_version":"0.2","tool":"ripr","mode":"ready",
+                "summary":{"findings":1},"findings":[{"id":"unknown","classification":"static_unknown","source_currentness":currentness,"probe":{"file":"src/lib.rs","line":1}}]});
+            let detail = ripr_exposure_gap_details_from_value(&raw)?;
+            assert_eq!(detail["total_raw_findings"], 1);
+            assert_eq!(detail["total_raw_gap_findings"], 0);
+            // Unknowns survive only in raw stdout, not the gap-only projection.
+            assert_eq!(detail["entries"], json!([]));
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod currentness_gate_seam_1067 {
+    use anyhow::Result;
+    use serde_json::json;
+
+    #[test]
+    fn currentness_1067_tool_gate_currently_binds_counts_without_schema_admission() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("gate-decision.json");
+        let badge = json!({"schema_version":"future-unsupported", "kind":"ripr",
+            "analysis_complete":false, "counts":{"unsuppressed_exposure_gaps":0}});
+        std::fs::write(&path, serde_json::to_vec(&badge)?)?;
+        match crate::read_tool_gate_decision(&path) {
+            crate::ToolGateDecisionState::Present(decision) => {
+                assert_eq!(decision.new_unsuppressed, 0)
+            }
+            _ => anyhow::bail!("existing count-only boundary changed"),
+        }
+        // Characterization only. Exact admission is a separate owner migration.
+        Ok(())
+    }
+}
