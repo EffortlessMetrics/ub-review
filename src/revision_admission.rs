@@ -17,6 +17,9 @@ use std::path::{Component, Path, PathBuf};
 use std::process::Command as ProcessCommand;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[path = "worktree_evidence.rs"]
+mod worktree_evidence;
+
 /// Artifact schema for `input/revision-admission.json`.
 pub(crate) const REVISION_ADMISSION_SCHEMA: &str = "ub-review.revision_admission.v1";
 
@@ -41,6 +44,9 @@ pub(crate) struct RevisionAdmission {
     /// admission time. Dirt never changes commit objects, so it is recorded,
     /// not rejected.
     pub(crate) worktree_dirty: bool,
+    /// Additive observation only; older receipts deserialize without it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) worktree_evidence: Option<worktree_evidence::WorktreeEvidence>,
 }
 
 /// Complete trusted-base input set for an explicit diff admission. The head
@@ -131,6 +137,7 @@ pub(crate) fn admit_trusted_diff(
         reviewed_commit_oid: head_sha.to_owned(),
         pr_head_commit: Some(head_sha.to_owned()),
         worktree_dirty: false,
+        worktree_evidence: Some(worktree_evidence::collect(root, &identity, head_sha)),
     };
     admission.validate()?;
     let flags = crate::classify_diff(&changed_files, &patch);
@@ -453,6 +460,11 @@ pub(crate) fn admit_revision(
         reviewed_commit_oid: reviewed.commit_oid().to_owned(),
         pr_head_commit,
         worktree_dirty,
+        worktree_evidence: Some(worktree_evidence::collect(
+            root,
+            &identity,
+            reviewed.commit_oid(),
+        )),
     })
 }
 

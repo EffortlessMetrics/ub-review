@@ -111,6 +111,46 @@ constructs these same stable input artifacts from four fail-closed explicit
 objects while the root remains on the verified base tree; it does not resolve
 or check out the candidate head.
 
+New admission receipts add optional `worktree_evidence` with schema
+`ub-review.worktree_evidence.v1`; older receipts omit it. The unchanged
+`worktree_dirty` flag and revision identity remain the existing consumers'
+inputs. This evidence has no cleanliness enforcement or gate authority.
+
+The observation links `identity_digest` and `reviewed_commit_oid`, records the
+checkout's actual HEAD separately, and timestamps observation start. Porcelain
+v1 NUL records supply separate `index_status` (X) and `worktree_status` (Y),
+including `??` untracked entries. Renames are disabled so each row has one path.
+`tracked_diff_paths_hex` is the worktree-versus-index name-only diff;
+`staged_diff_paths_hex` is the index-versus-reviewed-commit name-only diff.
+Both are successful Git observations when `outcome=complete`. In trusted-diff
+mode the checkout remains the base, so the staged comparison can describe the
+base versus the reviewed candidate rather than local staging; consult the
+separate checkout HEAD. Ignored outputs are omitted; unignored bytecode is
+listed. Submodule dirt can be listed, but nested submodule inventories are not
+collected.
+
+Paths are lowercase hex of exact repository-relative Git path bytes, preserving
+spaces, tabs, newlines and non-UTF-8 names. Absolute paths, traversal components,
+backslashes and colon forms are rejected as unavailable rather than normalized.
+No file contents, diff hunks, stderr, environment or paths outside the repository
+are serialized. Each of six fixed read-only Git calls is capped at 64 KiB stdout,
+two seconds and a 100 ms owned-child cleanup wait; each inventory is capped at
+256 entries. This also bounds serialized path bytes (at most three 128 KiB hex
+inventories plus fixed fields and entry metadata). Optional locks, fsmonitor and
+untracked cache are disabled; diffs disable external diff and textconv.
+
+`outcome` is `complete`, `unavailable`, `truncated` or `racy`, with a fixed-label
+`reason` on non-complete outcomes. Byte/entry limits are truncated; Git failure,
+timeout, malformed records and unsafe paths are unavailable. Fields already
+collected can remain on failure and must not be treated as a complete inventory.
+Different before/after porcelain bytes or HEAD are racy. Matching observations
+establish only metadata agreement: contents may change without changing status,
+or change and revert between observations. Index/content hashes, atomic
+snapshots, hostile descendant containment and later execution equivalence are
+not established. An unexpected descendant retaining stdout cannot block the
+caller, but a capped detached reader can remain until that pipe closes.
+Historical dirty admissions without this evidence remain unproven.
+
 Root-level NDJSON streams (each is line-for-line parity with a `review/`
 JSON array; see parity rules):
 
