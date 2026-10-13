@@ -129,6 +129,23 @@ separate checkout HEAD. Ignored outputs are omitted; unignored bytecode is
 listed. Submodule dirt can be listed, but nested submodule inventories are not
 collected.
 
+Both name-only diffs also disable rename detection, so renamed-away and
+destination paths remain visible under `diff.renames=true`, `false` or `copies`.
+The bounded helper removes all inherited `GIT_*` settings, disables system and
+global Git config, and explicitly anchors the worktree to the supplied checkout
+root (including linked worktrees). Repository-local config otherwise remains
+active, with the documented command overrides; local `core.worktree` cannot
+redirect these observations. A nested directory or bare repository is
+`unavailable/checkout_root_required`.
+
+Existing identity and dirty-flag helpers retain their source selection. To avoid
+silently mixing their source with the isolated inventory, inherited nonempty
+Git repository/index/object/namespace selectors or `GIT_CONFIG*` settings make
+the supplementary record `unavailable/inherited_git_source` before collection.
+The record retains the admitted identity linkage but contains no inventory in
+that case. No variable names or values are serialized. This preserves existing
+admission behavior rather than enforcing new cleanliness or source policy.
+
 Paths are lowercase hex of exact repository-relative Git path bytes, preserving
 spaces, tabs, newlines and non-UTF-8 names. Absolute paths, traversal components,
 backslashes and colon forms are rejected as unavailable rather than normalized.

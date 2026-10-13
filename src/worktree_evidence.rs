@@ -62,9 +62,35 @@ pub(crate) fn collect(
         staged_diff_paths_hex: Vec::new(),
     };
     let run = |args: &[&str]| git_bytes_bounded(root, args, MAX_BYTES, TIMEOUT);
-    let result = observe(&mut evidence, &run);
+    // Legacy admission helpers still honor caller-selected Git sources. Do
+    // not silently associate a newly isolated checkout inventory with that
+    // possibly different source. Such observations remain unavailable.
+    let result = if inherited_git_source() {
+        Err(anyhow::anyhow!("inherited_git_source"))
+    } else {
+        observe(&mut evidence, &run)
+    };
     finish(&mut evidence, result);
     evidence
+}
+
+fn inherited_git_source() -> bool {
+    std::env::vars_os().any(|(key, value)| {
+        let key = key.to_string_lossy().to_ascii_uppercase();
+        !value.is_empty()
+            && (key.starts_with("GIT_CONFIG")
+                || matches!(
+                    key.as_str(),
+                    "GIT_DIR"
+                        | "GIT_WORK_TREE"
+                        | "GIT_INDEX_FILE"
+                        | "GIT_COMMON_DIR"
+                        | "GIT_OBJECT_DIRECTORY"
+                        | "GIT_ALTERNATE_OBJECT_DIRECTORIES"
+                        | "GIT_SHALLOW_FILE"
+                        | "GIT_NAMESPACE"
+                ))
+    })
 }
 
 fn finish(evidence: &mut WorktreeEvidence, result: Result<()>) {
@@ -115,6 +141,7 @@ fn observe(
             "-z",
             "--no-ext-diff",
             "--no-textconv",
+            "--no-renames",
             "--ignore-submodules=none",
             "--",
         ])?,
@@ -128,6 +155,7 @@ fn observe(
             "-z",
             "--no-ext-diff",
             "--no-textconv",
+            "--no-renames",
             "--ignore-submodules=none",
             &evidence.reviewed_commit_oid,
             "--",
@@ -397,7 +425,14 @@ mod tests {
         let missing = tempfile::tempdir()?;
         let unavailable = collect(missing.path(), &identity, &original.reviewed_commit_oid);
         assert_eq!(unavailable.outcome, "unavailable");
-        assert_eq!(unavailable.reason.as_deref(), Some("git_failed"));
+        assert_eq!(
+            unavailable.reason.as_deref(),
+            Some("checkout_root_required")
+        );
+        git_text(missing.path(), &["init", "-q"])?;
+        let missing_head = collect(missing.path(), &identity, &original.reviewed_commit_oid);
+        assert_eq!(missing_head.outcome, "unavailable");
+        assert_eq!(missing_head.reason.as_deref(), Some("git_failed"));
         for index in 0..=MAX_ENTRIES {
             std::fs::write(repo.path().join(format!("untracked-{index}")), "private")?;
         }
@@ -428,6 +463,52 @@ mod tests {
         assert!(legacy.worktree_evidence.is_none());
         assert_eq!(legacy.identity_digest, admitted.identity_digest);
         assert_eq!(legacy.worktree_dirty, admitted.worktree_dirty);
+        Ok(())
+    }
+
+    #[test]
+    fn staged_rename_inventory_is_independent_of_rename_configuration() -> Result<()> {
+        let repo = repo()?;
+        let root = repo.path();
+        git_text(root, &["mv", "tracked.rs", "renamed.rs"])?;
+        let expected = vec![path_hex(b"renamed.rs")?, path_hex(b"tracked.rs")?];
+        for value in ["true", "false", "copies"] {
+            git_text(root, &["config", "diff.renames", value])?;
+            git_text(root, &["config", "status.renames", value])?;
+            let observed = evidence(root)?;
+            assert_eq!(observed.outcome, "complete");
+            assert_eq!(observed.staged_diff_paths_hex, expected, "{value}");
+            assert!(observed.tracked_diff_paths_hex.is_empty());
+            assert_eq!(observed.status.len(), 2);
+            assert!(
+                observed
+                    .status
+                    .iter()
+                    .any(|row| row.path_hex == expected[0] && row.index_status == "A")
+            );
+            assert!(
+                observed
+                    .status
+                    .iter()
+                    .any(|row| row.path_hex == expected[1] && row.index_status == "D")
+            );
+        }
+        // Linked worktrees retain their own index after selector isolation.
+        let linked_dir = tempfile::tempdir()?;
+        let linked = linked_dir.path().join("checkout");
+        git_text(
+            root,
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "--detach",
+                &linked.to_string_lossy(),
+                "HEAD",
+            ],
+        )?;
+        assert!(evidence(&linked)?.status.is_empty());
+        assert_eq!(evidence(&linked)?.outcome, "complete");
         Ok(())
     }
 }
