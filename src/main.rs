@@ -1171,6 +1171,106 @@ mod worker_proof_tests {
     }
 
     #[test]
+    fn cargo_selection_worker_publication_reconciles_refusal_and_execution() -> Result<()> {
+        for (case, target, expected_calls, success) in [
+            (
+                "target-absent",
+                "cargo test --locked -p fixture --test absent",
+                1,
+                true,
+            ),
+            (
+                "package-unknown",
+                "cargo test --locked -p absent --test probe",
+                1,
+                true,
+            ),
+            (
+                "target-passed",
+                "cargo test --locked -p fixture --test probe",
+                2,
+                true,
+            ),
+            (
+                "target-failed",
+                "cargo test --locked -p fixture --test probe",
+                2,
+                false,
+            ),
+        ] {
+            let temp = tempfile::tempdir()?;
+            let (root, base, _) = worker_repo(&temp)?;
+            crate::proof::cargo_selection::tests::declared_mock_package(
+                &root,
+                "fixture",
+                Some("probe"),
+            )?;
+            crate::tests::run_test_command(&root, "git", &["add", "."])?;
+            crate::tests::run_test_command(
+                &root,
+                "git",
+                &["commit", "-m", "native Cargo declarations"],
+            )?;
+            let head = git_text(&root, &["rev-parse", "HEAD"])?.trim().to_owned();
+            let out = temp.path().join("out");
+            let mut calls = 0;
+            run_worker_request_with_runner(
+                &args(&root, &out),
+                request(case, &base, &head, ProofKind::FocusedTest, target),
+                &mut |_root, _argv, _env, _timeout, stdout, stderr, observer| {
+                    calls += 1;
+                    observer(CommandProcessObservation::Spawned);
+                    fs::write(stdout, b"controlled lifecycle execution\n")?;
+                    fs::write(stderr, b"")?;
+                    let mut status = successful_status();
+                    if calls == 2 && !success {
+                        status.success = false;
+                        status.exit_code = Some(101);
+                    }
+                    Ok(status)
+                },
+            )?;
+            ensure!(calls == expected_calls, "{case}: unexpected proof spawn");
+            let output = std::process::Command::new("python3")
+                .arg(
+                    Path::new(env!("CARGO_MANIFEST_DIR"))
+                        .join("scripts/reconcile-task-projections.py"),
+                )
+                .arg(&out)
+                .args(["--kind", "worker"])
+                .output()?;
+            ensure!(
+                output.status.success(),
+                "{case}: actual worker reconciliation failed: {} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let lease: ResourceLease =
+                serde_json::from_slice(&fs::read(out.join("resource_lease.json"))?)?;
+            if expected_calls == 1 {
+                ensure!(
+                    lease.status == "granted"
+                        && lease.cpu > 0
+                        && lease.memory_mb > 0
+                        && lease.disk_mb > 0
+                        && lease.scratch
+                        && !lease.network
+                );
+                let task = snapshot_task(&out, &proof_command_task_id(case, "head")?)?;
+                let disposition = if case == "target-absent" {
+                    "Unsupported"
+                } else {
+                    "Refused"
+                };
+                ensure!(task["state"] == serde_json::json!({"TerminallyDeclined":disposition}));
+            } else {
+                ensure!(lease.status == "granted");
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn worker_stream_failure_reconciles_every_receipt_pending_command() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let (root, base, head) = worker_repo(&temp)?;
