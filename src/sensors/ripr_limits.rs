@@ -193,7 +193,9 @@ mod tests {
     #[test]
     fn read_prefix_rejects_non_regular_files() -> Result<()> {
         let temp = tempfile::tempdir()?;
-        let error = read_prefix(temp.path()).expect_err("directory is not a regular file");
+        let error = read_prefix(temp.path())
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("directory unexpectedly read as a regular file"))?;
         assert_eq!(error.kind(), std::io::ErrorKind::Other);
         assert_eq!(error.to_string(), "diagnostic source is not a regular file");
         Ok(())
