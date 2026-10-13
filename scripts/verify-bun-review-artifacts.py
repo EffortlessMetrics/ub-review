@@ -5795,6 +5795,11 @@ def require_proof_receipt_ndjson(root: pathlib.Path, proof_receipts: list[dict])
             parsed = json.loads(line)
         except json.JSONDecodeError as error:
             fail(f"invalid proof_receipts.ndjson line {index + 1}: {error}")
+        if not isinstance(parsed, dict):
+            fail(f"proof_receipts.ndjson line {index + 1} is not an object")
+        # Python equality conflates False with 0 (and 0.0 with 0). Validate
+        # streamed command types before parity can erase that distinction.
+        require_proof_receipt_schema(root, parsed)
         if parsed != proof_receipts[index]:
             fail(f"proof_receipts.ndjson line {index + 1} does not match JSON artifact")
 
@@ -9213,16 +9218,25 @@ def require_proof_command_receipt_schema(
         fail(f"proof command receipt has unsupported side: {command!r}")
     if command["status"] not in {"passed", "failed", "timed_out", "skipped"}:
         fail(f"proof command receipt has unsupported status: {command!r}")
-    if command.get("exit_code") is not None and not isinstance(command.get("exit_code"), int):
+    exit_code = command.get("exit_code")
+    if exit_code is not None and type(exit_code) is not int:
         fail(f"proof command receipt exit_code is invalid: {command!r}")
+    if command["status"] == "passed" and (type(exit_code) is not int or exit_code != 0):
+        fail("passed proof command must have integer zero exit_code")
+    if command["status"] == "failed" and exit_code == 0:
+        fail("failed proof command cannot have zero exit_code")
     if not isinstance(command.get("timed_out"), bool):
         fail(f"proof command receipt timed_out is not boolean: {command!r}")
+    if command["timed_out"] is not (command["status"] == "timed_out"):
+        fail("proof command receipt status/timed_out mismatch")
     timeout = command.get("timeout_sec")
-    if not isinstance(timeout, int) or timeout < 0 or timeout > 900:
+    if type(timeout) is not int or timeout < 0 or timeout > 900:
         fail(f"proof command receipt timeout_sec is invalid: {command!r}")
     duration_ms = command.get("duration_ms")
-    if not isinstance(duration_ms, int) or duration_ms < 0:
+    if type(duration_ms) is not int or duration_ms < 0:
         fail(f"proof command receipt duration_ms is invalid: {command!r}")
+    if command["status"] == "skipped" and (exit_code is not None or duration_ms != 0):
+        fail("skipped proof command must retain unavailable exit and zero duration")
     for field in ["stdout", "stderr"]:
         rel = command[field]
         path = pathlib.PurePosixPath(rel.replace("\\", "/"))
@@ -10977,17 +10991,17 @@ def self_test_skipped_unresolved_receipt_contract() -> None:
         }
         for kind in ("focused-head", "focused-red-green", "focused-build"):
             require_proof_receipt_schema(root, dict(receipt, kind=kind))
-        for label, updates in (
-            ("nonzero completed command", {"status": "failed", "exit_code": 101}),
-            ("only successful commands", {"status": "passed", "exit_code": 0}),
-            ("skipped zero exit", {"exit_code": 0}),
-            ("skipped duration", {"duration_ms": 1}),
-            ("skipped timeout", {"timeout_sec": 1}),
-            ("skipped timeout flag", {"timed_out": True}),
+        for label, updates, expected in (
+            ("nonzero completed command", {"status": "failed", "exit_code": 101}, "unresolved proof receipt contradicts nonexecution"),
+            ("only successful commands", {"status": "passed", "exit_code": 0}, "unresolved proof receipt contradicts nonexecution"),
+            ("skipped zero exit", {"exit_code": 0}, "skipped proof command must retain unavailable exit"),
+            ("skipped duration", {"duration_ms": 1}, "skipped proof command must retain unavailable exit"),
+            ("skipped timeout", {"timeout_sec": 1}, "unresolved proof receipt contradicts nonexecution"),
+            ("skipped timeout flag", {"timed_out": True}, "status/timed_out mismatch"),
         ):
             malformed = dict(receipt, commands=[dict(command, **updates)])
             expect_self_test_failure(
-                f"unresolved {label}", "unresolved proof receipt contradicts nonexecution",
+                f"unresolved {label}", expected,
                 lambda malformed=malformed: require_proof_receipt_schema(root, malformed),
             )
         baseline_dir = root / "proof" / receipt["id"] / "base-plus-tests"
@@ -11035,6 +11049,99 @@ def self_test_skipped_unresolved_receipt_contract() -> None:
             "unresolved lease cannot prove baseline discrimination", "lease status does not match receipt result",
             lambda: require_resource_lease_artifacts(root, [dict(receipt, result="discriminating")], [lease]),
         )
+
+
+def self_test_proof_command_exit_contract() -> None:
+    import copy
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as temporary:
+        root = pathlib.Path(temporary)
+        (root / "review").mkdir()
+        commands = []
+        for side in ("head", "base-plus-tests"):
+            directory = root / "proof" / "proof-exits" / side
+            directory.mkdir(parents=True)
+            for stream in ("stdout", "stderr"):
+                (directory / f"{stream}.txt").write_text("", encoding="utf-8")
+            commands.append({
+                "side": side, "command": "cargo test controlled_fixture", "env": {},
+                "status": "passed", "exit_code": 0, "timed_out": False,
+                "timeout_sec": 30, "duration_ms": 1,
+                "stdout": f"proof/proof-exits/{side}/stdout.txt",
+                "stderr": f"proof/proof-exits/{side}/stderr.txt", "reason": "controlled receipt",
+            })
+        receipt = {
+            "schema": "ub-review.proof_receipt.v1", "id": "proof-exits",
+            "kind": "focused-red-green", "base": "base", "head": "head",
+            "test_patch_mode": "base-plus-tests", "requested_by": ["tests-oracle"],
+            "request_ids": ["request-exits"], "commands": commands,
+            "result": "non_discriminating", "reason": "controlled receipt",
+        }
+
+        def verify(rows: dict, streamed: dict | None = None) -> None:
+            (root / "review/proof_receipts.json").write_text(json.dumps([rows]), encoding="utf-8")
+            (root / "proof_receipts.ndjson").write_text(
+                json.dumps(rows if streamed is None else streamed) + "\n", encoding="utf-8",
+            )
+            require_proof_receipt_ndjson(root, load_json(root / "review/proof_receipts.json"))
+
+        verify(receipt)
+        skipped = dict(commands[1], status="skipped", exit_code=None, duration_ms=0, timeout_sec=0)
+        unresolved = dict(receipt, result="skipped_unresolved", commands=[commands[0], skipped])
+        verify(unresolved)
+        verify(dict(receipt, result="head_passed", commands=[commands[0]]))
+        verify(dict(receipt, result="skipped_profile", commands=[dict(skipped, side="head",
+                    stdout=commands[0]["stdout"], stderr=commands[0]["stderr"], timeout_sec=30)]))
+        for code in (101, None):
+            verify(dict(receipt, result="head_failed", commands=[dict(commands[0], status="failed", exit_code=code)]))
+        verify(dict(receipt, result="timed_out", commands=[dict(commands[0], status="timed_out",
+                    exit_code=None, timed_out=True)]))
+
+        for side_index, side in enumerate(("head", "base-plus-tests")):
+            for code in (101, None, True, False):
+                malformed = copy.deepcopy(receipt)
+                malformed["commands"][side_index]["exit_code"] = code
+                expected = "exit_code is invalid" if type(code) is bool else "passed proof command must have integer zero exit_code"
+                expect_self_test_failure(
+                    f"passed {side} exit {code!r} in JSON and NDJSON", expected,
+                    lambda malformed=malformed: verify(malformed),
+                )
+                if side_index == 0:
+                    malformed_unresolved = copy.deepcopy(unresolved)
+                    malformed_unresolved["commands"][0]["exit_code"] = code
+                    expect_self_test_failure(
+                        f"unresolved passed HEAD exit {code!r}", expected,
+                        lambda malformed=malformed_unresolved: verify(malformed),
+                    )
+            # Stream-only corruption must not exploit Python's False == 0 or
+            # 0.0 == 0 comparison to pass parity against valid JSON metadata.
+            for code in (False, 0.0):
+                streamed = copy.deepcopy(receipt)
+                streamed["commands"][side_index]["exit_code"] = code
+                expect_self_test_failure(
+                    f"stream-only {side} exit {code!r}", "exit_code is invalid",
+                    lambda streamed=streamed: verify(receipt, streamed),
+                )
+            for field in ("timeout_sec", "duration_ms"):
+                streamed = copy.deepcopy(receipt)
+                streamed["commands"][side_index][field] = True
+                expect_self_test_failure(
+                    f"Boolean {side} {field}", f"{field} is invalid",
+                    lambda streamed=streamed: verify(streamed),
+                )
+        for updates, expected in (
+            ({"status": "failed", "exit_code": 0}, "failed proof command cannot have zero exit_code"),
+            ({"status": "skipped", "exit_code": 101}, "skipped proof command must retain unavailable exit"),
+            ({"status": "skipped", "exit_code": None, "duration_ms": 1}, "skipped proof command must retain unavailable exit"),
+            ({"timed_out": True}, "status/timed_out mismatch"),
+            ({"status": "timed_out", "exit_code": None}, "status/timed_out mismatch"),
+        ):
+            malformed = dict(receipt, commands=[dict(commands[0], **updates)])
+            expect_self_test_failure(
+                f"contradictory command {updates!r}", expected,
+                lambda malformed=malformed: verify(malformed),
+            )
 
 
 def self_test_absent_resource_lease_contract() -> None:
@@ -16015,6 +16122,7 @@ def run_self_tests() -> None:
     self_test_coverage_sidecar_receipts()
     self_test_non_discriminating_routes_as_missing_evidence()
     self_test_skipped_unresolved_receipt_contract()
+    self_test_proof_command_exit_contract()
     self_test_absent_resource_lease_contract()
     self_test_receipt_route_source_anchor_contract()
     self_test_follow_up_resolved_away_filter_matches_rust_contract()
