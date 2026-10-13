@@ -109,6 +109,14 @@ pub(crate) fn strip_embedded_evidence_label(value: &str) -> &str {
 }
 
 pub(crate) fn render_proof_receipt_summary(text: &mut String, receipt: &ProofReceipt) {
+    if proof_receipt_has_contradictory_completion(receipt) {
+        render_pr_signal(
+            text,
+            "Focused proof has contradictory completion metadata; evidence remains incomplete.",
+        );
+        return;
+    }
+
     let command = receipt
         .commands
         .first()

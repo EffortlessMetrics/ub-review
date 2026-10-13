@@ -309,9 +309,9 @@ pub(crate) fn render_pull_request_review_body(
         .iter()
         .filter(|receipt| proof_receipt_is_public_test_proof_result(receipt))
         .collect::<Vec<_>>();
-    let current_proof_failure = proof_receipts
-        .iter()
-        .any(|receipt| receipt.result == "head_failed");
+    let current_proof_failure = proof_receipts.iter().any(|receipt| {
+        receipt.result == "head_failed" && !proof_receipt_has_contradictory_completion(receipt)
+    });
     let finding_count = inline_comments.len() + summary_concerns.len() + concern_observations.len();
     let verification_count = verification_questions.len() + verification_observations.len();
     let has_test_proof_verification = verification_questions

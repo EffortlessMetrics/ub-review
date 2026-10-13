@@ -22,7 +22,7 @@ use crate::gate_truth::{
 use crate::{
     ModelEvidenceIssue, Plan, ProofReceipt, ProofRequest, ReviewTerminalState, RunArgs,
     RunCompletion, RunMode, SensorEvidenceIssue, SensorPlan, ToolGateOutcomeEntry,
-    proof_command_status, sensor_issue_is_required,
+    proof_command_status, proof_receipt_has_contradictory_completion, sensor_issue_is_required,
 };
 
 /// Minimal read view of `review/gate_outcome.json` for enforcement. The full
@@ -883,6 +883,19 @@ pub(crate) fn proof_request_is_gate_required(request: &ProofRequest) -> bool {
 }
 
 pub(crate) fn required_proof_receipt_class(receipt: &ProofReceipt) -> RequiredProofClass {
+    // Keep the legacy Required-timeout policy, even when an aggregate falsely
+    // claims completion. This is a failed requirement, not code-failure proof.
+    if receipt.commands.iter().any(|command| {
+        matches!(command.side.as_str(), "head" | "base-plus-tests")
+            && (command.timed_out || command.status == "timed_out")
+    }) {
+        return RequiredProofClass::Failed;
+    }
+    if proof_receipt_has_contradictory_completion(receipt) {
+        // Invalid completion metadata must not weaken Required enforcement.
+        return RequiredProofClass::Failed;
+    }
+
     match receipt.result.as_str() {
         "head_passed" | "discriminating" => RequiredProofClass::Passed,
         "head_failed" | "timed_out" => RequiredProofClass::Failed,
