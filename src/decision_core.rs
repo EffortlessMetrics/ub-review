@@ -448,6 +448,19 @@ mod tests {
     use crate::*;
 
     #[test]
+    fn skipped_budget_and_profile_remain_missing_evidence() {
+        for result in ["skipped_budget", "skipped_profile"] {
+            let receipt = test_proof_receipt(result, "skipped");
+            assert!(proof_receipt_is_missing_evidence(&receipt), "{result}");
+            assert_eq!(
+                routed_status_for_proof_receipt(&receipt),
+                "missing-evidence"
+            );
+            assert!(!proof_receipt_is_test_proof_result(&receipt), "{result}");
+        }
+    }
+
+    #[test]
     fn skipped_unresolved_is_missing_evidence_without_decisive_proof() -> Result<()> {
         for kind in ["focused-head", "focused-red-green", "focused-build"] {
             let mut receipt = test_proof_receipt("skipped_unresolved", "skipped");
