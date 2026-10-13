@@ -482,7 +482,14 @@ fn terminalize_proof(
     };
     let reason = matching
         .iter()
-        .map(|(receipt, relation)| format!("{}={} join={relation}", receipt.id, receipt.result))
+        .map(|(receipt, relation)| {
+            let joined = format!("{}={} join={relation}", receipt.id, receipt.result);
+            if receipt.result == "skipped_unresolved" {
+                format!("{joined} reason={}", receipt.reason)
+            } else {
+                joined
+            }
+        })
         .collect::<Vec<_>>()
         .join("; ");
     Ok((status, reason, request_ids, receipt_ids))
@@ -508,11 +515,24 @@ fn terminal_proof_receipt_status(receipt: &ProofReceipt) -> Result<String> {
                 | "timed_out"
                 | "skipped_budget"
                 | "skipped_profile"
+                | "skipped_unresolved"
         ),
         "proof receipt {} has unsupported terminal result {}",
         receipt.id,
         receipt.result
     );
+    if receipt.result == "skipped_unresolved" {
+        anyhow::ensure!(
+            receipt.commands.iter().all(|command| {
+                command.status == "skipped"
+                    && command.exit_code.is_none()
+                    && !command.timed_out
+                    && command.duration_ms == 0
+            }),
+            "proof receipt {} has contradictory execution metadata for skipped_unresolved",
+            receipt.id
+        );
+    }
     Ok(receipt.result.clone())
 }
 
