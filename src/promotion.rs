@@ -23,7 +23,17 @@ const FALSE_POSITIVE_THRESHOLD: f64 = 0.10; // 10%
 /// recommendation logic.
 pub(crate) fn load_calibration(run_dir: &Path) -> Result<CalibrationArtifact> {
     let path = run_dir.join("review").join("calibration.json");
-    let bytes = fs::read(&path).with_context(|| format!("read {}", path.display()))?;
+    let bytes = fs::read(&path).map_err(|error| {
+        let context = if error.kind() == std::io::ErrorKind::NotFound {
+            format!(
+                "read {}; missing calibration artifact; select an existing completed run with `ub-review status --run-dir <RUN_DIR>`",
+                path.display()
+            )
+        } else {
+            format!("read {}", path.display())
+        };
+        anyhow::Error::new(error).context(context)
+    })?;
     let artifact: CalibrationArtifact = serde_json::from_slice(&bytes)
         .with_context(|| format!("parse {} as calibration artifact", path.display()))?;
     if artifact.schema != CALIBRATION_SCHEMA {
