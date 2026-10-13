@@ -11524,6 +11524,13 @@ index 3333333..4444444 100644
 
         assert_eq!(proof_result.proof_receipts.len(), 1);
         assert_eq!(proof_result.proof_receipts[0].result, "skipped_profile");
+        assert!(super::proof_receipt_is_missing_evidence(
+            &proof_result.proof_receipts[0]
+        ));
+        assert_eq!(
+            super::routed_status_for_proof_receipt(&proof_result.proof_receipts[0]),
+            "missing-evidence"
+        );
         assert_eq!(proof_result.resource_leases.len(), 1);
         assert_eq!(proof_result.resource_leases[0].status, "absent");
         assert_eq!(

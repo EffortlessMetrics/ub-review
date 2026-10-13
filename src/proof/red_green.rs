@@ -634,6 +634,10 @@ mod tests {
             );
             let mut summary = String::new();
             render_proof_receipt_summary(&mut summary, &contradictory);
+            assert!(
+                summary.contains("Focused proof has contradictory completion metadata; evidence remains incomplete."),
+                "{label}: {summary}"
+            );
             assert!(!summary.contains("current failure"), "{summary}");
             assert!(!summary.contains("discriminates the patch"), "{summary}");
             let body = render_review_body(
