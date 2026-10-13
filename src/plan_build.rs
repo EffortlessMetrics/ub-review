@@ -309,6 +309,168 @@ pub(crate) fn git_text_owned(root: &Path, args: &[String]) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+/// Byte-preserving, bounded Git observation. Diagnostics are fixed labels:
+/// stderr, environment and file contents never enter the evidence receipt.
+pub(crate) fn git_bytes_bounded(
+    root: &Path,
+    args: &[&str],
+    max_bytes: usize,
+    timeout: std::time::Duration,
+) -> Result<Vec<u8>> {
+    let mut command = ProcessCommand::new("git");
+    command
+        .arg("--no-optional-locks")
+        .arg("-C")
+        .arg(root)
+        .args([
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.untrackedCache=false",
+        ])
+        .args(args);
+    capture_git_bytes(&mut command, max_bytes, timeout)
+}
+
+fn capture_git_bytes(
+    command: &mut ProcessCommand,
+    max_bytes: usize,
+    timeout: std::time::Duration,
+) -> Result<Vec<u8>> {
+    use std::io::Read;
+    use std::process::Stdio;
+    use wait_timeout::ChildExt;
+    let deadline = std::time::Instant::now() + timeout;
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| anyhow::anyhow!("spawn_failed"))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("stdout_unavailable"))?;
+    let (send, receive) = std::sync::mpsc::sync_channel(1);
+    // Never join a pipe reader: an unexpected descendant can retain stdout.
+    // Its buffer is capped even when the observation times out.
+    let reader = std::thread::Builder::new().spawn(move || {
+        let mut bytes = Vec::new();
+        let result = stdout
+            .take(max_bytes.saturating_add(1) as u64)
+            .read_to_end(&mut bytes)
+            .map(|_| bytes);
+        let _ = send.send(result);
+    });
+    if reader.is_err() {
+        let _ = child.kill();
+        let _ = child.wait_timeout(std::time::Duration::from_millis(100));
+        bail!("reader_spawn_failed");
+    }
+    let observed =
+        receive.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()));
+    let bytes = match observed {
+        Ok(Ok(bytes)) if bytes.len() <= max_bytes => bytes,
+        other => {
+            let _ = child.kill();
+            let _ = child.wait_timeout(std::time::Duration::from_millis(100));
+            bail!(match other {
+                Ok(Ok(_)) => "byte_limit",
+                Ok(Err(_)) => "read_failed",
+                Err(_) => "timeout",
+            });
+        }
+    };
+    match child.wait_timeout(deadline.saturating_duration_since(std::time::Instant::now())) {
+        Ok(Some(status)) if status.success() => Ok(bytes),
+        Ok(Some(_)) => bail!("git_failed"),
+        other => {
+            let _ = child.kill();
+            let _ = child.wait_timeout(std::time::Duration::from_millis(100));
+            bail!(if other.is_err() {
+                "wait_failed"
+            } else {
+                "timeout"
+            });
+        }
+    }
+}
+
+#[cfg(test)]
+mod bounded_git_tests {
+    use super::capture_git_bytes;
+    use anyhow::Result;
+    use std::process::Command;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn missing_executable_is_fixed_label() {
+        let result = capture_git_bytes(
+            &mut Command::new("/nonexistent-ub-review-git-observation"),
+            8,
+            Duration::from_millis(50),
+        );
+        assert_eq!(
+            result.err().map(|e| e.to_string()).as_deref(),
+            Some("spawn_failed")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn subprocess_exit_caps_and_deadlines_are_bounded() -> Result<()> {
+        let mut normal = Command::new("sh");
+        normal.args(["-c", "printf 12345678"]);
+        assert_eq!(
+            capture_git_bytes(&mut normal, 8, Duration::from_secs(1))?,
+            b"12345678"
+        );
+        let mut capped = Command::new("sh");
+        capped.args(["-c", "printf 123456789"]);
+        assert_eq!(
+            capture_git_bytes(&mut capped, 8, Duration::from_secs(1))
+                .err()
+                .map(|e| e.to_string())
+                .as_deref(),
+            Some("byte_limit")
+        );
+        let mut failing = Command::new("sh");
+        failing.args(["-c", "printf private-diagnostic >&2; exit 7"]);
+        assert_eq!(
+            capture_git_bytes(&mut failing, 8, Duration::from_secs(1))
+                .err()
+                .map(|e| e.to_string())
+                .as_deref(),
+            Some("git_failed")
+        );
+        let mut sleeping = Command::new("sh");
+        sleeping.args(["-c", "exec sleep 2"]);
+        let start = Instant::now();
+        assert_eq!(
+            capture_git_bytes(&mut sleeping, 8, Duration::from_millis(25))
+                .err()
+                .map(|e| e.to_string())
+                .as_deref(),
+            Some("timeout")
+        );
+        assert!(start.elapsed() < Duration::from_secs(1));
+        // The owned shell exits while a short-lived descendant retains stdout.
+        // The caller must return without joining the pipe reader.
+        let mut inherited = Command::new("sh");
+        inherited.args(["-c", "sleep 0.2 & exit 0"]);
+        let start = Instant::now();
+        assert_eq!(
+            capture_git_bytes(&mut inherited, 8, Duration::from_millis(25))
+                .err()
+                .map(|e| e.to_string())
+                .as_deref(),
+            Some("timeout")
+        );
+        assert!(start.elapsed() < Duration::from_millis(180));
+        Ok(())
+    }
+}
+
 pub(crate) fn build_plan(
     config: &Config,
     profile: &Profile,
