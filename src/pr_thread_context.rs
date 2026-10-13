@@ -2,6 +2,7 @@
 //! and event PR context reading (cleanup train step 47, pure code motion).
 
 use crate::*;
+use anyhow::ensure;
 
 /// Constructs an explicit no-context receipt without reading event files,
 /// configured context files, or GitHub API state.
@@ -87,6 +88,8 @@ pub(crate) fn collect_pr_thread_context(
                 Ok(api_context) => {
                     context.sources.extend(api_context.sources);
                     context.threads.extend(api_context.threads);
+                    context.warnings.extend(api_context.warnings);
+                    context.thread_context_truncated |= api_context.truncated;
                     append_thread_context(
                         &mut context,
                         &api_context.thread_context,
@@ -123,7 +126,27 @@ pub(crate) struct GitHubThreadApiContext {
     pub(crate) sources: Vec<String>,
     pub(crate) thread_context: String,
     pub(crate) threads: Vec<ReviewThreadRecord>,
+    pub(crate) warnings: Vec<String>,
+    pub(crate) truncated: bool,
 }
+
+// A first-page snapshot is context, never complete conversation or CI proof.
+const PR_THREAD_RESPONSE_MAX_BYTES: usize = 1_048_576;
+
+#[derive(Debug)]
+struct PrThreadAccessDenied(u16);
+
+impl std::fmt::Display for PrThreadAccessDenied {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "GitHub thread access denied (HTTP {}); further API reads stopped",
+            self.0
+        )
+    }
+}
+
+impl std::error::Error for PrThreadAccessDenied {}
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub(crate) struct ReviewThreadRecord {
@@ -183,6 +206,7 @@ pub(crate) fn read_github_pr_thread_context(
     let endpoints = [
         (
             "issue-comments",
+            30,
             format!(
                 "{}/repos/{}/issues/{}/comments?per_page=30",
                 request.api_url, request.repo, request.pull_number
@@ -190,6 +214,7 @@ pub(crate) fn read_github_pr_thread_context(
         ),
         (
             "review-summaries",
+            30,
             format!(
                 "{}/repos/{}/pulls/{}/reviews?per_page=30",
                 request.api_url, request.repo, request.pull_number
@@ -197,6 +222,7 @@ pub(crate) fn read_github_pr_thread_context(
         ),
         (
             "review-comments",
+            50,
             format!(
                 "{}/repos/{}/pulls/{}/comments?per_page=50",
                 request.api_url, request.repo, request.pull_number
@@ -206,31 +232,102 @@ pub(crate) fn read_github_pr_thread_context(
     let mut sections = Vec::new();
     let mut sources = Vec::new();
     let mut threads = Vec::new();
-    for (kind, url) in endpoints {
-        let value = run_github_api_get(root, &url, request.auth)
-            .with_context(|| format!("fetch GitHub PR thread {kind}"))?;
+    let mut warnings = Vec::new();
+    let mut truncated = false;
+    for (kind, item_limit, url) in endpoints {
+        let value = match run_bounded_pr_thread_get(root, &url, request.auth) {
+            Ok(value) => value,
+            Err(err) => {
+                warnings.push(format!("github-api {kind} unavailable: {err:#}; coverage is incomplete; retry after resolving the endpoint failure"));
+                if err.downcast_ref::<PrThreadAccessDenied>().is_some() {
+                    break;
+                }
+                continue;
+            }
+        };
+        let Some(items) = value.as_array() else {
+            warnings.push(format!("github-api {kind} unavailable: expected an array; coverage is incomplete; retry with a valid GitHub response"));
+            continue;
+        };
+        let admitted = serde_json::Value::Array(items.iter().take(item_limit).cloned().collect());
+        if items.len() > item_limit {
+            truncated = true;
+            warnings.push(format!(
+                "github-api {kind}: omitted items beyond the first-page limit {item_limit}"
+            ));
+        }
+        truncated |= items.iter().take(item_limit).any(|item| {
+            item.get("body")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|body| body.trim().len() > max_bytes.min(1200))
+        });
         sources.push(format!(
             "github-api:{}/{}/{}",
             request.repo, request.pull_number, kind
         ));
-        sections.push(render_github_pr_thread_section(kind, &value, max_bytes));
-        threads.extend(github_thread_records(kind, &value, current_head));
+        sections.push(render_github_pr_thread_section(kind, &admitted, max_bytes));
+        threads.extend(github_thread_records(kind, &admitted, current_head));
     }
 
     let mut text = String::new();
-    text.push_str("## GitHub PR Thread Snapshot\n\n");
-    text.push_str(&format!(
-        "Source: `{}` PR `#{}`. Bounded to lane context; full GitHub thread remains source of truth.\n\n",
-        escape_md(request.repo),
-        request.pull_number
-    ));
-    text.push_str(&sections.join("\n"));
+    if !sources.is_empty() {
+        text.push_str("## GitHub PR Thread Snapshot\n\n");
+        text.push_str(&format!(
+            "Source: `{}` PR `#{}`. Only the first page of each available endpoint is included (30 issue comments, 30 reviews, 50 inline comments); later pages are not fetched. Full GitHub thread remains source of truth.\n\n",
+            escape_md(request.repo), request.pull_number
+        ));
+        text.push_str(&sections.join("\n"));
+    }
     let bounded = bounded_string(&text, max_bytes);
     Ok(GitHubThreadApiContext {
         sources,
         thread_context: bounded.text,
         threads,
+        warnings,
+        truncated: truncated || bounded.truncated,
     })
+}
+
+/// Thread-only transport: shared delivery and CI acquisition retain their own contract.
+fn run_bounded_pr_thread_get(root: &Path, url: &str, auth: &str) -> Result<serde_json::Value> {
+    use std::io::Read as _;
+    let mut child = spawn_github_api_get(root, url, auth, true)?;
+    let capture = (|| -> Result<Vec<u8>> {
+        let stdout = child.stdout.take().context("curl stdout unavailable")?;
+        let mut bytes = Vec::new();
+        stdout
+            .take((PR_THREAD_RESPONSE_MAX_BYTES + 1) as u64)
+            .read_to_end(&mut bytes)
+            .context("read bounded GitHub thread response")?;
+        ensure!(
+            bytes.len() <= PR_THREAD_RESPONSE_MAX_BYTES,
+            "response exceeds {PR_THREAD_RESPONSE_MAX_BYTES} byte capture limit"
+        );
+        Ok(bytes)
+    })();
+    let bytes = match capture {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            // Reap before returning; no detached reader or unbounded spool survives failure.
+            let _ = child.kill();
+            child.wait().context("reap failed GitHub thread curl")?;
+            return Err(err);
+        }
+    };
+    let status = child
+        .wait()
+        .context("wait for bounded GitHub thread curl")?;
+    let (body, http_status) = split_curl_http_status(bytes);
+    if let Some(status @ (401 | 403)) = http_status {
+        return Err(PrThreadAccessDenied(status).into());
+    }
+    ensure!(
+        status.success(),
+        "GitHub thread curl exited {:?}, HTTP status {:?}",
+        status.code(),
+        http_status
+    );
+    serde_json::from_slice(&body).context("parse GitHub thread response")
 }
 
 fn github_thread_records(
@@ -298,38 +395,7 @@ fn github_thread_records(
 }
 
 pub(crate) fn run_github_api_get(root: &Path, url: &str, auth: &str) -> Result<serde_json::Value> {
-    let mut command = ProcessCommand::new("curl");
-    command
-        .arg("-sS")
-        .arg("--fail-with-body")
-        .arg("--max-time")
-        .arg("30")
-        .arg("-w")
-        .arg("\nUB_REVIEW_HTTP_STATUS:%{http_code}\n")
-        .arg("-K")
-        .arg("-")
-        .arg(url)
-        .current_dir(root)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = command.spawn().with_context(|| "spawn GitHub API curl")?;
-    {
-        let mut stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| anyhow::anyhow!("curl stdin unavailable"))?;
-        use std::io::Write as _;
-        const AUTH_HEADER_NAME: &str = "Authorization";
-        let auth_scheme = ["Bear", "er"].concat();
-        for header in [
-            "Accept: application/vnd.github+json",
-            "X-GitHub-Api-Version: 2022-11-28",
-            &format!("{AUTH_HEADER_NAME}: {auth_scheme} {auth}"),
-        ] {
-            writeln!(stdin, "header = \"{}\"", curl_config_quote(header))?;
-        }
-    }
+    let child = spawn_github_api_get(root, url, auth, false)?;
     let output = child
         .wait_with_output()
         .with_context(|| "wait for GitHub API curl")?;
@@ -344,6 +410,66 @@ pub(crate) fn run_github_api_get(root: &Path, url: &str, auth: &str) -> Result<s
         );
     }
     serde_json::from_slice(&stdout).with_context(|| "parse GitHub API response")
+}
+
+// Reuse the existing acquisition/spawn site; thread bounds grant no new
+// process, endpoint, credential, delivery or CI authority.
+fn spawn_github_api_get(
+    root: &Path,
+    url: &str,
+    auth: &str,
+    bounded_thread: bool,
+) -> Result<std::process::Child> {
+    let mut command = ProcessCommand::new("curl");
+    if bounded_thread {
+        command.arg("-q");
+    }
+    command
+        .arg("-sS")
+        .arg(if bounded_thread {
+            "--fail"
+        } else {
+            "--fail-with-body"
+        })
+        .arg("--max-time")
+        .arg("30")
+        .arg("-w")
+        .arg("\nUB_REVIEW_HTTP_STATUS:%{http_code}\n")
+        .arg("-K")
+        .arg("-")
+        .arg(url)
+        .current_dir(root)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(if bounded_thread {
+            Stdio::null()
+        } else {
+            Stdio::piped()
+        });
+    let mut child = command.spawn().with_context(|| "spawn GitHub API curl")?;
+    let configured = (|| -> Result<()> {
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("curl stdin unavailable"))?;
+        use std::io::Write as _;
+        const AUTH_HEADER_NAME: &str = "Authorization";
+        let auth_scheme = ["Bear", "er"].concat();
+        for header in [
+            "Accept: application/vnd.github+json",
+            "X-GitHub-Api-Version: 2022-11-28",
+            &format!("{AUTH_HEADER_NAME}: {auth_scheme} {auth}"),
+        ] {
+            writeln!(stdin, "header = \"{}\"", curl_config_quote(header))?;
+        }
+        Ok(())
+    })();
+    if let Err(err) = configured {
+        let _ = child.kill();
+        child.wait().context("reap unconfigured GitHub API curl")?;
+        return Err(err);
+    }
+    Ok(child)
 }
 
 pub(crate) fn render_github_pr_thread_section(
