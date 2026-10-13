@@ -249,6 +249,132 @@ fn response(id: u64, body: &str) -> String {
     json!([{"id": id, "body": body, "user": {"login": "maintainer"}}]).to_string()
 }
 
+fn regenerate_summary(out: &Path, receipt: &Value) -> Result<String> {
+    fs::write(
+        out.join("review/review.json"),
+        serde_json::to_vec_pretty(receipt)?,
+    )?;
+    let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
+        .env_clear()
+        .args(["summary", "--run-dir"])
+        .arg(out)
+        .output()?;
+    ensure!(
+        output.status.success(),
+        "summary: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    fs::read_to_string(out.join("running-summary.md")).context("read regenerated summary")
+}
+
+#[test]
+fn summary_hydration_preserves_recorded_degraded_evidence_and_legacy_fallback() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let root = temp.path().join("repo");
+    repository(&root)?;
+    let out = temp.path().join("summary-packet");
+    hydrate(
+        &root,
+        &out,
+        serve(vec![
+            (200, "[]".to_owned()),
+            (200, "[]".to_owned()),
+            (200, "[]".to_owned()),
+        ])?,
+        8192,
+    )?;
+    let reason = "internal audit artifact write failed: fixture-failure";
+    let lane = json!({"lane":"audit-fixture", "provider":"fixture", "model":"fixture-model", "endpoint_kind":"openai-chat", "status":"degraded", "reason":reason});
+    let mut receipt = json!({"model_mode":"auto", "model_lanes":[lane.clone()], "missing_or_failed_model_evidence":[lane.clone()]});
+    let summary = regenerate_summary(&out, &receipt)?;
+    let missing = summary
+        .split_once("## Missing or failed model evidence")
+        .context("missing model evidence section")?
+        .1;
+    ensure!(
+        missing.contains("- Lane `audit-fixture` via `fixture` model `fixture-model` endpoint `openai-chat`: `degraded` - internal audit artifact write failed: fixture-failure"),
+        "hydration lost recorded failure: {missing}"
+    );
+    ensure!(!summary.contains("No planned model evidence is currently missing or failed."));
+
+    // Persisted issue identity remains useful even without a lane receipt.
+    receipt["model_lanes"] = json!([]);
+    let standalone = regenerate_summary(&out, &receipt)?;
+    ensure!(standalone.contains("fixture-failure"));
+    ensure!(!standalone.contains("No planned model evidence is currently missing or failed."));
+
+    // Explicit audit evidence and a different legacy status gap must coexist.
+    let mut timed_out = lane.clone();
+    timed_out["lane"] = json!("other-fixture");
+    timed_out["status"] = json!("timed_out");
+    timed_out["reason"] = json!("independent-timeout");
+    receipt["model_lanes"] = json!([lane.clone(), timed_out]);
+    let combined = regenerate_summary(&out, &receipt)?;
+    let missing = combined
+        .split_once("## Missing or failed model evidence")
+        .context("missing model evidence section")?
+        .1;
+    ensure!(missing.contains("fixture-failure") && missing.contains("independent-timeout"));
+
+    // A different recorded reason for the same lane is distinct evidence.
+    let mut earlier_issue = lane.clone();
+    earlier_issue["reason"] = json!("earlier-audit-failure");
+    receipt["missing_or_failed_model_evidence"] = json!([lane.clone(), earlier_issue]);
+    let history = regenerate_summary(&out, &receipt)?;
+    let missing = history
+        .split_once("## Missing or failed model evidence")
+        .context("missing model evidence section")?
+        .1;
+    ensure!(missing.contains("fixture-failure") && missing.contains("earlier-audit-failure"));
+
+    // Contentful degradation alone is still usable evidence, not a generic gap.
+    let mut healthy = lane.clone();
+    healthy["reason"] = json!("contentful lane output was preserved as degraded evidence");
+    receipt["model_lanes"] = json!([healthy]);
+    receipt["missing_or_failed_model_evidence"] = json!([]);
+    let healthy_summary = regenerate_summary(&out, &receipt)?;
+    ensure!(healthy_summary.contains("No planned model evidence is currently missing or failed."));
+    ensure!(!healthy_summary.contains("fixture-failure"));
+
+    // Old packets without the explicit array retain status-based reconstruction.
+    let mut failed = lane;
+    failed["status"] = json!("failed");
+    failed["reason"] = json!("legacy-failure");
+    receipt = json!({"model_mode":"auto", "model_lanes":[failed.clone()]});
+    let legacy = regenerate_summary(&out, &receipt)?;
+    ensure!(legacy.contains("legacy-failure"));
+    ensure!(!legacy.contains("No planned model evidence is currently missing or failed."));
+
+    // Explicit and reconstructed copies of the same issue render only once.
+    receipt["missing_or_failed_model_evidence"] = json!([failed]);
+    let deduplicated = regenerate_summary(&out, &receipt)?;
+    let missing = deduplicated
+        .split_once("## Missing or failed model evidence")
+        .context("missing model evidence section")?
+        .1;
+    ensure!(
+        missing.matches("legacy-failure").count() == 1,
+        "duplicate issue after hydration: {missing}"
+    );
+
+    // The producer records preflight issues with this reserved lane identity.
+    let preflight = json!({"provider":"fixture", "model":"fixture-model", "endpoint_kind":"openai-chat", "status":"failed", "reason":"preflight-failure"});
+    let mut preflight_issue = preflight.clone();
+    preflight_issue["lane"] = json!("provider-preflight");
+    receipt = json!({"provider_preflights":[preflight], "missing_or_failed_model_evidence":[preflight_issue]});
+    let preflight_summary = regenerate_summary(&out, &receipt)?;
+    let missing = preflight_summary
+        .split_once("## Missing or failed model evidence")
+        .context("missing model evidence section")?
+        .1;
+    ensure!(
+        missing.matches("preflight-failure").count() == 1,
+        "duplicate preflight issue: {missing}"
+    );
+    ensure!(missing.contains("Provider preflight `fixture`"));
+    Ok(())
+}
+
 #[test]
 fn partial_failure_preserves_source_records_and_recovers_on_next_run() -> Result<()> {
     let temp = tempfile::tempdir()?;

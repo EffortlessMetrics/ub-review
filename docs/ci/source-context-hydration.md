@@ -84,6 +84,19 @@ Compare source IDs and original commit/body identities with the retained failed
 packet. A recovered run can add the missing endpoint while the earlier failure
 receipt remains available. Never relabel historical context as current proof.
 
+## Regenerating packet summaries
+
+`summary --run-dir <packet>` retains the packet's recorded
+`missing_or_failed_model_evidence` entries alongside legacy status-derived
+issues. An internal-audit write failure recorded for a degraded lane therefore
+remains visible in the missing-evidence section. Identical persisted and
+reconstructed copies render once;
+different reasons remain distinct. Packets without the array retain their
+existing status fallback, and contentful degradation alone is not reclassified
+as missing evidence. This preserves recorded failures during hydration; it does
+not execute providers, repair missing audit files, or add a malformed-packet
+recovery contract or a general summary-input memory limit.
+
 ## Measured costs and qualification
 
 On 2026-10-13, Linux cloud host: 16 GiB cgroup memory limit, four-CPU quota,
@@ -113,11 +126,12 @@ Connected snapshot SHA256:
 Campaign inputs, raw packets, script and costs are retained under
 `/workspace/evidence-1407/`; this local path is not a hosted artifact link.
 
-The eleven actual-CLI regressions include a real 30s stalled read, capture overflow
+The twelve actual-CLI regressions include a real 30s stalled read, capture overflow
 without Content-Length, cutoff while a producer withholds EOF, exact capture
 boundary including the status trailer, malformed JSON/shape/items and recovery, UTF-8/zero-budget truncation,
 partial-to-recovered records, permission-denial stop and oversized 401/403
-denial bodies. On Linux they observe
+denial bodies, plus persisted model-evidence hydration and legacy/healthy controls.
+On Linux they observe
 live acquisition children through procfs and require their absence after return.
 The prior six-test suite took 31.93s at its retained candidate, before adding
 the oversized-denial regression. Twelve existing
