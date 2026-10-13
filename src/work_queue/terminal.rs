@@ -523,17 +523,54 @@ fn terminal_proof_receipt_status(receipt: &ProofReceipt) -> Result<String> {
     );
     if receipt.result == "skipped_unresolved" {
         anyhow::ensure!(
-            receipt.commands.iter().all(|command| {
-                command.status == "skipped"
-                    && command.exit_code.is_none()
-                    && !command.timed_out
-                    && command.duration_ms == 0
-            }),
+            unresolved_terminal_command_roles(receipt),
             "proof receipt {} has contradictory execution metadata for skipped_unresolved",
             receipt.id
         );
     }
     Ok(receipt.result.clone())
+}
+
+// An unresolved proof side did not execute. Setup and an earlier HEAD may
+// already have completed, and must retain their own truthful execution facts.
+fn unresolved_terminal_command_roles(receipt: &ProofReceipt) -> bool {
+    let skipped = |command: &ProofCommandReceipt| {
+        command.status == "skipped"
+            && command.exit_code.is_none()
+            && !command.timed_out
+            && command.duration_ms == 0
+            && command.timeout_sec == 0
+    };
+    let passed = |command: &ProofCommandReceipt| {
+        command.status == "passed" && command.exit_code == Some(0) && !command.timed_out
+    };
+    match receipt.commands.as_slice() {
+        [] => true, // Existing broker pre-execution refusals may have no commands.
+        [head] => head.side == "head" && skipped(head),
+        [setup, head] if setup.side == "nightly-preflight" => {
+            receipt.test_patch_mode == "head-only"
+                && head.side == "head"
+                && skipped(head)
+                && match setup.status.as_str() {
+                    "passed" => passed(setup),
+                    "failed" => !setup.timed_out && setup.exit_code != Some(0),
+                    "timed_out" => setup.timed_out,
+                    "skipped" => {
+                        !setup.timed_out && setup.exit_code.is_none() && setup.duration_ms == 0
+                    }
+                    _ => false,
+                }
+        }
+        [head, baseline] => {
+            receipt.kind == "focused-red-green"
+                && receipt.test_patch_mode == "base-plus-tests"
+                && head.side == "head"
+                && passed(head)
+                && baseline.side == "base-plus-tests"
+                && skipped(baseline)
+        }
+        _ => false,
+    }
 }
 
 fn load_proof_task_request_ids(out: &Path) -> Result<BTreeMap<String, Vec<String>>> {

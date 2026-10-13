@@ -1167,6 +1167,26 @@ mod worker_proof_tests {
             &proof_command_task_id("proof-request-unresolved", "head")?,
         )?;
         ensure!(task["state"] == serde_json::json!({"TerminallyDeclined": "Refused"}));
+        // Feed the actual worker receipt through the terminal consumer. Its
+        // completed preflight is execution evidence, not the unresolved proof.
+        fs::write(
+            out.join("work_queue_plan.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "schema": crate::artifacts::WORK_QUEUE_SCHEMA,
+                "tasks": []
+            }))?,
+        )?;
+        write_proof_receipt_artifacts(&out, std::slice::from_ref(&receipt), None)?;
+        let queue: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("work_queue_terminal.json"))?)?;
+        ensure!(queue["tasks"][0]["status"] == "skipped_unresolved");
+        ensure!(queue["tasks"][0]["reason"] == receipt.reason);
+        ensure!(queue["tasks"][0]["receipt_ids"] == serde_json::json!([receipt.id]));
+        ensure!(queue["tasks"][0]["request_ids"] == serde_json::json!(receipt.request_ids));
+        ensure!(matches!(
+            required_proof_receipt_class(&receipt),
+            RequiredProofClass::Skipped
+        ));
         Ok(())
     }
 
