@@ -38,6 +38,9 @@ pub(crate) fn command_version(command: &str) -> Option<String> {
         .arg("--version")
         .output()
         .ok()?;
+    if !output.status.success() {
+        return None;
+    }
     let text = if output.stdout.is_empty() {
         String::from_utf8_lossy(&output.stderr).to_string()
     } else {

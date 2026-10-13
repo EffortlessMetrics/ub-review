@@ -3273,6 +3273,80 @@ command = "ub-review-test-missing-tokmd"
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn doctor_rejects_failed_version_probe_even_when_it_prints_the_pin() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempfile::tempdir()?;
+    let config = temp.path().join(".ub-review.toml");
+    let mut config_text = "profile = \"gh-runner\"\n".to_owned();
+    for (tool, version) in [
+        ("tokmd", "1.12.0"),
+        ("cargo-allow", "0.1.8"),
+        ("ripr", "0.10.0"),
+        ("unsafe-review", "0.3.4"),
+        ("ast-grep", "0.0.0"),
+        ("actionlint", "1.7.12"),
+    ] {
+        let executable = temp.path().join(tool);
+        write_file(
+            &executable,
+            &format!("#!/bin/sh\nprintf '{tool} {version}\\n'\n"),
+        )?;
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755))?;
+        config_text.push_str(&format!(
+            "\n[tools.{tool}]\ncommand = {:?}\n",
+            path_str(&executable)?
+        ));
+    }
+    write_file(&config, &config_text)?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let args = [
+        "doctor",
+        "--config",
+        path_str(&config)?,
+        "--require-core-tools",
+    ];
+    run_capture_with_env(temp.path(), bin, &args, &[])?;
+
+    for (label, redirect) in [("stdout", ""), ("stderr", " >&2")] {
+        let executable = temp.path().join(format!("failed-probe-{label}"));
+        write_file(
+            &executable,
+            &format!("#!/bin/sh\nprintf 'tokmd 1.12.0\\n'{redirect}\nexit 2\n"),
+        )?;
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755))?;
+        let failed_config = temp.path().join(format!("failed-{label}.toml"));
+        let failed_text = config_text.replace(
+            &format!("command = {:?}", path_str(&temp.path().join("tokmd"))?),
+            &format!("command = {:?}", path_str(&executable)?),
+        );
+        write_file(&failed_config, &failed_text)?;
+        let output = run_expect_failure_with_env(
+            temp.path(),
+            bin,
+            &[
+                "doctor",
+                "--config",
+                path_str(&failed_config)?,
+                "--require-core-tools",
+            ],
+            &[],
+        )?;
+        assert!(output.contains("tokmd expected 1.12.0, got no --version output"));
+        assert!(output.contains("tokmd version unknown:"));
+        let advisory = run_capture_with_env(
+            temp.path(),
+            bin,
+            &["doctor", "--config", path_str(&failed_config)?],
+            &[],
+        )?;
+        assert!(advisory.contains("tokmd version unknown:"));
+    }
+    Ok(())
+}
+
 #[test]
 fn doctor_reports_provider_key_env_status_without_values() -> Result<()> {
     let temp = tempfile::tempdir()?;
