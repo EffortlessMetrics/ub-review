@@ -1,6 +1,15 @@
 schema_version = "1"
 tool = "cargo-allow"
 
+[[exception]]
+id = "cargo-selection-metadata-preparation"
+kind = "process-spawn"
+path = "src/proof/cargo_selection.rs"
+owner = "ub-review/proof"
+reason = "#1005 exact Cargo test selection uses a fixed cargo metadata --locked --offline --format-version 1 source-discovery query through the existing timeout/process primitive, never model argv or a proof result. Preparation takes at most five seconds within the command ceiling; proof execution uses remaining time. Metadata read/retention is capped at four MiB after completion; peak subprocess disk streaming remains the existing #1281 boundary. Missing, partial or ambiguous metadata yields skipped_unresolved. This is not scheduler or complete-packet authority."
+created = "2026-10-13"
+review_after = "2026-11-13"
+
 # Default source-tree exception ledger. Keep this consolidated until real
 # exception volume proves that narrower ledgers improve reviewability.
 

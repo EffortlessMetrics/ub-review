@@ -393,7 +393,7 @@ where
             ));
         }
     };
-    let nightly_available = preflight_receipt.status == "passed";
+    let nightly_available = preflight_receipt.command.status == "passed";
 
     let command_task = ProofCommandTask::worker(&request, timeout_sec);
     let kind_str = request.kind.key().to_owned();
@@ -460,14 +460,14 @@ where
         }
     };
 
-    let result = if lease.status == "granted" {
-        classify_worker_proof_result(&request.kind, &command_receipt)
+    let result = if lease.status == "granted" && !command_receipt.unresolved {
+        classify_worker_proof_result(&request.kind, &command_receipt.command)
     } else {
         "skipped_unresolved".to_owned()
     };
     let reason = format!(
         "{}: {}; nightly preflight {}",
-        kind_str, result, preflight_receipt.status
+        kind_str, result, preflight_receipt.command.status
     );
     let receipt = ProofReceipt {
         revision: Some(revision.clone()),
@@ -479,7 +479,7 @@ where
         test_patch_mode: "head-only".to_owned(),
         requested_by: request.requested_by.clone(),
         request_ids: request.claim_ids.clone(),
-        commands: vec![preflight_receipt, command_receipt],
+        commands: vec![preflight_receipt.command, command_receipt.command],
         result,
         reason,
     };
@@ -531,7 +531,7 @@ fn run_worker_command_receipt<F>(
     task_ledger: &ProofTaskLedger,
     task: &ProofCommandTask,
     runner: &mut F,
-) -> Result<ProofCommandReceipt>
+) -> Result<SelectionCheckedCommand>
 where
     F: FnMut(
         &Path,
@@ -543,7 +543,7 @@ where
         &mut dyn FnMut(CommandProcessObservation),
     ) -> Result<CommandStatus>,
 {
-    run_proof_command_receipt(
+    run_selection_checked_command(
         ProofCommandInvocation {
             command_root: root,
             out,
@@ -10160,6 +10160,9 @@ index 1111111..2222222 100644
         let out = temp.path().join("out");
         let base_root = temp.path().join("base-plus-tests");
         fs::create_dir_all(&base_root)?;
+        for root in [temp.path(), base_root.as_path()] {
+            super::proof::cargo_selection::tests::declared_mock_package(root, "ub-review", None)?;
+        }
         let diff = test_diff();
         let command =
             "cargo test --locked -p ub-review cargo_focused_red_green -- --exact".to_owned();
@@ -10223,7 +10226,7 @@ index 1111111..2222222 100644
                 commands.push(super::test_parse::command_display_with_env(env, argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
                 assert!(env.is_empty());
-                assert_eq!(timeout, 300);
+                assert!(timeout > 0 && timeout <= 300);
                 fs::write(
                     stdout,
                     if is_base {

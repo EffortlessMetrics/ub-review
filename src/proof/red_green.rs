@@ -152,7 +152,7 @@ where
         let receipt = match task.mode {
             FocusedProofMode::HeadOnly => {
                 let head_spec = proof_task_command_spec(&task, "head");
-                let head = run_proof_command_receipt_for_task(
+                let checked = run_proof_command_receipt_for_task(
                     root,
                     out,
                     &task,
@@ -164,11 +164,16 @@ where
                     execution_phase,
                     &mut runner,
                 )?;
-                let result = match head.status.as_str() {
-                    "passed" => "head_passed",
-                    "failed" => "head_failed",
-                    "timed_out" => "timed_out",
-                    _ => "skipped_profile",
+                let head = checked.command;
+                let result = if checked.unresolved {
+                    "skipped_unresolved"
+                } else {
+                    match head.status.as_str() {
+                        "passed" => "head_passed",
+                        "failed" => "head_failed",
+                        "timed_out" => "timed_out",
+                        _ => "skipped_profile",
+                    }
                 };
                 let reason = format!("HEAD proof {}: {}", head.status, head.reason);
                 focused_head_receipt(diff, &task, vec![head], result.to_owned(), reason)
@@ -245,7 +250,7 @@ where
     clippy::too_many_arguments,
     reason = "lease is an execution precondition for the proof command; keeping it explicit pins the no-lease-no-command broker contract"
 )]
-fn run_focused_red_green_proof_task_with_cleanup<F, G, H>(
+pub(super) fn run_focused_red_green_proof_task_with_cleanup<F, G, H>(
     root: &Path,
     out: &Path,
     diff: &DiffContext,
@@ -272,7 +277,7 @@ where
     H: FnMut(&Path, &Path) -> Result<()>,
 {
     let head_spec = proof_task_command_spec(task, "head");
-    let head = run_proof_command_receipt_for_task(
+    let checked_head = run_proof_command_receipt_for_task(
         root,
         out,
         task,
@@ -284,12 +289,17 @@ where
         execution_phase,
         runner,
     )?;
+    let head = checked_head.command;
     let head_status = head.status.clone();
     if head_status != "passed" {
-        let result = match head_status.as_str() {
-            "timed_out" => "timed_out",
-            "failed" => "head_failed",
-            _ => "skipped_profile",
+        let result = if checked_head.unresolved {
+            "skipped_unresolved"
+        } else {
+            match head_status.as_str() {
+                "timed_out" => "timed_out",
+                "failed" => "head_failed",
+                _ => "skipped_profile",
+            }
         };
         let reason = format!("HEAD proof {}: {}", head.status, head.reason);
         return Ok(focused_red_green_receipt(
@@ -338,7 +348,7 @@ where
     };
     let base_spec = proof_task_command_spec(task, "base-plus-tests");
     let mut cleanup = || cleanup_base_plus_tests(root, &base_root);
-    let base = run_proof_command_receipt_for_task_with_cleanup(
+    let checked_base = run_proof_command_receipt_for_task_with_cleanup(
         &base_root,
         out,
         task,
@@ -351,23 +361,31 @@ where
         Some(&mut cleanup),
         runner,
     )?;
-    let (result, reason) = match base.status.as_str() {
-        "failed" => (
-            "discriminating".to_owned(),
-            format!("HEAD passed; base+tests failed: {}", base.reason),
-        ),
-        "passed" => (
-            "non_discriminating".to_owned(),
-            "HEAD and base+tests both passed".to_owned(),
-        ),
-        "timed_out" => (
-            "timed_out".to_owned(),
-            format!("base+tests timed out: {}", base.reason),
-        ),
-        _ => (
-            "skipped_profile".to_owned(),
-            format!("base+tests proof unavailable: {}", base.reason),
-        ),
+    let base = checked_base.command;
+    let (result, reason) = if checked_base.unresolved {
+        (
+            "skipped_unresolved".to_owned(),
+            format!("base+tests selection unresolved: {}", base.reason),
+        )
+    } else {
+        match base.status.as_str() {
+            "failed" => (
+                "discriminating".to_owned(),
+                format!("HEAD passed; base+tests failed: {}", base.reason),
+            ),
+            "passed" => (
+                "non_discriminating".to_owned(),
+                "HEAD and base+tests both passed".to_owned(),
+            ),
+            "timed_out" => (
+                "timed_out".to_owned(),
+                format!("base+tests timed out: {}", base.reason),
+            ),
+            _ => (
+                "skipped_profile".to_owned(),
+                format!("base+tests proof unavailable: {}", base.reason),
+            ),
+        }
     };
     Ok(focused_red_green_receipt(
         diff,
