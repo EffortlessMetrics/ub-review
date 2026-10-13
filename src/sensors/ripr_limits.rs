@@ -191,6 +191,30 @@ mod tests {
     }
 
     #[test]
+    fn read_prefix_rejects_non_regular_files() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let error = read_prefix(temp.path()).expect_err("directory is not a regular file");
+        assert_eq!(error.kind(), std::io::ErrorKind::Other);
+        assert_eq!(error.to_string(), "diagnostic source is not a regular file");
+        Ok(())
+    }
+
+    #[test]
+    fn module_note_context_limit_counts_utf8_bytes() {
+        let exact_ascii = "a".repeat(1024);
+        assert!(parse_note(note(&exact_ascii).trim()).is_some());
+        assert!(parse_note(note(&(exact_ascii + "a")).trim()).is_none());
+
+        let exact_utf8 = format!("{}{}", "界".repeat(256), "a".repeat(256));
+        assert_eq!(exact_utf8.len(), 1024);
+        assert!(parse_note(note(&exact_utf8).trim()).is_some());
+        let over_utf8 = format!("{exact_utf8}界");
+        assert_eq!(over_utf8.chars().count(), 513);
+        assert_eq!(over_utf8.len(), 1027);
+        assert!(parse_note(note(&over_utf8).trim()).is_none());
+    }
+
+    #[test]
     fn module_note_contract_rejects_malformed_counts_reasons_and_paths() {
         assert_eq!(
             parse_note(note("tests/日本語.rs").trim()),
@@ -269,6 +293,29 @@ mod tests {
         assert_eq!(value["sources"][0]["state"], "truncated");
         assert_eq!(value["sources"][0]["captured_bytes"], CAP);
         assert_eq!(value["detail_status"], "detail_unavailable");
+
+        let mut exact_cap = note("exact-cap.rs").into_bytes();
+        while exact_cap.len() + 2 <= CAP {
+            exact_cap.extend_from_slice(b"x\n");
+        }
+        if exact_cap.len() < CAP {
+            exact_cap.push(b'x');
+        }
+        assert_eq!(exact_cap.len(), CAP);
+        fs::write(dir.join("stderr.txt"), &exact_cap)?;
+        let exact = module_limit_evidence(dir, "ok");
+        assert_eq!(exact["sources"][0]["captured_bytes"], CAP);
+        assert_eq!(exact["sources"][0]["truncated"], false);
+        assert_eq!(exact["sources"][0]["state"], "disclosed");
+        assert_eq!(exact["entries"].as_array().map(Vec::len), Some(1));
+
+        exact_cap.push(b'x');
+        fs::write(dir.join("stderr.txt"), &exact_cap)?;
+        let over = module_limit_evidence(dir, "ok");
+        assert_eq!(over["sources"][0]["captured_bytes"], CAP);
+        assert_eq!(over["sources"][0]["truncated"], true);
+        assert_eq!(over["sources"][0]["state"], "truncated");
+        assert_eq!(over["entries"].as_array().map(Vec::len), Some(0));
         let many = (0..129)
             .map(|index| note(&format!("src/{index}.rs")))
             .collect::<String>();
