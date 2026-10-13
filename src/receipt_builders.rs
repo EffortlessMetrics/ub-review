@@ -4,6 +4,72 @@
 
 use crate::*;
 
+#[cfg(test)]
+mod bounded_file_tests {
+    use super::*;
+
+    #[test]
+    fn bounded_file_empty_does_not_reserve_the_capture_ceiling() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("empty.md");
+        fs::write(&path, b"")?;
+        let actual = read_bounded_text_with_status(&path, usize::MAX)?;
+        assert_eq!(actual.text, "");
+        assert!(!actual.truncated);
+        Ok(())
+    }
+
+    #[test]
+    fn bounded_file_small_does_not_reserve_the_capture_ceiling() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("ledger.md");
+        fs::write(&path, "Prior claim: café remains unresolved.\n")?;
+        let actual = read_bounded_text_with_status(&path, usize::MAX)?;
+        assert_eq!(actual.text, "Prior claim: café remains unresolved.\n");
+        assert!(!actual.truncated);
+        assert_eq!(
+            read_bounded_text(&path, usize::MAX)?,
+            "Prior claim: café remains unresolved.\n"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn bounded_file_preserves_exact_excerpts_and_truncation_truth() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("excerpt.txt");
+        let cases: &[(&[u8], usize, &str, bool)] = &[
+            (b"", 0, "", false),
+            (b"abc", 0, "\n[truncated]\n", true),
+            (b"abc", 2, "ab\n[truncated]\n", true),
+            (b"abc", 3, "abc", false),
+            (b"abc", 4, "abc", false),
+            ("café".as_bytes(), 4, "caf\u{fffd}\n[truncated]\n", true),
+            ("café".as_bytes(), 5, "café", false),
+            (&[b'a', 0xff, b'b'], 3, "a\u{fffd}b", false),
+        ];
+        for (input, budget, expected, truncated) in cases {
+            fs::write(&path, input)?;
+            let actual = read_bounded_text_with_status(&path, *budget)?;
+            assert_eq!(actual.text, *expected, "input {input:?}, budget {budget}");
+            assert_eq!(actual.truncated, *truncated, "budget {budget}");
+            assert_eq!(read_bounded_text(&path, *budget)?, *expected);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn bounded_file_missing_remains_an_error() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let missing = temp.path().join("missing.md");
+        let error = read_bounded_text_with_status(&missing, usize::MAX)
+            .err()
+            .context("missing evidence must not be admitted as empty text")?;
+        assert!(error.to_string().contains("open "));
+        Ok(())
+    }
+}
+
 pub(crate) fn render_ledger_context(
     root: &Path,
     config: &Config,
