@@ -1931,6 +1931,220 @@ phase = "sometime"
     }
 
     #[test]
+    fn provider_shape_receipts_omit_scalar_payload_in_written_artifacts() -> Result<()> {
+        for payload in [
+            "SYNTHETIC_PRIVATE_VALUE_1427".to_owned(),
+            "SYNTHETIC_PRIVATE_VALUE_1427".repeat(1024),
+        ] {
+            let text = format!("providers = \"{payload}\"\n[impact]\nmode = \"active\"\n");
+            let (config, effective, gate) = provider_shape_artifacts(&text)?;
+            ensure_provider_shape_receipt(
+                &config,
+                &effective,
+                &gate,
+                "providers",
+                "invalid [providers]: expected a table with `policy`, `minimax`, and `opencode` keys, found string",
+            )?;
+            anyhow::ensure!(config.providers.policy.is_empty());
+            anyhow::ensure!(config.providers.minimax.is_empty());
+            anyhow::ensure!(config.providers.opencode.is_empty());
+            anyhow::ensure!(effective["impact"]["mode"] == "active");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn provider_shape_receipts_omit_nested_array_payload_and_keep_siblings() -> Result<()> {
+        for (provider, sibling) in [("minimax", "opencode"), ("opencode", "minimax")] {
+            let text = format!(
+                "[providers]\npolicy = \"minimax-only\"\n{provider} = [{{ SYNTHETIC_FIELD_1427 = \"SYNTHETIC_PRIVATE_VALUE_1427\" }}]\n{sibling} = {{ max_concurrency = 2 }}\n"
+            );
+            let (config, effective, gate) = provider_shape_artifacts(&text)?;
+            ensure_provider_shape_receipt(
+                &config,
+                &effective,
+                &gate,
+                &format!("providers.{provider}"),
+                &format!("invalid [providers.{provider}]: expected a table, found array"),
+            )?;
+            anyhow::ensure!(effective["providers"].get(provider).is_none());
+            anyhow::ensure!(effective["providers"][sibling]["max_concurrency"] == 2);
+            anyhow::ensure!(config.providers.policy == "minimax-only");
+            anyhow::ensure!(
+                match sibling {
+                    "minimax" => config.providers.minimax.max_concurrency,
+                    _ => config.providers.opencode.max_concurrency,
+                } == Some(2)
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn provider_shape_receipts_name_each_toml_type_without_value_context() -> Result<()> {
+        // Expected type names are fixture data, independent of Value::type_str.
+        for (literal, expected_type) in [
+            ("42", "integer"),
+            ("3.25", "float"),
+            ("false", "boolean"),
+            ("2026-10-13T00:00:00Z", "datetime"),
+            ("[]", "array"),
+        ] {
+            for section in ["providers", "providers.minimax", "providers.opencode"] {
+                let text = if section == "providers" {
+                    format!("providers = {literal}\n")
+                } else {
+                    format!("{section} = {literal}\n")
+                };
+                let (config, effective, gate) = provider_shape_artifacts(&text)?;
+                let expected = if section == "providers" {
+                    format!(
+                        "invalid [providers]: expected a table with `policy`, `minimax`, and `opencode` keys, found {expected_type}"
+                    )
+                } else {
+                    format!("invalid [{section}]: expected a table, found {expected_type}")
+                };
+                ensure_provider_shape_receipt(&config, &effective, &gate, section, &expected)?;
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn provider_shape_receipts_preserve_valid_tables_and_multiple_failures() -> Result<()> {
+        for text in [
+            "",
+            "[providers]\n",
+            "[providers]\npolicy = \"minimax-only\"\nminimax = { max_concurrency = 3, prompt_cache = \"off\" }\nopencode = { max_concurrency = 2 }\n",
+        ] {
+            let (config, effective, gate) = provider_shape_artifacts(text)?;
+            anyhow::ensure!(config.policy_errors.is_empty());
+            anyhow::ensure!(effective.get("policy_errors").is_none());
+            anyhow::ensure!(gate["conclusion"] == "pass");
+            anyhow::ensure!(gate["reasons"] == serde_json::json!([]));
+            if !config.providers.policy.is_empty() {
+                anyhow::ensure!(effective["providers"]["policy"] == "minimax-only");
+                anyhow::ensure!(effective["providers"]["minimax"]["max_concurrency"] == 3);
+                anyhow::ensure!(effective["providers"]["minimax"]["prompt_cache"] == "off");
+                anyhow::ensure!(effective["providers"]["opencode"]["max_concurrency"] == 2);
+            }
+        }
+        let (config, effective, gate) = provider_shape_artifacts(
+            "[providers]\nminimax = [\"SYNTHETIC_PRIVATE_VALUE_1427\"]\nopencode = \"SYNTHETIC_PRIVATE_VALUE_1427\"\n",
+        )?;
+        anyhow::ensure!(config.policy_errors.len() == 2);
+        anyhow::ensure!(effective["policy_errors"].as_array().map(Vec::len) == Some(2));
+        anyhow::ensure!(gate["conclusion"] == "fail");
+        anyhow::ensure!(
+            gate["reasons"]
+                == serde_json::json!([
+                    {"kind": "policy", "id": "providers.minimax", "detail": "invalid [providers.minimax]: expected a table, found array", "receipt": "effective-config.json"},
+                    {"kind": "policy", "id": "providers.opencode", "detail": "invalid [providers.opencode]: expected a table, found string", "receipt": "effective-config.json"}
+                ])
+        );
+        Ok(())
+    }
+
+    // Exercise the real file reader and both production artifact writers with
+    // model work disabled, synthetic inputs, and no sensor or proof execution.
+    fn provider_shape_artifacts(
+        text: &str,
+    ) -> Result<(Config, serde_json::Value, serde_json::Value)> {
+        let temp = tempfile::tempdir()?;
+        let config_path = temp.path().join("synthetic.toml");
+        fs::write(&config_path, text)?;
+        let config = Config::load_or_default(&config_path, Some("gh-runner"))?;
+        let out = temp.path().join("out");
+        let plan = crate::tests::test_plan(Vec::new());
+        let diff = crate::tests::test_diff();
+        let box_state = crate::BoxState {
+            cpus: 2,
+            free_mem_mb: Some(7_000),
+            free_disk_mb: Some(10_000),
+            load_1m: Some(0.5),
+            github_actions: false,
+        };
+        let mut args = crate::tests::test_run_args(out.clone());
+        args.model_mode = crate::ModelMode::Off;
+        crate::write_plan_artifacts(
+            &out,
+            &config,
+            &diff,
+            &box_state,
+            &plan,
+            None,
+            crate::plan_artifacts::PlanArtifactSelectors {
+                run_args: Some(&args),
+                selectors: &args.selectors,
+                effective_model_lanes: None,
+            },
+        )?;
+        let event_log = crate::EventLog::open(&out.join("events.ndjson"))?;
+        let started = std::time::Instant::now();
+        crate::write_review_artifacts(
+            temp.path(),
+            &out,
+            &config,
+            &diff,
+            &box_state,
+            &plan,
+            None,
+            "synthetic provider-shape receipt control",
+            crate::absent_pr_thread_context(0),
+            &args,
+            &event_log,
+            &started,
+            &mut crate::RunLoopTracker::new(),
+            std::time::Duration::ZERO,
+            None,
+            None,
+        )?;
+        let effective_bytes = fs::read(out.join("effective-config.json"))?;
+        let gate_bytes = fs::read(out.join("review/gate_outcome.json"))?;
+        let leaks = [&effective_bytes, &gate_bytes].map(|bytes| {
+            std::str::from_utf8(bytes).map(|text| {
+                text.contains("SYNTHETIC_PRIVATE_VALUE_1427")
+                    || text.contains("SYNTHETIC_FIELD_1427")
+            })
+        });
+        let effective_leaks = leaks[0].clone()?;
+        let gate_leaks = leaks[1].clone()?;
+        anyhow::ensure!(
+            !effective_leaks && !gate_leaks,
+            "synthetic rejected-payload disclosure: effective-config.json={effective_leaks}, review/gate_outcome.json={gate_leaks}"
+        );
+        Ok((
+            config,
+            serde_json::from_slice(&effective_bytes)?,
+            serde_json::from_slice(&gate_bytes)?,
+        ))
+    }
+
+    fn ensure_provider_shape_receipt(
+        config: &Config,
+        effective: &serde_json::Value,
+        gate: &serde_json::Value,
+        section: &str,
+        expected: &str,
+    ) -> Result<()> {
+        anyhow::ensure!(config.policy_errors.len() == 1);
+        anyhow::ensure!(config.policy_errors[0].section == section);
+        anyhow::ensure!(config.policy_errors[0].detail == expected);
+        anyhow::ensure!(config.policy_errors[0].detail.len() <= 120);
+        anyhow::ensure!(
+            effective["policy_errors"]
+                == serde_json::json!([{"section": section, "detail": expected}])
+        );
+        anyhow::ensure!(gate["schema"] == "ub-review.gate_outcome.v1");
+        anyhow::ensure!(gate["conclusion"] == "fail");
+        anyhow::ensure!(
+            gate["reasons"]
+                == serde_json::json!([{"kind": "policy", "id": section, "detail": expected, "receipt": "effective-config.json"}])
+        );
+        Ok(())
+    }
+
+    #[test]
     fn providers_section_receipts_invalid_max_concurrency() -> anyhow::Result<()> {
         let mut value = providers_max_concurrency_document(
             toml::Value::Integer(0),
