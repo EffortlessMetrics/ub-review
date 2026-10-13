@@ -50,7 +50,8 @@ Each curl request has its own 30-second deadline and captures at most
 not remove the byte bound. Overflow rejects the whole endpoint, closes the
 reader, kills and reaps the child. Failed bodies and stderr are not retained;
 diagnostics contain endpoint, exit/status or parse/shape/size cause and recovery.
-Curl's user config is disabled. There is no response spool or detached reader.
+Curl's user config and output buffering are disabled for thread reads, so an
+overflow need not wait for the producer's EOF. There is no response spool or detached reader.
 Three stalled endpoints can cost approximately 90 seconds plus small startup
 overhead; this is not a shared hard run deadline or a host-level cgroup limit.
 
@@ -59,6 +60,10 @@ parse, shape or size failure. Original record IDs, full admitted bodies, source
 anchors, commit IDs and head bindings remain unchanged. Failed endpoints are
 excluded from successful API sources and add incomplete-coverage warnings.
 All failed endpoints produce `unavailable`, not an empty successful snapshot.
+An admitted array item must be an object. A null or scalar item rejects that
+endpoint, including any valid prefix, rather than inventing a source record.
+The warning identifies the item ordinal without echoing its value. Empty arrays
+remain valid, and omitted items past the first-page limit are not admitted.
 Failed HTTP responses stop curl at their headers, so an oversized or stalled
 denial body cannot hide its status behind the capture limit. HTTP 401/403 stops
 further API reads; resolve access through the existing owner
@@ -108,8 +113,9 @@ Connected snapshot SHA256:
 Campaign inputs, raw packets, script and costs are retained under
 `/workspace/evidence-1407/`; this local path is not a hosted artifact link.
 
-The seven actual-CLI regressions include a real 30s stalled read, capture overflow
-without Content-Length, malformed JSON/shape, UTF-8/zero-budget truncation,
+The eleven actual-CLI regressions include a real 30s stalled read, capture overflow
+without Content-Length, cutoff while a producer withholds EOF, exact capture
+boundary including the status trailer, malformed JSON/shape/items and recovery, UTF-8/zero-budget truncation,
 partial-to-recovered records, permission-denial stop and oversized 401/403
 denial bodies. On Linux they observe
 live acquisition children through procfs and require their absence after return.
