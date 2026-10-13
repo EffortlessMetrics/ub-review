@@ -672,6 +672,42 @@ mod bounded_git_tests {
         assert!(start.elapsed() < Duration::from_millis(180));
         Ok(())
     }
+
+    /// EOF before timeout exercises owned-child waiting rather than the pipe
+    /// deadline. A vanished /proc entry excludes a surviving child or zombie.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn timeout_after_stdout_closes_kills_and_reaps_owned_child() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let pid_file = temp.path().join("owned.pid");
+        let mut sleeping = Command::new("sh");
+        sleeping
+            .args([
+                "-c",
+                "printf '%s' \"$$\" > \"$1\"; exec 1>&-; exec sleep 10",
+                "owned-observation-child",
+            ])
+            .arg(&pid_file);
+        let start = Instant::now();
+        let result = capture_git_bytes(&mut sleeping, 8, Duration::from_millis(500));
+        let pid = std::fs::read_to_string(&pid_file)?.parse::<u32>()?;
+        let alive = std::path::Path::new("/proc").join(pid.to_string()).exists();
+        // Keep test-owned cleanup bounded if a future cleanup regression (or
+        // an isolated mutant) leaves the process alive. Assert the pre-cleanup
+        // observation so the regression cannot be hidden by this fixture.
+        if alive {
+            let mut cleanup = Command::new("kill");
+            cleanup.arg(pid.to_string());
+            let _ = capture_git_bytes(&mut cleanup, 0, Duration::from_millis(100));
+        }
+        assert_eq!(
+            result.err().map(|error| error.to_string()).as_deref(),
+            Some("timeout")
+        );
+        assert!(start.elapsed() < Duration::from_secs(2));
+        assert!(!alive, "owned child must be killed and reaped");
+        Ok(())
+    }
 }
 
 pub(crate) fn build_plan(

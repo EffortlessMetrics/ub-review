@@ -275,6 +275,12 @@ mod tests {
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("missing evidence"))?;
         assert_eq!(clean.outcome, "complete");
+        let serialized = serde_json::to_value(clean)?;
+        assert_eq!(serialized["schema"], "ub-review.worktree_evidence.v1");
+        assert_eq!(serialized["max_command_bytes"], 65_536);
+        assert_eq!(serialized["max_entries_per_inventory"], 256);
+        assert_eq!(serialized["command_timeout_ms"], 2_000);
+        chrono::DateTime::parse_from_rfc3339(&clean.observed_at)?;
         assert!(clean.status.is_empty());
         assert!(clean.tracked_diff_paths_hex.is_empty());
         assert!(clean.staged_diff_paths_hex.is_empty());
@@ -402,6 +408,26 @@ mod tests {
         finish(&mut racy, result);
         assert_eq!(racy.outcome, "racy");
         assert_eq!(racy.reason.as_deref(), Some("metadata_changed"));
+        for row in [b"Z? file\0".as_slice(), b"??file\0", b"?? \0"] {
+            assert_eq!(
+                parse_status(row, 1)
+                    .err()
+                    .map(|error| error.to_string())
+                    .as_deref(),
+                Some("invalid_status")
+            );
+        }
+        assert_eq!(
+            parse_status(b"R  file\0", 1)
+                .err()
+                .map(|error| error.to_string())
+                .as_deref(),
+            Some("rename_not_disabled")
+        );
+        let mut byte_limited = original.clone();
+        finish(&mut byte_limited, Err(anyhow::anyhow!("byte_limit")));
+        assert_eq!(byte_limited.outcome, "truncated");
+        assert_eq!(byte_limited.reason.as_deref(), Some("byte_limit"));
         assert_eq!(
             parse_status(b"?? a\0?? b\0", 1)
                 .err()
@@ -460,6 +486,72 @@ mod tests {
                 .as_deref(),
             Some("byte_limit")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn head_only_race_is_racy_with_unchanged_porcelain() -> Result<()> {
+        let repo = repo()?;
+        let mut observed = evidence(repo.path())?;
+        let calls = std::cell::Cell::new(0);
+        let status_reads = std::cell::RefCell::new(Vec::new());
+        let result = observe(&mut observed, &|args| {
+            let count = calls.get();
+            calls.set(count + 1);
+            if count == 5 {
+                git_text(
+                    repo.path(),
+                    &["commit", "--allow-empty", "-qm", "HEAD-only race"],
+                )?;
+            }
+            let bytes = git_bytes_bounded(repo.path(), args, MAX_BYTES, TIMEOUT)?;
+            if args.first() == Some(&"status") {
+                status_reads.borrow_mut().push(bytes.clone());
+            }
+            Ok(bytes)
+        });
+        assert_eq!(
+            status_reads.borrow().as_slice(),
+            &[Vec::<u8>::new(), Vec::new()]
+        );
+        assert_eq!(
+            result
+                .as_ref()
+                .err()
+                .map(|error| error.to_string())
+                .as_deref(),
+            Some("metadata_changed")
+        );
+        finish(&mut observed, result);
+        assert_eq!(observed.outcome, "racy");
+        assert_eq!(observed.reason.as_deref(), Some("metadata_changed"));
+        assert!(
+            git_text(repo.path(), &["status", "--porcelain"])?
+                .trim()
+                .is_empty()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn malformed_head_and_unsafe_status_are_unavailable() -> Result<()> {
+        let repo = repo()?;
+        let mut malformed = evidence(repo.path())?;
+        let result = observe(&mut malformed, &|_| Ok(b"malformed-head".to_vec()));
+        finish(&mut malformed, result);
+        assert_eq!(malformed.outcome, "unavailable");
+        assert_eq!(malformed.reason.as_deref(), Some("invalid_head"));
+        let mut unsafe_status = evidence(repo.path())?;
+        let result = observe(&mut unsafe_status, &|args| {
+            Ok(if args.first() == Some(&"rev-parse") {
+                vec![b'a'; 40]
+            } else {
+                b"?? C:stream\0".to_vec()
+            })
+        });
+        finish(&mut unsafe_status, result);
+        assert_eq!(unsafe_status.outcome, "unavailable");
+        assert_eq!(unsafe_status.reason.as_deref(), Some("unsafe_path"));
         Ok(())
     }
 
