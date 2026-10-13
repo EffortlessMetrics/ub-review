@@ -1,15 +1,6 @@
 schema_version = "1"
 tool = "cargo-allow"
 
-[[exception]]
-id = "provider-completion-cli-fixture"
-kind = "test-network-and-process-fixture"
-path = "tests/provider_completion_cli.rs"
-owner = "ub-review/tests"
-reason = "Issue #1409 exercises the real CLI against loopback-only provider envelopes and local Git/build fixtures. Dummy local auth has no external provider authority; bounded listeners and child waits retain incomplete response witnesses, exact subject identity, deterministic failure controls and recovery."
-created = "2026-10-13"
-review_after = "2027-01-13"
-
 # Default source-tree exception ledger. Keep this consolidated until real
 # exception volume proves that narrower ledgers improve reviewability.
 
