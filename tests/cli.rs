@@ -6659,9 +6659,13 @@ fn admission_plan_receipt(
             String::from_utf8_lossy(&result.stderr)
         );
     }
-    Ok(serde_json::from_slice(&fs::read(
-        output.join("input/revision-admission.json"),
-    )?)?)
+    let receipt: serde_json::Value =
+        serde_json::from_slice(&fs::read(output.join("input/revision-admission.json"))?)?;
+    assert_eq!(
+        receipt["worktree_evidence"]["reviewed_commit_oid"], receipt["reviewed_commit_oid"],
+        "worktree evidence must bind the resolved reviewed commit"
+    );
+    Ok(receipt)
 }
 
 /// Actual plan CLI preserves legacy source selection while withholding new
