@@ -1896,6 +1896,8 @@ struct ReviewSummaryReceipt {
     provider_preflights: Vec<ProviderPreflightReceipt>,
     #[serde(default)]
     model_lanes: Vec<ModelLaneReceipt>,
+    #[serde(default)]
+    missing_or_failed_model_evidence: Vec<ModelEvidenceIssue>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -2806,7 +2808,7 @@ struct ProviderPreflightReceipt {
     cache_usage: ModelCacheUsage,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct ModelEvidenceIssue {
     lane: String,
     provider: String,
