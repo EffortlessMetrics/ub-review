@@ -4,6 +4,8 @@
 
 use crate::*;
 
+mod completion;
+
 pub(crate) fn run_model_lane_tasks(
     context: &ModelRunContext<'_>,
     model_dir: &Path,
@@ -1697,6 +1699,7 @@ pub(crate) fn call_model_prompt_content(
     }
     let response: serde_json::Value = serde_json::from_slice(&process_output.stdout)
         .with_context(|| format!("parse {}", response_path.display()))?;
+    completion::validate_model_completion(&response)?;
     let response_shape = model_response_shape(&response).to_owned();
     let cache_usage = model_cache_usage(&response);
     let content = extract_model_content(&response)
