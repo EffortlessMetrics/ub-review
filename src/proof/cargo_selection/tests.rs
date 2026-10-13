@@ -588,3 +588,99 @@ fn preparation_and_cleanup_errors_remain_errors_without_proof_execution() -> Res
     }
     Ok(())
 }
+
+#[cfg(unix)]
+#[test]
+fn metadata_output_cap_and_failed_completion_decline_before_proof() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir()?;
+    let root = temp.path();
+    let bin = root.join("bin");
+    fs::create_dir(&bin)?;
+    // Valid declaration plus JSON whitespace isolates the byte boundary from parsing.
+    let json = br#"{"packages":[{"id":"fixture-id","name":"fixture","targets":[{"name":"probe","kind":["test"],"src_path":"probe.rs"}]}],"resolve":{"nodes":[{"id":"fixture-id"}]}}"#;
+    let cap = 4 * 1024 * 1024;
+    assert_eq!(METADATA_READ_CAP, cap as u64);
+    let mut payload = json.to_vec();
+    payload.resize(cap, b' ');
+    let shim = bin.join("cargo");
+    fs::write(
+        &shim,
+        "#!/bin/sh\nif [ \"$1\" = metadata ]; then\n /bin/cat metadata.json\n /bin/cat diagnostics.txt >&2\n exit \"$METADATA_EXIT\"\nfi\nexit 0\n",
+    )?;
+    fs::set_permissions(&shim, fs::Permissions::from_mode(0o755))?;
+    for (id, bytes, exit, unresolved, expected_calls) in [
+        ("exact-cap", cap, "0", false, 1),
+        ("over-cap", cap + 1, "0", true, 0),
+        ("failed-completion", cap, "1", true, 0),
+    ] {
+        payload.resize(bytes, b' ');
+        fs::write(root.join("metadata.json"), &payload)?;
+        fs::write(root.join("diagnostics.txt"), vec![b'd'; bytes])?;
+        let mut spec = spec(root, &["-p", "fixture", "--test", "probe"]);
+        spec.env
+            .insert("PATH".to_owned(), bin.display().to_string());
+        spec.env.insert("METADATA_EXIT".to_owned(), exit.to_owned());
+        let out = root.join(id);
+        let mut calls = 0;
+        let result = run_selection_checked_command(
+            ProofCommandInvocation {
+                command_root: root,
+                out: &out,
+                receipt_id: id,
+                side: "head",
+                spec: &spec,
+                timeout_sec: 30,
+                lease: &lease(id),
+                task_ledger: None,
+                task: None,
+                cleanup: None,
+            },
+            &mut |root, argv, env, timeout, stdout, stderr, observer| {
+                calls += 1;
+                run_command_to_files_with_spawn_observer(
+                    root, argv, env, timeout, stdout, stderr, observer,
+                )
+            },
+        )?;
+        assert_eq!(result.unresolved, unresolved, "{id}");
+        assert_eq!(calls, expected_calls, "{id}");
+        let paths = proof_command_paths(&out, id, "head-cargo-metadata")?;
+        if id == "over-cap" {
+            assert_eq!(
+                fs::read(paths.stdout_path)?,
+                b"metadata exceeded the read cap; selection unresolved\n"
+            );
+            assert_eq!(
+                fs::read(paths.stderr_path)?,
+                b"metadata diagnostics exceeded the retention cap\n"
+            );
+            assert!(
+                result
+                    .command
+                    .reason
+                    .contains("metadata exceeded the 4 MiB read budget")
+            );
+        } else {
+            assert_eq!(fs::read(paths.stdout_path)?, payload);
+            assert_eq!(fs::metadata(paths.stderr_path)?.len(), cap as u64);
+        }
+        if unresolved {
+            assert_eq!(result.command.status, "skipped");
+            assert_eq!(result.command.exit_code, None);
+            assert_eq!(result.command.duration_ms, 0);
+            assert!(!result.command.timed_out);
+            assert!(
+                !result
+                    .command
+                    .reason
+                    .contains("without integration-test target")
+            );
+            assert!(!result.command.reason.contains("matched 0 packages"));
+        } else {
+            assert_eq!(result.command.status, "passed");
+            assert_eq!(result.command.exit_code, Some(0));
+        }
+    }
+    Ok(())
+}
