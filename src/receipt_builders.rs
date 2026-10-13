@@ -93,18 +93,39 @@ pub(crate) fn read_bounded_text(path: &Path, max_bytes: usize) -> Result<String>
 
 pub(crate) fn read_bounded_text_with_status(path: &Path, max_bytes: usize) -> Result<BoundedText> {
     let file = File::open(path).with_context(|| format!("open {}", path.display()))?;
-    // The configured ceiling is a read limit, not an allocation request.
-    // Grow with the actual file bytes while retaining one-byte truncation
-    // lookahead. This also permits small files with a usize::MAX ceiling.
-    let read_limit = u64::try_from(max_bytes)
-        .unwrap_or(u64::MAX)
-        .saturating_add(1);
-    let mut buffer = Vec::new();
+    let regular_file = file
+        .metadata()
+        .map(|metadata| metadata.is_file())
+        .unwrap_or(false);
+    capture_bounded_local_text(file, max_bytes, regular_file)
+        .with_context(|| format!("read {}", path.display()))
+}
+
+fn capture_bounded_local_text(
+    mut reader: impl std::io::Read,
+    max_bytes: usize,
+    regular_file: bool,
+) -> std::io::Result<BoundedText> {
     use std::io::Read as _;
-    let count = file
-        .take(read_limit)
-        .read_to_end(&mut buffer)
-        .with_context(|| format!("read {}", path.display()))?;
+
+    let (mut buffer, count) = if regular_file {
+        // A regular-file ceiling limits reads, rather than requesting an
+        // allocation. Retain one-byte lookahead, including usize::MAX caps.
+        let read_limit = u64::try_from(max_bytes)
+            .unwrap_or(u64::MAX)
+            .saturating_add(1);
+        let mut buffer = Vec::new();
+        let count = reader.take(read_limit).read_to_end(&mut buffer)?;
+        (buffer, count)
+    } else {
+        // Keep the original single read for streams (or unknown file type).
+        // A FIFO's writer may remain open after supplying the current seed;
+        // waiting for EOF would stall packet construction. These inputs
+        // retain their existing ceiling-sized reservation and read semantics.
+        let mut buffer = vec![0; max_bytes.saturating_add(1)];
+        let count = reader.read(&mut buffer)?;
+        (buffer, count)
+    };
     buffer.truncate(count.min(max_bytes));
     let mut text = String::from_utf8_lossy(&buffer).to_string();
     if count > max_bytes {
@@ -387,6 +408,45 @@ pub(crate) fn is_sensor_skipped_evidence_issue(sensor: &SensorPlan, reason: &str
 #[cfg(test)]
 mod bounded_file_tests {
     use super::*;
+
+    struct OneChunkThenError {
+        chunk: Option<&'static [u8]>,
+        reads: usize,
+    }
+
+    impl std::io::Read for OneChunkThenError {
+        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+            self.reads += 1;
+            let chunk = self.chunk.take().ok_or_else(|| {
+                std::io::Error::other(
+                    "a stream must return its available seed before reading again",
+                )
+            })?;
+            let count = chunk.len().min(buffer.len());
+            buffer[..count].copy_from_slice(&chunk[..count]);
+            Ok(count)
+        }
+    }
+
+    #[test]
+    fn bounded_file_stream_returns_one_chunk_without_requiring_eof() -> Result<()> {
+        for (budget, expected, truncated) in [
+            (0, "\n[truncated]\n", true),
+            (3, "Pri\n[truncated]\n", true),
+            (23, "Prior review: accepted\n", false),
+            (64, "Prior review: accepted\n", false),
+        ] {
+            let mut reader = OneChunkThenError {
+                chunk: Some(b"Prior review: accepted\n"),
+                reads: 0,
+            };
+            let actual = capture_bounded_local_text(&mut reader, budget, false)?;
+            assert_eq!(actual.text, expected);
+            assert_eq!(actual.truncated, truncated);
+            assert_eq!(reader.reads, 1);
+        }
+        Ok(())
+    }
 
     #[test]
     fn bounded_file_empty_does_not_reserve_the_capture_ceiling() -> Result<()> {

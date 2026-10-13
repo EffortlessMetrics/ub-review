@@ -5,8 +5,11 @@ buffer before reading. A 4,856-byte ledger with a 64 MiB ceiling therefore
 reserved 64 MiB of address space. Under a 64 MiB process address-space limit,
 the actual `run` aborted, although the same input with the default 64 KiB
 ceiling succeeded. `usize::MAX` caused a capacity-overflow panic even for an
-empty file. The fix grows capture with bytes read, with a bounded one-byte
-lookahead for the existing truncation marker and flag.
+empty regular file. The fix grows regular-file capture with bytes read, with
+a bounded one-byte lookahead for the existing truncation marker and flag.
+Nonregular inputs and unknown file types keep the prior single read, including
+its ceiling-sized reservation, so an open stream can return available seed
+bytes without waiting for EOF.
 
 This changes local file capture only. GitHub API hydration/error handling
 (#1410), provider completion admission (#1411), proof disposition (#1412),
@@ -52,8 +55,8 @@ Medians for hydrated runs with a 64 MiB local ledger ceiling:
 
 | Subject | Before / after wall seconds | Before / after CPU seconds | Before / after VmPeak KiB | Before / after RSS KiB | Before / after packet bytes |
 |---|---:|---:|---:|---:|---:|
-| ub-review docs diff | 0.0946 / 0.0965 | 0.0916 / 0.0889 | 86,392 / 21,224 | 16,788 / 16,736 | 599,588 / 599,578 |
-| serde_json empty diff | 0.0771 / 0.0759 | 0.0740 / 0.0728 | 86,392 / 21,228 | 16,764 / 16,708 | 400,277 / 400,268 |
+| ub-review docs diff | 0.0946 / 0.0901 | 0.0916 / 0.0866 | 86,392 / 21,236 | 16,788 / 16,704 | 599,588 / 599,588 |
+| serde_json empty diff | 0.0771 / 0.0757 | 0.0740 / 0.0721 | 86,392 / 21,232 | 16,764 / 16,772 | 400,277 / 400,277 |
 
 Setup takes 0.0202/0.0170 seconds and writes 17,290/16,817 bytes of config and
 guide respectively. Hydrated packets contain 203/183 files. Default-ceiling
@@ -84,12 +87,26 @@ zero/exact/over budgets, split UTF-8, invalid UTF-8, and unavailable files.
 The two maximum-ceiling regressions fail on the tests-only predecessor
 `c0d14fa3aec39f5cb64004e4a53d51be55163863`; unchanged controls pass.
 
+The pre-merge discussion refresh found a stream regression in the initial
+`043426145812c0813ef90e3ce2866ee8c868067d` candidate: a held-open FIFO delivered
+23 bytes but `read_to_end` stalled instead of returning the current seed. The
+exact-base CLI finishes in 0.225 seconds while its writer remains open;
+the initial candidate needs a kill at the independent two-second deadline.
+Merge was held and prior broad caller clearance was superseded. The revised
+reader uses metadata from the opened file to select incremental capture only
+for regular files. Four independent author-prototype controls now finish while
+the writer remains open (0.175-0.210 seconds): budget 64, zero, exact 23, and
+truncating 22, with literal excerpt/flag equality. A pure Rust reader that
+errors on its second read adds a one-read invariant without process spawning.
+These immediate prototype checks supplement the later exact-head independent
+review; they are not substitutes for it. GitHub API hydration is unchanged.
+
 ## Identity and limits
 
 Retained baseline executable SHA256:
 `af35a0d0873e5a3c36f3ba7c33b4f7ffc5f85d3a79d69dae85862b56fc623285`.
 Retained candidate executable SHA256:
-`b66c427e843337fd252dfa265d978bb64ea75075656cd06f53924ef50e38a0fb`.
+`c615f334e6a8d677c70f94099a31d8c60eb6b791736302c1bdb8b3bca3bf97e1`.
 Raw commands, snapshots, per-run packets, source checkouts, compilation logs,
 and measurements are retained under `/workspace/static-cost-evidence` in the
 execution environment. These local paths are not hosted artifact downloads.
@@ -102,6 +119,8 @@ live GitHub hydration acceptance, or publication. Default sensors are planned
 but not executed, model lanes remain unavailable/off, and their evidence
 cannot establish a clean review. No fifty-lane capacity, sustained-load,
 cross-platform, or total-storage bound is inferred. Content allowed by a large
-ceiling can still consume correspondingly large memory; the fix avoids paying
-for bytes that were never read. Truncation markers and lossy UTF-8 conversion
+ceiling can still consume correspondingly large memory; the regular-file fix
+avoids paying for bytes that were never read. Nonregular/unknown file types
+retain their existing allocation/read behavior, including large-ceiling
+memory costs. Truncation markers and lossy UTF-8 conversion
 retain their existing output semantics and can exceed the raw-byte ceiling.
