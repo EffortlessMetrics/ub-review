@@ -52,8 +52,8 @@ Medians for hydrated runs with a 64 MiB local ledger ceiling:
 
 | Subject | Before / after wall seconds | Before / after CPU seconds | Before / after VmPeak KiB | Before / after RSS KiB | Before / after packet bytes |
 |---|---:|---:|---:|---:|---:|
-| ub-review docs diff | 0.0946 / 0.1019 | 0.0916 / 0.0977 | 86,392 / 21,228 | 16,788 / 16,692 | 599,588 / 599,596 |
-| serde_json empty diff | 0.0771 / 0.0803 | 0.0740 / 0.0764 | 86,392 / 21,232 | 16,764 / 16,760 | 400,277 / 400,286 |
+| ub-review docs diff | 0.0946 / 0.0965 | 0.0916 / 0.0889 | 86,392 / 21,224 | 16,788 / 16,736 | 599,588 / 599,578 |
+| serde_json empty diff | 0.0771 / 0.0759 | 0.0740 / 0.0728 | 86,392 / 21,228 | 16,764 / 16,708 | 400,277 / 400,268 |
 
 Setup takes 0.0202/0.0170 seconds and writes 17,290/16,817 bytes of config and
 guide respectively. Hydrated packets contain 203/183 files. Default-ceiling
@@ -89,7 +89,7 @@ The two maximum-ceiling regressions fail on the tests-only predecessor
 Retained baseline executable SHA256:
 `af35a0d0873e5a3c36f3ba7c33b4f7ffc5f85d3a79d69dae85862b56fc623285`.
 Retained candidate executable SHA256:
-`3960241fd18e80e6eaa3156e5bd7a72cb6707bc41ef71293d4e6377f042fea91`.
+`b66c427e843337fd252dfa265d978bb64ea75075656cd06f53924ef50e38a0fb`.
 Raw commands, snapshots, per-run packets, source checkouts, compilation logs,
 and measurements are retained under `/workspace/static-cost-evidence` in the
 execution environment. These local paths are not hosted artifact downloads.
