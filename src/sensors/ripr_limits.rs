@@ -191,6 +191,69 @@ mod tests {
     }
 
     #[test]
+    fn module_note_line_byte_boundary_excludes_line_terminators() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut contexts = (0..8)
+            .map(|index| format!("{index}{}", "a".repeat(979)))
+            .collect::<Vec<_>>();
+        let make = |contexts: &[String]| {
+            let entries = contexts
+                .iter()
+                .map(|context| format!("{context}:rust_module_ambiguous_parent"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("ripr: 8{MARKER}{entries}{SUFFIX}")
+        };
+        let padding = 8192 - make(&contexts).len();
+        contexts[7].push_str(&"a".repeat(padding));
+        assert!(contexts.iter().all(|context| context.len() <= 1024));
+        let exact = make(&contexts);
+        assert_eq!(exact.len(), 8192);
+        assert_eq!(parse_note(&exact).as_ref().map(Vec::len), Some(8));
+        contexts[7].push('a');
+        let over = make(&contexts);
+        assert_eq!(over.len(), 8193);
+        assert!(contexts.iter().all(|context| context.len() <= 1024));
+        assert_eq!(parse_note(&over).as_ref().map(Vec::len), Some(8));
+        for ending in ["", "\n", "\r\n"] {
+            for (line, accepted, rejected, count, state) in [
+                (&exact, 1, 0, 8, "disclosed"),
+                (&over, 0, 1, 0, "invalid_disclosure"),
+            ] {
+                let bytes = format!("{line}{ending}");
+                fs::write(temp.path().join("stderr.txt"), &bytes)?;
+                let value = module_limit_evidence(temp.path(), "detail_unavailable");
+                assert_eq!(value["sources"][0]["captured_bytes"], bytes.len());
+                assert_eq!(value["sources"][0]["truncated"], false);
+                assert_eq!(value["sources"][0]["accepted_notes"], accepted);
+                assert_eq!(value["sources"][0]["rejected_notes"], rejected);
+                assert_eq!(value["sources"][0]["state"], state);
+                assert_eq!(value["entries"].as_array().map(Vec::len), Some(count));
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn module_note_orientation_sentence_accepts_optional_next_step() {
+        let bare = note("x.rs");
+        let oriented = format!("{} {ANALYSIS_LIMIT_ORIENTATION}", bare.trim());
+        let expected = Some(vec![("x.rs".into(), "rust_module_ambiguous_parent".into())]);
+        assert_eq!(parse_note(&oriented), expected);
+        assert_eq!(
+            parse_note(&format!("{oriented} {MODULE_AMBIGUOUS_PARENT_NEXT_STEP}")),
+            expected
+        );
+        for malformed in [
+            format!("{oriented} unsupported addition"),
+            format!("{} {MODULE_AMBIGUOUS_PARENT_NEXT_STEP}", bare.trim()),
+            oriented.replace("missing.", "missing"),
+        ] {
+            assert!(parse_note(&malformed).is_none(), "{malformed}");
+        }
+    }
+
+    #[test]
     fn read_prefix_rejects_non_regular_files() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let error = read_prefix(temp.path())
