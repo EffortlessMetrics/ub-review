@@ -666,7 +666,17 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
                                      for key in ("cpu", "memory_mb", "disk_mb"))
                              and matching[0].get("scratch") is False
                              and matching[0].get("network") is False)
-            if not valid_refusal:
+            # A real resource grant precedes Cargo provenance preparation.
+            # Declining an unexecuted selection does not undo that grant.
+            valid_grant = (len(matching) == 1
+                           and matching[0].get("status") == "granted"
+                           and lease_quantities.get(id(matching[0])) is not None
+                           and all(type(matching[0].get(key)) is int
+                                   and matching[0][key] > 0
+                                   for key in ("cpu", "memory_mb", "disk_mb"))
+                           and matching[0].get("scratch") is True
+                           and matching[0].get("network") is False)
+            if not (valid_refusal or valid_grant):
                 packet.issue("worker_unresolved_lease_mismatch", lease_path,
                              proof.get("id", ""))
             proof_id = proof.get("id")
@@ -674,11 +684,23 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
                             + verifier.sanitize_artifact_name(proof_id)
                             + "-head") if isinstance(proof_id, str) else ""
             head_task = ledger.get(head_task_id)
+            decline = head_task.get("non_execution_disposition") if head_task else None
+            allowed_declines = {"Refused", "Unsupported"} if valid_grant else {"Refused"}
+            head_commands = [command for owner, command in commands.values()
+                             if owner is proof and command.get("side") == "head"]
+            unexecuted_head = (len(head_commands) == 1
+                               and head_commands[0].get("status") == "skipped"
+                               and head_commands[0].get("exit_code") is None
+                               and head_commands[0].get("duration_ms") == 0
+                               and head_commands[0].get("timed_out") is False)
             if (head_task is None
                     or head_task.get("source") != "Worker"
-                    or head_task.get("state") != {"TerminallyDeclined": "Refused"}
-                    or head_task.get("non_execution_disposition") != "Refused"
-                    or head_task.get("execution_disposition") is not None):
+                    or decline not in allowed_declines
+                    or head_task.get("state") != {"TerminallyDeclined": decline}
+                    or head_task.get("execution_disposition") is not None
+                    or head_task.get("receipt") is not None
+                    or head_task.get("reservations") != []
+                    or not unexecuted_head):
                 packet.issue("worker_unresolved_head_task_mismatch", snapshot_path,
                              head_task_id or proof.get("id", ""))
 

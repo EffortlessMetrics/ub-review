@@ -702,6 +702,59 @@ class Projections(unittest.TestCase):
             self.assertIn("proof_result_command_mismatch",
                           {row["code"] for row in report["issues"]})
 
+    def test_guard_declined_worker_retains_grant_and_nonexecution_disposition(self):
+        for disposition in ("Unsupported", "Refused"):
+            with self.subTest(disposition=disposition), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                binding, events = coherent(root, worker=True)
+                proof = read_json(root, "proof_receipt.json")
+                proof["result"] = "skipped_unresolved"
+                proof["commands"][1].update(status="skipped", exit_code=None,
+                                             duration_ms=0, timed_out=False)
+                write_json(root, "proof_receipt.json", proof)
+                lease = read_json(root, "resource_lease.json")
+                lease.update(scratch=True, network=False)
+                write_json(root, "resource_lease.json", lease)
+                head = "proof-command-proof-a-head"
+                declined = [(identity, event) for identity, event in events
+                            if identity != head or "Proposed" in event
+                            or "ConsumerAttached" in event]
+                declined.append((head, {"TerminallyDeclined": {
+                    "at": 50, "disposition": disposition,
+                    "reason": "native selection not executed", "existing_receipt": None}}))
+                seal(root, binding, declined)
+                report = subject.reconcile(root, kind="worker")
+                self.assertEqual(report["status"], "coherent", report["issues"])
+                self.assertEqual(report["counts"]["executed_proof_command_tasks"], 1)
+
+                # A grant is not permission to manufacture a witness, orphan
+                # the head task, or credit a different receipt/revision.
+                for mutation in ("executed", "missing-head", "wrong-consumer", "wrong-revision"):
+                    with self.subTest(mutation=mutation):
+                        bad_proof, bad_lease = copy.deepcopy(proof), copy.deepcopy(lease)
+                        bad_events = copy.deepcopy(declined)
+                        if mutation == "executed":
+                            bad_proof["commands"][1].update(status="passed", exit_code=0, duration_ms=2)
+                        elif mutation == "missing-head":
+                            bad_events = [(identity, event) for identity, event in bad_events if identity != head]
+                        elif mutation == "wrong-consumer":
+                            bad_lease["consumer"] = "different-proof"
+                        else:
+                            bad_lease["revision"]["digest"] = "f" * 64
+                        write_json(root, "proof_receipt.json", bad_proof)
+                        write_json(root, "resource_lease.json", bad_lease)
+                        seal(root, binding, bad_events)
+                        self.assertNotEqual(subject.reconcile(root, kind="worker")["status"], "coherent")
+                write_json(root, "proof_receipt.json", proof)
+                lease.update(status="refused", cpu=0, memory_mb=0, disk_mb=0, scratch=False)
+                write_json(root, "resource_lease.json", lease)
+                seal(root, binding, declined)
+                report = subject.reconcile(root, kind="worker")
+                if disposition == "Unsupported":
+                    self.assertIn("worker_unresolved_head_task_mismatch", {row["code"] for row in report["issues"]})
+                else:
+                    self.assertEqual(report["status"], "coherent", report["issues"])
+
     def test_legacy_mode_never_grants_current_coherence(self):
         self.assertEqual(subject.reconcile(self.root, legacy=True)["status"], "unverifiable")
 
