@@ -9189,6 +9189,7 @@ def require_proof_receipt_schema(root: pathlib.Path, receipt: dict) -> None:
         # hide real failure behind the newly admitted compatibility result.
         if (not any(command["status"] == "skipped" for command in commands)
                 or any(command["status"] not in {"passed", "skipped"} for command in commands)
+                or any(command["timed_out"] for command in commands)
                 or any(command["status"] == "skipped" and (
                     command["exit_code"] is not None or command["duration_ms"] != 0
                     or command["timeout_sec"] != 0
@@ -10982,6 +10983,7 @@ def self_test_skipped_unresolved_receipt_contract() -> None:
             ("skipped zero exit", {"exit_code": 0}),
             ("skipped duration", {"duration_ms": 1}),
             ("skipped timeout", {"timeout_sec": 1}),
+            ("skipped timeout flag", {"timed_out": True}),
         ):
             malformed = dict(receipt, commands=[dict(command, **updates)])
             expect_self_test_failure(
