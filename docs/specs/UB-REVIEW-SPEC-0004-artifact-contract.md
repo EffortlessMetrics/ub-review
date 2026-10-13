@@ -139,12 +139,18 @@ redirect these observations. A nested directory or bare repository is
 `unavailable/checkout_root_required`.
 
 Existing identity and dirty-flag helpers retain their source selection. To avoid
-silently mixing their source with the isolated inventory, inherited nonempty
-Git repository/index/object/namespace selectors or `GIT_CONFIG*` settings make
+silently mixing their source with the isolated inventory, any inherited `GIT_*`
+setting makes
 the supplementary record `unavailable/inherited_git_source` before collection.
 The record retains the admitted identity linkage but contains no inventory in
 that case. No variable names or values are serialized. This preserves existing
 admission behavior rather than enforcing new cleanliness or source policy.
+The refusal guard and helper use one shared prefix rule, covering replacement
+object selectors (`GIT_NO_REPLACE_OBJECTS`, `GIT_REPLACE_REF_BASE`) and future
+Git settings. Presence alone is sufficient, including empty values that Git
+can interpret as flags. Even diagnostic-only Git settings conservatively make
+the supplementary record unavailable; no environment setting is silently
+discarded while claiming equivalence with the earlier helpers.
 
 Paths are lowercase hex of exact repository-relative Git path bytes, preserving
 spaces, tabs, newlines and non-UTF-8 names. Absolute paths, traversal components,
