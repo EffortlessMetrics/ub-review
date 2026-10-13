@@ -5006,6 +5006,7 @@ def routed_status_for_proof_receipt(receipt: dict) -> str:
         "timed_out",
         "skipped_budget",
         "skipped_profile",
+        "skipped_unresolved",
     }:
         return "missing-evidence"
     return "recorded"
@@ -5794,6 +5795,11 @@ def require_proof_receipt_ndjson(root: pathlib.Path, proof_receipts: list[dict])
             parsed = json.loads(line)
         except json.JSONDecodeError as error:
             fail(f"invalid proof_receipts.ndjson line {index + 1}: {error}")
+        if not isinstance(parsed, dict):
+            fail(f"proof_receipts.ndjson line {index + 1} is not an object")
+        # Python equality conflates False with 0 (and 0.0 with 0). Validate
+        # streamed command types before parity can erase that distinction.
+        require_proof_receipt_schema(root, parsed)
         if parsed != proof_receipts[index]:
             fail(f"proof_receipts.ndjson line {index + 1} does not match JSON artifact")
 
@@ -5987,6 +5993,9 @@ def require_resource_lease_artifacts(
                 f"lease={lease!r} receipt={receipt!r}"
             )
         expected = expected_lease_statuses_for_proof_result(receipt["result"])
+        if any(command.get("status") in {"passed", "failed", "timed_out"}
+               for command in receipt.get("commands", [])) and lease["status"] != "granted":
+            fail("executed proof command requires granted lease")
         if lease["status"] not in expected:
             fail(
                 "focused proof lease status does not match receipt result: "
@@ -6004,6 +6013,8 @@ def expected_lease_statuses_for_proof_result(result: str) -> set[str]:
         return {"exhausted"}
     if result == "skipped_profile":
         return {"granted", "skipped_profile", "absent"}
+    if result == "skipped_unresolved":
+        return {"granted", "absent"}
     return {"granted"}
 
 
@@ -9163,6 +9174,7 @@ def require_proof_receipt_schema(root: pathlib.Path, receipt: dict) -> None:
         "timed_out",
         "skipped_budget",
         "skipped_profile",
+        "skipped_unresolved",
         "discriminating",
         "non_discriminating",
         "base_patch_failed",
@@ -9179,6 +9191,30 @@ def require_proof_receipt_schema(root: pathlib.Path, receipt: dict) -> None:
         fail(f"proof receipt commands is not a non-empty array: {receipt!r}")
     for command in commands:
         require_proof_command_receipt_schema(root, receipt["id"], command)
+    expected_mode = "base-plus-tests" if receipt["kind"] == "focused-red-green" else "head-only"
+    if receipt["test_patch_mode"] != expected_mode:
+        fail("proof receipt kind/mode mismatch")
+    sides = [command["side"] for command in commands]
+    allowed_sides = [["head"], ["head", "base-plus-tests"]] if receipt["kind"] == "focused-red-green" else [["head"]]
+    if sides not in allowed_sides:
+        fail("proof receipt command sides contradict kind or cardinality")
+    if len(commands) == 2 and commands[0]["status"] != "passed":
+        fail("proof receipt command roles require passed HEAD before baseline")
+    if receipt["result"] == "skipped_unresolved":
+        statuses = [command["status"] for command in commands]
+        if statuses != (["skipped"] if len(commands) == 1 else ["passed", "skipped"]):
+            fail("unresolved proof receipt command roles contradict nonexecution")
+        # A completed HEAD can precede an unresolved baseline. The unresolved
+        # side itself never executed; accepting a failed command here would
+        # hide real failure behind the newly admitted compatibility result.
+        if (not any(command["status"] == "skipped" for command in commands)
+                or any(command["status"] not in {"passed", "skipped"} for command in commands)
+                or any(command["timed_out"] for command in commands)
+                or any(command["status"] == "skipped" and (
+                    command["exit_code"] is not None or command["duration_ms"] != 0
+                    or command["timeout_sec"] != 0
+                ) for command in commands)):
+            fail("unresolved proof receipt contradicts nonexecution")
 
 
 def require_proof_command_receipt_schema(
@@ -9197,16 +9233,25 @@ def require_proof_command_receipt_schema(
         fail(f"proof command receipt has unsupported side: {command!r}")
     if command["status"] not in {"passed", "failed", "timed_out", "skipped"}:
         fail(f"proof command receipt has unsupported status: {command!r}")
-    if command.get("exit_code") is not None and not isinstance(command.get("exit_code"), int):
+    exit_code = command.get("exit_code")
+    if exit_code is not None and type(exit_code) is not int:
         fail(f"proof command receipt exit_code is invalid: {command!r}")
+    if command["status"] == "passed" and (type(exit_code) is not int or exit_code != 0):
+        fail("passed proof command must have integer zero exit_code")
+    if command["status"] == "failed" and exit_code == 0:
+        fail("failed proof command cannot have zero exit_code")
     if not isinstance(command.get("timed_out"), bool):
         fail(f"proof command receipt timed_out is not boolean: {command!r}")
+    if command["timed_out"] is not (command["status"] == "timed_out"):
+        fail("proof command receipt status/timed_out mismatch")
     timeout = command.get("timeout_sec")
-    if not isinstance(timeout, int) or timeout < 0 or timeout > 900:
+    if type(timeout) is not int or timeout < 0 or timeout > 900:
         fail(f"proof command receipt timeout_sec is invalid: {command!r}")
     duration_ms = command.get("duration_ms")
-    if not isinstance(duration_ms, int) or duration_ms < 0:
+    if type(duration_ms) is not int or duration_ms < 0:
         fail(f"proof command receipt duration_ms is invalid: {command!r}")
+    if command["status"] == "skipped" and (exit_code is not None or duration_ms != 0):
+        fail("skipped proof command must retain unavailable exit and zero duration")
     for field in ["stdout", "stderr"]:
         rel = command[field]
         path = pathlib.PurePosixPath(rel.replace("\\", "/"))
@@ -10933,6 +10978,277 @@ def self_test_non_discriminating_routes_as_missing_evidence() -> None:
     )
     if status != "missing-evidence":
         fail(f"non_discriminating proof routed as {status!r}, expected missing-evidence")
+
+
+def self_test_skipped_unresolved_receipt_contract() -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as temporary:
+        root = pathlib.Path(temporary)
+        proof_dir = root / "proof" / "proof-unresolved" / "head"
+        proof_dir.mkdir(parents=True)
+        for stream in ("stdout", "stderr"):
+            (proof_dir / f"{stream}.txt").write_text("", encoding="utf-8")
+        command = {
+            "side": "head", "command": "cargo test --locked --test absent", "env": {},
+            "status": "skipped", "exit_code": None, "timed_out": False,
+            "timeout_sec": 0, "duration_ms": 0,
+            "stdout": "proof/proof-unresolved/head/stdout.txt",
+            "stderr": "proof/proof-unresolved/head/stderr.txt",
+            "reason": "approved target could not be resolved",
+        }
+        receipt = {
+            "schema": "ub-review.proof_receipt.v1", "id": "proof-unresolved",
+            "kind": "focused-head", "base": "base", "head": "head",
+            "test_patch_mode": "head-only", "requested_by": ["tests-oracle"],
+            "request_ids": ["request-unresolved"], "commands": [command],
+            "result": "skipped_unresolved", "reason": command["reason"],
+        }
+        for kind in ("focused-head", "focused-red-green", "focused-build"):
+            require_proof_receipt_schema(root, dict(receipt, kind=kind,
+                test_patch_mode="base-plus-tests" if kind == "focused-red-green" else "head-only"))
+        for label, updates, expected in (
+            ("nonzero completed command", {"status": "failed", "exit_code": 101}, "unresolved proof receipt command roles"),
+            ("only successful commands", {"status": "passed", "exit_code": 0}, "unresolved proof receipt command roles"),
+            ("skipped zero exit", {"exit_code": 0}, "skipped proof command must retain unavailable exit"),
+            ("skipped duration", {"duration_ms": 1}, "skipped proof command must retain unavailable exit"),
+            ("skipped timeout", {"timeout_sec": 1}, "unresolved proof receipt contradicts nonexecution"),
+            ("skipped timeout flag", {"timed_out": True}, "status/timed_out mismatch"),
+        ):
+            malformed = dict(receipt, commands=[dict(command, **updates)])
+            expect_self_test_failure(
+                f"unresolved {label}", expected,
+                lambda malformed=malformed: require_proof_receipt_schema(root, malformed),
+            )
+        baseline_dir = root / "proof" / receipt["id"] / "base-plus-tests"
+        baseline_dir.mkdir()
+        for stream in ("stdout", "stderr"):
+            (baseline_dir / f"{stream}.txt").write_text("", encoding="utf-8")
+        baseline = dict(command, side="base-plus-tests",
+                        stdout=f"proof/{receipt['id']}/base-plus-tests/stdout.txt",
+                        stderr=f"proof/{receipt['id']}/base-plus-tests/stderr.txt")
+        passed_head = dict(command, status="passed", exit_code=0, duration_ms=10, timeout_sec=30)
+        require_proof_receipt_schema(root, dict(receipt, kind="focused-red-green",
+                                              test_patch_mode="base-plus-tests",
+                                              commands=[passed_head, baseline]))
+        if routed_status_for_proof_receipt(receipt) != "missing-evidence":
+            fail("skipped_unresolved must route as missing-evidence")
+        for result in ("head_failed", "discriminating", "head_passed"):
+            if routed_status_for_proof_receipt(dict(receipt, result=result)) != "tool-confirmed":
+                fail(f"existing decisive route changed for {result}")
+        expect_self_test_failure(
+            "unknown unresolved vocabulary", "unsupported result",
+            lambda: require_proof_receipt_schema(root, dict(receipt, result="unresolved_new")),
+        )
+        lease = {
+            "schema": "ub-review.resource_lease.v1", "id": "lease-proof-unresolved",
+            "kind": "focused-test", "consumer": receipt["id"], "status": "absent",
+            "reason": command["reason"], "cpu": 0, "memory_mb": 0, "disk_mb": 0,
+            "timeout_sec": 0, "network": False, "scratch": False,
+            "worktree": None, "command": None,
+        }
+        (root / "review").mkdir()
+        (root / "review/resource_leases.json").write_text(json.dumps([lease]), encoding="utf-8")
+        (root / "resource_leases.ndjson").write_text(json.dumps(lease) + "\n", encoding="utf-8")
+        (root / "review/resource_plan.md").write_text(
+            "# Resource lease plan\n\n## Focused proof leases\n\n"
+            "- `lease-proof-unresolved` status=`absent`.\n", encoding="utf-8",
+        )
+        require_resource_lease_artifacts(root, [receipt], [lease])
+        if expected_lease_statuses_for_proof_result("skipped_unresolved") != {"granted", "absent"}:
+            fail("unresolved lease vocabulary changed")
+        expect_self_test_failure(
+            "unresolved lease cannot prove success", "lease status does not match receipt result",
+            lambda: require_resource_lease_artifacts(root, [dict(receipt, result="head_passed")], [lease]),
+        )
+        expect_self_test_failure(
+            "unresolved lease cannot prove baseline discrimination", "lease status does not match receipt result",
+            lambda: require_resource_lease_artifacts(root, [dict(receipt, result="discriminating")], [lease]),
+        )
+
+
+def self_test_unresolved_side_and_lease_contract() -> None:
+    import copy
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as temporary:
+        root = pathlib.Path(temporary)
+        (root / "review").mkdir()
+        commands = {}
+        for side in ("head", "base-plus-tests"):
+            directory = root / "proof" / "proof-sides" / side
+            directory.mkdir(parents=True)
+            for stream in ("stdout", "stderr"):
+                (directory / f"{stream}.txt").write_text("", encoding="utf-8")
+            commands[side] = {
+                "side": side, "command": "cargo test controlled_fixture", "env": {},
+                "status": "skipped", "exit_code": None, "timed_out": False,
+                "timeout_sec": 0, "duration_ms": 0,
+                "stdout": f"proof/proof-sides/{side}/stdout.txt",
+                "stderr": f"proof/proof-sides/{side}/stderr.txt", "reason": "controlled unresolved",
+            }
+        head, baseline = commands["head"], commands["base-plus-tests"]
+        passed = dict(head, status="passed", exit_code=0, timeout_sec=30, duration_ms=1)
+        receipt = {
+            "schema": "ub-review.proof_receipt.v1", "id": "proof-sides", "kind": "focused-head",
+            "base": "base", "head": "head", "test_patch_mode": "head-only",
+            "requested_by": ["tests-oracle"], "request_ids": ["request-sides"],
+            "commands": [head], "result": "skipped_unresolved", "reason": "controlled unresolved",
+        }
+
+        def verify(probe: dict) -> None:
+            (root / "review/proof_receipts.json").write_text(json.dumps([probe]), encoding="utf-8")
+            (root / "proof_receipts.ndjson").write_text(json.dumps(probe) + "\n", encoding="utf-8")
+            require_proof_receipt_ndjson(root, load_json(root / "review/proof_receipts.json"))
+
+        def lease_verify(probe: dict, status: str, include: bool = True) -> None:
+            lease = {
+                "schema": "ub-review.resource_lease.v1", "id": "lease-proof-sides",
+                "kind": "focused-build" if probe["kind"] == "focused-build" else "focused-test",
+                "consumer": probe["id"], "status": status, "reason": "controlled grant",
+                "cpu": 0, "memory_mb": 0, "disk_mb": 0, "timeout_sec": 30,
+                "network": False, "scratch": False, "worktree": None, "command": None,
+            }
+            rows = [lease] if include else []
+            (root / "review/resource_leases.json").write_text(json.dumps(rows), encoding="utf-8")
+            (root / "resource_leases.ndjson").write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+            (root / "review/resource_plan.md").write_text(
+                "# Resource lease plan\n\n## Focused proof leases\n", encoding="utf-8",
+            )
+            require_resource_lease_artifacts(root, [probe], rows)
+
+        for kind in ("focused-head", "focused-build", "focused-red-green"):
+            current = dict(receipt, kind=kind,
+                test_patch_mode="base-plus-tests" if kind == "focused-red-green" else "head-only")
+            verify(current)
+            lease_verify(current, "absent")
+            lease_verify(current, "granted")
+            for rows in ([head, head], [head, baseline, baseline], [baseline], [baseline, head]):
+                expect_self_test_failure(f"{kind} extra/duplicate/reordered sides", "command sides",
+                    lambda rows=rows, current=current: verify(dict(current, commands=rows)))
+            wrong_mode = dict(current, test_patch_mode="head-only" if kind == "focused-red-green" else "base-plus-tests")
+            expect_self_test_failure(f"{kind} mismatched mode", "kind/mode", lambda: verify(wrong_mode))
+            unknown = dict(head, side="unknown")
+            expect_self_test_failure(f"{kind} unknown side", "unsupported side",
+                lambda current=current: verify(dict(current, commands=[unknown])))
+            if kind != "focused-red-green":
+                expect_self_test_failure(f"{kind} successful HEAD plus fake skipped baseline", "command sides",
+                    lambda current=current: verify(dict(current, commands=[passed, baseline])))
+            else:
+                expect_self_test_failure("red-green skipped HEAD plus skipped baseline", "command roles",
+                    lambda current=current: verify(dict(current, commands=[head, baseline])))
+                expect_self_test_failure("red-green completed HEAD labelled unresolved without baseline", "command roles",
+                    lambda current=current: verify(dict(current, commands=[passed])))
+        red_green = dict(receipt, kind="focused-red-green", test_patch_mode="base-plus-tests",
+                         commands=[passed, baseline])
+        verify(red_green)
+        lease_verify(red_green, "granted")
+        expect_self_test_failure("executed HEAD with absent lease", "executed proof command requires granted lease",
+            lambda: lease_verify(red_green, "absent"))
+        expect_self_test_failure("executed HEAD with missing lease", "lacks resource lease",
+            lambda: lease_verify(red_green, "granted", include=False))
+        # The same grant invariant applies when a completed HEAD precedes an
+        # unavailable profile/tool baseline, not only the new unresolved tag.
+        profile = dict(red_green, result="skipped_profile")
+        lease_verify(profile, "granted")
+        expect_self_test_failure("profile-deferred executed HEAD with absent lease", "executed proof command requires granted lease",
+            lambda: lease_verify(profile, "absent"))
+        streamed = copy.deepcopy(red_green)
+        streamed["commands"] = [passed, dict(passed)]
+        expect_self_test_failure("streamed duplicate HEAD", "command sides", lambda: verify(streamed))
+
+
+def self_test_proof_command_exit_contract() -> None:
+    import copy
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as temporary:
+        root = pathlib.Path(temporary)
+        (root / "review").mkdir()
+        commands = []
+        for side in ("head", "base-plus-tests"):
+            directory = root / "proof" / "proof-exits" / side
+            directory.mkdir(parents=True)
+            for stream in ("stdout", "stderr"):
+                (directory / f"{stream}.txt").write_text("", encoding="utf-8")
+            commands.append({
+                "side": side, "command": "cargo test controlled_fixture", "env": {},
+                "status": "passed", "exit_code": 0, "timed_out": False,
+                "timeout_sec": 30, "duration_ms": 1,
+                "stdout": f"proof/proof-exits/{side}/stdout.txt",
+                "stderr": f"proof/proof-exits/{side}/stderr.txt", "reason": "controlled receipt",
+            })
+        receipt = {
+            "schema": "ub-review.proof_receipt.v1", "id": "proof-exits",
+            "kind": "focused-red-green", "base": "base", "head": "head",
+            "test_patch_mode": "base-plus-tests", "requested_by": ["tests-oracle"],
+            "request_ids": ["request-exits"], "commands": commands,
+            "result": "non_discriminating", "reason": "controlled receipt",
+        }
+
+        def verify(rows: dict, streamed: dict | None = None) -> None:
+            (root / "review/proof_receipts.json").write_text(json.dumps([rows]), encoding="utf-8")
+            (root / "proof_receipts.ndjson").write_text(
+                json.dumps(rows if streamed is None else streamed) + "\n", encoding="utf-8",
+            )
+            require_proof_receipt_ndjson(root, load_json(root / "review/proof_receipts.json"))
+
+        verify(receipt)
+        skipped = dict(commands[1], status="skipped", exit_code=None, duration_ms=0, timeout_sec=0)
+        unresolved = dict(receipt, result="skipped_unresolved", commands=[commands[0], skipped])
+        verify(unresolved)
+        verify(dict(receipt, result="head_passed", commands=[commands[0]]))
+        verify(dict(receipt, result="skipped_profile", commands=[dict(skipped, side="head",
+                    stdout=commands[0]["stdout"], stderr=commands[0]["stderr"], timeout_sec=30)]))
+        for code in (101, None):
+            verify(dict(receipt, result="head_failed", commands=[dict(commands[0], status="failed", exit_code=code)]))
+        verify(dict(receipt, result="timed_out", commands=[dict(commands[0], status="timed_out",
+                    exit_code=None, timed_out=True)]))
+
+        for side_index, side in enumerate(("head", "base-plus-tests")):
+            for code in (101, None, True, False):
+                malformed = copy.deepcopy(receipt)
+                malformed["commands"][side_index]["exit_code"] = code
+                expected = "exit_code is invalid" if type(code) is bool else "passed proof command must have integer zero exit_code"
+                expect_self_test_failure(
+                    f"passed {side} exit {code!r} in JSON and NDJSON", expected,
+                    lambda malformed=malformed: verify(malformed),
+                )
+                if side_index == 0:
+                    malformed_unresolved = copy.deepcopy(unresolved)
+                    malformed_unresolved["commands"][0]["exit_code"] = code
+                    expect_self_test_failure(
+                        f"unresolved passed HEAD exit {code!r}", expected,
+                        lambda malformed=malformed_unresolved: verify(malformed),
+                    )
+            # Stream-only corruption must not exploit Python's False == 0 or
+            # 0.0 == 0 comparison to pass parity against valid JSON metadata.
+            for code in (False, 0.0):
+                streamed = copy.deepcopy(receipt)
+                streamed["commands"][side_index]["exit_code"] = code
+                expect_self_test_failure(
+                    f"stream-only {side} exit {code!r}", "exit_code is invalid",
+                    lambda streamed=streamed: verify(receipt, streamed),
+                )
+            for field in ("timeout_sec", "duration_ms"):
+                streamed = copy.deepcopy(receipt)
+                streamed["commands"][side_index][field] = True
+                expect_self_test_failure(
+                    f"Boolean {side} {field}", f"{field} is invalid",
+                    lambda streamed=streamed: verify(streamed),
+                )
+        for updates, expected in (
+            ({"status": "failed", "exit_code": 0}, "failed proof command cannot have zero exit_code"),
+            ({"status": "skipped", "exit_code": 101}, "skipped proof command must retain unavailable exit"),
+            ({"status": "skipped", "exit_code": None, "duration_ms": 1}, "skipped proof command must retain unavailable exit"),
+            ({"timed_out": True}, "status/timed_out mismatch"),
+            ({"status": "timed_out", "exit_code": None}, "status/timed_out mismatch"),
+        ):
+            malformed = dict(receipt, commands=[dict(commands[0], **updates)])
+            expect_self_test_failure(
+                f"contradictory command {updates!r}", expected,
+                lambda malformed=malformed: verify(malformed),
+            )
 
 
 def self_test_absent_resource_lease_contract() -> None:
@@ -15912,6 +16228,9 @@ def run_self_tests() -> None:
     )
     self_test_coverage_sidecar_receipts()
     self_test_non_discriminating_routes_as_missing_evidence()
+    self_test_skipped_unresolved_receipt_contract()
+    self_test_proof_command_exit_contract()
+    self_test_unresolved_side_and_lease_contract()
     self_test_absent_resource_lease_contract()
     self_test_receipt_route_source_anchor_contract()
     self_test_follow_up_resolved_away_filter_matches_rust_contract()
