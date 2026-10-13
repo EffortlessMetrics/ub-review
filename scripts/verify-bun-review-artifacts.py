@@ -5006,6 +5006,7 @@ def routed_status_for_proof_receipt(receipt: dict) -> str:
         "timed_out",
         "skipped_budget",
         "skipped_profile",
+        "skipped_unresolved",
     }:
         return "missing-evidence"
     return "recorded"
@@ -6004,6 +6005,8 @@ def expected_lease_statuses_for_proof_result(result: str) -> set[str]:
         return {"exhausted"}
     if result == "skipped_profile":
         return {"granted", "skipped_profile", "absent"}
+    if result == "skipped_unresolved":
+        return {"granted", "absent"}
     return {"granted"}
 
 
@@ -9163,6 +9166,7 @@ def require_proof_receipt_schema(root: pathlib.Path, receipt: dict) -> None:
         "timed_out",
         "skipped_budget",
         "skipped_profile",
+        "skipped_unresolved",
         "discriminating",
         "non_discriminating",
         "base_patch_failed",
@@ -9179,6 +9183,17 @@ def require_proof_receipt_schema(root: pathlib.Path, receipt: dict) -> None:
         fail(f"proof receipt commands is not a non-empty array: {receipt!r}")
     for command in commands:
         require_proof_command_receipt_schema(root, receipt["id"], command)
+    if receipt["result"] == "skipped_unresolved":
+        # A completed HEAD can precede an unresolved baseline. The unresolved
+        # side itself never executed; accepting a failed command here would
+        # hide real failure behind the newly admitted compatibility result.
+        if (not any(command["status"] == "skipped" for command in commands)
+                or any(command["status"] not in {"passed", "skipped"} for command in commands)
+                or any(command["status"] == "skipped" and (
+                    command["exit_code"] is not None or command["duration_ms"] != 0
+                    or command["timeout_sec"] != 0
+                ) for command in commands)):
+            fail("unresolved proof receipt contradicts nonexecution")
 
 
 def require_proof_command_receipt_schema(
@@ -10933,6 +10948,91 @@ def self_test_non_discriminating_routes_as_missing_evidence() -> None:
     )
     if status != "missing-evidence":
         fail(f"non_discriminating proof routed as {status!r}, expected missing-evidence")
+
+
+def self_test_skipped_unresolved_receipt_contract() -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as temporary:
+        root = pathlib.Path(temporary)
+        proof_dir = root / "proof" / "proof-unresolved" / "head"
+        proof_dir.mkdir(parents=True)
+        for stream in ("stdout", "stderr"):
+            (proof_dir / f"{stream}.txt").write_text("", encoding="utf-8")
+        command = {
+            "side": "head", "command": "cargo test --locked --test absent", "env": {},
+            "status": "skipped", "exit_code": None, "timed_out": False,
+            "timeout_sec": 0, "duration_ms": 0,
+            "stdout": "proof/proof-unresolved/head/stdout.txt",
+            "stderr": "proof/proof-unresolved/head/stderr.txt",
+            "reason": "approved target could not be resolved",
+        }
+        receipt = {
+            "schema": "ub-review.proof_receipt.v1", "id": "proof-unresolved",
+            "kind": "focused-head", "base": "base", "head": "head",
+            "test_patch_mode": "head-only", "requested_by": ["tests-oracle"],
+            "request_ids": ["request-unresolved"], "commands": [command],
+            "result": "skipped_unresolved", "reason": command["reason"],
+        }
+        for kind in ("focused-head", "focused-red-green", "focused-build"):
+            require_proof_receipt_schema(root, dict(receipt, kind=kind))
+        for label, updates in (
+            ("nonzero completed command", {"status": "failed", "exit_code": 101}),
+            ("only successful commands", {"status": "passed", "exit_code": 0}),
+            ("skipped zero exit", {"exit_code": 0}),
+            ("skipped duration", {"duration_ms": 1}),
+            ("skipped timeout", {"timeout_sec": 1}),
+        ):
+            malformed = dict(receipt, commands=[dict(command, **updates)])
+            expect_self_test_failure(
+                f"unresolved {label}", "unresolved proof receipt contradicts nonexecution",
+                lambda malformed=malformed: require_proof_receipt_schema(root, malformed),
+            )
+        baseline_dir = root / "proof" / receipt["id"] / "base-plus-tests"
+        baseline_dir.mkdir()
+        for stream in ("stdout", "stderr"):
+            (baseline_dir / f"{stream}.txt").write_text("", encoding="utf-8")
+        baseline = dict(command, side="base-plus-tests",
+                        stdout=f"proof/{receipt['id']}/base-plus-tests/stdout.txt",
+                        stderr=f"proof/{receipt['id']}/base-plus-tests/stderr.txt")
+        passed_head = dict(command, status="passed", exit_code=0, duration_ms=10, timeout_sec=30)
+        require_proof_receipt_schema(root, dict(receipt, kind="focused-red-green",
+                                              test_patch_mode="base-plus-tests",
+                                              commands=[passed_head, baseline]))
+        if routed_status_for_proof_receipt(receipt) != "missing-evidence":
+            fail("skipped_unresolved must route as missing-evidence")
+        for result in ("head_failed", "discriminating", "head_passed"):
+            if routed_status_for_proof_receipt(dict(receipt, result=result)) != "tool-confirmed":
+                fail(f"existing decisive route changed for {result}")
+        expect_self_test_failure(
+            "unknown unresolved vocabulary", "unsupported result",
+            lambda: require_proof_receipt_schema(root, dict(receipt, result="unresolved_new")),
+        )
+        lease = {
+            "schema": "ub-review.resource_lease.v1", "id": "lease-proof-unresolved",
+            "kind": "focused-test", "consumer": receipt["id"], "status": "absent",
+            "reason": command["reason"], "cpu": 0, "memory_mb": 0, "disk_mb": 0,
+            "timeout_sec": 0, "network": False, "scratch": False,
+            "worktree": None, "command": None,
+        }
+        (root / "review").mkdir()
+        (root / "review/resource_leases.json").write_text(json.dumps([lease]), encoding="utf-8")
+        (root / "resource_leases.ndjson").write_text(json.dumps(lease) + "\n", encoding="utf-8")
+        (root / "review/resource_plan.md").write_text(
+            "# Resource lease plan\n\n## Focused proof leases\n\n"
+            "- `lease-proof-unresolved` status=`absent`.\n", encoding="utf-8",
+        )
+        require_resource_lease_artifacts(root, [receipt], [lease])
+        if expected_lease_statuses_for_proof_result("skipped_unresolved") != {"granted", "absent"}:
+            fail("unresolved lease vocabulary changed")
+        expect_self_test_failure(
+            "unresolved lease cannot prove success", "lease status does not match receipt result",
+            lambda: require_resource_lease_artifacts(root, [dict(receipt, result="head_passed")], [lease]),
+        )
+        expect_self_test_failure(
+            "unresolved lease cannot prove baseline discrimination", "lease status does not match receipt result",
+            lambda: require_resource_lease_artifacts(root, [dict(receipt, result="discriminating")], [lease]),
+        )
 
 
 def self_test_absent_resource_lease_contract() -> None:
@@ -15912,6 +16012,7 @@ def run_self_tests() -> None:
     )
     self_test_coverage_sidecar_receipts()
     self_test_non_discriminating_routes_as_missing_evidence()
+    self_test_skipped_unresolved_receipt_contract()
     self_test_absent_resource_lease_contract()
     self_test_receipt_route_source_anchor_contract()
     self_test_follow_up_resolved_away_filter_matches_rust_contract()
