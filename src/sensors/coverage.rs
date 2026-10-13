@@ -71,9 +71,39 @@ pub(crate) fn coverage_summary_receipt(dir: &Path) -> serde_json::Value {
     let mut functions_found = 0u64;
     let mut functions_hit = 0u64;
     let present = lcov_path.is_file();
-    if present {
-        let text = fs::read_to_string(&lcov_path).unwrap_or_default();
+    let mut status = "not_collected";
+    let mut reason = "lcov.info not present";
+    let text = if present {
+        match fs::read_to_string(&lcov_path) {
+            Ok(text) => Some(text),
+            Err(_) => {
+                status = "unknown";
+                reason = "lcov.info unreadable";
+                None
+            }
+        }
+    } else {
+        None
+    };
+    if let Some(text) = text {
+        let mut source_record_open = false;
+        let mut unterminated_record = false;
         for line in text.lines() {
+            if line.starts_with("SF:") {
+                unterminated_record |= source_record_open;
+                source_record_open = true;
+            } else if line == "end_of_record" {
+                source_record_open = false;
+            }
+        }
+        if source_record_open || unterminated_record {
+            status = "unknown";
+            reason = "lcov.info contains an unterminated source record";
+        } else {
+            status = "collected";
+            reason = "lcov.info parsed";
+        }
+        for line in text.lines().filter(|_| status == "collected") {
             if let Some(value) = line.strip_prefix("LF:") {
                 lines_found += parse_lcov_count(value);
             } else if let Some(value) = line.strip_prefix("LH:") {
@@ -87,8 +117,8 @@ pub(crate) fn coverage_summary_receipt(dir: &Path) -> serde_json::Value {
     }
     serde_json::json!({
         "schema": COVERAGE_SUMMARY_SCHEMA,
-        "status": if present { "collected" } else { "not_collected" },
-        "reason": if present { "lcov.info parsed" } else { "lcov.info not present" },
+        "status": status,
+        "reason": reason,
         "execution_surface_only": true,
         "correctness_claim": false,
         "lcov": {
@@ -112,6 +142,89 @@ mod tests {
     use anyhow::Result;
 
     use crate::*;
+
+    #[test]
+    fn coverage_summary_rejects_truncated_record() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let dir = temp.path();
+        fs::write(
+            dir.join("lcov.info"),
+            "TN:\nSF:src/complete.rs\nLF:4\nLH:3\nend_of_record\nSF:src/truncated.rs\nLF:9\nLH:8\n",
+        )?;
+        let summary = super::coverage_summary_receipt(dir);
+        assert_eq!(summary["status"], "unknown");
+        assert_eq!(
+            summary["reason"],
+            "lcov.info contains an unterminated source record"
+        );
+        assert_eq!(summary["lcov"]["present"], true);
+        assert_eq!(summary["line_totals"]["found"], 0);
+        assert_eq!(summary["line_totals"]["hit"], 0);
+        assert_eq!(summary["correctness_claim"], false);
+        Ok(())
+    }
+
+    #[test]
+    fn coverage_summary_checks_each_source_record_boundary() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("lcov.info");
+        for text in [
+            "SF:src/a.rs\nLF:4\nLH:3\n",
+            "SF:src/a.rs\nLF:4\nLH:3\nSF:src/b.rs\nLF:2\nLH:1\nend_of_record\n",
+        ] {
+            fs::write(&path, text)?;
+            let summary = super::coverage_summary_receipt(temp.path());
+            assert_eq!(summary["status"], "unknown");
+            assert_eq!(summary["line_totals"]["found"], 0);
+        }
+        for (text, found, hit) in [
+            (
+                "SF:src/a.rs\nLF:4\nLH:3\nend_of_record\nSF:src/b.rs\nLF:2\nLH:1\nend_of_record",
+                6,
+                4,
+            ),
+            ("SF:src/a.rs\nLF:0\nLH:0\nend_of_record\n", 0, 0),
+        ] {
+            fs::write(&path, text)?;
+            let summary = super::coverage_summary_receipt(temp.path());
+            assert_eq!(summary["status"], "collected");
+            assert_eq!(summary["reason"], "lcov.info parsed");
+            assert_eq!(summary["line_totals"]["found"], found);
+            assert_eq!(summary["line_totals"]["hit"], hit);
+        }
+        fs::write(path, [0xff])?;
+        let summary = super::coverage_summary_receipt(temp.path());
+        assert_eq!(summary["status"], "unknown");
+        assert_eq!(summary["reason"], "lcov.info unreadable");
+        assert_eq!(summary["lcov"]["present"], true);
+        Ok(())
+    }
+
+    #[test]
+    fn coverage_summary_gap_preserves_sensor_process_status() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        fs::write(temp.path().join("lcov.info"), "SF:src/lib.rs\nLF:4\n")?;
+        for status in ["ok", "failed", "timed_out", "missing"] {
+            super::write_coverage_status_receipt(
+                temp.path(),
+                SensorStatusWrite {
+                    status,
+                    argv: &[],
+                    duration_ms: 0,
+                    reason: "process outcome",
+                    exit_code: None,
+                    timed_out: status == "timed_out",
+                },
+            )?;
+            let receipt: serde_json::Value =
+                serde_json::from_slice(&fs::read(temp.path().join("status.json"))?)?;
+            assert_eq!(receipt["status"], status);
+            assert_eq!(receipt["reason"], "process outcome");
+            assert_eq!(receipt["summary"]["status"], "unknown");
+            assert_eq!(receipt["correctness_claim"], false);
+        }
+        Ok(())
+    }
 
     #[test]
     fn coverage_summary_receipt_records_absent_and_malformed_lcov() -> Result<()> {
