@@ -167,11 +167,10 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
     let fake_bin = temp.path().join("fake-bin");
     fs::create_dir(&fake_bin)?;
     let curl = fake_bin.join("curl");
-    fs::write(
+    write_executable_fixture(
         &curl,
         "#!/bin/sh\nset -eu\nout=\"\"\nurl=\"\"\nwhile [ \"$#\" -gt 0 ]; do\n  case \"$1\" in\n    -o) out=\"$2\"; shift 2 ;;\n    http*) url=\"$1\"; shift ;;\n    *) shift ;;\n  esac\ndone\ncase \"$url\" in\n  *.sha256) cp \"$FIXTURE_CHECKSUM\" \"$out\" ;;\n  *) cp \"$FIXTURE_ARCHIVE\" \"$out\" ;;\nesac\n",
     )?;
-    fs::set_permissions(&curl, fs::Permissions::from_mode(0o755))?;
 
     let cases = [
         (
