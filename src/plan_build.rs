@@ -318,10 +318,48 @@ pub(crate) fn git_bytes_bounded(
     timeout: std::time::Duration,
 ) -> Result<Vec<u8>> {
     let mut command = ProcessCommand::new("git");
+    configure_git_observation(&mut command, root, args)?;
+    capture_git_bytes(&mut command, max_bytes, timeout)
+}
+
+/// Pin metadata reads to the supplied checkout, independently of inherited
+/// Git selectors and global/system configuration. Local config remains active
+/// except where the observation contract explicitly overrides it.
+pub(crate) fn configure_git_observation(
+    command: &mut ProcessCommand,
+    root: &Path,
+    args: &[&str],
+) -> Result<()> {
+    let root = root
+        .canonicalize()
+        .map_err(|_| anyhow::anyhow!("root_unavailable"))?;
+    // A nested directory or bare repository is not a checkout root. Linked
+    // worktrees use a .git file and remain supported by Git discovery.
+    if !root.join(".git").exists() {
+        bail!("checkout_root_required");
+    }
+    let git_keys: Vec<_> = std::env::vars_os()
+        .map(|(key, _)| key)
+        .chain(command.get_envs().map(|(key, _)| key.to_owned()))
+        .filter(|key| {
+            key.to_string_lossy()
+                .to_ascii_uppercase()
+                .starts_with("GIT_")
+        })
+        .collect();
+    for key in git_keys {
+        command.env_remove(key);
+    }
+    command.env("GIT_CONFIG_NOSYSTEM", "1").env(
+        "GIT_CONFIG_GLOBAL",
+        if cfg!(windows) { "NUL" } else { "/dev/null" },
+    );
     command
         .arg("--no-optional-locks")
         .arg("-C")
-        .arg(root)
+        .arg(&root)
+        .arg("--work-tree")
+        .arg(&root)
         .args([
             "-c",
             "core.fsmonitor=false",
@@ -329,7 +367,7 @@ pub(crate) fn git_bytes_bounded(
             "core.untrackedCache=false",
         ])
         .args(args);
-    capture_git_bytes(&mut command, max_bytes, timeout)
+    Ok(())
 }
 
 fn capture_git_bytes(
@@ -398,10 +436,150 @@ fn capture_git_bytes(
 
 #[cfg(test)]
 mod bounded_git_tests {
-    use super::capture_git_bytes;
+    use super::{capture_git_bytes, configure_git_observation, git_text};
     use anyhow::Result;
     use std::process::Command;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn git_observation_ignores_external_selectors_and_configuration() -> Result<()> {
+        let fixture = tempfile::tempdir()?;
+        let root = fixture.path().join("root");
+        let foreign = fixture.path().join("foreign");
+        for (path, name) in [(&root, "local.rs"), (&foreign, "foreign.rs")] {
+            std::fs::create_dir(path)?;
+            git_text(path, &["init", "-q", "-b", "main"])?;
+            git_text(path, &["config", "user.name", "observation test"])?;
+            git_text(
+                path,
+                &["config", "user.email", "observation@example.invalid"],
+            )?;
+            std::fs::write(path.join(name), "base\n")?;
+            git_text(path, &["add", "."])?;
+            git_text(path, &["commit", "-qm", "base"])?;
+        }
+        let external_index = fixture.path().join("external.index");
+        let mut alternate = Command::new("git");
+        alternate
+            .arg("-C")
+            .arg(&root)
+            .args(["read-tree", "HEAD"])
+            .env("GIT_INDEX_FILE", &external_index);
+        capture_git_bytes(&mut alternate, 1024, Duration::from_secs(1))?;
+        std::fs::write(root.join("local.rs"), "staged\n")?;
+        git_text(&root, &["add", "local.rs"])?;
+        let diff_args = [
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z",
+            "--no-renames",
+            "--no-ext-diff",
+            "--no-textconv",
+            "HEAD",
+            "--",
+        ];
+        let mut before = Command::new("git");
+        before
+            .arg("-C")
+            .arg(&root)
+            .args(diff_args)
+            .env("GIT_INDEX_FILE", &external_index);
+        assert!(capture_git_bytes(&mut before, 1024, Duration::from_secs(1))?.is_empty());
+        let expected_head = git_text(&root, &["rev-parse", "HEAD"])?;
+        // Each selector is tested independently; tests never mutate the
+        // process-wide environment or alter the legacy admission helpers.
+        for (key, value) in [
+            ("GIT_INDEX_FILE", external_index.clone()),
+            ("GIT_DIR", foreign.join(".git")),
+            ("GIT_WORK_TREE", foreign.clone()),
+            ("GIT_COMMON_DIR", foreign.join(".git")),
+            ("GIT_OBJECT_DIRECTORY", foreign.join(".git/objects")),
+            (
+                "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+                foreign.join(".git/objects"),
+            ),
+            ("GIT_CONFIG", foreign.join(".git/config")),
+            ("GIT_CONFIG_SYSTEM", foreign.join(".git/config")),
+        ] {
+            let mut command = Command::new("git");
+            command.env(key, &value);
+            configure_git_observation(&mut command, &root, &diff_args)?;
+            assert_eq!(
+                capture_git_bytes(&mut command, 1024, Duration::from_secs(1))?,
+                b"local.rs\0",
+                "{key}"
+            );
+        }
+        let global_config = fixture.path().join("global.config");
+        std::fs::write(
+            &global_config,
+            format!(
+                "[core]\nworktree = {}\n[diff]\nrenames = true\n",
+                foreign.display()
+            ),
+        )?;
+        let mut command = Command::new("git");
+        command
+            .env("GIT_DIR", foreign.join(".git"))
+            .env("GIT_INDEX_FILE", &external_index)
+            .env("GIT_CONFIG_GLOBAL", &global_config)
+            .env("GIT_CONFIG_COUNT", "1")
+            .env("GIT_CONFIG_KEY_0", "core.worktree")
+            .env("GIT_CONFIG_VALUE_0", &foreign)
+            .env("GIT_CONFIG_PARAMETERS", "'diff.renames=true'")
+            .env("GIT_LITERAL_PATHSPECS", "1")
+            .env("OBSERVATION_TEST_MARKER", "retained");
+        configure_git_observation(&mut command, &root, &["rev-parse", "HEAD"])?;
+        assert_eq!(
+            capture_git_bytes(&mut command, 1024, Duration::from_secs(1))?,
+            expected_head.as_bytes()
+        );
+        for (key, value) in command.get_envs() {
+            if key.to_string_lossy().starts_with("GIT_")
+                && key != "GIT_CONFIG_GLOBAL"
+                && key != "GIT_CONFIG_NOSYSTEM"
+            {
+                assert!(value.is_none(), "Git selector must be removed");
+            }
+        }
+        assert!(
+            command
+                .get_envs()
+                .any(|(key, value)| key == "OBSERVATION_TEST_MARKER" && value.is_some())
+        );
+        // Repository-local worktree redirection is also overridden without
+        // disabling unrelated local ignore/config semantics.
+        git_text(
+            &root,
+            &["config", "core.worktree", &foreign.to_string_lossy()],
+        )?;
+        let mut command = Command::new("git");
+        configure_git_observation(&mut command, &root, &diff_args)?;
+        assert_eq!(
+            capture_git_bytes(&mut command, 1024, Duration::from_secs(1))?,
+            b"local.rs\0"
+        );
+        let mut command = Command::new("git");
+        configure_git_observation(
+            &mut command,
+            &root,
+            &["status", "--porcelain=v1", "-z", "--no-renames"],
+        )?;
+        assert_eq!(
+            capture_git_bytes(&mut command, 1024, Duration::from_secs(1))?,
+            b"M  local.rs\0"
+        );
+        std::fs::create_dir(root.join("nested"))?;
+        assert_eq!(
+            configure_git_observation(&mut Command::new("git"), &root.join("nested"), &diff_args)
+                .err()
+                .map(|e| e.to_string())
+                .as_deref(),
+            Some("checkout_root_required")
+        );
+        Ok(())
+    }
 
     #[test]
     fn missing_executable_is_fixed_label() {

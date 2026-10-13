@@ -6620,6 +6620,113 @@ fn env_scrub_driver_invokes_isolated_plan() -> Result<()> {
     )
 }
 
+/// Actual plan CLI preserves legacy source selection while withholding new
+/// checkout evidence for an externally selected index; rename inventories
+/// retain both paths regardless of repository rename configuration.
+#[test]
+fn admission_worktree_source_and_rename_controls() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+    let external_index = temp.path().join("external.index");
+    run_with_env(
+        &repo,
+        "git",
+        &["read-tree", "HEAD"],
+        &[("GIT_INDEX_FILE", path_str(&external_index)?)],
+    )?;
+    let blob = run_capture_with_env(&repo, "git", &["rev-parse", "HEAD:src/lib.rs"], &[])?;
+    let cacheinfo = format!("100644,{},phantom-outside-index", blob.trim());
+    run_with_env(
+        &repo,
+        "git",
+        &["update-index", "--add", "--cacheinfo", &cacheinfo],
+        &[("GIT_INDEX_FILE", path_str(&external_index)?)],
+    )?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let output = temp.path().join("external-packet");
+    run_with_env(
+        &repo,
+        bin,
+        &[
+            "plan",
+            "--write",
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&output)?,
+        ],
+        &[("GIT_INDEX_FILE", path_str(&external_index)?)],
+    )?;
+    let external: serde_json::Value =
+        serde_json::from_slice(&fs::read(output.join("input/revision-admission.json"))?)?;
+    assert_eq!(external["worktree_evidence"]["outcome"], "unavailable");
+    assert_eq!(
+        external["worktree_evidence"]["reason"],
+        "inherited_git_source"
+    );
+    assert_eq!(external["worktree_dirty"], true); // legacy selected index preserved
+    assert_eq!(
+        external["worktree_evidence"]["identity_digest"],
+        external["identity_digest"]
+    );
+    assert!(!repo.join("phantom-outside-index").exists());
+    assert!(
+        run_capture_with_env(&repo, "git", &["status", "--porcelain"], &[])?
+            .trim()
+            .is_empty()
+    );
+    let destination = "src/renamed\nfile.rs";
+    run(&repo, "git", &["mv", "src/lib.rs", destination])?;
+    let mut previous: Option<serde_json::Value> = None;
+    for value in ["true", "false", "copies"] {
+        run(&repo, "git", &["config", "diff.renames", value])?;
+        let output = temp.path().join(format!("rename-{value}"));
+        run(
+            &repo,
+            bin,
+            &[
+                "plan",
+                "--write",
+                "--root",
+                path_str(&repo)?,
+                "--base",
+                "HEAD",
+                "--head",
+                "HEAD",
+                "--out",
+                path_str(&output)?,
+            ],
+        )?;
+        let admitted: serde_json::Value =
+            serde_json::from_slice(&fs::read(output.join("input/revision-admission.json"))?)?;
+        let evidence = &admitted["worktree_evidence"];
+        assert_eq!(evidence["outcome"], "complete");
+        assert_eq!(
+            evidence["staged_diff_paths_hex"],
+            serde_json::json!([
+                "7372632f6c69622e7273",
+                "7372632f72656e616d65640a66696c652e7273"
+            ])
+        );
+        assert_eq!(evidence["status"].as_array().map(Vec::len), Some(2));
+        if let Some(previous) = previous.as_ref() {
+            assert_eq!(admitted["identity_digest"], previous["identity_digest"]);
+            assert_eq!(
+                evidence["staged_diff_paths_hex"],
+                previous["worktree_evidence"]["staged_diff_paths_hex"]
+            );
+        }
+        previous = Some(admitted);
+    }
+    Ok(())
+}
+
 #[test]
 fn isolated_command_scrubs_ambient_profile_env_from_child_runs() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
