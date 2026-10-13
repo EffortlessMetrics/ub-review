@@ -249,6 +249,14 @@ pub(crate) fn read_github_pr_thread_context(
             warnings.push(format!("github-api {kind} unavailable: expected an array; coverage is incomplete; retry with a valid GitHub response"));
             continue;
         };
+        if let Some(index) = items
+            .iter()
+            .take(item_limit)
+            .position(|item| !item.is_object())
+        {
+            warnings.push(format!("github-api {kind} unavailable: item {} expected an object; coverage is incomplete; retry with a valid GitHub response", index + 1));
+            continue;
+        }
         let admitted = serde_json::Value::Array(items.iter().take(item_limit).cloned().collect());
         if items.len() > item_limit {
             truncated = true;
@@ -422,7 +430,7 @@ fn spawn_github_api_get(
 ) -> Result<std::process::Child> {
     let mut command = ProcessCommand::new("curl");
     if bounded_thread {
-        command.arg("-q");
+        command.arg("-q").arg("--no-buffer");
     }
     command
         .arg("-sS")

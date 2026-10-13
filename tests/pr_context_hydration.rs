@@ -21,6 +21,13 @@ struct Server {
 }
 
 fn serve(responses: Vec<(u16, String)>) -> Result<Server> {
+    serve_with_open_prefix(responses, None)
+}
+
+fn serve_with_open_prefix(
+    responses: Vec<(u16, String)>,
+    open_prefix: Option<usize>,
+) -> Result<Server> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     listener.set_nonblocking(true)?;
     let url = format!("http://{}", listener.local_addr()?);
@@ -32,7 +39,7 @@ fn serve(responses: Vec<(u16, String)>) -> Result<Server> {
         let mut requests = Vec::new();
         let mut children = Vec::new();
         let deadline = Instant::now() + Duration::from_secs(45);
-        for (status, body) in responses {
+        for (index, (status, body)) in responses.into_iter().enumerate() {
             let mut socket = loop {
                 match listener.accept() {
                     Ok((socket, _)) => break socket,
@@ -97,6 +104,24 @@ fn serve(responses: Vec<(u16, String)>) -> Result<Server> {
                         std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::ConnectionReset
                     ) => {}
                 Err(err) => return Err(err.into()),
+            }
+            if open_prefix == Some(index) {
+                // Keep EOF withheld until the client closes its oversized reader.
+                // A read-to-EOF mutant instead waits for this eight-second fallback.
+                socket.set_read_timeout(Some(Duration::from_secs(8)))?;
+                let mut byte = [0];
+                match socket.read(&mut byte) {
+                    Ok(0) => {}
+                    Err(err)
+                        if matches!(
+                            err.kind(),
+                            std::io::ErrorKind::WouldBlock
+                                | std::io::ErrorKind::TimedOut
+                                | std::io::ErrorKind::ConnectionReset
+                        ) => {}
+                    Ok(_) => anyhow::bail!("unexpected data after fixture request"),
+                    Err(err) => return Err(err.into()),
+                }
             }
         }
         Ok((requests, children))
@@ -352,6 +377,160 @@ fn oversized_and_malformed_endpoints_are_unavailable_with_bounded_diagnostics() 
 }
 
 #[test]
+fn non_object_thread_items_fail_the_endpoint_without_fabricating_evidence() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let root = temp.path().join("repo");
+    repository(&root)?;
+    let malformed =
+        json!([{"id":202,"body":"Valid prefix must not hide malformed admitted item."}, null])
+            .to_string();
+    let (partial, requests) = hydrate(
+        &root,
+        &temp.path().join("mixed-item"),
+        serve(vec![
+            (200, response(101, "Original issue context.")),
+            (200, malformed),
+            (200, response(303, "Original inline context.")),
+        ])?,
+        8192,
+    )?;
+    ensure!(requests.len() == 3);
+    ensure!(
+        partial["threads"].as_array().context("threads")?.len() == 2,
+        "malformed endpoint fabricated evidence: {partial}"
+    );
+    ensure!(partial["threads"][0]["id"] == "101" && partial["threads"][1]["id"] == "303");
+    ensure!(partial["sources"].as_array().context("sources")?.len() == 2);
+    let warning = partial["warnings"].to_string();
+    ensure!(
+        warning.contains("review-summaries")
+            && warning.contains("item 2")
+            && warning.contains("object")
+            && warning.contains("retry"),
+        "malformed item was not receipted: {warning}"
+    );
+    let (recovered, _) = hydrate(
+        &root,
+        &temp.path().join("items-recovered"),
+        serve(vec![
+            (200, response(101, "Original issue context.")),
+            (200, response(202, "Valid review item restored.")),
+            (200, response(303, "Original inline context.")),
+        ])?,
+        8192,
+    )?;
+    ensure!(recovered["threads"].as_array().context("threads")?.len() == 3);
+    ensure!(
+        recovered["threads"][0] == partial["threads"][0]
+            && recovered["threads"][2] == partial["threads"][1]
+    );
+    ensure!(recovered["warnings"] == json!([]));
+    Ok(())
+}
+
+#[test]
+fn scalar_thread_arrays_are_unavailable_and_keep_failed_values_private() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let root = temp.path().join("repo");
+    repository(&root)?;
+    let (context, requests) = hydrate(
+        &root,
+        &temp.path().join("scalar-items"),
+        serve(vec![
+            (200, "[null]".to_owned()),
+            (200, json!(["PRIVATE_BAD_ITEM_SENTINEL"]).to_string()),
+            (200, "[42]".to_owned()),
+        ])?,
+        8192,
+    )?;
+    ensure!(requests.len() == 3);
+    ensure!(
+        context["status"] == "unavailable",
+        "malformed arrays became successful context: {context}"
+    );
+    ensure!(context["threads"] == json!([]) && context["sources"] == json!([]));
+    let warnings = context["warnings"].as_array().context("warnings")?;
+    ensure!(warnings.len() == 3);
+    ensure!(
+        warnings.iter().all(|warning| warning
+            .as_str()
+            .is_some_and(|warning| warning.contains("item 1")
+                && warning.contains("object")
+                && warning.contains("retry")))
+    );
+    ensure!(!context.to_string().contains("PRIVATE_BAD_ITEM_SENTINEL"));
+    Ok(())
+}
+
+#[test]
+fn overflow_closes_an_open_stream_promptly_and_recovers_later_endpoints() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let root = temp.path().join("repo");
+    repository(&root)?;
+    let started = Instant::now();
+    let (context, requests) = hydrate(
+        &root,
+        &temp.path().join("open-overflow"),
+        serve_with_open_prefix(
+            vec![
+                (200, "x".repeat(1_048_577)),
+                (200, response(202, "Review survived early stream cutoff.")),
+                (200, response(303, "Inline survived early stream cutoff.")),
+            ],
+            Some(0),
+        )?,
+        8192,
+    )?;
+    ensure!(
+        started.elapsed() < Duration::from_secs(5),
+        "capture waited for producer EOF"
+    );
+    ensure!(requests.len() == 3);
+    ensure!(context["threads"].as_array().context("threads")?.len() == 2);
+    ensure!(context["threads"][0]["id"] == "202" && context["threads"][1]["id"] == "303");
+    ensure!(context["warnings"].to_string().contains("1048576"));
+    Ok(())
+}
+
+#[test]
+fn exact_capture_limit_includes_status_trailer_and_rejects_one_extra_byte() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let root = temp.path().join("repo");
+    repository(&root)?;
+    let mut body = response(101, "Exact bounded source record.");
+    // Curl adds this trailer after the HTTP body; the capture budget includes it.
+    let trailer = "\nUB_REVIEW_HTTP_STATUS:200\n";
+    body.push_str(&" ".repeat(1_048_576 - trailer.len() - body.len()));
+    let (accepted, _) = hydrate(
+        &root,
+        &temp.path().join("exact-cap"),
+        serve(vec![
+            (200, body.clone()),
+            (200, "[]".to_owned()),
+            (200, "[]".to_owned()),
+        ])?,
+        8192,
+    )?;
+    ensure!(accepted["threads"][0]["id"] == "101");
+    ensure!(accepted["warnings"] == json!([]));
+    body.push(' ');
+    let (rejected, _) = hydrate(
+        &root,
+        &temp.path().join("one-over-cap"),
+        serve(vec![
+            (200, body),
+            (200, response(202, "Healthy independent endpoint.")),
+            (200, "[]".to_owned()),
+        ])?,
+        8192,
+    )?;
+    ensure!(rejected["threads"].as_array().context("threads")?.len() == 1);
+    ensure!(rejected["threads"][0]["id"] == "202");
+    ensure!(rejected["warnings"].to_string().contains("1048576"));
+    Ok(())
+}
+
+#[test]
 fn permission_denial_stops_further_reads_and_keeps_prior_context() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let root = temp.path().join("repo");
@@ -417,9 +596,10 @@ fn first_page_and_zero_text_budget_keep_explicit_omissions() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let root = temp.path().join("repo");
     repository(&root)?;
-    let items: Vec<Value> = (1..=31)
+    let mut items: Vec<Value> = (1..=30)
         .map(|id| json!({"id": id, "body": "bounded item"}))
         .collect();
+    items.push(Value::Null); // Omitted tail is outside the admitted first-page slice.
     let (context, requests) = hydrate(
         &root,
         &temp.path().join("page"),
