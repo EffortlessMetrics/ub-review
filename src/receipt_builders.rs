@@ -158,11 +158,18 @@ pub(crate) fn read_bounded_text(path: &Path, max_bytes: usize) -> Result<String>
 }
 
 pub(crate) fn read_bounded_text_with_status(path: &Path, max_bytes: usize) -> Result<BoundedText> {
-    let mut file = File::open(path).with_context(|| format!("open {}", path.display()))?;
-    let mut buffer = vec![0; max_bytes.saturating_add(1)];
+    let file = File::open(path).with_context(|| format!("open {}", path.display()))?;
+    // The configured ceiling is a read limit, not an allocation request.
+    // Grow with the actual file bytes while retaining one-byte truncation
+    // lookahead. This also permits small files with a usize::MAX ceiling.
+    let read_limit = u64::try_from(max_bytes)
+        .unwrap_or(u64::MAX)
+        .saturating_add(1);
+    let mut buffer = Vec::new();
     use std::io::Read as _;
     let count = file
-        .read(&mut buffer)
+        .take(read_limit)
+        .read_to_end(&mut buffer)
         .with_context(|| format!("read {}", path.display()))?;
     buffer.truncate(count.min(max_bytes));
     let mut text = String::from_utf8_lossy(&buffer).to_string();
