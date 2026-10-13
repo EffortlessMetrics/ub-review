@@ -1,5 +1,5 @@
 //! Admission-time metadata, never a cleanliness gate or a content snapshot.
-use crate::plan_build::git_bytes_bounded;
+use crate::plan_build::{git_bytes_bounded, git_environment_key};
 use crate::revision_identity::RevisionIdentity;
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -46,6 +46,15 @@ pub(crate) fn collect(
     identity: &RevisionIdentity,
     reviewed_commit_oid: &str,
 ) -> WorktreeEvidence {
+    collect_with_source(root, identity, reviewed_commit_oid, inherited_git_source())
+}
+
+fn collect_with_source(
+    root: &Path,
+    identity: &RevisionIdentity,
+    reviewed_commit_oid: &str,
+    has_inherited_source: bool,
+) -> WorktreeEvidence {
     let mut evidence = WorktreeEvidence {
         schema: "ub-review.worktree_evidence.v1".to_owned(),
         identity_digest: identity.identity_digest(),
@@ -65,7 +74,7 @@ pub(crate) fn collect(
     // Legacy admission helpers still honor caller-selected Git sources. Do
     // not silently associate a newly isolated checkout inventory with that
     // possibly different source. Such observations remain unavailable.
-    let result = if inherited_git_source() {
+    let result = if has_inherited_source {
         Err(anyhow::anyhow!("inherited_git_source"))
     } else {
         observe(&mut evidence, &run)
@@ -75,22 +84,7 @@ pub(crate) fn collect(
 }
 
 fn inherited_git_source() -> bool {
-    std::env::vars_os().any(|(key, value)| {
-        let key = key.to_string_lossy().to_ascii_uppercase();
-        !value.is_empty()
-            && (key.starts_with("GIT_CONFIG")
-                || matches!(
-                    key.as_str(),
-                    "GIT_DIR"
-                        | "GIT_WORK_TREE"
-                        | "GIT_INDEX_FILE"
-                        | "GIT_COMMON_DIR"
-                        | "GIT_OBJECT_DIRECTORY"
-                        | "GIT_ALTERNATE_OBJECT_DIRECTORIES"
-                        | "GIT_SHALLOW_FILE"
-                        | "GIT_NAMESPACE"
-                ))
-    })
+    std::env::vars_os().any(|(key, _)| git_environment_key(&key))
 }
 
 fn finish(evidence: &mut WorktreeEvidence, result: Result<()>) {
@@ -252,7 +246,17 @@ mod tests {
     }
 
     fn admission(root: &Path) -> Result<crate::revision_admission::RevisionAdmission> {
-        admit_revision(root, "HEAD", "HEAD", None, &[], "")
+        let mut admission = admit_revision(root, "HEAD", "HEAD", None, &[], "")?;
+        // Metadata/parser fixtures model a clean caller environment. The real
+        // inherited-variable guard is exercised through actual plan CLI tests.
+        let identity = RevisionIdentity::from_canonical(&admission.identity_canonical)?;
+        admission.worktree_evidence = Some(collect_with_source(
+            root,
+            &identity,
+            &admission.reviewed_commit_oid,
+            false,
+        ));
+        Ok(admission)
     }
 
     fn evidence(root: &Path) -> Result<WorktreeEvidence> {
@@ -423,14 +427,24 @@ mod tests {
         let identity =
             RevisionIdentity::from_canonical(&admission(repo.path())?.identity_canonical)?;
         let missing = tempfile::tempdir()?;
-        let unavailable = collect(missing.path(), &identity, &original.reviewed_commit_oid);
+        let unavailable = collect_with_source(
+            missing.path(),
+            &identity,
+            &original.reviewed_commit_oid,
+            false,
+        );
         assert_eq!(unavailable.outcome, "unavailable");
         assert_eq!(
             unavailable.reason.as_deref(),
             Some("checkout_root_required")
         );
         git_text(missing.path(), &["init", "-q"])?;
-        let missing_head = collect(missing.path(), &identity, &original.reviewed_commit_oid);
+        let missing_head = collect_with_source(
+            missing.path(),
+            &identity,
+            &original.reviewed_commit_oid,
+            false,
+        );
         assert_eq!(missing_head.outcome, "unavailable");
         assert_eq!(missing_head.reason.as_deref(), Some("git_failed"));
         for index in 0..=MAX_ENTRIES {

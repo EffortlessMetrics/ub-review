@@ -322,6 +322,14 @@ pub(crate) fn git_bytes_bounded(
     capture_git_bytes(&mut command, max_bytes, timeout)
 }
 
+/// One shared selector rule for refusal and stripping. Presence matters:
+/// Git can interpret an empty setting (for example GIT_NO_REPLACE_OBJECTS).
+pub(crate) fn git_environment_key(key: &std::ffi::OsStr) -> bool {
+    key.to_string_lossy()
+        .to_ascii_uppercase()
+        .starts_with("GIT_")
+}
+
 /// Pin metadata reads to the supplied checkout, independently of inherited
 /// Git selectors and global/system configuration. Local config remains active
 /// except where the observation contract explicitly overrides it.
@@ -341,11 +349,7 @@ pub(crate) fn configure_git_observation(
     let git_keys: Vec<_> = std::env::vars_os()
         .map(|(key, _)| key)
         .chain(command.get_envs().map(|(key, _)| key.to_owned()))
-        .filter(|key| {
-            key.to_string_lossy()
-                .to_ascii_uppercase()
-                .starts_with("GIT_")
-        })
+        .filter(|key| git_environment_key(key))
         .collect();
     for key in git_keys {
         command.env_remove(key);
@@ -436,10 +440,28 @@ fn capture_git_bytes(
 
 #[cfg(test)]
 mod bounded_git_tests {
-    use super::{capture_git_bytes, configure_git_observation, git_text};
+    use super::{capture_git_bytes, configure_git_observation, git_environment_key, git_text};
     use anyhow::Result;
     use std::process::Command;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn selector_rule_covers_replacements_and_future_git_settings() {
+        for key in [
+            "GIT_DIR",
+            "GIT_INDEX_FILE",
+            "GIT_NO_REPLACE_OBJECTS",
+            "GIT_REPLACE_REF_BASE",
+            "GIT_CONFIG_COUNT",
+            "GIT_FUTURE_SELECTOR",
+            "git_trace",
+        ] {
+            assert!(git_environment_key(std::ffi::OsStr::new(key)), "{key}");
+        }
+        for key in ["GITHUB_ACTIONS", "XGIT_DIR", "PATH", "GIT"] {
+            assert!(!git_environment_key(std::ffi::OsStr::new(key)), "{key}");
+        }
+    }
 
     #[test]
     fn git_observation_ignores_external_selectors_and_configuration() -> Result<()> {
@@ -529,6 +551,9 @@ mod bounded_git_tests {
             .env("GIT_CONFIG_VALUE_0", &foreign)
             .env("GIT_CONFIG_PARAMETERS", "'diff.renames=true'")
             .env("GIT_LITERAL_PATHSPECS", "1")
+            .env("GIT_NO_REPLACE_OBJECTS", "")
+            .env("GIT_REPLACE_REF_BASE", "refs/custom-replace/")
+            .env("GIT_FUTURE_SELECTOR", "")
             .env("OBSERVATION_TEST_MARKER", "retained");
         configure_git_observation(&mut command, &root, &["rev-parse", "HEAD"])?;
         assert_eq!(
