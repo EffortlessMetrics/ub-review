@@ -249,6 +249,28 @@ mod tests {
     }
 
     #[test]
+    fn unresolved_target_location_is_required_and_positive() {
+        let make = |context: &str| {
+            format!("ripr: 1{MARKER}{context}:rust_module_unresolved_target{SUFFIX}")
+        };
+        assert_eq!(
+            parse_note(&make("src/a.rs:12")),
+            Some(vec![(
+                "src/a.rs:12".into(),
+                "rust_module_unresolved_target".into()
+            )])
+        );
+        for context in [
+            "src/a.rs",
+            "src/a.rs:0",
+            "src/a.rs:not_a_number",
+            "src/a.rs:18446744073709551616",
+        ] {
+            assert!(parse_note(&make(context)).is_none(), "{context}");
+        }
+    }
+
+    #[test]
     fn module_evidence_retains_single_pass_duplicates_benign_and_unavailable() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let dir = temp.path();
