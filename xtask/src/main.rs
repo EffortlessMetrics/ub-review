@@ -1820,6 +1820,47 @@ mod tests {
         Ok(())
     }
 
+    // #1067 test-only characterization; do not broaden legacy admission.
+    #[test]
+    fn currentness_1067_local_verifier_rejects_candidate_badge_schema() -> Result<()> {
+        let mut badge: JsonValue = serde_json::from_slice(&fake_badge(0, 0, 0))?;
+        badge["schema_version"] = json!("0.8");
+        let raw: JsonValue = serde_json::from_slice(&fake_detail(&[]))?;
+        let error = validate_local_ripr_outputs(&badge, &raw)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("candidate badge unexpectedly admitted"))?;
+        assert!(
+            error
+                .to_string()
+                .contains("badge-json envelope is incompatible")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn currentness_1067_local_verifier_counts_legacy_raw_gaps() -> Result<()> {
+        let badge: JsonValue = serde_json::from_slice(&fake_badge(1, 0, 2))?;
+        let mut raw: JsonValue =
+            serde_json::from_slice(&fake_detail(&["weakly_exposed", "weakly_exposed"]))?;
+        raw["findings"][0]["source_currentness"] = json!("candidate_current");
+        raw["findings"][1]["source_currentness"] = json!("moved_or_renamed");
+        let error = validate_local_ripr_outputs(&badge, &raw)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("current-only counter unexpectedly accepted"))?;
+        assert!(error.to_string().contains("canonical gaps=2"));
+        Ok(())
+    }
+
+    #[test]
+    fn currentness_1067_local_verifier_duplicate_id_boundary_is_unimplemented() -> Result<()> {
+        let badge: JsonValue = serde_json::from_slice(&fake_badge(0, 0, 2))?;
+        let mut raw: JsonValue = serde_json::from_slice(&fake_detail(&["exposed", "exposed"]))?;
+        raw["findings"][1]["id"] = raw["findings"][0]["id"].clone();
+        assert!(validate_local_ripr_outputs(&badge, &raw).is_ok());
+        // Existing behavior only: the proposed matrix rejects the same IDs.
+        Ok(())
+    }
+
     fn fake_badge(unsuppressed: u64, suppressed: u64, analyzed: u64) -> Vec<u8> {
         serde_json::to_vec(&json!({
             "schema_version": "0.6",
