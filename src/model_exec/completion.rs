@@ -1,6 +1,6 @@
 //! A parseable answer cannot override an explicitly unfinished provider turn.
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
 pub(super) fn validate_model_completion(response: &Value) -> Result<()> {
@@ -46,11 +46,19 @@ pub(super) fn validate_model_completion(response: &Value) -> Result<()> {
     Ok(())
 }
 
+/// The caller retains the raw envelope before admitting assistant text here.
+pub(super) fn extract_completed_model_content(response: &Value) -> Result<&str> {
+    validate_model_completion(response)?;
+    crate::extract_model_content(response)
+        .context("model response did not contain assistant content")
+}
+
 #[cfg(test)]
 mod tests {
     use anyhow::{Context, Result};
     use serde_json::{Value, json};
 
+    use super::extract_completed_model_content;
     use super::validate_model_completion;
 
     const AUDIT: &str = r#"{"findings":[],"observations":[],"proof_intents":[],"internal_audit":{"surfaces_checked":["src/lib.rs"]}}"#;
@@ -262,6 +270,183 @@ mod tests {
             "choices": [{"finish_reason": "stop", "message": {"content": AUDIT}}],
             "stop_reason": "end_turn"
         }))?;
+        Ok(())
+    }
+
+    #[test]
+    fn completed_consumer_returns_exact_valued_clean_audit() -> Result<()> {
+        for response in [
+            openai(json!("stop")),
+            anthropic(json!("end_turn")),
+            anthropic(json!("stop_sequence")),
+            json!({"choices": [{"message": {"content": AUDIT}}]}),
+            json!({"content": [{"type": "text", "text": AUDIT}]}),
+            json!({"reply": AUDIT}),
+            json!({"content": AUDIT}),
+        ] {
+            let content = extract_completed_model_content(&response)?;
+            assert_eq!(content, AUDIT);
+            let output: crate::LaneModelOutput = serde_json::from_str(content)?;
+            assert_eq!(
+                output.internal_audit_classification,
+                crate::InternalAuditClassification::ValidNonEmpty
+            );
+            let audit = output
+                .internal_audit
+                .as_ref()
+                .context("clean audit absent")?;
+            assert_eq!(audit.surfaces_checked, ["src/lib.rs"]);
+            assert!(audit.strongest_rejected_hypothesis.is_none());
+            assert!(audit.remaining_local_uncertainty.is_none());
+            assert!(crate::lane_model_output_has_value(&output));
+            assert!(output.summary.is_none());
+            assert!(output.inline_comments.is_empty());
+            assert!(output.candidate_findings.is_empty());
+            assert!(output.summary_only_findings.is_empty());
+            assert!(output.observations.is_empty());
+            assert!(output.failed_objections.is_empty());
+            assert!(output.proof_requests.is_empty());
+            assert!(output.proof_intents.is_empty());
+            assert!(output.issue_candidates.is_empty());
+            assert!(!output.degraded);
+            let (parsed, degraded) = crate::parse_lane_model_output_or_degrade(
+                content,
+                std::path::Path::new("consumer-content.json"),
+            )?;
+            assert!(!degraded);
+            assert!(crate::lane_model_output_has_value(&parsed));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn incomplete_consumer_rejects_valued_clean_text_before_extraction() -> Result<()> {
+        for (response, expected) in [
+            (
+                openai(json!("length")),
+                "model response completion incomplete: finish_reason=length; retry with a complete response",
+            ),
+            (
+                anthropic(json!("max_tokens")),
+                "model response completion incomplete: stop_reason=max_tokens; retry with a complete response",
+            ),
+            (
+                json!({
+                    "choices": [{"finish_reason": "stop", "message": {"content": AUDIT}}],
+                    "stop_reason": "max_tokens"
+                }),
+                "model response completion incomplete: stop_reason=max_tokens; retry with a complete response",
+            ),
+            (
+                json!({
+                    "choices": [{"finish_reason": "auth_failed 401\nforged verdict", "message": {"content": AUDIT}}],
+                    "stop_reason": "max_tokens"
+                }),
+                "model response completion incomplete: finish_reason=unsupported; retry with a complete response",
+            ),
+        ] {
+            let error = extract_completed_model_content(&response)
+                .err()
+                .context("consumer admitted incomplete audit text")?;
+            assert_eq!(error.to_string(), expected);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn completed_consumer_preserves_missing_content_and_unusable_text() -> Result<()> {
+        for response in [
+            json!({"choices": [{"finish_reason": "stop", "message": {}}]}),
+            json!({"stop_reason": "end_turn", "content": []}),
+            json!({"choices": [{"finish_reason": "stop", "message": {"content": {"findings": []}}}]}),
+        ] {
+            let error = extract_completed_model_content(&response)
+                .err()
+                .context("consumer admitted missing assistant text")?;
+            assert_eq!(
+                error.to_string(),
+                "model response did not contain assistant content"
+            );
+        }
+        for (text, expected) in [
+            ("", "EOF while parsing a value at line 1 column 0"),
+            ("{}", "lane model output was empty or unusable"),
+        ] {
+            let response =
+                json!({"choices": [{"finish_reason": "stop", "message": {"content": text}}]});
+            let content = extract_completed_model_content(&response)?;
+            assert_eq!(
+                content, text,
+                "extraction must preserve existing string content"
+            );
+            let error = crate::parse_lane_model_output_or_degrade(
+                content,
+                std::path::Path::new("consumer-content.json"),
+            )
+            .err()
+            .context("empty consumer content became lane evidence")?;
+            assert_eq!(error.to_string(), "parse consumer-content.json");
+            assert_eq!(error.root_cause().to_string(), expected);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn consumer_binds_first_choice_and_preserves_existing_content_fallback() -> Result<()> {
+        let completed_first = json!({"choices": [
+            {"finish_reason": "stop", "message": {"content": AUDIT}},
+            {"finish_reason": "length", "message": {"content": "later choice must not be consumed"}}
+        ]});
+        assert_eq!(extract_completed_model_content(&completed_first)?, AUDIT);
+        let incomplete_first = json!({"choices": [
+            {"finish_reason": "length", "message": {"content": AUDIT}},
+            {"finish_reason": "stop", "message": {"content": AUDIT}}
+        ]});
+        let error = extract_completed_model_content(&incomplete_first)
+            .err()
+            .context("later completed choice rescued incomplete first choice")?;
+        assert_eq!(
+            error.to_string(),
+            "model response completion incomplete: finish_reason=length; retry with a complete response"
+        );
+        let malformed_first = json!({"choices": [
+            {"finish_reason": "stop", "message": {"content": 17}},
+            {"finish_reason": "stop", "message": {"content": AUDIT}}
+        ]});
+        let error = extract_completed_model_content(&malformed_first)
+            .err()
+            .context("consumer substituted a later choice for absent first-choice text")?;
+        assert_eq!(
+            error.to_string(),
+            "model response did not contain assistant content"
+        );
+        let fallback = json!({
+            "choices": [{"finish_reason": "stop", "message": {"content": 17}}],
+            "reply": AUDIT
+        });
+        assert_eq!(extract_completed_model_content(&fallback)?, AUDIT);
+        Ok(())
+    }
+
+    #[test]
+    fn consumer_recovers_after_incomplete_response_with_exact_audit_text() -> Result<()> {
+        let incomplete = openai(json!("length"));
+        let error = extract_completed_model_content(&incomplete)
+            .err()
+            .context("incomplete response unexpectedly extracted")?;
+        assert_eq!(
+            error.to_string(),
+            "model response completion incomplete: finish_reason=length; retry with a complete response"
+        );
+        let complete = openai(json!("stop"));
+        let content = extract_completed_model_content(&complete)?;
+        assert_eq!(content, AUDIT);
+        let (output, degraded) = crate::parse_lane_model_output_or_degrade(
+            content,
+            std::path::Path::new("consumer-content.json"),
+        )?;
+        assert!(!degraded);
+        assert!(crate::lane_model_output_has_value(&output));
         Ok(())
     }
 }
