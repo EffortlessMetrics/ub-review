@@ -98,6 +98,10 @@ fn missing_routes_files_and_invalid_metadata_are_rejected() -> Result<()> {
             .to_string(),
         format!("missing AGENTS.md route: {native_path}")
     );
+    for malformed_routes in [routes.replace('(', ""), routes.replace(')', "")] {
+        fs::write(root.join("AGENTS.md"), malformed_routes)?;
+        ensure!(check_layout(root).is_err(), "malformed route accepted");
+    }
     fs::write(root.join("AGENTS.md"), routes)?;
     fs::remove_file(root.join(native_path))?;
     assert_eq!(
@@ -106,6 +110,11 @@ fn missing_routes_files_and_invalid_metadata_are_rejected() -> Result<()> {
             .context("missing native file accepted")?
             .to_string(),
         format!("read routed file: {native_path}")
+    );
+    fs::write(root.join(native_path), [0xff_u8, 0xfe])?;
+    ensure!(
+        check_layout(root).is_err(),
+        "invalid UTF-8 guidance accepted"
     );
     fs::write(root.join(native_path), "native procedure")?;
     check_layout(root)?;
@@ -132,6 +141,22 @@ fn missing_routes_files_and_invalid_metadata_are_rejected() -> Result<()> {
             format!("read routed file: {path}")
         );
         for (bad, error) in [
+            (
+                format!("garbage before fence\n{original}"),
+                "missing skill frontmatter",
+            ),
+            (
+                original.replace("\n---\n", "\n---garbage\n"),
+                "missing skill frontmatter",
+            ),
+            (
+                original.replace("description: fixture control", "description:    "),
+                "missing skill description",
+            ),
+            (
+                original.replace(&format!("name: {name}"), &format!("name: {name}-obsolete")),
+                "skill name does not match directory",
+            ),
             (
                 original.replace(&format!("name: {name}"), "name: obsolete"),
                 "skill name does not match directory",
