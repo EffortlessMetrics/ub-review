@@ -263,12 +263,7 @@ fn skipped_unresolved_execution_contradictions_cannot_publish_terminal_truth() -
             let mut receipt = proof_receipt("proof-receipt-a", &["req-a"], &["tests-oracle"]);
             write_proof_receipt_artifacts(out, std::slice::from_ref(&receipt), None)?;
             receipt.result = "skipped_unresolved".to_owned();
-            receipt.commands[0].status = "skipped".to_owned();
-            receipt.commands[0].exit_code = None;
-            receipt.commands[0].timed_out = false;
-            receipt.commands[0].duration_ms = 0;
-            receipt.commands.push(receipt.commands[0].clone());
-            let command = &mut receipt.commands[1];
+            let command = &mut receipt.commands[0];
             command.status = "skipped".to_owned();
             command.exit_code = None;
             command.timed_out = false;
