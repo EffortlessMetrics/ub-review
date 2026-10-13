@@ -18,6 +18,8 @@ pub(crate) use budget::*;
 
 pub(crate) mod command;
 pub(crate) use command::*;
+pub(crate) mod cargo_selection;
+pub(crate) use cargo_selection::*;
 
 pub(crate) mod tasks;
 pub(crate) use tasks::*;
