@@ -86,9 +86,9 @@ fn bless_value_enabled(value: Option<&str>) -> bool {
     value == Some("1")
 }
 
-fn snapshot_text(case: &GoldenCase, surface: &CompiledReviewSurface) -> Result<String> {
-    let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/review-golden");
-    fs::create_dir_all(&out).with_context(|| format!("create {}", out.display()))?;
+fn snapshot_post_args(case: &GoldenCase) -> Result<(tempfile::TempDir, PostArgs)> {
+    let workspace = tempfile::tempdir().context("create golden snapshot workspace")?;
+    let out = workspace.path().to_owned();
     let patch_path = out.join(format!("{}.patch", case.id));
     fs::write(&patch_path, &case.patch)
         .with_context(|| format!("write {}", patch_path.display()))?;
@@ -102,6 +102,11 @@ fn snapshot_text(case: &GoldenCase, surface: &CompiledReviewSurface) -> Result<S
         github_api_url: "https://api.github.invalid".to_owned(),
         fail_on_post_error: true,
     };
+    Ok((workspace, post_args))
+}
+
+fn snapshot_text(case: &GoldenCase, surface: &CompiledReviewSurface) -> Result<String> {
+    let (_workspace, post_args) = snapshot_post_args(case)?;
     if surface.should_prepare_github_review {
         validate_github_review_payload_for_post(&post_args, &surface.github_review)
             .with_context(|| format!("validate `{}` post payload", case.id))?;
@@ -506,5 +511,29 @@ fn clean_case_stays_silent() -> Result<()> {
     ensure!(!surface.should_prepare_github_review);
     ensure!(surface.github_review.body.is_empty());
     ensure!(surface.github_review.comments.is_empty());
+    Ok(())
+}
+
+#[test]
+fn overlapping_snapshots_keep_independent_validation_patches() -> Result<()> {
+    let case = suggestion_case();
+    let surface = case.compile()?;
+    let (_first_workspace, first) = snapshot_post_args(&case)?;
+    let (_second_workspace, second) = snapshot_post_args(&case)?;
+    validate_github_review_payload_for_post(&first, &surface.github_review)?;
+    validate_github_review_payload_for_post(&second, &surface.github_review)?;
+
+    // Pause the second writer after truncation, before any patch bytes are written.
+    // The first snapshot must still validate its complete RIGHT-side line 39.
+    let second_patch = second
+        .diff_patch
+        .as_ref()
+        .context("second snapshot patch")?;
+    let _writer = fs::File::create(second_patch)?;
+    validate_github_review_payload_for_post(&first, &surface.github_review)?;
+    let error = validate_github_review_payload_for_post(&second, &surface.github_review)
+        .err()
+        .context("truncated patch unexpectedly validated")?;
+    ensure!(format!("{error:#}").contains("src/buffer.rs:39 is not a valid RIGHT-side diff line"));
     Ok(())
 }
