@@ -1,0 +1,8 @@
+serde_json v1.0.150
+├── serde_json feature "default"
+│   ├── ub-review v0.1.2 (/workspace/scratch/2e70149a8e59/rust-projection-1292)
+│   │   └── ub-review feature "default" (command-line)
+│   └── xtask v0.1.0 (/workspace/scratch/2e70149a8e59/rust-projection-1292/xtask)
+│       └── xtask feature "default" (command-line)
+└── serde_json feature "std"
+    └── serde_json feature "default" (*)

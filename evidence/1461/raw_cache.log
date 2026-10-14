@@ -1,0 +1,19 @@
+   Compiling xtask v0.1.0 (/workspace/scratch/2e70149a8e59/review-projection-frozen-f7c54ca8/xtask)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.61s
+     Running unittests src/main.rs (/workspace/scratch/2e70149a8e59/review-projection-frozen-target/debug/deps/xtask-4a0c068f328b344e)
+
+running 1 test
+test task_projection_reader::reader::tests::successful_reads_cache_raw_bytes_and_source_digest ... FAILED
+
+failures:
+
+---- task_projection_reader::reader::tests::successful_reads_cache_raw_bytes_and_source_digest stdout ----
+Error: Condition failed: `reader.read("source.json", true)? == Some(b"abc".as_slice())`
+
+
+failures:
+    task_projection_reader::reader::tests::successful_reads_cache_raw_bytes_and_source_digest
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 70 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p xtask --bin xtask`

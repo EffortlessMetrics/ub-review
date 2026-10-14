@@ -1,0 +1,19 @@
+   Compiling xtask v0.1.0 (/workspace/scratch/2e70149a8e59/review-projection-frozen-f7c54ca8/xtask)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.49s
+     Running tests/task_projection_reader_parity.rs (/workspace/scratch/2e70149a8e59/review-projection-frozen-target/debug/deps/task_projection_reader_parity-d2deca1b3f76f363)
+
+running 1 test
+test worker_reader_preserves_full_u128_duration_domain ... FAILED
+
+failures:
+
+---- worker_reader_preserves_full_u128_duration_domain stdout ----
+Error: valid u128 input refused: {"authority":"reader-only-shadow","bytes_observed":296,"coverage":{"proof_receipt.json":"read","resource_lease.json":"read","review/task_ledger_snapshot.json":"read","task_ledger_events.ndjson":"read"},"input_unavailable":true,"issues":[{"code":"invalid_command_duration","identity":"","path":"proof_receipt.json"}],"issues_truncated":false,"packet_kind":"worker","reader_status":"input_unavailable","reconciliation":"not_performed","schema":"ub-review.task_projection_reader.v1","source_artifacts":[{"bytes":124,"path":"proof_receipt.json","sha256":"b0d180635aa74347b4ee9d377a9b28748b4ae56cc59418273a80ccac00287f81"},{"bytes":91,"path":"resource_lease.json","sha256":"fdb963593c30098337e77961c226a2547abc1a6ed2e61f56d9c566313d8f2e3a"},{"bytes":57,"path":"review/task_ledger_snapshot.json","sha256":"ffe6b55b2152b2e86662d4b14d9e7d5de0915d3f0197b5f11193a94cdc7a631d"},{"bytes":24,"path":"task_ledger_events.ndjson","sha256":"775e55539e0fee1db239a0c5acbbf20f27c9bab2b6cbee3ecac9e1cb0506e9af"}],"source_attempts":4}
+
+
+failures:
+    worker_reader_preserves_full_u128_duration_domain
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p xtask --test task_projection_reader_parity`

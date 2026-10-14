@@ -1,0 +1,13 @@
+diff --git a/src/task_projection_reconciliation/reader.rs b/src/task_projection_reconciliation/reader.rs
+index 08a9c44..1f86fcb 100644
+--- a/src/task_projection_reconciliation/reader.rs
++++ b/src/task_projection_reconciliation/reader.rs
+@@ -530,7 +530,7 @@ pub(crate) fn integer_u64(value: &Value) -> Option<u64> {
+ pub(crate) fn integer_u128(value: &Value) -> Option<u128> {
+     match value {
+         Value::Number(JsonNumber(lexeme)) if !lexeme.contains(['.', 'e', 'E']) => {
+-            lexeme.parse().ok()
++            lexeme.parse::<u64>().ok().map(u128::from)
+         }
+         _ => None,
+     }

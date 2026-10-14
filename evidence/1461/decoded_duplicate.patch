@@ -1,0 +1,22 @@
+diff --git a/src/task_projection_reconciliation/reader.rs b/src/task_projection_reconciliation/reader.rs
+index 08a9c44..90df85d 100644
+--- a/src/task_projection_reconciliation/reader.rs
++++ b/src/task_projection_reconciliation/reader.rs
+@@ -623,7 +623,7 @@ impl<'de> Visitor<'de> for UniqueVisitor {
+             if keys.len() >= MAX_ROWS {
+                 return Err(de::Error::custom("JSON container budget exceeded"));
+             }
+-            if !keys.insert(key) {
++            if !keys.insert(key) && false {
+                 return Err(de::Error::custom("duplicate JSON key"));
+             }
+             object.next_value::<UniqueJson>()?;
+@@ -801,7 +801,7 @@ impl NativeDecoder<'_> {
+             self.whitespace()?;
+             self.node()?;
+             let key = self.string()?;
+-            if object.contains_key(&key) {
++            if object.contains_key(&key) && false {
+                 return Err(PacketError::InvalidJson);
+             }
+             self.whitespace()?;

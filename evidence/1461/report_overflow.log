@@ -1,0 +1,39 @@
+   Compiling xtask v0.1.0 (/workspace/scratch/2e70149a8e59/review-projection-frozen-f7c54ca8/xtask)
+warning: unreachable statement
+   --> xtask/src/task_projection_reader.rs:192:9
+    |
+191 |       if bytes.len() > MAX_REPORT_BYTES { return Ok(1);
+    |                                           ------------ any code following this expression is unreachable
+192 | /         let unavailable = json!({
+193 | |             "schema": READER_SCHEMA,
+194 | |             "authority": "reader-only-shadow",
+195 | |             "packet_kind": kind,
+...   |
+202 | |             "input_unavailable": true,
+203 | |         });
+    | |___________^ unreachable statement
+    |
+    = note: `#[warn(unreachable_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `xtask` (bin "xtask") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.42s
+     Running tests/task_projection_reader_parity.rs (/workspace/scratch/2e70149a8e59/review-projection-frozen-target/debug/deps/task_projection_reader_parity-d2deca1b3f76f363)
+
+running 1 test
+test escaped_source_inventory_report_overflow_retains_bounded_unavailable_receipt ... FAILED
+
+failures:
+
+---- escaped_source_inventory_report_overflow_retains_bounded_unavailable_receipt stdout ----
+Error: parse native reader-only output
+
+Caused by:
+    EOF while parsing a value at line 1 column 0
+
+
+failures:
+    escaped_source_inventory_report_overflow_retains_bounded_unavailable_receipt
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.03s
+
+error: test failed, to rerun pass `-p xtask --test task_projection_reader_parity`

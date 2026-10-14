@@ -1,0 +1,13 @@
+diff --git a/xtask/src/task_projection_reader.rs b/xtask/src/task_projection_reader.rs
+index 792796b..ff495b8 100644
+--- a/xtask/src/task_projection_reader.rs
++++ b/xtask/src/task_projection_reader.rs
+@@ -188,7 +188,7 @@ pub(super) fn run(mut args: impl Iterator<Item = String>) -> Result<i32> {
+         "input_unavailable": packet.input_unavailable(),
+     });
+     let bytes = canonical(&evidence)?;
+-    if bytes.len() > MAX_REPORT_BYTES {
++    if bytes.len() > MAX_REPORT_BYTES { return Ok(1);
+         let unavailable = json!({
+             "schema": READER_SCHEMA,
+             "authority": "reader-only-shadow",

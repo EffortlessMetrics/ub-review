@@ -1,0 +1,25 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `/workspace/scratch/2e70149a8e59/rust-projection-1292-target/debug/xtask precommit --staged`
+# Precommit summary
+
+- mode: staged
+- changed files: 9
+- affected Rust packages: 2
+  - ub-review
+  - xtask
+- blocking findings: 0
+
+## Checks
+
+- pass: fmt
+- pass: cargo check ub-review
+- pass: cargo check xtask
+- pass: cargo clippy ub-review
+- pass: cargo clippy xtask
+- missing: cargo-allow (cargo-allow not installed; install: cargo install cargo-allow --locked)
+- pass: ripr
+- missing: unsafe-review (unsafe-review not installed; install: cargo install unsafe-review --locked --version 0.3.4 --force)
+- skipped: actionlint (no changed workflow files)
+- missing: ast-grep (ast-grep not installed; install: npm install -g @ast-grep/cli)
+
+Artifacts are under `target/precommit/`.

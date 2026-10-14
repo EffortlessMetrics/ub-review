@@ -1,0 +1,13 @@
+diff --git a/src/task_projection_reconciliation/reader.rs b/src/task_projection_reconciliation/reader.rs
+index 08a9c44..1301c74 100644
+--- a/src/task_projection_reconciliation/reader.rs
++++ b/src/task_projection_reconciliation/reader.rs
+@@ -293,7 +293,7 @@ impl PacketReader {
+             }
+             target.push(part);
+             match fs::symlink_metadata(&target) {
+-                Ok(metadata) if metadata.file_type().is_symlink() => {
++                Ok(metadata) if metadata.file_type().is_symlink() && false => {
+                     return Err(PacketError::SymlinkInput);
+                 }
+                 Ok(_) => {}

@@ -1,0 +1,1611 @@
+
+=== cargo fmt --all -- --check ===
+RESULT exit=0
+
+=== cargo test -p xtask task_projection_reader --locked --offline ===
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running unittests src/main.rs (/workspace/scratch/2e70149a8e59/rust-projection-1292-target/debug/deps/xtask-73afb058809d4af4)
+
+running 29 tests
+test task_projection_reader::reader::tests::canonical_json_sorts_nested_utf8_keys_and_retains_exact_u128 ... ok
+test task_projection_reader::reader::tests::bounded_row_and_string_helpers_fail_closed ... ok
+test task_projection_reader::reader::tests::canonical_report_metadata_is_sorted_compact_utf8_without_native_numbers ... ok
+test task_projection_reader::reader::tests::aggregate_cap_accepts_exact_total_then_refuses_even_empty_input ... ok
+test task_projection_reader::reader::tests::aggregate_overflow_reads_remaining_plus_one_and_charges_probe ... ok
+test task_projection_reader::reader::tests::every_symlink_component_is_rejected_including_broken_links ... ok
+test task_projection_reader::reader::tests::file_cap_accepts_exact_limit_and_empty_files ... ok
+test task_projection_reader::reader::tests::integer_domains_reject_bool_fraction_negative_and_overflow ... ok
+test task_projection_reader::reader::tests::input_must_be_a_regular_file_and_missing_child_is_unavailable ... ok
+test task_projection_reader::reader::tests::issues_are_deduplicated_bounded_and_sanitize_control_text ... ok
+test task_projection_reader::reader::tests::mapping_missing_or_null_is_empty_but_nonobject_is_invalid ... ok
+test task_projection_reader::reader::tests::labels_use_bounded_debug_printable_unicode_rendering ... ok
+test task_projection_reader::reader::tests::lease_quantities_obey_u32_and_u64_domains_without_bool_coercion ... ok
+test task_projection_reader::reader::tests::json_load_preserves_raw_inventory_on_invalid_json_shape_or_schema ... ok
+test task_projection_reader::reader::tests::file_overflow_charges_exactly_one_probe_byte_and_caches_error ... ok
+test task_projection_reader::reader::tests::missing_optional_input_remains_cached_on_required_revisit ... ok
+test task_projection_reader::reader::tests::production_limits_are_pinned ... ok
+test task_projection_reader::reader::tests::real_private_number_keys_remain_objects ... ok
+test task_projection_reader::reader::tests::native_decoder_handles_odd_even_backslashes_and_surrogate_keys ... ok
+test task_projection_reader::reader::tests::native_decoder_independently_enforces_json_lexical_grammar ... ok
+test task_projection_reader::reader::tests::root_is_resolved_once_and_root_symlink_is_allowed ... ok
+test task_projection_reader::reader::tests::paths_require_canonical_posix_relative_spelling ... ok
+test task_projection_reader::reader::tests::strict_json_rejects_nonfinite_numbers_encoding_bom_and_trailing_data ... ok
+test task_projection_reader::reader::tests::root_must_exist_and_be_a_directory ... ok
+test task_projection_reader::reader::tests::strict_json_rejects_recursive_and_escape_decoded_duplicate_keys ... ok
+test task_projection_reader::reader::tests::successful_reads_cache_raw_bytes_and_source_digest ... ok
+test task_projection_reader::reader::tests::unique_attempt_limit_counts_missing_and_invalid_names ... ok
+test task_projection_reader::reader::tests::native_decoder_bounds_source_depth_containers_and_total_nodes ... ok
+test task_projection_reader::reader::tests::exact_production_file_aggregate_and_attempt_limits ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 42 filtered out; finished in 2.26s
+
+     Running tests/smoke_base_cli.rs (/workspace/scratch/2e70149a8e59/rust-projection-1292-target/debug/deps/smoke_base_cli-9a26dbc847881c91)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/task_projection_reader_parity.rs (/workspace/scratch/2e70149a8e59/rust-projection-1292-target/debug/deps/task_projection_reader_parity-ab76208b8113547c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+RESULT exit=0
+
+=== cargo test -p xtask --test task_projection_reader_parity --locked --offline ===
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running tests/task_projection_reader_parity.rs (/workspace/scratch/2e70149a8e59/rust-projection-1292-target/debug/deps/task_projection_reader_parity-ab76208b8113547c)
+
+running 10 tests
+test serde_json_ambient_contract_keeps_private_raw_value_keys_as_objects ... ok
+test serde_json_ambient_contract_keeps_private_number_keys_as_objects ... ok
+test sensor_parent_symlink_cannot_escape_reader_root ... ok
+test malformed_source_retains_independent_later_input_evidence ... ok
+test serde_json_ambient_contract_rejects_nonfinite_float_exponents ... ok
+test worker_reader_preserves_full_u128_duration_domain ... ok
+test escaped_source_inventory_report_overflow_retains_bounded_unavailable_receipt ... ok
+test actual_reader_matches_python_packet_sources_and_cached_bytes ... ok
+test actual_reader_records_explicit_tighter_python_encoding_and_number_boundary ... ok
+test actual_reader_matches_python_strict_json_on_bounded_grammar_vectors ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+
+RESULT exit=0
+
+=== cargo check --workspace --all-targets --locked --offline ===
+   Compiling proc-macro2 v1.0.106
+   Compiling quote v1.0.45
+   Compiling libc v0.2.186
+   Compiling syn v2.0.117
+    Checking iana-time-zone v0.1.65
+    Checking utf8parse v0.2.2
+    Checking anstyle-parse v1.0.0
+    Checking getrandom v0.4.2
+    Checking is_terminal_polyfill v1.70.2
+    Checking colorchoice v1.0.5
+    Checking anstyle-query v1.1.5
+    Checking anstyle v1.0.14
+    Checking tempfile v3.27.0
+    Checking anstream v1.0.0
+    Checking strsim v0.11.1
+   Compiling heck v0.5.0
+    Checking clap_lex v1.1.0
+    Checking clap_builder v4.6.0
+    Checking wait-timeout v0.2.1
+   Compiling serde_derive v1.0.228
+   Compiling clap_derive v4.6.1
+    Checking clap v4.6.1
+    Checking serde v1.0.228
+    Checking chrono v0.4.44
+    Checking xtask v0.1.0 (/workspace/scratch/2e70149a8e59/rust-projection-1292/xtask)
+    Checking ub-review v0.1.2 (/workspace/scratch/2e70149a8e59/rust-projection-1292)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 23.52s
+RESULT exit=0
+
+=== cargo test --workspace --all-targets --locked --offline ===
+   Compiling libc v0.2.186
+   Compiling serde v1.0.228
+   Compiling iana-time-zone v0.1.65
+   Compiling chrono v0.4.44
+   Compiling utf8parse v0.2.2
+   Compiling anstyle-parse v1.0.0
+   Compiling getrandom v0.4.2
+   Compiling anstyle-query v1.1.5
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling anstyle v1.0.14
+   Compiling colorchoice v1.0.5
+   Compiling anstream v1.0.0
+   Compiling tempfile v3.27.0
+   Compiling strsim v0.11.1
+   Compiling clap_lex v1.1.0
+   Compiling wait-timeout v0.2.1
+   Compiling clap_builder v4.6.0
+   Compiling xtask v0.1.0 (/workspace/scratch/2e70149a8e59/rust-projection-1292/xtask)
+   Compiling clap v4.6.1
+   Compiling ub-review v0.1.2 (/workspace/scratch/2e70149a8e59/rust-projection-1292)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 48.72s
+     Running unittests src/main.rs (/workspace/scratch/2e70149a8e59/rust-projection-1292-target/debug/deps/ub_review-4614f5f0e4e9db86)
+
+running 1136 tests
+test calibration::tests::calibration_suggested_class_expected_quiet ... ok
+test artifact_writers::output_degradation_artifact_tests::output_degradation_artifact_round_trips_exact_head_and_receipt_fields ... ok
+test calibration::tests::calibration_quiet_green_no_proof ... ok
+test calibration::tests::calibration_missing_proof ... ok
+test calibration::tests::calibration_reporter_skipped ... ok
+test calibration::tests::calibration_suggested_class_infra_excluded ... ok
+test calibration::tests::calibration_round_trips_schema ... ok
+test calibration::tests::calibration_detects_proof_changed_conclusion ... ok
+test calibration::tests::calibration_suggested_class_no_model ... ok
+test calibration::tests::write_calibration_counts_model_selected_proof ... ok
+test candidate::tests::summary_only_candidates_reject_a_suggestion ... ok
+test claim_graph::tests::adjudicate_best_evidence_wins_not_first_listed ... ok
+test claim_graph::tests::adjudicate_equal_precedence_stays_conflicted ... ok
+test claim_graph::tests::adjudicate_citation_beats_unsupported ... ok
+test calibration::tests::write_calibration_creates_artifact ... ok
+test candidate::tests::suggestions_survive_the_candidate_queue_round_trip ... ok
+test claim_graph::tests::changed_line_with_explanation_is_eligible ... ok
+test claim_graph::tests::changed_line_without_explanation_is_artifact_only ... ok
+test claim_graph::tests::adjudicate_proof_beats_model_interpretation ... ok
+test candidate::tests::malformed_queued_suggestions_are_dropped_on_read ... ok
+test claim_graph::tests::claim_state_keys_are_stable ... ok
+test claim_graph::tests::adjudicate_no_evidence_on_either_is_inconclusive ... ok
+test claim_graph::tests::convergence_continues_with_unresolved_and_transitions ... ok
+test claim_graph::tests::claim_extraction_assigns_hypothesized_when_no_evidence ... ok
+test claim_graph::tests::caller_of_changed_symbol_with_explanation_is_eligible ... ok
+test claim_graph::tests::claim_extraction_assigns_needs_evidence_when_evidence_present ... ok
+test claim_graph::tests::convergence_stops_when_all_resolved ... ok
+test claim_graph::tests::convergence_stops_when_budget_exhausted ... ok
+test claim_graph::tests::claim_extraction_detects_cross_lane_conflicts ... ok
+test claim_graph::tests::convergence_stops_at_max_rounds ... ok
+test claim_graph::tests::stamped_revision_ref_is_visible_in_the_artifact ... ok
+test claim_graph::tests::evidence_class_precedence_orders_correctly ... ok
+test claim_graph::tests::relevance_kind_keys_are_stable ... ok
+test claim_graph::tests::convergence_stops_when_no_state_change ... ok
+test claim_graph::tests::receipt_rows_are_stamped_with_the_packet_revision_at_write_time ... ok
+test claim_graph::tests::unresolved_relevance_is_always_artifact_only ... ok
+test cli::tests::minimax_prompt_cache_keys_match_config_vocabulary ... ok
+test cohort_contract_tests::cross_provider_fallback_is_a_cohort_break ... ok
+test claim_graph::tests::reverse_dependent_package_without_explanation_is_artifact_only ... ok
+test claim_graph::tests::shadow_claim_graph_is_empty_by_default ... ok
+test cohort_contract_tests::strict_cohort_stamp_is_unbroken_and_consistent ... ok
+test cohort_contract_tests::cohort_id_is_deterministic_and_stable ... ok
+test cohort_contract_tests::model_lane_receipt_round_trips_and_back_compat ... ok
+test compiler_reconciliation::tests::current_head_thread_explains_removed_surface ... ok
+test compiler_reconciliation::tests::ambiguous_cross_surface_match_is_not_explained ... ok
+test compiler_reconciliation::tests::cross_surface_duplicate_is_explicitly_accounted ... ok
+test cohort_contract_tests::same_provider_fallback_is_not_a_cohort_break ... ok
+test compiler_reconciliation::tests::resolved_candidate_is_subtracted_before_accounting ... ok
+test compiler_reconciliation::tests::unexplained_surface_loss_is_rejected ... ok
+test compiler_reconciliation::tests::reconciliation_receipts_account_for_adjudicated_removals ... ok
+test config::tests::impact_resolved_mode_defaults_to_shadow_and_clamps_invalid ... ok
+test config::tests::default_sensor_phase_classifies_by_class_and_lease ... ok
+test compiler_reconciliation::tests::duplicate_surface_is_explicitly_accounted ... ok
+test compiler_reconciliation::tests::final_surface_missing_from_input_is_rejected ... ok
+test config::tests::impact_section_parses_and_is_known_top_level ... ok
+test config::tests::impact_section_receipts_malformed_values_and_unknown_keys ... ok
+test compiler_reconciliation::tests::removal_explanation_returns_exact_cross_surface_receipt ... ok
+test config::tests::issues_section_parses_exact_field_defaults ... ok
+test config::tests::invalid_tool_phase_value_is_stripped_with_policy_error ... ok
+test config::tests::known_profile_override_records_no_fallback_receipt ... ok
+test config::tests::providers_section_receipts_invalid_max_concurrency ... ok
+test config::tests::providers_section_receipts_invalid_prompt_cache ... ok
+test config::tests::synchronize_mode_records_deprecation_receipt_and_keeps_gate_siblings ... ok
+test cross_lane_messages::tests::message_kind_serializes_snake_case ... ok
+test decision_core::tests::gate_truth_still_admits_receipts_publication_withholds ... ok
+test decision_core::tests::discriminating_and_head_failed_are_published_whatever_else_the_receipt_says ... ok
+test decision_core::tests::head_passed_is_published_only_as_a_focused_test_with_a_base_plus_tests_side ... ok
+test cross_lane_messages::tests::message_log_appends_monotonic_sequence ... ok
+test decision_core::tests::publication_switches_on_receipt_result_alone ... ok
+test config::tests::providers_section_parses_policy_and_receipts_invalid_values ... ok
+test delivery_transaction::tests::cleanup_outcome_validation_is_fail_closed ... ok
+test delivery_transaction::tests::delivery_identity_labels_are_stable_for_inline_and_reply ... ok
+test decision_core::tests::skipped_unresolved_is_missing_evidence_without_decisive_proof ... ok
+test delivery_transaction::tests::delivery_validation_rejects_each_invalid_identity_component ... ok
+test decision_core::tests::every_other_result_stays_out_of_the_pr_body ... ok
+test delivery_transaction::tests::empty_reconciliation_is_a_deterministic_empty_receipt_set ... ok
+test delivery_transaction::tests::legal_transition_matrix_covers_success_and_cleanup_paths ... ok
+test delivery_transaction::tests::contract_round_trips_each_serialized_shape_and_lifecycle_state ... ok
+test delivery_transaction::tests::failure_and_cleanup_guards_reject_terminal_or_unstarted_states ... ok
+test delivery_transaction::tests::exact_reconciliation_returns_sorted_confirmed_receipts ... ok
+test delivery_transaction::tests::failure_after_creation_records_cleanup_success_or_failure ... ok
+test delivery_transaction::tests::metadata_dependent_states_require_their_validating_operations ... ok
+test delivery_transaction::tests::deserialization_reapplies_invariants_for_each_receipt_shape ... ok
+test delivery_transaction::tests::post_submission_failure_is_terminal_and_never_deletes_submitted_review ... ok
+test delivery_transaction::tests::reconciliation_binds_path_line_side_and_body_digest ... ok
+test config::tests::tool_policy_phase_key_overrides_class_default ... ok
+test delivery_transaction::tests::public_constructors_validate_and_preserve_delivery_identity ... ok
+test delivery_transaction::tests::reconciliation_validates_empty_inputs_and_duplicate_identities ... ok
+test delivery_transaction::tests::reconciliation_rejects_partial_returned_set ... ok
+test delivery_transaction::tests::reconciliation_rejects_duplicate_or_malformed_comment_ids ... ok
+test delivery_transaction::tests::reconciliation_rejects_wrong_identity_or_head ... ok
+test config::tests::unknown_profile_override_records_policy_error_not_silent_fallback ... ok
+test delivery_transaction::tests::reply_and_inline_thread_identity_rules_are_fail_closed ... ok
+test delivery_transaction::tests::transaction_constructor_returns_the_complete_initial_contract ... ok
+test enable::tests::enable_inspect_requires_a_repository_root ... ok
+test delivery_transaction::tests::transaction_serialization_preserves_contract_fields ... ok
+test delivery_transaction::tests::transaction_state_machine_requires_exact_order_and_receipts ... ok
+test enable::tests::enable_refuses_existing_ub_review_workflow_by_name ... ok
+test enable::tests::cmd_enable_with_resolver_writes_release_workflow_offline ... ok
+test enable::tests::enable_config_is_not_the_bun_dogfood_default ... ok
+test enable::tests::enable_config_round_trips ... ok
+test enable::tests::enable_rejects_non_hex_action_sha ... ok
+test enable::tests::enable_workflow_release_path_downloads_binary_not_source_builds ... ok
+test enable::tests::enable_workflow_caches_source_build ... ok
+test enable::tests::enable_refuses_overwrite_without_force ... ok
+test enable::tests::enable_rejects_unsupported_model ... ok
+test enable::tests::enable_requires_a_valid_sha_only_for_source_fallback ... ok
+test enable::tests::enable_summary_renders_install_and_mode_contracts ... ok
+test enable::tests::enable_workflow_renders_review_mode_input ... ok
+test enable::tests::enable_workflow_uses_minimax_key_not_env ... ok
+test enable::tests::enable_workflows_include_exact_pr_head_metadata ... ok
+test enable::tests::is_installable_release_tag_accepts_version_tags_only ... ok
+test enable::tests::inspected_repo_kind_covers_all_repository_surfaces ... ok
+test config::tests::rendered_default_config_has_no_policy_errors ... ok
+test enable::tests::enable_workflows_render_primary_with_optional_opencode_fallback ... ok
+test enable::tests::enable_workflow_release_version_and_uses_ref_agree ... ok
+test enable::tests::release_lookup_classifies_unavailable_paths ... ok
+test enable::tests::release_resolver_requires_the_action_archive_and_checksum ... ok
+test gate::tests::gate_check_reason_carries_detail_and_next_action ... ok
+test gate::tests::gate_check_reason_tolerates_missing_detail ... ok
+test enable::tests::inspected_enable_config_selects_relevant_rust_surfaces ... ok
+test gate::tests::disjoint_passing_receipt_never_satisfies_required_planner_proof ... ok
+test gate::tests::failed_receipt_never_satisfies_required_planner_proof ... ok
+test gate::tests::deferred_required_planner_proof_is_retained_advisory ... ok
+test enable::tests::inspected_enable_config_disables_unavailable_sensors ... ok
+test gate::tests::gate_outcome_blocks_evaluated_exceeded_threshold_with_receipt ... ok
+test gate::tests::gate_outcome_blocks_missing_tool_gate_evidence_only_when_policy_opts_in ... ok
+test enable::tests::inspected_enable_config_classifies_mixed_and_generic_repositories ... ok
+test gate::tests::gate_outcome_counts_tool_gates_and_fails_on_threshold_failure ... ok
+test gate::tests::gate_outcome_emits_one_reason_per_failed_required_request ... ok
+test gate::tests::gate_outcome_counts_passed_and_skipped_required_proof_without_failing ... ok
+test gate::tests::gate_outcome_fails_on_required_proof_failure_with_receipt ... ok
+test gate::tests::gate_outcome_fail_reasons_always_carry_receipts ... ok
+test gate::tests::gate_outcome_blocks_unproven_required_proof_only_when_policy_opts_in ... ok
+test gate::tests::gate_outcome_ignores_model_flagged_required_proof ... ok
+test gate::tests::gate_outcome_inconclusive_when_only_evidence_unavailable ... ok
+test gate::tests::gate_outcome_keeps_missing_model_evidence_advisory ... ok
+test gate::tests::gate_outcome_fails_on_required_proof_timeout_with_receipt ... ok
+test gate::tests::gate_outcome_fails_on_required_sensor_gap_with_receipt ... ok
+test gate::tests::gate_outcome_non_timeout_required_gap_keeps_generic_kind ... ok
+test gate::tests::gate_outcome_passes_on_model_unavailability ... ok
+test gate::tests::gate_outcome_timed_out_tool_without_gate_policy_omits_threshold_clause ... ok
+test gate::tests::gate_outcome_keeps_sensor_crash_advisory_unless_required_and_opted_in ... ok
+test gate::tests::gate_outcome_timed_out_required_tool_gets_structured_timeout_reason ... ok
+test gate::tests::gate_outcome_required_sensor_failure_is_fail ... ok
+test gate::tests::gate_outcome_sensor_finding_overrides_inconclusive_when_mixed ... ok
+test gate::tests::gate_outcome_keeps_unevaluated_tool_gates_non_blocking_by_default ... ok
+test gate::tests::gate_reason_diagnostics_bound_count_and_summary ... ok
+test gate::tests::gate_outcome_points_receipt_absent_sensor_gap_at_terminal_state ... ok
+test gate::tests::gate_reason_log_text_cannot_inject_a_workflow_command ... ok
+test gate::tests::planner_snapshot_reader_tolerates_missing_and_malformed_portfolios ... ok
+test gate::tests::head_only_receipt_never_satisfies_required_planner_proof ... ok
+test gate::tests::required_planner_proof_with_matching_receipt_is_proven ... ok
+test gate::tests::invalid_impact_mode_fails_gate_with_effective_config_receipt ... ok
+test gate::tests::optional_deferred_planner_proof_stays_out_of_accounting ... ok
+test gate::tests::run_gate_failure_message_enforces_exact_pass_matrix ... ok
+test gate::tests::gate_outcome_maps_terminal_states_deterministically ... ok
+test gate::tests::review_forward_coordination_failure_is_exact_inconclusive ... ok
+test gate::tests::review_forward_stale_reporter_is_inconclusive_not_silent ... ok
+test gate::tests::review_forward_uses_exact_reporter_receipt_and_verdict ... ok
+test gate::tests::skipped_unresolved_retains_required_unproven_policy ... ok
+test gate::tests::skipped_receipt_never_satisfies_required_planner_proof ... ok
+test gate::tests::tool_gate_outcome_classifies_sensor_crash_as_missing_evidence ... ok
+test gate_truth::tests::coverage_counts_add_up ... ok
+test gate_truth::tests::complete_run_without_findings_is_clean_and_pass ... ok
+test gate_truth::tests::artifact_only_run_with_no_usable_lane_is_not_proven ... ok
+test gate_truth::tests::deferred_required_planner_proof_is_not_proven_but_not_blocking ... ok
+test gate_truth::tests::demonstrated_blocking_reason_reports_finding ... ok
+test gate_truth::tests::failed_required_sensor_reports_finding_under_advisory_policy ... ok
+test gate_truth::tests::inconclusive_conclusion_reports_not_proven_with_a_reason ... ok
+test gate_truth::tests::failed_to_review_run_is_never_clean_or_pass ... ok
+test gate_truth::tests::optional_sensor_loss_is_limited_not_unproven ... ok
+test gate_truth::tests::prepared_payload_reports_posted_publication ... ok
+test gate_truth::tests::proven_planner_portfolio_records_no_planner_reason ... ok
+test gate_truth::tests::unreported_required_sensor_is_not_proven_even_when_advisory ... ok
+test gate_truth::tests::unscheduled_sensors_are_outside_coverage ... ok
+test gate_truth::tests::suppressed_body_with_substantive_findings_is_findings_and_not_proven ... ok
+test gate_watchdog::tests::artifact_bound_to_other_run_is_missing_artifact ... ok
+test gate_watchdog::tests::cancelled_exact_head_without_replacement_is_inconclusive ... ok
+test gate_watchdog::tests::completed_run_missing_artifact_is_inconclusive ... ok
+test gate_watchdog::tests::classification_is_deterministic ... ok
+test gate_watchdog::tests::cancelled_with_in_progress_replacement_before_deadline_stays_pending ... ok
+test gate_watchdog::tests::coordinator_crash_is_inconclusive_even_with_artifact ... ok
+test gate_watchdog::tests::exact_head_completed_with_artifact_is_terminal_and_preserves_conclusion ... ok
+test gate::tests::stale_revision_receipt_never_satisfies_required_planner_proof ... ok
+test gate_watchdog::tests::latest_attempt_is_selected_for_terminal ... ok
+test gate_watchdog::tests::newer_in_progress_replacement_before_deadline_never_serializes_verdict ... ok
+test gate_watchdog::tests::malformed_gate_conclusion_never_passes ... ok
+test gate_watchdog::tests::no_exact_head_run_after_deadline_is_missing_run ... ok
+test gate::tests::reporter_verdicts_respect_review_forward_and_evidence_semantics ... ok
+test gate::tests::unstamped_receipt_never_satisfies_required_planner_proof ... ok
+test gate_watchdog::tests::no_run_before_deadline_is_pending_awaiting_run ... ok
+test gate_watchdog::tests::older_sha_success_cannot_satisfy_current_head ... ok
+test gate_watchdog::tests::orphaned_required_proof_is_inconclusive ... ok
+test github_delivery::tests::expected_delivery_head_requires_current_graph_for_comments ... ok
+test github_delivery::tests::confirmed_delivery_removes_only_the_matching_body_surface ... ok
+test github_delivery::tests::confirmed_delivery_removes_a_multiline_suggestion_surface_once ... ok
+test github_delivery::tests::failure_stage_tracks_each_delivery_lifecycle_boundary ... ok
+test gate_watchdog::tests::coordinator_marker_bound_to_other_head_is_inconclusive ... ok
+test github_delivery::tests::planned_inline_delivery_binds_exact_claim_graph_identity ... ok
+test github_delivery::tests::head_revalidation_is_exact_and_classified ... ok
+test github_delivery::tests::missing_unexpected_and_duplicate_comments_are_rejected ... ok
+test github_delivery::tests::delivery_head_prefers_immutable_revision_over_legacy_label ... ok
+test github_delivery::tests::planned_inline_delivery_keeps_empty_review_empty ... ok
+test github_delivery::tests::planned_inline_delivery_rejects_missing_stale_and_ambiguous_plans ... ok
+test github_delivery::tests::planned_reply_requires_a_current_source_thread ... ok
+test github_delivery::tests::pull_review_comments_fetches_all_pages ... ok
+test github_delivery::tests::reply_delivery_rejects_stale_source_without_posting ... ok
+test github_delivery::tests::prior_inline_receipt_requires_exact_current_comment_and_head ... ok
+test github_delivery::tests::reply_identity_requires_exact_head_source_and_body ... ok
+test github_delivery::tests::reply_delivery_posts_to_exact_current_source_and_receipts_it ... ok
+test github_delivery::tests::generic_transport_path_preserves_receipts_and_payload_boundaries ... ok
+test github_delivery::tests::retry_decisions_record_exact_identity_and_unconfirmed_status ... ok
+test github_delivery::tests::returned_comment_reconciles_to_exact_planned_identity ... ok
+test github_delivery::tests::returned_comment_wrong_body_or_head_is_rejected ... ok
+test github_delivery::tests::unconfirmed_delivery_keeps_a_concise_body_fallback ... ok
+test github_validation::tests::post_gate_proves_suggestions_apply_to_the_line_they_replace ... ok
+test github_delivery::tests::reply_delivery_rejects_wrong_response_identity_without_receipt ... ok
+test github_delivery::tests::reply_delivery_rejects_wrong_response_source_thread_without_receipt ... ok
+test github_delivery::tests::reply_delivery_reuses_exact_current_comment_without_duplicate_post ... ok
+test github_delivery::tests::response_parsing_and_identifiers_fail_closed ... ok
+test impact_plan::tests::impact_candidate_rank_changed_above_reverse_dep ... ok
+test impact_plan::tests::impact_candidate_rank_orders_test_above_bin ... ok
+test impact_plan::tests::cargo_workspace_graph_returns_none_on_missing_cargo ... ok
+test enable::tests::enable_workflows_select_the_written_companion_config ... ok
+test impact_plan::tests::a_tree_without_a_cargo_workspace_records_no_lockfile_gap ... ok
+test impact_plan::tests::cargo_lockfile_tracks_a_committed_lock_file_at_the_workspace_root ... ok
+test impact_plan::tests::impact_plan_schema_is_stable ... ok
+test impact_plan::tests::relative_to_repo_keeps_unresolvable_absolute_root ... ok
+test impact_plan::tests::parent_directory_extracts_dir ... ok
+test impact_plan::tests::relative_to_repo_resolves_relative_root_against_current_directory ... ok
+test impact_plan::tests::relative_to_repo_strips_prefix ... ok
+test impact_plan::tests::shadow_impact_plan_handles_empty_diff ... ok
+test impact_plan::tests::shadow_impact_plan_populates_candidates_for_source_changes ... ok
+test impact_plan::tests::shadow_impact_plan_records_changed_files_and_gaps ... ok
+test impact_plan::tests::shadow_impact_plan_no_candidates_for_docs_only ... ok
+test impact_plan::tests::this_repo_impact_plan_reports_its_committed_lockfile ... ok
+test lane_identity_artifact_ref_tests::hostile_lane_refs_use_the_same_encoded_component ... ok
+test lane_packets::tests::child_cleanup_marks_release_unconfirmed_when_reaping_fails ... ok
+test lane_packets::tests::child_cleanup_retries_interrupted_reaps_until_exit_is_confirmed ... ok
+test lane_packets::tests::child_cleanup_waits_for_confirmed_exit_even_when_kill_reports_an_error ... ok
+test lane_packets::tests::child_cleanup_bounds_persistent_interrupted_reaps ... ok
+test lane_packets::tests::fake_delayed_marker_child ... ok
+test impact_plan::tests::cargo_workspace_graph_is_memoized_under_its_exact_root ... ok
+test impact_plan::tests::impact_mode_controls_proof_planner_candidate_visibility ... ok
+
+running 1 test
+test impact_plan::tests::write_impact_plan_preserves_full_candidates_in_both_modes ... ok
+test impact_plan::tests::cargo_workspace_graph_parses_this_repo ... ok
+test lane_packets::tests::fake_sensor_cannot_read_actual_parent_credentials ... ok
+test lane_packets::tests::wait_cleanup_failure_preserves_wait_and_reap_errors ... ok
+test lane_threads::tests::primary_turn_write_rejects_higher_turn_without_rollup ... ok
+test lane_threads::tests::hostile_lane_identity_stays_inside_encoded_thread_root ... ok
+test lane_threads::tests::multiple_turns_rollup_picks_latest_conclusion ... ok
+test lane_threads::tests::malformed_latest_turn_preserves_previous_rollup_identity ... ok
+test lane_threads::tests::truncate_summary_bounds_long_responses ... oktest lane_packets::tests::fake_sensor_cannot_read_actual_parent_credentials ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1135 filtered out; finished in 0.00s
+
+
+test lane_threads::tests::rollup_orders_turns_by_numeric_identity ... ok
+test lane_threads::tests::rollup_rewriting_older_turn_keeps_latest_identity ... ok
+test lane_threads::tests::write_lane_thread_turn_creates_turn_and_rollup ... ok
+test lane_packets::tests::sensor_environment_excludes_credentials_and_keeps_execution_metadata ... ok
+test model_exec::lane_thread_reference_tests::continuation_prompt_and_receipt_references_share_encoded_lane_root ... ok
+test model_exec::proof_planner_classification_tests::proof_planner_forwards_malformed_internal_audit_classification ... ok
+test model_exec::proof_planner_classification_tests::proof_planner_forwards_empty_internal_audit_classification ... ok
+test model_exec::lane_thread_reference_tests::continuation_receipt_reference_encodes_hostile_lane_id ... ok
+test model_exec::proof_planner_classification_tests::proof_planner_forwards_valid_internal_audit_classification ... ok
+test model_exec::receipt_reconsideration_tests::one_receipt_changes_two_exact_lane_topic_dispositions ... ok
+test model_exec::receipt_reconsideration_tests::reconsideration_prompt_is_answer_shaped_and_claim_linked ... ok
+test model_exec::receipt_reconsideration_tests::proof_intent_validation_rejects_each_invalid_required_field ... ok
+test model_exec::receipt_reconsideration_tests::proof_intent_validation_preserves_exact_safe_wire_fields ... ok
+test model_exec::receipt_reconsideration_tests::reconsideration_turn_reference_matches_written_turn_artifact ... ok
+test model_exec::receipt_reconsideration_tests::reconsideration_updates_only_exactly_linked_observations ... ok
+test model_exec::receipt_reconsideration_tests::unchanged_reconsideration_preserves_lane_audit_state ... ok
+test model_exec::reporter_authority_tests::redistillation_provider_failure_withholds_turn_zero_authority ... ok
+test model_orchestration::preflight_identity_tests::hostile_logical_ids_have_distinct_portable_components ... ok
+test model_exec::reporter_authority_tests::redistillation_parse_failure_withholds_turn_zero_authority ... ok
+test model_orchestration::preflight_identity_tests::long_artifact_ids_use_input_hash_to_disambiguate_shared_prefixes ... ok
+test model_orchestration::preflight_identity_tests::long_provider_preflight_labels_are_bounded_and_hash_suffixed ... ok
+test model_orchestration::preflight_identity_tests::safe_components_remain_compatible_and_long_values_are_bounded ... ok
+test noise::human_output_admission_tests::internal_audit_observations_are_withheld_from_public_review_boundary ... ok
+test model_orchestration::preflight_identity_tests::provider_preflight_labels_keep_legacy_component_mapping ... ok
+test model_orchestration::preflight_identity_tests::lane_identity_rejects_empty_and_whitespace_but_raw_artifact_encoding_is_stable ... ok
+test noise::human_output_admission_tests::internal_inline_planning_language_is_artifact_only ... ok
+test noise::human_output_admission_tests::observation_identity_requires_matching_path_and_kind ... ok
+test noise::human_output_admission_tests::executed_evidence_beats_model_confidence ... ok
+test noise::human_output_admission_tests::opposite_polarity_claims_are_not_collapsed ... ok
+test noise::human_output_admission_tests::structurally_distinct_summary_claims_with_shared_vocabulary_survive ... ok
+test noise::human_output_admission_tests::paraphrased_summary_findings_compile_to_one_claim ... ok
+test noise::human_output_admission_tests::unexecuted_proof_homework_is_artifact_only ... ok
+test observations::tests::absent_internal_audit_retains_no_evidence_semantics ... ok
+test noise::human_output_admission_tests::summary_claim_identity_requires_matching_family_marker ... ok
+test observations::tests::evidence_recovery_preserves_canonical_proof_fields ... ok
+test observations::tests::finding_evidence_string_arrays_recover_with_degradation ... ok
+test observations::tests::hostile_lane_production_directory_matches_audit_writer_and_reader ... ok
+test observations::tests::finding_evidence_invalid_arrays_fail_closed ... ok
+test observations::tests::evidence_recovery_does_not_coerce_finding_identity_or_summary ... ok
+test observations::tests::internal_audit_artifact_is_lane_scoped_and_not_public_surface ... ok
+test observations::tests::internal_audit_classifies_malformed_schema_distinctly ... ok
+test observations::tests::internal_audit_classifies_empty_as_degraded_typed_outcome ... ok
+test observations::tests::internal_audit_classifies_valid_non_empty_without_public_echo ... ok
+test observations::tests::internal_audit_writer_reports_filesystem_failure_without_partial_artifact ... ok
+test observations::tests::lane_model_output_deserialize_records_audit_classification ... ok
+test plan_artifacts::tests::trusted_diff_inputs_are_absent_or_complete ... ok
+test observations::tests::unknown_internal_audit_field_is_malformed_and_not_retained ... ok
+test pr_thread_context::structured_thread_tests::github_records_preserve_anchor_and_exact_head ... ok
+test pr_thread_context::structured_thread_tests::github_records_fall_back_to_original_line_when_line_is_unusable ... ok
+test pr_thread_context::structured_thread_tests::github_records_reject_unusable_original_line_instead_of_miscasting ... ok
+test observations::tests::evidence_recovery_does_not_coerce_proof_contract_fields ... ok
+test observations::tests::producer_prompt_evidence_shapes_match_wire_contract ... ok
+test pr_thread_context::structured_thread_tests::unbound_issue_comment_cannot_certify_current_head ... ok
+test promotion::tests::aggregate_computes_rates ... ok
+test pr_thread_context::structured_thread_tests::issue_comment_with_matching_commit_id_stays_unbound ... ok
+test observations::tests::stale_internal_audit_is_removed_before_a_new_lane_attempt ... ok
+test promotion::tests::recommend_advisory_when_infra_excluded_high ... ok
+test promotion::tests::cmd_status_prints_notable_events ... ok
+test promotion::tests::load_calibration_reads_typed_artifact ... ok
+test promotion::tests::recommend_advisory_when_too_few_runs ... ok
+test promotion::tests::collect_calibrations_finds_nested_artifacts ... ok
+test promotion::tests::load_calibration_rejects_wrong_schema ... ok
+test promotion::tests::recommend_gate_when_healthy ... ok
+test prompt_cache::tests::model_cache_mode_for_args_respects_off_override ... ok
+test promotion::tests::recommend_uses_human_classification_for_false_positives ... ok
+test promotion::tests::recommend_strict_requires_acted_on_and_proof_changed ... ok
+test prompt_cache::tests::model_cache_usage_fields_round_trip_and_discriminate ... ok
+test prompt_cache::tests::model_cache_mode_non_minimax_is_not_supported ... ok
+test proof::broker::tests::broker_merge_keeps_required_state_local_to_distinct_tasks ... ok
+test proof::broker::tests::broker_merge_preserves_required_obligations_in_either_order ... ok
+test proof::broker::tests::broker_keeps_same_named_tests_with_distinct_commands_separate ... ok
+test proof::broker::tests::current_head_receipts_filter_stale_entries_without_reordering ... ok
+test proof::broker::tests::current_head_receipt_ids_drive_both_unreceipted_task_filters ... ok
+test proof::broker::tests::broker_merges_equivalent_focused_test_commands_and_request_ids ... ok
+test proof::broker::tests::empty_follow_up_broker_preserves_existing_portfolio_artifact ... ok
+test proof::broker::tests::empty_follow_up_proof_preserves_primary_portfolio ... ok
+test proof::broker::tests::final_budget_accounts_for_existing_and_new_leases ... ok
+test proof::broker::tests::broker_satisfies_new_request_from_existing_receipt_without_execution ... ok
+test proof::broker::tests::portfolio_build_and_exact_receipt_bypass_test_file_capacity ... ok
+test proof::broker::tests::portfolio_artifact_preserves_the_live_deadline_after_estimated_reservations ... ok
+test proof::broker::tests::portfolio_deadline_cost_boundary_is_inclusive_and_saturating ... ok
+test proof::broker::tests::portfolio_declines_work_that_does_not_fit_the_current_box ... ok
+test proof::broker::tests::nonempty_follow_up_write_merges_primary_required_decisions ... ok
+test proof::broker::tests::portfolio_does_not_reuse_receipt_from_another_head ... ok
+test proof::broker::tests::follow_up_write_preserves_required_flag_on_shared_task_id ... ok
+test proof::broker::tests::portfolio_receipt_precedes_exhausted_allocation_deadline_and_resources ... ok
+test proof::broker::tests::portfolio_reasons_account_for_selected_work_and_file_reuse ... ok
+test proof::broker::tests::portfolio_records_safe_wind_down_without_selecting_work ... ok
+test proof::broker::tests::portfolio_replan_satisfies_shared_build_from_test_receipt ... ok
+test impact_plan::tests::tied_impact_candidates_break_on_package_then_target ... ok
+test proof::broker::tests::portfolio_selects_required_multi_request_test_before_build ... ok
+test proof::broker::tests::portfolio_winds_down_when_the_remaining_deadline_cannot_fit_a_task ... ok
+test proof::broker::tests::sanitizer_records_clean_when_passes ... ok
+test proof::broker::tests::sanitizer_records_ub_when_fails ... ok
+test proof::broker::tests::sanitizer_skips_when_no_nightly ... ok
+test proof::broker::tests::portfolio_write_under_new_head_discards_stale_decisions ... ok
+test proof::broker::tests::seeded_proof_requests_require_a_receipt_for_the_current_head ... ok
+test proof::broker::tests::seeded_request_check_ignores_receipts_from_another_head ... ok
+test proof::broker::tests::request_replan_retains_initial_diff_candidate_in_final_portfolio ... ok
+test proof::budget::tests::disabled_focused_proof_allows_zero_command_budget ... ok
+test proof::budget::tests::disabled_test_leases_allow_zero_proof_resources ... ok
+test proof::budget::tests::focused_proof_lease_kinds_count_against_remaining_budget ... ok
+test proof::budget::tests::focused_proof_lease_statuses_block_budget_when_no_command_may_run ... ok
+test proof::budget::tests::invalid_enabled_proof_budget_is_rejected ... ok
+test proof::budget::tests::invalid_enabled_proof_lease_disk_budget_is_rejected ... ok
+test proof::budget::tests::invalid_enabled_proof_lease_budget_is_rejected ... ok
+test proof::budget::tests::invalid_enabled_proof_lease_memory_budget_is_rejected ... ok
+test proof::budget::tests::invalid_enabled_proof_total_budget_is_rejected ... ok
+test proof::budget::tests::remaining_focused_proof_budget_ignores_unrelated_leases ... ok
+test proof::budget::tests::remaining_focused_proof_budget_subtracts_granted_focused_leases ... ok
+test proof::budget::tests::remaining_focused_proof_budget_zeroes_after_absent_focused_lease ... ok
+test proof::budget::tests::remaining_focused_proof_budget_zeroes_after_exhausted_focused_lease ... ok
+test proof::build::tests::focused_build_request_skips_when_profile_disables_build_leases ... ok
+test proof::build::tests::focused_build_stream_failure_reconciles_receipt_and_releases_resources ... ok
+test proof::budget::tests::proof_lease_budget_comes_from_runtime_profile_budgets ... ok
+test proof::budget::tests::proof_budget_comes_from_runtime_profile_budgets ... ok
+test proof::build::tests::proof_broker_v0_executes_allowlisted_focused_build_request ... ok
+test proof::broker::tests::broker_replans_after_discriminating_test_receipt_before_build_wind_down ... ok
+test proof::command::tests::cleanup_failure_remains_primary_when_stream_bounding_also_fails ... ok
+test proof::command::tests::completion_unconfirmed_stops_before_terminal_receipt_and_release ... ok
+test proof::command::tests::observation_failure_still_performs_confirmed_physical_cleanup ... ok
+test proof::command::tests::focused_command_wrapper_reconciles_stream_failure ... ok
+test proof::command::tests::prespawn_cleanup_failure_does_not_release_worktree ... ok
+test proof::command::tests::proof_command_paths_encode_logical_identity_without_escape_or_collision ... ok
+test proof::command::tests::proof_command_receipt_refuses_lease_for_different_consumer ... ok
+test proof::command::tests::proof_command_receipt_refuses_non_granted_lease_without_running ... ok
+test proof::command::tests::proof_command_receipt_records_timeout_and_artifact_paths ... ok
+test proof::command::tests::proof_command_task_records_spawn_and_completion_but_waits_for_receipt_publication ... ok
+test proof::command::tests::receipt_path_cleanup_failure_does_not_release_worktree ... ok
+test proof::command::tests::runner_setup_error_has_no_process_timing ... ok
+test proof::command::tests::spawned_runner_error_is_cancelled_and_serialized_as_skipped ... ok
+test proof::command::tests::stream_bounding_failure_records_physical_cleanup_before_receipt_failure ... ok
+test proof::command::tests::proof_command_receipt_bounds_stdout_and_stderr_artifacts ... ok
+test proof::command::tests::successful_status_without_spawn_is_failed_and_reconciled ... ok
+test proof::intent::tests::build_resolution_and_command_templates_are_exact ... ok
+test proof::intent::tests::equivalent_intents_and_existing_requests_share_one_request_identity ... ok
+test proof::intent::tests::build_and_base_plus_tests_use_only_approved_templates ... ok
+test proof::intent::tests::legacy_request_with_different_requiredness_keeps_distinct_identity ... ok
+test proof::intent::tests::execution_requirements_are_part_of_request_identity ... ok
+test proof::intent::tests::resolves_one_cargo_test_label_to_one_approved_request ... ok
+test proof::intent::tests::semantic_target_grammar_and_target_selectors_are_exact ... ok
+test proof::intent::tests::resolver_rejects_each_terminal_condition_with_exact_reason ... ok
+test proof::patch_split::tests::parses_paths_headers_and_line_numbers ... ok
+test proof::intent::tests::terminalizes_ambiguous_unsupported_and_malicious_intents ... ok
+test proof::patch_split::tests::change_slices_split_at_context_between_runs ... ok
+test proof::patch_split::tests::parsing_rejects_quoted_paths ... ok
+test proof::patch_split::tests::parsing_keeps_binary_sections_hunkless ... ok
+test proof::patch_split::tests::parsing_attaches_no_newline_marker_to_its_line ... ok
+test proof::patch_split::tests::change_slices_carry_surrounding_context ... ok
+test proof::patch_split::tests::parsing_rejects_unexpected_body_lines ... ok
+test proof::patch_split::tests::rendering_accumulates_line_offsets_across_slices ... ok
+test proof::patch_split::tests::parsing_tracks_rename_paths ... ok
+test proof::patch_split::tests::rendering_is_byte_stable_for_repeated_calls ... ok
+test proof::planner::tests::final_proof_artifact_boundary_rejects_pending_requests ... ok
+test proof::patch_split::tests::rendering_one_slice_recomputes_headers ... ok
+test proof::planner::tests::proof_intent_preserves_answer_shape_and_stable_claim_identity ... ok
+test proof::planner::tests::proof_planner_keeps_actionlint_relevant_for_workflow_changes ... ok
+test proof::planner::tests::focused_proof_tasks_detect_modified_bun_test_callees ... ok
+test proof::planner::tests::proof_planner_parks_leased_heavy_witnesses_until_executors_route_them ... ok
+test proof::planner::tests::proof_planner_records_heavy_witness_skips_without_leases ... ok
+test proof::planner::tests::proof_planner_skips_actionlint_when_workflows_are_unchanged ... ok
+test proof::broker::tests::portfolio_reports_the_actual_safe_wind_down_constraint ... ok
+test proof::planner::tests::focused_proof_tasks_detect_changed_test_names_and_merge_lane_requests ... ok
+test proof::planner::tests::proof_request_status_rejects_manual_cost_and_shell_tokens ... ok
+test proof::planner::tests::receipt_route_source_artifacts_include_exact_anchors ... ok
+test proof::planner::tests::terminalization_does_not_use_receipt_from_another_head ... ok
+test proof::planner::tests::receipt_routes_capture_initial_model_and_follow_up_consumers ... ok
+test proof::planner::tests::terminalize_proof_requests_maps_every_receipt_outcome ... ok
+test proof::planner::tests::terminalize_proof_requests_closes_receipted_and_unreceipted_requests ... ok
+test proof::red_green::tests::base_worktree_cleanup_precedes_ledger_cleanup_completion ... ok
+test proof::planner::tests::proof_request_status_enforces_v0_focused_allowlist ... ok
+test proof::red_green::tests::unconfirmed_head_completion_prevents_base_plus_tests_launch ... ok
+test proof::rust_test_regions::tests::multi_line_attributes_are_grouped_with_their_item ... ok
+test proof::rust_test_regions::tests::rust_test_regions_finds_bare_test_function ... ok
+test proof::rust_test_regions::tests::rust_test_regions_finds_inline_cfg_test_module ... ok
+test proof::rust_test_regions::tests::rust_test_regions_finds_nested_test_module ... ok
+test proof::planner::tests::proof_request_artifacts_write_focused_planner_without_execution ... ok
+test proof::rust_test_regions::tests::rust_test_regions_handles_attribute_and_item_on_one_line ... ok
+test proof::rust_test_regions::tests::rust_test_regions_ignores_braces_in_strings_and_comments ... ok
+test proof::rust_test_regions::tests::rust_test_regions_rejects_unbalanced_source ... ok
+test proof::planner::tests::proof_request_artifacts_group_duplicate_commands_once ... ok
+test proof::rust_test_regions::tests::test_attribute_detection_excludes_negated_cfg ... ok
+test proof::rust_test_regions::tests::test_mod_declaration_detection_is_narrow ... ok
+test proof::tasks::tests::a_workspace_without_a_lockfile_selects_no_cargo_candidate ... ok
+test proof::tasks::tests::bun_focused_test_file_classifier_requires_repo_relative_test_suffixes ... ok
+test proof::tasks::tests::budget_rejection_does_not_block_a_later_cheaper_candidate ... ok
+test proof::rust_test_regions::tests::rust_test_regions_treats_inner_cfg_test_attribute_as_whole_file ... ok
+test proof::tasks::tests::canonical_proof_request_group_command_normalizes_focused_bun_requests ... ok
+test proof::tasks::tests::focused_build_command_spec_accepts_only_cargo_build_family_or_exact_policy_check ... ok
+test proof::tasks::tests::candidate_plan_artifacts_preserve_identity_and_budget_status ... ok
+test proof::tasks::tests::cargo_candidate_identity_follows_the_approved_command ... ok
+test proof::tasks::tests::focused_build_command_spec_accepts_only_exact_xtask_check_pr_run ... ok
+test proof::tasks::tests::focused_proof_budget_allows_next_enforces_count_file_and_time_caps ... ok
+test proof::tasks::tests::focused_cargo_test_command_spec_pins_focus_and_passthrough_allowlist ... ok
+test proof::tasks::tests::focused_proof_mode_keys_and_command_counts_are_stable ... ok
+test proof::tasks::tests::focused_test_name_arg_strips_matching_quotes_without_promoting_empty_names ... ok
+test proof::tasks::tests::focused_test_tasks_from_diff_continues_after_new_file_rejection ... ok
+test proof::tasks::tests::focused_test_tasks_from_diff_continues_after_time_rejection ... ok
+test proof::tasks::tests::impact_candidates_that_fail_the_allowlist_are_dropped ... ok
+test proof::tasks::tests::proof_task_plan_command_formats_default_bun_and_explicit_command_specs ... ok
+test proof::tasks::tests::focused_test_tasks_from_diff_count_cap_defers_all_later_candidates ... ok
+test proof::tasks::tests::rust_only_diff_yields_a_focused_cargo_test_candidate ... ok
+test proof::tasks::tests::requiredness_survives_request_grouping_and_candidate_merging ... ok
+test proof::tasks::tests::the_cargo_floor_ignores_advisory_impact_plan_fields ... ok
+test proof::tasks::tests::v2_focused_build_candidates_match_v1 ... ok
+test proof::tasks::tests::the_cargo_floor_truncates_the_ranked_catalog_at_the_limit ... ok
+test proof::tasks::tests::v2_focused_test_candidates_match_v1 ... ok
+test proof::tasks::tests::v2_focused_test_rejects_non_allowlisted_command ... ok
+test proof::tasks::tests::this_repo_rust_diff_produces_deterministic_cargo_candidates ... ok
+test proof::tests::classify_proof_kind_defaults_to_external_check ... ok
+test proof::tasks::tests::v2_non_test_build_kinds_produce_no_test_build_candidates ... ok
+test proof::tests::classify_proof_kind_maps_focused_test ... ok
+test proof::tests::classify_proof_kind_maps_heavy_witnesses ... ok
+test proof::tests::proof_kind_keys_are_stable ... ok
+test proof::tests::proof_kind_rejects_rust_variant_name ... ok
+test proof::tests::proof_kind_rejects_unknown_wire_name ... ok
+test proof::tests::proof_kind_serializes_to_kebab_case ... ok
+test proof::tests::resolve_focused_test_rejects_arbitrary_argv_fallback ... ok
+test proof::tests::resolve_focused_test_rejects_cargo_test_without_locked ... ok
+test proof::tests::resolve_focused_test_delegates_to_allowlist ... ok
+test proof::tests::proof_request_v2_round_trips_with_kebab_kind ... ok
+test proof::broker::tests::seeded_stream_starts_current_head_request_broker_when_receipt_is_missing ... ok
+test proof::tests::resolve_mutation_uses_cargo_mutants ... ok
+test proof::tests::resolve_miri_requires_nightly ... ok
+test proof::tests::resolve_focused_test_rejects_empty_target ... ok
+test proof::tests::resolve_source_route_probe_returns_none ... ok
+test proof::tests::v2_shadow_handles_empty_requests ... ok
+test proof::tests::v2_shadow_preserves_id_and_requesters ... ok
+test proof::tests::resolve_sanitizer_requires_nightly ... ok
+test proof::red_green::tests::unbuildable_base_plus_tests_patch_reports_base_patch_failed ... ok
+test proof::worktree::tests::new_rust_file_carrying_its_own_tests_refuses ... ok
+test proof::worktree::tests::mixed_rust_file_keeps_the_test_hunk_and_drops_the_production_hunk ... ok
+test proof::worktree::tests::mixed_hunk_refuses_instead_of_guessing ... ok
+test proof::red_green::tests::same_file_rust_unit_test_discriminates_against_its_own_fix ... ok
+test github_delivery::tests::production_delivery_cleans_up_when_head_changes_before_submit ... ok
+test proof::worktree::tests::mixed_rust_file_patch_applies_to_the_base_tree ... ok
+test proof::worktree::tests::whole_file_paths_exclude_source_fix_files ... ok
+test proof_planner_lane::follow_up_artifact_path_tests::follow_up_artifact_reference_does_not_double_encode_lane_component ... ok
+test proof_planner_lane::tests::proof_planner_audit_write_failure_becomes_degraded_evidence ... ok
+test proof_planner_lane::tests::proof_planner_hostile_lane_uses_canonical_model_directory ... ok
+test proof_planner_lane::tests::proof_planner_removes_stale_internal_audit_before_attempt ... ok
+test proof_task_ledger::tests::command_receipt_and_release_wait_for_current_aggregate_publication ... ok
+test proof_task_ledger::tests::command_sources_preserve_impact_required_and_model_provenance ... ok
+test proof_task_ledger::tests::duplicate_source_requests_remain_distinct_without_receipt_substitution ... ok
+test proof_task_ledger::tests::red_green_side_swap_is_rejected_without_receipt_or_release ... ok
+test proof_task_ledger::tests::required_model_request_produces_required_gate_critical_command_task ... ok
+test proof_task_ledger::tests::stale_revision_receipt_cannot_satisfy_current_attempt ... ok
+test proof_task_ledger::tests::worker_receipt_reconciliation_binds_standalone_artifact ... ok
+test proof_task_ledger::tests::worker_tasks_are_optional_and_source_bound ... ok
+test providers::tests::preflight_matches_spec_discriminates_fields ... ok
+test providers::tests::provider_assignment_preflight_failed_reason_includes_both ... ok
+test providers::tests::provider_keys_and_labels_are_stable ... ok
+test providers::tests::provider_preflight_reason_formats_status_and_reason ... ok
+test proof::worktree::tests::new_test_only_rust_file_is_kept ... ok
+test providers::tests::provider_spec_from_preflight_rejects_unknown ... ok
+test providers::tests::provider_spec_from_preflight_round_trips ... ok
+test providers::tests::resolve_opencode_endpoint_kind_matches_each_arm ... ok
+test providers::tests::runtime_fallback_retry_spec_only_retries_transient_primary_failures ... ok
+test providers::tests::selected_provider_spec_prefers_primary_then_fallback ... ok
+test reporter::tests::invalid_model_verdict_stays_explicitly_undecided ... ok
+test reporter::tests::lane_continuation_prompt_includes_proof_evidence_when_present ... ok
+test reporter::tests::lane_continuation_prompt_includes_question_and_prior_conclusion ... ok
+test reporter::tests::lane_continuation_prompt_routes_late_sensor_evidence_when_present ... ok
+test reporter::tests::lane_digests_skip_unexecuted_lanes ... ok
+test reporter::tests::late_sensor_digest_reads_receipt_and_reports_absence_as_missing ... ok
+test reporter::tests::malformed_rollup_fails_closed_without_selecting_a_turn ... ok
+test reporter::tests::legacy_turn_without_invocation_head_fails_closed ... ok
+test reporter::tests::new_reporter_run_rejects_prior_run_turns_on_the_same_head ... ok
+test reporter::tests::parse_reporter_conclusion_fallback_for_non_json ... ok
+test reporter::tests::one_resolved_turn_drives_public_text_and_exact_gate_receipt ... ok
+test reporter::tests::parse_reporter_conclusion_json ... ok
+test reporter::tests::reporter_prompt_handles_no_lanes ... ok
+test reporter::tests::reporter_prompt_lists_lanes_and_includes_task ... ok
+test reporter::tests::reporter_prompt_routes_late_sensor_evidence ... ok
+test reporter::tests::reporter_withholds_lane_audit_from_prompt ... ok
+test reporter::tests::reporter_resolution_rejects_turn_rollup_identity_mismatches ... ok
+test reporter::tests::resolve_lane_target_exact_and_suffix ... ok
+test reporter::tests::resolve_lane_target_returns_none_for_unknown ... ok
+test reporter::tests::resolve_lane_target_strips_question_for_prefix ... ok
+test proof::worktree::tests::prepare_base_plus_tests_worktree_allows_source_only_request_without_test_patch ... ok
+test reporter::tests::resolve_reporter_turn_absent_when_no_artifact ... ok
+test reporter::tests::resolve_reporter_turn_reads_current_head_distillation ... ok
+test reporter::tests::stale_head_is_not_public_and_is_explicit_gate_evidence ... ok
+test reporter::tests::structured_verdict_survives_write_resolve_round_trip ... ok
+test reporter::tests::startup_invalidation_failure_withholds_restored_disk_authority ... ok
+test reporter::tests::turn_001_write_failure_is_propagated ... ok
+test review_compiler::tests::applicable_suggestion_keeps_applying_edits_and_drops_the_rest ... ok
+test reporter::tests::unknown_wire_verdict_is_malformed_and_fails_closed ... ok
+test reporter::tests::write_reporter_thread_creates_artifact ... ok
+test review_compiler::tests::empty_body_without_headings_is_not_reviewer_value ... ok
+test review_compiler::tests::other_reviewer_value_headings_still_recognized ... ok
+test review_compiler::tests::reporter_admission_keeps_novel_connective_judgment ... ok
+test review_compiler::tests::reporter_admission_preserves_dotted_paths ... ok
+test review_compiler::tests::reporter_admission_drops_duplicate_boilerplate_and_homework ... ok
+test review_compiler::tests::reporter_claim_duplicate_matching_obeys_identity_and_length_bounds ... ok
+test review_compiler::tests::reporter_emission_heading_is_recognized_as_reviewer_value ... ok
+test proof::worktree::tests::production_only_rust_change_yields_no_patch ... ok
+test review_compiler::tests::reporter_summary_heading_is_reviewer_value ... ok
+test review_experience::tests::perl_lsp_3627_keeps_material_claims_structurally_distinct ... ok
+test review_compiler::tests::review_body_quality_overflow_is_waivable_but_machinery_is_artifact_only ... ok
+test review_experience::tests::perl_lsp_3627_thread_fixture_includes_external_reviewers_and_receipts ... ok
+test review_experience::tests::perl_lsp_3627_reuses_threads_and_silences_the_fixed_head ... ok
+test review_golden::golden_bless_is_fail_closed_without_exact_opt_in ... ok
+test review_golden::clean_case_stays_silent ... ok
+test review_golden::missing_golden_reports_exact_path_and_refresh_command ... ok
+test review_golden::proof_cases_use_production_red_green_receipts ... ok
+test review_golden::snapshot_uses_the_production_inline_delivery_transform ... ok
+test review_text::github_review_serialization_tests::empty_review_round_trip_keeps_an_explicit_empty_comments_array ... ok
+test proof::worktree::tests::test_only_file_is_still_applied_whole ... ok
+test review_text::github_review_serialization_tests::github_review_round_trip_preserves_unicode_path_and_stable_post_json ... ok
+test review_experience::tests::perl_lsp_3627_replay_deduplicates_public_claims_and_keeps_diagnostics_artifact_only ... ok
+test review_text::output_degradation_tests::body_budget_drops_topics_and_preserves_inline_fallback_receipt ... ok
+test review_text::output_degradation_tests::bullet_budget_drops_all_topics_as_inline_only ... ok
+test review_text::output_degradation_tests::degradation_drops_lowest_ranked_topics_deterministically ... ok
+test review_text::output_degradation_tests::degradation_folds_duplicates_and_keeps_stronger_evidence ... ok
+test review_text::output_degradation_tests::degradation_handles_reporter_sections_and_unknown_sections ... ok
+test review_text::output_degradation_tests::degradation_is_byte_bounded_and_utf8_safe ... ok
+test review_text::output_degradation_tests::degradation_uses_artifact_only_when_no_public_topic_exists ... ok
+test review_text::output_degradation_tests::full_output_receipt_preserves_exact_input ... ok
+test review_text::output_degradation_tests::output_renderer_handles_empty_and_custom_sections_deterministically ... ok
+test review_text::output_degradation_tests::topic_parser_normalizes_empty_lines_and_punctuation ... ok
+test review_text::output_degradation_tests::recompressed_mode_is_selected_when_only_section_order_changes ... ok
+test review_text::output_degradation_tests::topic_ranking_and_order_cover_evidence_and_materiality_precedence ... ok
+test review_topics::tests::active_graph_does_not_reuse_stale_proof_receipts ... ok
+test review_topics::tests::active_graph_keeps_inline_delivery_and_proof_receipt_links ... ok
+test review_topics::tests::active_graph_links_current_threads_and_separates_stale_threads ... ok
+test review_topics::tests::current_thread_reconciliation_suppresses_only_current_surface_duplicates ... ok
+test review_topics::tests::inline_claim_id_uses_matching_observation_identity ... ok
+test review_topics::tests::current_thread_does_not_suppress_distinct_claim_at_same_anchor ... ok
+test review_topics::tests::active_graph_resolves_explicit_conflict_using_proof_precedence ... ok
+test review_topics::tests::planned_action_exact_matrix_is_fail_closed ... ok
+test review_topics::tests::public_claim_normalization_keeps_structural_prefixes ... ok
+test review_topics::tests::planned_delivery_action_names_reply_and_source_thread ... ok
+test review_topics::tests::resolved_candidates_remain_as_fixed_current_head_topics ... ok
+test proof::worktree::tests::selection_is_byte_identical_across_runs ... ok
+test review_topics::tests::reconcile_public_surfaces_exact_matrix ... ok
+test review_topics::tests::public_surface_reconciliation_prefers_inline_for_exact_duplicate_claims ... ok
+test review_topics::tests::short_technical_thread_tokens_remain_distinctive ... ok
+test review_topics::tests::unrelated_same_lane_receipt_does_not_attach_or_suppress ... ok
+test review_topics::tests::thread_disposition_tracks_new_evidence_refutation_tradeoff_and_stale_heads ... ok
+test review_golden::review_goldens_match_the_exact_github_facing_surface ... ok
+test proof::worktree::tests::unapplyable_patch_is_reported_by_the_caller_as_a_failure ... ok
+test github_delivery::tests::production_delivery_reconciles_head_comments_and_submission ... ok
+test revision_admission::tests::local_candidate_review_resolves_exact_objects ... ok
+test revision_admission::tests::digests_in_the_canonical_form_bind_the_admitted_inputs ... ok
+test revision_admission::tests::dirty_worktrees_are_typed_not_rejected ... ok
+test revision_admission::tests::merge_without_head_metadata_is_an_explicit_failure ... ok
+test revision_admission::tests::mismatched_candidate_metadata_is_rejected ... ok
+test revision_admission::tests::candidate_and_merge_packets_stay_distinct_end_to_end ... ok
+test revision_admission::tests::stale_or_forged_head_metadata_is_rejected_on_merges ... ok
+test revision_admission::tests::revision_ref_joins_admission_and_validates_shape ... ok
+test revision_admission::tests::symbolic_aliases_admit_one_identity ... ok
+test revision_admission::tests::synthetic_merge_records_head_and_merge_distinctly ... ok
+test revision_admission::tests::trusted_input_reader_rejects_oversize_and_non_utf8_objects ... ok
+test revision_identity::tests::canonical_tampering_is_rejected ... ok
+test revision_admission::tests::symlink_target_is_part_of_the_admitted_tree_and_repeats_stably ... ok
+test revision_identity::tests::changed_path_ordering_and_duplicates_cannot_move_the_digest ... ok
+test revision_identity::tests::crlf_canonical_forms_still_parse ... ok
+test revision_identity::tests::contract_surface_pins_tokens_labels_and_rejection_messages ... ok
+test revision_identity::tests::diff_byte_changes_move_the_diff_digest ... ok
+test revision_identity::tests::malformed_constructions_are_rejected ... ok
+test revision_admission::tests::trusted_diff_rejects_changed_paths_that_do_not_match_patch ... ok
+test revision_identity::tests::every_field_boundary_flips_the_identity_digest ... ok
+test revision_identity::tests::symbolic_labels_never_enter_serialization_or_digest ... ok
+test revision_identity::tests::valid_candidate_and_merge_identities_round_trip_and_stay_distinct ... ok
+test sensor_task_ledger::tests::empty_sensor_plan_omits_the_optional_artifact_pair ... ok
+test sensor_task_ledger::tests::ripr_reserves_primary_and_detail_subprocess_timeout_ceilings ... ok
+test sensor_task_ledger::tests::tokmd_reserves_the_aggregate_subprocess_timeout_ceiling ... ok
+test sensors::coverage::tests::coverage_summary_receipt_records_absent_and_malformed_lcov ... ok
+test sensors::ripr::tests::ripr_detail_unconfirmed_completion_propagates_to_the_sensor ... ok
+test sensors::ripr::tests::ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable ... ok
+test sensor_task_ledger::tests::runnable_and_skipped_sensors_share_one_shadow_contract ... ok
+test revision_admission::tests::trusted_diff_rejects_dirty_or_wrong_base_roots ... ok
+test sensors::ripr::tests::ripr_exposure_gap_details_reject_malformed_pinned_input ... ok
+test sensors::tests::actionlint_sensor_uses_json_template_format ... ok
+test sensors::tests::actionlint_sensor_scopes_to_changed_workflow_files ... ok
+test sensors::tests::baseline_gate_sensor_argvs_match_required_matrix ... ok
+test sensors::tests::cargo_allow_sensor_command_pins_native_ledger_when_present ... ok
+test sensors::tests::cargo_allow_sensor_command_writes_exception_receipts ... ok
+test sensors::tests::cargo_allow_sensor_skips_without_policy_config ... ok
+test sensors::tests::coverage_sensor_command_writes_lcov_artifact_when_enabled ... ok
+test revision_admission::tests::trusted_diff_admits_unresolved_head_without_loading_candidate_surfaces ... ok
+test review_experience::tests::perl_lsp_3627_runs_production_compiler_and_delivery_replay ... ok
+test sensor_task_ledger::tests::setup_timeout_receipt_failure_and_release_remain_explicit ... ok
+test sensors::tests::non_unsafe_review_exit_one_stays_failed ... ok
+test sensors::tests::late_sensor_phase_spawn_and_join_write_receipts_and_events ... ok
+test sensors::tests::failed_attempt_cannot_reuse_a_prior_sensor_status_receipt ... ok
+test sensors::tests::missing_tool_status_is_recorded_as_missing ... ok
+test revision_admission::tests::trusted_diff_rejects_invalid_identity_and_input_objects ... ok
+test sensors::tests::sensor_pool_routes_shared_cargo_targets_to_one_ordered_queue ... ok
+test sensors::tests::sensor_receipt_defaults_missing_exit_fields ... ok
+test sensors::tests::process_finish_observation_follows_ripr_detail_and_precedes_sensor_status ... ok
+test sensors::tests::sensor_task_receipt_mapping_rejects_missing_mismatched_and_unknown_status ... ok
+test sensors::tests::ripr_sensor_keeps_primary_receipts_when_detail_output_is_unavailable ... ok
+test sensors::tests::stale_status_removal_failure_cannot_create_a_receipt ... ok
+test sensors::tests::sensor_spawn_setup_failure_records_no_process_timing ... ok
+test sensors::tests::baseline_gate_plan_phases_split_fast_signal_from_slow_suite ... ok
+test sensors::ripr::tests::ripr_exposure_gap_details_project_filter_cap_and_unavailable_shape ... ok
+test sensors::tests::unsafe_review_exit_one_is_completed_policy_signal ... ok
+test sensors::tests::ripr_sensor_writes_badge_and_detail_receipts_from_configured_command ... ok
+test sensors::tests::unsafe_review_exit_two_remains_tool_failure ... ok
+test sensors::tests::unsafe_review_sensor_argv_uses_first_pr_out_dir_flag ... ok
+test sensors::tests::unsafe_review_sensor_outputs_includes_gate_and_artifact_files ... ok
+test sensors::unsafe_review::tests::comment_plan_absolute_pointer_is_rejected ... ok
+test sensors::unsafe_review::tests::comment_plan_empty_pointer_is_rejected ... ok
+test sensors::unsafe_review::tests::comment_plan_empty_operation_family_is_explicit_invalid_gap ... ok
+test sensors::unsafe_review::tests::comment_plan_envelope_accepts_additive_fields_and_retains_opaque_identity ... ok
+test sensors::unsafe_review::tests::comment_plan_malformed_entry_is_explicit_field_gap ... ok
+test sensors::unsafe_review::tests::comment_plan_identity_field_gaps_name_the_missing_entry_field ... ok
+test sensors::unsafe_review::tests::comment_plan_missing_comments_is_explicit_field_gap ... ok
+test sensors::unsafe_review::tests::comment_plan_parent_relative_pointer_is_rejected ... ok
+test sensors::unsafe_review::tests::comment_plan_missing_or_unknown_schema_version_is_explicit_gap ... ok
+test sensors::unsafe_review::tests::comment_plan_symlink_redirect_is_rejected ... ok
+test sensors::unsafe_review::tests::comment_plan_pointer_missing_or_file_missing_is_explicit_gap ... ok
+test sensors::unsafe_review::tests::comment_plan_whitespace_trust_boundary_is_explicit_invalid_gap ... ok
+test sensors::unsafe_review::tests::comment_plan_wrong_top_level_type_is_explicit_gap ... ok
+test sensors::unsafe_review::tests::read_unsafe_review_artifacts_missing_schema_version_returns_malformed_gap ... ok
+test sensors::unsafe_review::tests::unsafe_review_artifacts_absent_gate_is_gap ... ok
+test sensors::unsafe_review::tests::unsafe_review_artifacts_malformed_json_is_gap_with_reason ... ok
+test sensors::unsafe_review::tests::unsafe_review_artifacts_unknown_schema_is_gap_naming_found_version ... ok
+test sensors::unsafe_review::tests::unsafe_review_artifacts_v1_gate_ingested ... ok
+test shared_context_render::tests::prefix_manifest_hash_and_length_match_prefix ... ok
+test shared_context_render::tests::prefix_sections_handle_no_headers ... ok
+test shared_context_render::tests::prefix_sections_scan_finds_headers_with_byte_ranges ... ok
+test shared_context_render::tests::shared_context_redacts_credential_like_assignments_but_keeps_placeholders ... ok
+test summary_render::tests::hostile_planner_fields_render_escaped_not_live ... ok
+test summary_render::tests::deferred_required_planner_proof_reaches_summary_with_digest ... ok
+test summary_render::tests::lane_packet_model_display_returns_none_for_missing_packet ... ok
+test summary_render::tests::lane_packet_model_display_resolves_encoded_hostile_lane_id ... ok
+test task_ledger::tests::consumers_keep_independent_metadata_across_terminal_result ... ok
+test summary_render::tests::planner_accounting_defaults_render_as_zero ... ok
+test sensors::tests::tokmd_unconfirmed_subcommand_completion_stops_later_commands ... ok
+test task_ledger::tests::every_executed_terminal_path_requires_receipt_then_release ... ok
+test task_ledger::tests::fake_clock_keeps_all_execution_phases_distinct ... ok
+test task_ledger::tests::invalid_orders_and_conflicting_terminals_fail_closed ... ok
+test task_ledger::tests::invalid_timing_and_resource_sequences_fail_without_mutation ... ok
+test task_ledger::tests::malformed_deserialized_values_fail_at_reducer_boundary ... ok
+test task_ledger::tests::setup_and_receipt_failure_still_release_resources ... ok
+test task_ledger::tests::pre_run_termination_attempts_receipt_and_releases_resources ... ok
+test task_ledger::tests::timeout_ceiling_is_not_actual_process_duration ... ok
+test sensors::tests::tokmd_post_spawn_error_still_terminalizes_the_task ... ok
+test task_ledger::tests::stale_revision_replay_and_serialization_are_deterministic ... ok
+test task_ledger::tests::non_executed_dispositions_fabricate_neither_timing_nor_receipt ... ok
+test sensors::tests::tokmd_sensor_fails_fast_on_stale_installed_version ... ok
+test task_ledger_artifact::tests::pair_removal_failure_restores_the_previous_generation ... ok
+test task_ledger_artifact::tests::pair_publication_failure_restores_the_previous_generation ... ok
+test revision_admission::tests::trusted_diff_rejects_invalid_patch_and_unsafe_paths ... ok
+test tests::absent_pr_thread_context_omits_reuse_rules ... ok
+test tests::action_release_download_verifies_sha256_receipt ... ok
+test tests::action_release_install_mode_fails_closed_instead_of_source_fallback ... ok
+test tests::action_config_input_overrides_bundled_preset_selection ... ok
+test tests::action_smoke_workflow_is_a_manual_debug_lane ... ok
+test tests::artifact_name_sanitizer_bounds_long_generated_ids ... ok
+test tests::auto_run_pass_maps_pull_request_actions ... ok
+test tests::artifact_review_body_keeps_model_lane_roster ... ok
+test tests::box_from_allocation_false_premise_candidate_is_refuted_not_inline ... ok
+test tests::box_from_allocation_false_premise_observation_is_forced_refuted ... ok
+test tests::build_unsafe_review_inline_comments_deduplicates_against_existing ... ok
+test tests::build_unsafe_review_inline_comments_produces_comment_for_changed_line ... ok
+test tests::build_unsafe_review_inline_comments_requires_matching_operation_family ... ok
+test tests::build_unsafe_review_inline_comments_respects_budget_cap ... ok
+test tests::build_unsafe_review_inline_comments_skips_non_diff_anchor ... ok
+test tests::build_unsafe_review_inline_comments_skips_unchanged_line ... ok
+test tests::build_unsafe_review_inline_comments_surfaces_repair_queue_context ... ok
+test tests::build_unsafe_review_inline_comments_uses_concrete_repair_queue_suggestion ... ok
+test tests::build_unsafe_review_inline_comments_works_without_repair_queue ... ok
+test task_ledger_artifact::tests::corruption_reordering_truncation_and_duplicate_terminal_fail_closed ... ok
+test task_ledger_artifact::tests::golden_replay_is_byte_stable_and_snapshot_is_derived ... ok
+test tests::builtin_runtime_profiles_encode_trusted_repo_gate_defaults ... ok
+test tests::builtin_gh_runner_profile_matches_default_test_lease ... ok
+test task_ledger_artifact::tests::stale_revision_forged_snapshot_and_unknown_fields_fail_closed ... ok
+test tests::candidate_artifact_readback_rejects_inconsistent_disposition ... ok
+test tests::cache_events_include_provider_preflight_usage ... ok
+test tests::cache_artifacts_use_follow_up_result_provider ... ok
+test tests::candidate_artifact_readback_rejects_malformed_records ... ok
+test tests::candidate_only_lanes_cannot_emit_inline_comments ... ok
+test tests::candidate_artifacts_track_inline_and_summary_surfaces ... ok
+test tests::bun_config_loads_with_default_lanes_enabled ... ok
+test tests::ci_audit_tests::ci_audit_artifacts_flag_missing_permissions_as_human_review ... ok
+test tests::ci_audit_tests::ci_audit_artifacts_carry_schema_fields_and_receipts ... ok
+test tests::ci_audit_tests::ci_audit_artifacts_use_literal_matrix_size_for_inventory_and_costs ... ok
+test tests::builtin_runtime_profiles_match_runtime_files ... ok
+test tests::ci_audit_tests::ci_audit_artifacts_record_permissions_secrets_and_flag_sensitive_jobs ... ok
+test tests::ci_audit_tests::ci_audit_artifacts_record_required_check_receipts_for_setup_ci ... ok
+test tests::ci_audit_tests::ci_audit_report_lines_carry_receipts_without_boilerplate ... ok
+test tests::ci_audit_tests::ci_cheap_job_with_independent_failures_keeps_required ... ok
+test tests::ci_audit_tests::ci_audit_tokenless_degrades_to_inventory_only ... ok
+test sensors::tests::tokmd_sensor_commands_use_on_diff_analyze_cockpit_and_context ... ok
+test task_ledger_artifact::tests::receipt_refs_are_structural_only_and_consumers_remain_integral ... ok
+test tests::ci_audit_tests::ci_audit_runner_cancellation_receipts_separate_superseded_from_eviction ... ok
+test tests::ci_audit_tests::ci_expensive_quiet_job_right_sizes_to_adaptive_by_data_volume ... ok
+test tests::ci_audit_tests::ci_insufficient_history_is_never_adaptive ... ok
+test tests::ci_audit_tests::ci_parse_api_array_counts_dropped_items ... ok
+test tests::ci_audit_tests::ci_independent_failures_require_all_cheaper_jobs_passing ... ok
+test tests::ci_audit_tests::ci_percentile_uses_nearest_rank ... ok
+test tests::ci_audit_tests::ci_proven_required_jobs_move_inside_ub_review_gate ... ok
+test tests::ci_audit_tests::ci_required_check_parsers_extract_branch_and_ruleset_contexts ... ok
+test tests::ci_audit_tests::ci_permissions_and_secrets_flag_for_human ... ok
+test tests::ci_audit_tests::ci_required_move_tier_needs_exact_required_check_context ... ok
+test tests::ci_audit_tests::ci_survivorship_caps_confidence_without_proven_sibling_signal ... ok
+test tests::ci_audit_tests::ci_workflow_permissions_key_requires_top_level_indent ... ok
+test tests::ci_audit_tests::ci_security_jobs_always_flag_for_human ... ok
+test tests::ci_audit_tests::ci_tokenless_evidence_flags_for_human ... ok
+test tests::ci_audit_tests::ci_workflow_scan_extracts_permissions_and_secret_refs ... ok
+test tests::ci_audit_tests::ci_workflow_scan_extracts_literal_matrix_size_with_gaps ... ok
+test tests::ci_audit_tests::ci_workflow_scan_extracts_triggers_paths_timeouts_and_uses ... ok
+test tests::ci_audit_tests::setup_ci_fails_closed_on_missing_receipts_and_bad_accepts ... ok
+test tests::ci_audit_tests::ci_audit_repo_empty_override_falls_back_to_git_origin ... ok
+test tests::ci_audit_tests::setup_ci_accepts_move_required_jobs_as_required_proof ... ok
+test tests::ci_audit_tests::setup_ci_print_pr_renders_sections_policy_and_round_trips ... ok
+test tests::ci_audit_tests::setup_ci_print_pr_writes_open_pr_preview_files_with_action_sha ... ok
+test tests::ci_repo_slug_parses_remote_url_variants ... ok
+test tests::clean_internal_audit_is_successful_without_public_lane_signal ... ok
+test tests::compiler_surface_admits_model_lane_suggestions_that_apply_at_the_anchor ... ok
+test tests::ci_audit_tests::setup_ci_refuses_exact_branch_protection_plan_with_unmatched_required_context ... ok
+test tests::compiler_surface_keeps_refuted_only_follow_up_artifact_only ... ok
+test tests::compiler_surface_caps_inline_comments_after_value_ranking ... ok
+test tests::compiler_surface_keeps_resolved_check_artifact_only ... ok
+test tests::compiler_surface_keeps_unexecuted_inline_homework_artifact_only ... ok
+test tests::ci_audit_tests::ci_fetch_required_checks_reads_branch_protection_and_rulesets ... ok
+test tests::compiler_surface_keeps_valid_inline_findings_when_body_is_suppressed ... ok
+test tests::compiler_surface_prepares_review_for_synchronize_pass_in_profile_list ... ok
+test tests::compiler_surface_preserves_unsafe_review_suggestions ... ok
+test tests::compiler_surface_keeps_substantive_inline_when_only_evidence_mentions_skipped_proof ... ok
+test tests::compiler_surface_strips_homework_but_keeps_substantive_inline ... ok
+test tests::compiler_surface_suppresses_successful_status_tables_without_failing_gate ... ok
+test tests::compiler_surface_skips_pass_excluded_by_post_review_on ... ok
+test tests::compiler_surface_suppresses_policy_rejected_artifact_only_pr_body ... ok
+test tests::cost_receipt_records_measured_v1_inputs ... ok
+test tests::cost_receipt_records_missing_inputs_without_suggested_fill ... ok
+test tests::curl_http_status_marker_is_stripped_from_body ... ok
+test tests::cross_lane_conflict_does_not_inflate_public_finding_count ... ok
+test tests::degraded_model_lane_is_attempted_but_not_missing_evidence ... ok
+test tests::deep_depth_expands_to_wide_lane_budget ... ok
+test tests::direct_minimax_anthropic_uses_messages_endpoint_and_api_key_header ... ok
+test tests::direct_minimax_openai_uses_chat_endpoint_and_bearer_header ... ok
+test tests::docs_only_diff_is_detected ... ok
+test tests::doctor_tool_install_hints_name_exact_core_tool_fixes ... ok
+test tests::doctor_binary_install_status_reports_path_state_and_fix ... ok
+test tests::doctor_version_fix_reinstalls_pinned_standard_image_tools ... ok
+test tests::empty_internal_audit_does_not_make_empty_provider_content_successful ... ok
+test tests::cross_lane_conflict_receipt_suppresses_standalone_summary_finding ... ok
+test tests::events_ndjson_appends_across_reopen ... ok
+test tests::evidence_sections_surface_unevaluated_required_tool_gates ... ok
+test tests::except_lane_selector_filters_model_assignments ... ok
+test tests::fail_on_gate_resolves_auto_by_mode ... ok
+test tests::failed_model_evidence_is_not_rendered_as_summary_finding ... ok
+test tests::fill_ledger_selected_focused_build_request_cites_matching_lease ... ok
+test tests::fill_ledger_skip_entries_record_heavy_witness_expected_signal ... ok
+test tests::final_compiler_input_artifact_records_exact_final_sources ... ok
+test tests::final_orchestrator_plan_can_route_late_follow_up_receipts ... ok
+test tests::final_orchestrator_plan_routes_evaluated_tool_gate_to_relevant_lanes ... ok
+test tests::final_orchestrator_plan_suppresses_source_route_task_when_late_proof_routes ... ok
+test tests::example_config_preserves_gate_policy ... ok
+test tests::floor_trend_records_single_run_without_history_overclaim ... ok
+test tests::focused_build_allowlist_brokers_exact_repo_policy_check_only ... ok
+test tests::final_orchestrator_plan_suppresses_test_oracle_task_when_late_proof_routes ... ok
+test tests::follow_up_packet_prompt_carries_bounded_routed_receipt_content ... ok
+test tests::follow_up_outputs_preserve_validated_model_content ... ok
+test tests::follow_up_proof_broker_executes_request_only_focused_proof ... ok
+test tests::follow_up_proof_broker_uses_remaining_focused_proof_budget ... ok
+test tests::follow_up_resolved_away_excludes_refuted_and_dropped_but_keeps_parked ... ok
+test tests::follow_up_proof_receipts_route_reconsideration_messages ... ok
+test tests::gate_check_enforces_fail_outcomes_per_fail_on_gate_resolution ... ok
+test tests::gate_config_rejects_unknown_fields ... ok
+test tests::generic_typescript_diff_stays_source_general_despite_native_words ... ok
+test tests::ci_audit_tests::ci_fetch_required_checks_treats_not_found_as_evidence_gap ... ok
+test tests::gh_runner_alias_matches_standard_profile_except_name ... ok
+test tests::github_quality_outcomes_keeps_comments_absent_when_collection_truncated ... ok
+test tests::github_quality_outcomes_keeps_comments_absent_when_error_receipt_present ... ok
+test tests::github_quality_outcomes_keeps_comments_absent_without_thread_receipts ... ok
+test tests::gh_runner_runtime_profile_keeps_standard_model_concurrency ... ok
+test tests::github_quality_outcomes_requires_request_source_for_complete_collection ... ok
+test tests::github_quality_outcomes_normalizes_review_thread_state ... ok
+test tests::github_review_comment_suggestion_serialises_correctly ... ok
+test tests::github_review_payload_rejects_inline_comment_boilerplate ... ok
+test tests::gate_blocking_policy_parses_and_defaults_off ... ok
+test tests::github_review_payload_gates_suggestions_on_content_not_lane ... ok
+test tests::github_review_post_payload_renders_suggestion_without_internal_field ... ok
+test tests::github_review_post_payload_requires_recorded_right_diff_line ... ok
+test tests::initial_diff_receipt_absorbs_matching_lane_request_metadata ... ok
+test tests::github_review_payload_requires_comment_event_and_right_side ... ok
+test tests::inline_dedupe_keeps_strongest_same_location_candidate ... ok
+test tests::inline_dedupe_keeps_distinct_structural_claims_with_shared_vocabulary ... ok
+test tests::inline_dedupe_keeps_suggestions_line_specific ... ok
+test tests::inline_dedupe_merges_same_claim_different_line_candidates ... ok
+test tests::inline_findings_order_best_first_after_dedupe ... ok
+test tests::inline_findings_rank_executed_evidence_before_model_confidence ... ok
+test tests::inline_guard_accepts_only_right_side_diff_lines ... ok
+test tests::internal_audit_stays_out_of_public_sinks ... ok
+test tests::github_review_payload_rejects_pr_body_boilerplate ... ok
+test tests::intelligent_ci_synthesizes_matching_required_proof_requests ... ok
+test tests::issue_broker_plan_gates_on_mode_allowlist_and_cap ... ok
+test tests::issue_candidates_classify_validate_and_dedupe ... ok
+test tests::lane_model_identity_is_split ... ok
+test tests::lane_model_summary_rejects_standalone_approval_language ... ok
+test tests::issues_toml_parse_pins_exact_field_defaults ... ok
+test tests::lane_output_split_accepts_scalar_evidence_strings ... ok
+test tests::lane_output_split_degrades_contentful_malformed_output ... ok
+test tests::lane_output_split_degrades_contentful_schema_wrong_json ... ok
+test tests::lane_output_split_degrades_scalar_sequence_fields ... ok
+test tests::lane_output_split_rejects_empty_unusable_output ... ok
+test tests::lane_output_split_accepts_observations_candidates_and_proof_requests ... ok
+test tests::lane_output_validates_typed_proof_intents_without_command ... ok
+test tests::lane_packet_write_reports_unwritable_lane_directory ... ok
+test tests::lane_packets_render_late_phase_sensors_as_scheduled ... ok
+test tests::ci_audit_tests::setup_ci_open_pr_fails_closed_on_existing_config_and_missing_pin ... ok
+test tests::failed_gate_without_post_reports_gate_failure_not_empty_smoke ... ok
+test tests::lane_prompt_does_not_seed_global_box_refutations ... ok
+test tests::lane_prompt_routes_execution_through_typed_or_legacy_requests ... ok
+test tests::lane_prompt_offers_suggestions_with_the_shape_the_gate_enforces ... ok
+test tests::lane_selectors_filter_model_assignments ... ok
+test tests::minimax_openai_payload_uses_chat_shape ... ok
+test tests::minimax_anthropic_payload_uses_messages_shape ... ok
+test tests::minimax_prompt_cache_off_omits_anthropic_cache_control ... ok
+test tests::minimax_primary_ignores_empty_opencode_key ... ok
+test tests::model_cache_usage_extracts_provider_token_counts ... ok
+test tests::mixed_language_diff_records_language_mix_without_ub_routing ... ok
+test tests::model_error_exposes_http_status_for_receipts ... ok
+test tests::model_content_extracts_openai_and_anthropic_envelopes ... ok
+test tests::model_json_payload_accepts_markdown_json_fence ... ok
+test tests::ledger_context_reads_configured_file_bounded ... ok
+test tests::model_lane_queued_retry_starved_by_budget_is_skipped_not_leaked ... ok
+test tests::model_lane_failed_fallback_retry_is_terminal ... ok
+test tests::model_lane_rate_limited_primary_retries_once_on_fallback ... ok
+test tests::model_lane_rate_limited_provider_sheds_next_wave_to_fallback ... ok
+test tests::model_lane_rate_limited_retry_provider_sheds_next_wave_to_fallback ... ok
+test tests::model_lane_retryable_failure_without_fallback_is_terminal ... ok
+test tests::model_lane_scheduler_fills_wave_across_provider_limits ... ok
+test tests::model_lane_scheduling_ignores_inline_comment_cap ... ok
+test tests::model_lane_scheduler_honors_provider_max_concurrency ... ok
+test tests::model_pass_provider_selection_uses_fallback_preflight ... ok
+test tests::native_surface_typescript_path_can_still_route_source_ub ... ok
+test tests::no_finding_audit_corpus_never_becomes_public_prose ... ok
+test tests::model_stage_records_cover_primary_refuter_and_follow_ups ... ok
+test tests::no_standalone_approval_lines_in_generated_templates ... ok
+test tests::long_model_artifact_ids_are_bounded_without_rewriting_receipts ... ok
+test tests::nonstandard_depth_rejects_raw_budget_override ... ok
+test tests::no_value_pr_body_is_not_prepared_for_posting ... ok
+test tests::observation_artifacts_normalize_zero_line_to_absent ... ok
+test tests::observation_question_artifacts_bound_model_supplied_filenames ... ok
+test tests::opencode_go_canary_payload_uses_messages_shape ... ok
+test tests::observation_question_artifacts_disambiguate_hostile_paths ... ok
+test tests::output_degradation_is_value_ranked_and_arrival_order_independent ... ok
+test tests::observation_artifacts_include_aggregate_and_lane_ndjson ... ok
+test tests::overlapping_evidence_phases_never_exceed_observed_span ... ok
+test tests::output_degradation_uses_inline_only_when_no_body_fits ... ok
+test tests::partial_tool_config_preserves_explicit_overrides ... ok
+test tests::partial_tool_config_inherits_builtin_routing_defaults ... ok
+test tests::pass_policy_decision_matrix_honors_post_review_on ... ok
+test tests::orchestrator_plan_groups_evidence_needs_and_tasks ... ok
+test tests::policy_parse_errors_are_recorded_receipts_not_silent_defaults ... ok
+test tests::policy_selector_known_sets_match_classifier_outputs ... ok
+test tests::policy_shape_mismatches_become_receipts_not_hard_errors ... ok
+test tests::post_command_accepts_explicit_skip_receipt_without_token ... ok
+test tests::post_error_classification_covers_403_429_500_statuses ... ok
+test tests::post_validation_honors_effective_summary_only_body_policy ... ok
+test tests::pr_decision_has_no_default_no_finding_sentence ... ok
+test tests::pr_review_body_collapses_timed_out_proof_to_missing_evidence ... ok
+test tests::pr_review_body_compiles_ffi_test_gap_as_decision_memo ... ok
+test tests::pr_review_body_dedupes_duplicate_summary_findings ... ok
+test tests::issue_broker_executes_plan_with_duplicate_search_and_receipts ... ok
+test tests::pr_review_body_dedupes_observations_before_rendering ... ok
+test tests::pr_review_body_drops_structurally_answered_red_green_question ... ok
+test tests::pr_review_body_drops_unexecuted_verification_homework ... ok
+test tests::pr_review_body_hides_machine_metadata_for_findings ... ok
+test tests::pr_review_body_drops_stale_workflow_cache_path_summary ... ok
+test tests::pr_review_body_keeps_clean_lane_summary_artifact_only ... ok
+test tests::pr_review_body_keeps_compiler_residue_artifact_only ... ok
+test tests::pr_review_body_keeps_red_green_question_after_head_only_proof_receipt ... ok
+test tests::pr_review_body_keeps_refuted_only_observations_artifact_only ... ok
+test tests::pr_review_body_keeps_unexecuted_proof_homework_artifact_only ... ok
+test tests::pr_review_body_keeps_workflow_lockstep_summaries_artifact_only ... ok
+test tests::pipelined_late_sensor_phase_joins_before_proof_and_stays_missing_evidence ... ok
+test tests::pr_review_body_omits_lane_output_shape_artifacts ... ok
+test tests::pr_review_body_omits_residual_risk_only_observations ... ok
+test tests::pr_review_body_omits_successful_model_lane_roster_and_default_decision ... ok
+test tests::pr_review_body_publishes_discriminating_proof_but_not_passing_build ... ok
+test tests::pass_excluded_by_post_review_on_writes_truthful_skip_receipt ... ok
+test tests::pr_review_body_renders_discriminating_proof_receipt_once ... ok
+test tests::model_off_empty_smoke_writes_skip_receipt_instead_of_review_payload ... ok
+test tests::pr_review_body_renders_head_failed_proof_exit_code ... ok
+test tests::pr_review_body_renders_non_discriminating_proof_as_evidence_gap ... ok
+test tests::pr_review_body_uses_proof_receipt_instead_of_duplicate_test_witness_question ... ok
+test tests::pr_review_body_uses_missing_proof_receipt_instead_of_duplicate_test_witness_question ... ok
+test tests::pr_thread_context_reads_configured_file_bounded ... ok
+test tests::pr_thread_context_reads_github_event_pr_metadata ... ok
+test tests::pr_thread_context_treats_non_pr_event_as_absent ... ok
+test tests::pr_thread_context_truncates_github_event_body_on_utf8_boundary ... ok
+test tests::primary_with_fallback_does_not_plan_missing_opencode_fallbacks ... ok
+test tests::primary_with_fallback_routes_canary_and_fast_fallbacks ... ok
+test tests::primary_with_fallback_routes_model_pass_fallbacks ... ok
+test tests::prior_resolved_candidates_drop_matching_candidate_by_hash_suffix ... ok
+test tests::profile_selection_prefers_gh_runner_on_actions ... ok
+test tests::pr_review_body_keeps_paths_ignore_no_posture_review_artifact_only ... ok
+test tests::proof_broker_v0_does_not_execute_when_focused_test_budget_is_zero ... ok
+test tests::proof_broker_v0_does_not_execute_without_focused_test_lease ... ok
+test tests::production_reporter_failure_composition_withholds_public_text_and_gates_inconclusive ... ok
+test tests::proof_broker_v0_cleans_base_plus_tests_worktree_when_base_receipt_errors ... ok
+test tests::proof_broker_v0_executes_allowlisted_cargo_test_request_as_red_green_proof ... ok
+test tests::proof_broker_v0_executes_allowlisted_request_as_red_green_proof ... ok
+test tests::proof_broker_v0_records_base_patch_failed_as_missing_proof ... ok
+test tests::proof_broker_v0_exhausts_focused_tests_after_runtime_budget ... ok
+test tests::proof_broker_v0_marks_base_plus_tests_pass_as_non_discriminating ... ok
+test tests::proof_broker_v0_skips_base_plus_tests_when_head_fails ... ok
+test tests::proof_cost_is_normalized_to_known_broker_classes ... ok
+test tests::provider_backpressure_only_tracks_transient_provider_failures ... ok
+test tests::provider_policy_minimax_only_uses_direct_m3 ... ok
+test tests::provider_policy_opencode_canary_routes_only_opposition ... ok
+test tests::provider_policy_opencode_wide_uses_flash_for_fast_lanes ... ok
+test tests::provider_preflight_cache_selection_is_minimax_anthropic_only ... ok
+test tests::proof_broker_v0_records_candidates_beyond_focused_file_budget ... ok
+test tests::public_test_proof_result_admits_only_decision_changing_receipts ... ok
+test tests::quality_backfill_aggregates_github_outcomes_and_previous_deltas ... ok
+test tests::quality_backfill_keeps_reviewer_rates_missing_without_github_receipts ... ok
+test tests::quality_backfill_reviewer_override_rate_uses_posted_comment_denominator ... ok
+test tests::quality_github_collect_allows_empty_pull_list ... ok
+test tests::quality_github_collect_pull_numbers_dedupes_file_and_cli ... ok
+test tests::pr_review_body_keeps_workflow_status_residue_artifact_only ... ok
+test tests::quality_receipt_records_run_completion_inputs_without_reviewer_overclaim ... ok
+test tests::quality_trend_records_single_run_without_reviewer_or_history_overclaim ... ok
+test tests::quick_depth_expands_to_small_lane_budget ... ok
+test tests::read_repair_queue_absent_file_returns_empty_map ... ok
+test tests::read_repair_queue_indexes_entries_by_card_id ... ok
+test tests::real_finding_remains_public_alongside_internal_audit ... ok
+test tests::refuter_demotes_uncertain_or_unmatched_inline_candidates ... ok
+test tests::refuter_drops_high_confidence_false_positive ... ok
+test tests::refuter_prompt_keeps_execution_out_of_model_turn ... ok
+test tests::refuter_unavailable_demotes_pending_inline_candidates ... ok
+test tests::release_binary_workflow_dispatch_is_packaging_dry_run ... ok
+test tests::release_binary_workflow_records_and_validates_immutable_candidate ... ok
+test tests::proof_broker_v0_runs_budgeted_focused_red_green_targets_and_writes_receipts ... ok
+test tests::render_unsafe_review_lane_evidence_degrades_on_unknown_schema ... ok
+test tests::render_unsafe_review_lane_evidence_includes_movement_and_candidates ... ok
+test tests::providers_policy_config_parses_resolves_and_receipts_invalid_values ... ok
+test tests::required_tool_policy_applies_only_when_trigger_matches ... ok
+test tests::resolved_away_candidates_match_their_original_review_surfaces ... ok
+test tests::resolved_candidate_record_round_trips_unicode_and_empty_vectors ... ok
+test tests::repo_lane_toml_parse_pins_exact_field_defaults ... ok
+test tests::repo_lanes_merge_with_defaults_replacement_and_diff_class_gating ... ok
+test tests::resolved_candidate_record_serialization_round_trips_for_known_dispositions ... ok
+test tests::review_body_cap_drops_excess_bullets_without_failing_compilation ... ok
+test tests::review_body_cap_preserves_utf8_boundary ... ok
+test tests::review_body_policy_allows_configured_execution_summary_on_failure ... ok
+test tests::review_body_cap_preserves_required_sections ... ok
+test tests::resolved_candidate_records_capture_follow_up_dispositions ... ok
+test tests::review_body_routes_parked_followups_to_campaign_section ... ok
+test tests::quality_github_collect_writes_raw_receipts_for_outcomes ... ok
+test tests::review_body_waiver_skips_suppressible_checks_only ... ok
+test tests::review_byok_does_not_synthesize_required_proof_requests ... ok
+test tests::review_metrics_count_efficiency_facts ... ok
+test tests::review_byok_advisory_contract_pins_resolution_alias_and_posture_defaults ... ok
+test tests::review_body_unknown_policy_values_are_receipted ... ok
+test tests::review_mode_preset_resolves_to_expected_triple ... ok
+test tests::review_metrics_separate_prepared_output_and_receipt_freshness ... ok
+test tests::run_loop_metrics_count_actual_model_proof_overlap ... ok
+test tests::run_loop_overlap_ms_does_not_double_count_self_overlapping_side ... ok
+test tests::run_mode_accepts_product_names_and_legacy_review_direct ... ok
+test tests::run_pass_parser_accepts_github_action_spelling ... ok
+test tests::running_summary_renders_model_receipt_status ... ok
+test tests::review_mode_preset_overrides_legacy_knobs ... ok
+test tests::running_summary_uses_missing_evidence_wording ... ok
+test tests::review_mode_preset_unset_uses_legacy_knobs ... ok
+test tests::runtime_fallback_retry_spec_only_retries_transient_primary_failures ... ok
+test tests::runtime_profile_override_takes_precedence_over_legacy_profile ... ok
+test tests::scripts_only_tooling_diff_routes_to_tooling_lanes_not_workflow_lanes ... ok
+test tests::seeded_pr_thread_context_tells_lanes_not_to_reask_answered_questions ... ok
+test tests::scoped_sibling_scan_limit_remains_coverage_limited ... ok
+test tests::runtime_profile_caps_model_concurrency ... ok
+test tests::sensor_tests::running_summary_reports_planned_skipped_sensor_evidence ... ok
+test tests::sensor_tests::cargo_allow_foreign_dialect_reason_wins_before_box_guard ... ok
+test tests::review_body_summary_only_body_parses_known_values ... ok
+test tests::sensor_tests::sensor_jobs_use_runtime_profile_limit ... ok
+test tests::sensor_tests::sensor_jobs_cap_to_runnable_sensors ... ok
+test tests::sensor_tests::skipped_required_sensor_is_missing_review_evidence ... ok
+test tests::sensor_tests::skipped_out_of_scope_sensors_are_not_missing_review_evidence ... ok
+test tests::sensor_tests::tool_selectors_filter_planned_sensors ... ok
+test tests::sensor_tests::unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap ... ok
+test tests::sensor_tests::gh_runner_profiles_carry_ripr_lease_override_quick_boxes_do_not ... ok
+test tests::sensor_tests::unsafe_tokens_trigger_native_risk ... ok
+test tests::sensor_tests::zero_sensor_runtime_limit_is_rejected ... ok
+test tests::sibling_failed_objection_completeness_claim_is_not_refuted ... ok
+test tests::sibling_source_route_prompt_requires_scan_boundaries ... ok
+test tests::sibling_summary_completeness_claim_becomes_verification_observation ... ok
+test tests::skipped_model_lanes_are_missing_evidence_when_review_work_was_suppressed ... ok
+test tests::skipped_out_of_scope_sensors_are_not_missing_review_evidence ... ok
+test tests::sensor_tests::tool_gate_scope_outside_allowlist_is_receipted_and_stripped ... ok
+test tests::skipped_required_sensor_is_missing_review_evidence ... ok
+test tests::stale_prior_resolutions_cannot_satisfy_the_current_revision ... ok
+test tests::sensor_tests::sensor_timeout_resolves_per_profile_with_repo_override_winning ... ok
+test tests::structural_red_green_does_not_answer_source_route_question ... ok
+test tests::summary_only_body_post_all_does_not_create_payload_without_summary_findings ... ok
+test tests::suggested_follow_up_renders_in_pr_body_and_never_blocks ... ok
+test tests::sensor_tests::unsafe_review_swarm_recommended_config_loads_advisory_floor ... ok
+test tests::summary_only_body_post_all_posts_non_substantive_findings ... ok
+test tests::summary_only_body_post_substantive_withholds_non_substantive_findings ... ok
+test tests::summary_only_guard_rejects_unsupported_model_findings ... ok
+test tests::pr_thread_context_fetches_github_thread_snapshot ... ok
+test tests::summary_only_withheld_terminal_reason_names_policy_and_counts ... ok
+test tests::suppressed_body_skip_receipt_names_policy_and_counts ... ok
+test tests::terminal_state_fails_intelligent_ci_required_sensor_gap ... ok
+test tests::summary_only_finding_substantive_classification ... ok
+test tests::terminal_state_keeps_model_off_runs_artifact_only ... ok
+test tests::summary_only_body_suppress_withholds_substantive_findings ... ok
+test tests::summary_only_body_post_substantive_posts_substantive_findings ... ok
+test tests::terminal_state_marks_surviving_pr_body_as_reviewer_attention ... ok
+test tests::terminal_state_marks_clean_usable_review_sufficient ... ok
+test tests::terminal_state_marks_unusable_auto_run_failed_to_review ... ok
+test tests::tests_oracle_prompt_batches_oracle_critique_and_convergence ... ok
+test tests::tool_policy_known_keys_match_serialized_fields ... ok
+test tests::ub_review_gate_workflow_uses_contained_candidate_posture ... ok
+test tests::unknown_lane_selector_is_rejected ... ok
+test tests::unreceipted_proof_request_tasks_skip_already_receipted_seeded_request ... ok
+test tests::unsafe_review_comment_plan_enters_compiler_intake ... ok
+test tests::unsafe_review_comment_plan_stale_anchor_uses_shared_inline_guard ... ok
+test tests::unknown_policy_keys_are_stripped_with_receipts_keeping_valid_siblings ... ok
+test tests::turn_one_persistence_failure_composes_to_exact_inconclusive_gate ... ok
+test tests::unsafe_review_comment_plan_suggestion_enters_compiler_intake ... ok
+test tests::validate_tests::candidate_only_lanes_cannot_emit_inline_comments ... ok
+test tests::validate_tests::degraded_model_lane_is_attempted_but_not_missing_evidence ... ok
+test tests::validate_tests::inline_guard_accepts_only_right_side_diff_lines ... ok
+test tests::unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap ... ok
+test tests::ub_review_example_config_loads_clean_and_demonstrates_schema ... ok
+test tests::validate_tests::github_payload_strips_lane_identity_that_artifacts_keep ... ok
+test tests::validate_tests::lane_output_split_accepts_scalar_evidence_strings ... ok
+test tests::validate_tests::lane_output_split_degrades_contentful_malformed_output ... ok
+test tests::validate_tests::lane_output_split_degrades_contentful_schema_wrong_json ... ok
+test tests::validate_tests::inline_guard_demotes_overlong_comment_to_summary_only ... ok
+test tests::validate_tests::lane_output_split_degrades_scalar_sequence_fields ... ok
+test tests::validate_tests::inline_length_walls_demote_then_truncate_and_keep_the_anchor ... ok
+test tests::validate_tests::lane_output_split_rejects_empty_unusable_output ... ok
+test tests::validate_tests::scoped_sibling_scan_limit_remains_coverage_limited ... ok
+test tests::validate_tests::proof_intent_validation_rejects_unsafe_targets_and_clamps_value ... ok
+test tests::validate_tests::sibling_failed_objection_completeness_claim_is_not_refuted ... ok
+test tests::ci_audit_tests::setup_ci_open_pr_creates_branch_files_and_pr_with_receipts ... ok
+test tests::validate_tests::sibling_source_route_prompt_requires_scan_boundaries ... ok
+test tests::validate_tests::summary_only_guard_rejects_unsupported_model_findings ... ok
+test tests::validate_tests::model_public_privacy_join_retains_private_audit_and_public_evidence ... ok
+test tests::validate_tests::lane_output_split_accepts_observations_candidates_and_proof_requests ... ok
+test tests::validate_tests::sibling_summary_completeness_claim_becomes_verification_observation ... ok
+test tests::work_queue_late_phase_sensor_stays_pending_initial_packet ... ok
+test tests::workflow_only_diff_routes_to_workflow_lanes ... ok
+test tests::workflow_pr_body_uses_workflow_route_language ... ok
+test tests::witness_artifacts_track_review_statuses ... ok
+test tests::ub_review_self_profile_loads_baseline_gate_tools ... ok
+test tests::zero_llm_runtime_limit_is_rejected ... ok
+test tests::zero_model_concurrency_is_rejected ... ok
+test tests::verifier_script_scope_noise_stays_artifact_only ... ok
+test tests::well_formed_policy_sections_record_no_policy_errors ... ok
+test tests::work_queue_includes_baseline_sensor_packet_policies ... ok
+test validate::claim_identity_tests::evidence_rank_is_receipt_first_then_source_thread_and_model ... ok
+test validate::claim_identity_tests::same_inline_claim_discriminates_exact_family_and_code_identity ... ok
+test tools::tests::tool_gate_outcome_records_malformed_gate_decision_receipt ... ok
+test tools::tests::tool_gate_outcome_passes_with_gate_decision_receipt ... ok
+test validate::inline_demotion_tests::anchoring_failure_keeps_the_model_finding_out_of_the_diagnostic ... ok
+test validate::claim_identity_tests::structural_identity_requires_family_and_code_token ... ok
+test validate::inline_demotion_tests::demoted_anchor_is_not_satisfied_by_a_longer_line_number ... ok
+test tools::tests::tool_gate_outcome_evaluates_ripr_badge_json_receipt ... ok
+test validate::inline_demotion_tests::refuter_demotion_keeps_the_model_finding_and_parks_the_diagnostic ... ok
+test validate::inline_demotion_tests::demoted_reason_withholds_unsupported_claims_and_caps_length ... ok
+test validate::suggestion_gate_tests::commented_replacement_text_is_not_treated_as_commentary ... ok
+test validate::suggestion_gate_tests::suggestion_anchor_gate_requires_a_real_edit_at_the_anchored_indentation ... ok
+test validate::suggestion_gate_tests::suggestion_text_gate_admits_code_and_refuses_uncommittable_text ... ok
+test worker_proof_tests::classify_passes_through_passed_timed_out_skipped ... ok
+test worker_proof_tests::classify_scopes_sanitizer_ub_to_sanitizer_kind_only ... ok
+test worker_proof_tests::symbolic_worker_revision_is_rejected_before_any_spawn ... ok
+test validate::inline_demotion_tests::demoted_anchoring_failure_survives_into_the_pull_request_body ... ok
+test worker_proof_tests::worker_attempt_paths_encode_logical_ids_before_cleanup ... ok
+test worker_proof_tests::worker_invalidation_attempts_both_canonical_files_after_one_failure ... ok
+test tools::tests::tool_gate_outcome_records_missing_threshold_receipt ... ok
+test tests::write_review_artifacts_records_gate_outcome_before_run_exit_decision ... ok
+test worker_proof_tests::readable_stale_receipt_cannot_survive_failed_attempt_preparation ... ok
+test worker_proof_tests::unconfirmed_worker_command_withholds_nonterminal_canonical_ledger ... ok
+test worker_proof_tests::unresolved_worker_request_never_spawns_the_proof_command ... ok
+test worker_proof_tests::worker_preflight_and_proof_are_distinct_revision_bound_tasks ... ok
+test worker_proof_tests::worker_publication_failure_releases_only_receipt_pending_tasks ... ok
+test worker_proof_tests::worker_stream_failure_reconciles_every_receipt_pending_command ... ok
+test worker_proof_tests::worker_requires_the_checked_out_clean_request_head ... ok
+test worker_proof_tests::worker_request_timeout_can_reduce_but_never_raise_operator_ceiling ... ok
+test sensors::tests::sensor_timeout_status_is_returned ... ok
+test tests::child_output_file_wait_reports_timeout_and_cleans_temp_files ... ok
+test lane_packets::tests::wait_error_branch_reaps_live_child_before_returning ... ok
+
+test result: ok. 1136 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.41s
+
+     Running tests/authority_incidents.rs (/workspace/scratch/2e70149a8e59/rust-projection-1292-target/debug/deps/authority_incidents-b84c7734c7d62ed5)
+
+running 6 tests
+test opaque_secret_prefix_requires_token_context ... ok
+test pr_915_preserves_legacy_pass_with_required_proof_unproven ... ok
+test pr_921_preserves_cross_projection_contradictions ... ok
+test pr_916_preserves_legacy_pass_with_truthful_not_proven ... ok
+test corpus_is_complete_sanitized_and_digest_bound ... ok
+test corpus_rejects_mutation_missing_files_secrets_and_bad_evidence ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/cli.rs (/workspace/scratch/2e70149a8e59/rust-projection-1292-target/debug/deps/cli-75b784530235b56a)
+
+running 62 tests
+test action_forwards_prior_resolved_candidates_input ... ok
+test action_forwards_complete_trusted_diff_admission_inputs ... ok
+test audit_ci_tokenless_cli_writes_receipts_without_repo_side_effects ... ok
+test doctor_reports_provider_key_env_status_without_values ... ok
+test doctor_reports_advisory_missing_tool_fix_without_requiring_core_tools ... ok
+test cargo_allow_foreign_policy_ledger_skips_with_linked_artifact_reason ... ok
+test doctor_standard_image_env_requires_core_tools ... ok
+test cache_warm_writes_base_and_rule_manifests ... ok
+test declared_pr_base_measures_only_stack_layer ... ok
+test env_scrub_driver_invokes_isolated_plan ... ignored, driver: invoked as a subprocess by the env-scrub test
+test doctor_reports_advisory_stale_tool_fix_without_requiring_core_tools ... ok
+test fake_setup_ci_listener_survives_handler_error ... ok
+test doctor_rejects_failed_version_probe_even_when_it_prints_the_pin ... ok
+test gate_workflow_grants_actions_read_for_prior_resolved_candidates_lookup ... ok
+test gh_runner_tool_installer_pins_core_rust_sensor_versions ... ok
+test doctor_require_core_tools_fails_missing_standard_image_tool ... ok
+test doctor_require_core_tools_fails_stale_actionlint_version ... ok
+test doctor_require_core_tools_fails_stale_cargo_allow_version ... ok
+test doctor_require_core_tools_fails_stale_tokmd_version ... ok
+test dry_run_accepts_intelligent_ci_mode ... ok
+test duplicate_model_proof_requests_execute_once_with_all_request_ids ... ok
+test fake_core_review_tools_with_versions_emit_requested_versions ... ok
+test gate_check_exit_codes_follow_fail_on_gate_resolution ... ok
+test init_guide_flags_bad_existing_audit_ci_receipts_without_failing ... ok
+test init_guide_lists_existing_package_scripts_as_proof_candidates ... ok
+test init_guide_summarizes_existing_audit_ci_receipts ... ok
+test init_writes_file_driven_setup_guide_from_repo_scan ... ok
+test model_provider_fixture_ignores_ambient_event_body ... ok
+test intelligent_ci_runs_advisory_proof_planner_lane_before_request_broker ... ok
+test isolated_command_scrubs_ambient_profile_env_from_child_runs ... ok
+test model_auto_run_hits_fake_minimax_provider_and_writes_artifacts ... ok
+test model_auto_run_overlaps_initial_diff_proof_with_model_lanes ... ok
+test post_failure_attempts_cleanup_and_receipts_cleanup_success ... ok
+test post_failure_receipts_cleanup_failure ... ok
+test post_payload_renders_suggestion_blocks_for_github_api ... ok
+test post_receipt_marks_semantically_invalid_review_json_invalid ... ok
+test post_receipt_rejects_boilerplate_review_body_before_payload_write ... ok
+test post_receipt_rejects_off_diff_inline_comment_before_payload_write ... ok
+test post_receipt_writes_success_receipt_with_fake_github_api ... ok
+test model_auto_run_overlaps_seeded_required_proof_with_model_lanes ... ok
+test model_auto_run_preserves_contentful_non_json_lane_output_as_degraded ... ok
+test quality_backfill_workflow_is_artifact_only_not_pr_gate_noise ... ok
+test model_auto_run_retries_transient_primary_failure_on_provider_fallback ... ok
+test model_outage_degrades_review_without_reddening_enforced_gate ... ok
+test release_resolver_validates_binary_version_before_acceptance ... ok
+test review_image_tool_installer_uses_tool_dir_as_install_prefix ... ok
+test model_suggested_manual_cost_proof_request_is_rejected_before_execution ... ok
+test model_suggested_shell_token_proof_request_is_rejected_before_execution ... ok
+test onboarding_help_matches_supported_cli_contract ... ok
+test release_resolver_executes_identity_fixture_cases ... ok
+test plan_and_dry_run_write_expected_packet_tree ... ok
+test quality_backfill_cli_records_missing_trend_without_failing ... ok
+test quality_backfill_cli_writes_rolling_artifact_with_source_receipts ... ok
+test quality_github_outcomes_cli_writes_thread_state_receipt ... ok
+test source_runner_requires_committed_regular_lockfile_before_locked_build ... ok
+test run_executes_focused_proof_and_writes_receipts ... ok
+test setup_ci::setup_ci_open_pr_cli_creates_payloads_and_terminal_receipt ... ok
+test setup_ci::setup_ci_print_pr_cli_materializes_accepted_preview_files ... ok
+test setup_ci::setup_ci_print_pr_preserves_missing_and_valid_config_semantics ... ok
+test setup_ci::setup_ci_print_pr_rejects_malformed_existing_config_before_outputs ... ok
+test setup_ci::setup_ci_print_pr_rejects_unreadable_existing_config_before_outputs ... ok
+test synchronize_pass_honors_profile_post_review_on_policy ... ok
+
+test result: ok. 61 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 8.52s
+
+     Running tests/cli_contract.rs (/workspace/scratch/2e70149a8e59/rust-projection-1292-target/debug/deps/cli_contract-8e7bd953a9d3f4d0)
+
+running 4 tests
+test handoff_docs_cover_current_product_gate_surfaces ... ok
+test artifact_contract_docs_pin_receipt_route_source_anchors ... ok
+test artifact_contract_docs_match_ci_audit_verifier_coverage ... ok
+test adoption_docs_match_setup_ci_current_surface ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/cli_run.rs (/workspace/scratch/2e70149a8e59/rust-projection-1292-target/debug/deps/cli_run-06e35495600cb059)
+
+running 4 tests
+test run_records_policy_parse_error_as_receipted_gate_failure ... ok
+test run_with_ledger_path_writes_bounded_shared_context ... ok
+test trusted_diff_run_uses_base_root_and_explicit_objects ... ok
+test run_with_pr_thread_context_seeds_shared_context ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s
+
+     Running tests/quality_backfill_workflow.rs (/workspace/scratch/2e70149a8e59/rust-projection-1292-target/debug/deps/quality_backfill_workflow-8c557ac23e3dd85d)
+
+running 1 test
+test quality_backfill_publishes_only_compact_current_output ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/release_result_planes.rs (/workspace/scratch/2e70149a8e59/rust-projection-1292-target/debug/deps/release_result_planes-6cbd2061bf052e09)
+
+running 1 test
+test advisory_result_planes_cannot_override_legacy_gate_enforcement ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.24s
+
+     Running tests/self_gate_containment.rs (/workspace/scratch/2e70149a8e59/rust-projection-1292-target/debug/deps/self_gate_containment-47fca3b54f3adcc3)
+
+running 3 tests
+test coverage_oidc_is_isolated_in_a_non_candidate_telemetry_job ... ok
+test candidate_gate_job_is_model_off_artifact_only_and_without_privileged_inputs ... ok
+test independent_baseline_isolates_candidate_evidence_from_trusted_finalization ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (/workspace/scratch/2e70149a8e59/rust-projection-1292-target/debug/deps/xtask-c30c91462ab40608)
+
+running 71 tests
+test ripr_install_hint_uses_the_content_addressed_identity_contract ... ok
+test task_projection_reader::reader::tests::aggregate_cap_accepts_exact_total_then_refuses_even_empty_input ... ok
+test task_projection_reader::reader::tests::canonical_json_sorts_nested_utf8_keys_and_retains_exact_u128 ... ok
+test task_projection_reader::reader::tests::canonical_report_metadata_is_sorted_compact_utf8_without_native_numbers ... ok
+test task_projection_reader::reader::tests::aggregate_overflow_reads_remaining_plus_one_and_charges_probe ... ok
+test task_projection_reader::reader::tests::bounded_row_and_string_helpers_fail_closed ... ok
+test task_projection_reader::reader::tests::file_overflow_charges_exactly_one_probe_byte_and_caches_error ... ok
+test task_projection_reader::reader::tests::every_symlink_component_is_rejected_including_broken_links ... ok
+test task_projection_reader::reader::tests::file_cap_accepts_exact_limit_and_empty_files ... ok
+test task_projection_reader::reader::tests::input_must_be_a_regular_file_and_missing_child_is_unavailable ... ok
+test task_projection_reader::reader::tests::integer_domains_reject_bool_fraction_negative_and_overflow ... ok
+test task_projection_reader::reader::tests::mapping_missing_or_null_is_empty_but_nonobject_is_invalid ... ok
+test task_projection_reader::reader::tests::issues_are_deduplicated_bounded_and_sanitize_control_text ... ok
+test task_projection_reader::reader::tests::json_load_preserves_raw_inventory_on_invalid_json_shape_or_schema ... ok
+test task_projection_reader::reader::tests::missing_optional_input_remains_cached_on_required_revisit ... ok
+test task_projection_reader::reader::tests::native_decoder_handles_odd_even_backslashes_and_surrogate_keys ... ok
+test task_projection_reader::reader::tests::labels_use_bounded_debug_printable_unicode_rendering ... ok
+test task_projection_reader::reader::tests::production_limits_are_pinned ... ok
+test task_projection_reader::reader::tests::paths_require_canonical_posix_relative_spelling ... ok
+test task_projection_reader::reader::tests::native_decoder_independently_enforces_json_lexical_grammar ... ok
+test task_projection_reader::reader::tests::lease_quantities_obey_u32_and_u64_domains_without_bool_coercion ... ok
+test task_projection_reader::reader::tests::root_must_exist_and_be_a_directory ... ok
+test task_projection_reader::reader::tests::strict_json_rejects_recursive_and_escape_decoded_duplicate_keys ... ok
+test task_projection_reader::reader::tests::root_is_resolved_once_and_root_symlink_is_allowed ... ok
+test task_projection_reader::reader::tests::unique_attempt_limit_counts_missing_and_invalid_names ... ok
+test task_projection_reader::reader::tests::successful_reads_cache_raw_bytes_and_source_digest ... ok
+test task_projection_reader::reader::tests::strict_json_rejects_nonfinite_numbers_encoding_bom_and_trailing_data ... ok
+test tests::affected_packages_include_all_packages_for_root_manifest_and_lockfile ... ok
+test tests::affected_packages_include_package_manifest_changes ... ok
+test task_projection_reader::reader::tests::real_private_number_keys_remain_objects ... ok
+test tests::clippy_findings_do_not_expand_empty_line_sets_to_whole_file ... ok
+test tests::epoch_to_ymd_matches_known_dates ... ok
+test tests::local_ripr_console_capture_is_bounded_and_keeps_head_and_tail ... ok
+test tests::clippy_findings_match_absolute_diagnostic_paths ... ok
+test tests::bun_gate_pin_policy_accepts_consistent_docs ... ok
+test tests::bun_gate_pin_policy_rejects_example_pin_drift ... ok
+test tests::clip_capture_bounds_streams_with_head_tail_and_marker ... ok
+test tests::local_ripr_rejects_untracked_rust_and_missing_merge_base ... ok
+test tests::local_ripr_schema_reconciles_suppressed_and_exposed_findings ... ok
+test tests::local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails ... ok
+test tests::local_ripr_options_and_rust_input_contract_are_explicit ... ok
+test tests::missing_tool_install_hints_match_standard_runner_fixes ... ok
+test tests::missing_tool_receipt_is_never_success_and_carries_install_hint ... ok
+test tests::local_ripr_missing_tool_is_loud_and_clears_stale_artifacts ... ok
+test tests::parse_policy_date_accepts_valid_yyyy_mm_dd ... ok
+test tests::parse_policy_date_rejects_bad_shapes ... ok
+test tests::parse_policy_date_rejects_impossible_calendar_dates ... ok
+test tests::precommit_out_dir_starts_fresh ... ok
+test tests::ripr_suppression_ledger_policy_accepts_well_formed_entries ... ok
+test tests::ripr_suppression_ledger_policy_rejects_duplicate_finding_id ... ok
+test tests::ripr_suppression_ledger_policy_rejects_headerless_append ... ok
+test tests::ripr_suppression_ledger_policy_rejects_malformed_toml ... ok
+test tests::ripr_suppression_ledger_policy_rejects_missing_required_field ... ok
+test tests::ripr_suppression_ledger_policy_rejects_non_array_suppressions_key ... ok
+test tests::ripr_suppression_ledger_policy_rejects_non_table_entries ... ok
+test tests::local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs ... ok
+test tests::ripr_suppression_ledger_policy_rejects_whitespace_only_required_field ... ok
+test tests::smoke_script_locks_every_cargo_invocation ... ok
+test tests::today_uses_the_actual_wall_clock_date ... ok
+test tests::validate_allow_at_keeps_overdue_review_and_same_day_expiry_valid ... ok
+test tests::validate_allow_at_uses_injected_date_for_expiry_boundary ... ok
+test tests::validate_allow_date_validation_rejects_review_before_created ... ok
+test tests::validate_allow_date_validation_rejects_expires_before_review ... ok
+test tests::validate_allow_date_validation_rejects_unparseable_dates ... ok
+test tests::local_ripr_no_common_ancestor_has_actionable_shallow_clone_error ... ok
+test tests::local_ripr_clean_and_non_rust_diffs_are_explicit_skips ... ok
+test tests::local_ripr_unsuppressed_count_is_advisory_not_a_local_threshold ... ok
+test tests::smoke_base_rejects_shallow_and_empty_history_with_actionable_errors ... ok
+test tests::local_ripr_wrong_version_and_malformed_badge_fail_closed ... ok
+test task_projection_reader::reader::tests::native_decoder_bounds_source_depth_containers_and_total_nodes ... ok
+test task_projection_reader::reader::tests::exact_production_file_aggregate_and_attempt_limits ... ok
+
+test result: ok. 71 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.30s
+
+     Running tests/smoke_base_cli.rs (/workspace/scratch/2e70149a8e59/rust-projection-1292-target/debug/deps/smoke_base_cli-c623f3c1be3079d5)
+
+running 1 test
+test smoke_base_cli_prints_one_usable_resolved_revision ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/task_projection_reader_parity.rs (/workspace/scratch/2e70149a8e59/rust-projection-1292-target/debug/deps/task_projection_reader_parity-b42bca65b41e15e7)
+
+running 10 tests
+test serde_json_ambient_contract_keeps_private_raw_value_keys_as_objects ... ok
+test serde_json_ambient_contract_keeps_private_number_keys_as_objects ... ok
+test serde_json_ambient_contract_rejects_nonfinite_float_exponents ... ok
+test sensor_parent_symlink_cannot_escape_reader_root ... ok
+test malformed_source_retains_independent_later_input_evidence ... ok
+test worker_reader_preserves_full_u128_duration_domain ... ok
+test escaped_source_inventory_report_overflow_retains_bounded_unavailable_receipt ... ok
+test actual_reader_matches_python_packet_sources_and_cached_bytes ... ok
+test actual_reader_records_explicit_tighter_python_encoding_and_number_boundary ... ok
+test actual_reader_matches_python_strict_json_on_bounded_grammar_vectors ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s
+
+RESULT exit=0
+
+=== cargo clippy --workspace --all-targets --locked --offline -- -D warnings ===
+    Checking xtask v0.1.0 (/workspace/scratch/2e70149a8e59/rust-projection-1292/xtask)
+    Checking ub-review v0.1.2 (/workspace/scratch/2e70149a8e59/rust-projection-1292)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 24.52s
+RESULT exit=0
+
+=== cargo doc --workspace --no-deps --locked --offline ===
+ Documenting ub-review v0.1.2 (/workspace/scratch/2e70149a8e59/rust-projection-1292)
+ Documenting xtask v0.1.0 (/workspace/scratch/2e70149a8e59/rust-projection-1292/xtask)
+warning: `rust_test_regions` is both a function and a module
+ --> src/proof/worktree.rs:9:12
+  |
+9 | //! (see [`rust_test_regions`] and [`crate::proof::patch_split`]).
+  |            ^^^^^^^^^^^^^^^^^ ambiguous link
+  |
+  = note: `#[warn(rustdoc::broken_intra_doc_links)]` on by default
+help: to link to the function, add parentheses
+  |
+9 | //! (see [`rust_test_regions()`] and [`crate::proof::patch_split`]).
+  |                             ++
+help: to link to the module, prefix with `mod@`
+  |
+9 | //! (see [`mod@rust_test_regions`] and [`crate::proof::patch_split`]).
+  |            ++++
+
+warning: `ub-review` (bin "ub-review" doc) generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.74s
+   Generated /workspace/scratch/2e70149a8e59/rust-projection-1292-target/doc/ub_review/index.html and 1 other file
+RESULT exit=0
+
+=== cargo xtask policy-check ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `/workspace/scratch/2e70149a8e59/rust-projection-1292-target/debug/xtask policy-check`
+warning: /workspace/scratch/2e70149a8e59/rust-projection-1292/policy/allow.toml exception `clippy-too-many-arguments-artifact-writers` `review_after` (2026-10-10) is overdue — review or renew
+warning: /workspace/scratch/2e70149a8e59/rust-projection-1292/policy/allow.toml exception `task-ledger-shadow` `review_after` (2026-09-27) is overdue — review or renew
+warning: /workspace/scratch/2e70149a8e59/rust-projection-1292/policy/allow.toml exception `non-rust-github-actions` `review_after` (2026-10-10) is overdue — review or renew
+warning: /workspace/scratch/2e70149a8e59/rust-projection-1292/policy/allow.toml exception `non-rust-config-toml` `review_after` (2026-09-03) is overdue — review or renew
+warning: /workspace/scratch/2e70149a8e59/rust-projection-1292/policy/allow.toml exception `non-rust-repo-gate-config` `review_after` (2026-09-06) is overdue — review or renew
+warning: /workspace/scratch/2e70149a8e59/rust-projection-1292/policy/allow.toml exception `non-rust-gitattributes` `review_after` (2026-09-21) is overdue — review or renew
+warning: /workspace/scratch/2e70149a8e59/rust-projection-1292/policy/allow.toml exception `non-rust-release-scripts` `review_after` (2026-10-10) is overdue — review or renew
+warning: /workspace/scratch/2e70149a8e59/rust-projection-1292/policy/allow.toml exception `non-rust-fixtures` `review_after` (2026-09-03) is overdue — review or renew
+warning: /workspace/scratch/2e70149a8e59/rust-projection-1292/policy/allow.toml exception `non-rust-action-metadata` `review_after` (2026-09-03) is overdue — review or renew
+warning: /workspace/scratch/2e70149a8e59/rust-projection-1292/policy/allow.toml exception `non-rust-ast-grep-rules` `review_after` (2026-09-03) is overdue — review or renew
+policy check passed: 6 policy files, 15 allow receipts, 5 CI lanes, 2 risk packs
+RESULT exit=0
+
+=== python3 scripts/verify-bun-review-artifacts.py --self-test ===
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+SKIP: Windows receipt junction regression requires win32
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+[legacy_symbolic_only] no revision-admission.json; packet is verified as legacy compatibility evidence only
+Bun review artifact verifier self-test passed
+RESULT exit=0
+
+=== python3 scripts/test-task-projections.py ===
+...................................................
+----------------------------------------------------------------------
+Ran 51 tests in 3.045s
+
+OK
+RESULT exit=0
+
+=== git diff --check ===
+RESULT exit=0

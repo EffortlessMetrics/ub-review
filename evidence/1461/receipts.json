@@ -1,0 +1,50 @@
+[
+  {
+    "name": "decoded_duplicate",
+    "tree": "dbb167f7bb7c834e3a9bc8e277cf90188b06ea5f",
+    "patch_sha256": "d3ca309469e77913002bced052a0d1e969ca8083bcdc87d161bc937f34e51e5a",
+    "command": "cargo test -p xtask --locked --test task_projection_reader_parity actual_reader_matches_python_strict_json_on_bounded_grammar_vectors",
+    "exit": 101,
+    "observed": "compiled; focused actual reader test failed"
+  },
+  {
+    "name": "exact_u128",
+    "tree": "75dd0a7827db2a7f5d46a125cae006adc4eae985",
+    "patch_sha256": "8b2d77c930de628f8aad96794ce730d2d80a37ac1cfc76da0a9f30e52103a76f",
+    "command": "cargo test -p xtask --locked --test task_projection_reader_parity worker_reader_preserves_full_u128_duration_domain",
+    "exit": 101,
+    "observed": "compiled; focused actual reader test failed"
+  },
+  {
+    "name": "symlink",
+    "tree": "c1689b99ffa016c07c01c5e2897ae686284bf3fc",
+    "patch_sha256": "6f50d8d7a342517227219dbadabde9e96b85b16ae44edfff3bafce6e8cf56bc2",
+    "command": "cargo test -p xtask --locked --test task_projection_reader_parity sensor_parent_symlink_cannot_escape_reader_root",
+    "exit": 101,
+    "observed": "compiled; focused actual reader test failed"
+  },
+  {
+    "name": "byte_probe",
+    "tree": "a7a12b1dcf1d35498c9f424e06f42d96060d73f3",
+    "patch_sha256": "03b0d93ede30cc202247f2c5c8dd644a62f2c29908a54cbff78028de6eb08a77",
+    "command": "cargo test -p xtask --locked --bin xtask file_overflow_charges_exactly_one_probe_byte_and_caches_error",
+    "exit": 101,
+    "observed": "compiled; focused actual reader test failed"
+  },
+  {
+    "name": "raw_cache",
+    "tree": "3f817fb0ad45fac5abd93949910210c00451a0f0",
+    "patch_sha256": "4ecef9effae91dd66e9a1d7954cced654014c15dea2626e5b7e526ec73342278",
+    "command": "cargo test -p xtask --locked --bin xtask successful_reads_cache_raw_bytes_and_source_digest",
+    "exit": 101,
+    "observed": "compiled; focused actual reader test failed"
+  },
+  {
+    "name": "report_overflow",
+    "tree": "fb383f7f6d4abcb4e4217cb634afd4b229bc34c0",
+    "patch_sha256": "8ddf17c5a480277eda6cc2111b24409b3fa945ee7bd171ba61b9f616fb8c00b2",
+    "command": "cargo test -p xtask --locked --test task_projection_reader_parity escaped_source_inventory_report_overflow_retains_bounded_unavailable_receipt",
+    "exit": 101,
+    "observed": "compiled; focused actual reader test failed"
+  }
+]

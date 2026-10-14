@@ -1,0 +1,17 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running tests/task_projection_reader_parity.rs (/workspace/scratch/2e70149a8e59/review-projection-frozen-target/debug/deps/task_projection_reader_parity-d2deca1b3f76f363)
+
+running 10 tests
+test serde_json_ambient_contract_keeps_private_number_keys_as_objects ... ok
+test serde_json_ambient_contract_keeps_private_raw_value_keys_as_objects ... ok
+test serde_json_ambient_contract_rejects_nonfinite_float_exponents ... ok
+test sensor_parent_symlink_cannot_escape_reader_root ... ok
+test malformed_source_retains_independent_later_input_evidence ... ok
+test worker_reader_preserves_full_u128_duration_domain ... ok
+test escaped_source_inventory_report_overflow_retains_bounded_unavailable_receipt ... ok
+test actual_reader_matches_python_packet_sources_and_cached_bytes ... ok
+test actual_reader_records_explicit_tighter_python_encoding_and_number_boundary ... ok
+test actual_reader_matches_python_strict_json_on_bounded_grammar_vectors ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+

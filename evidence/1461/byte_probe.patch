@@ -1,0 +1,13 @@
+diff --git a/src/task_projection_reconciliation/reader.rs b/src/task_projection_reconciliation/reader.rs
+index 08a9c44..f303613 100644
+--- a/src/task_projection_reconciliation/reader.rs
++++ b/src/task_projection_reconciliation/reader.rs
+@@ -325,7 +325,7 @@ impl PacketReader {
+         if remaining == 0 {
+             return Err(PacketError::ByteBudgetExceeded);
+         }
+-        let read_limit = self.limits.file_bytes.min(remaining) + 1;
++        let read_limit = self.limits.file_bytes.min(remaining);
+         let file = File::open(path).map_err(|_| PacketError::InputIo)?;
+         let mut data = Vec::new();
+         let read_result = file.take(read_limit as u64).read_to_end(&mut data);
