@@ -1,7 +1,7 @@
 //! Test-only proposal: currentness/schema admission; no production migration.
 #[path = "common/currentness_1067.rs"]
 mod contract;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use contract::{Admission, CANDIDATE_SOURCE, decode, fixture, verify};
 use serde_json::{Value, json};
 
@@ -184,6 +184,74 @@ fn currentness_1067_duplicate_ids_and_keys_reject() {
     ] {
         assert!(decode(bytes).is_err());
     }
+}
+
+#[test]
+fn currentness_1067_raw_tool_and_mode_admission_rejects_invalid_values() -> Result<()> {
+    for (candidate, admission, source) in [
+        (true, Admission::CandidateA734, CANDIDATE_SOURCE),
+        (false, Admission::LegacyUnspecified0100, "registry:0.10.0"),
+    ] {
+        for (field, invalid) in [
+            ("tool", json!("other")),
+            ("tool", Value::Null),
+            ("tool", json!(false)),
+            ("tool", json!(0)),
+            ("tool", json!({})),
+            ("mode", json!("partial")),
+            ("mode", Value::Null),
+            ("mode", json!(false)),
+            ("mode", json!(0)),
+            ("mode", json!({})),
+        ] {
+            let (mut raw, badge) = fixture(candidate);
+            raw.as_object_mut()
+                .context("raw fixture is an object")?
+                .insert(field.to_owned(), invalid);
+            let error = verify(&raw, &badge, admission, source)
+                .err()
+                .context("invalid raw tool/mode was accepted")?;
+            assert_eq!(error.to_string(), "raw admission", "field {field}");
+        }
+
+        for field in ["tool", "mode"] {
+            let (mut raw, badge) = fixture(candidate);
+            raw.as_object_mut()
+                .context("raw fixture is an object")?
+                .remove(field);
+            let error = verify(&raw, &badge, admission, source)
+                .err()
+                .context("missing raw tool/mode was accepted")?;
+            assert_eq!(error.to_string(), "raw admission", "missing {field}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn currentness_1067_unique_decoder_roundtrips_mixed_recursive_json_values() -> Result<()> {
+    let bytes = br#"{
+        "signed_min":-9223372036854775808,
+        "negative":-17,
+        "unsigned_max":18446744073709551615,
+        "fractional":1.125,
+        "null_value":null,
+        "booleans":[true,false],
+        "escaped":"quote: \" slash: \\ newline: \n tab: \t",
+        "nested":[{"inner":{"values":[-1,0,18446744073709551615]}}]
+    }"#;
+    let expected = json!({
+        "signed_min": i64::MIN,
+        "negative": -17,
+        "unsigned_max": u64::MAX,
+        "fractional": 1.125_f64,
+        "null_value": null,
+        "booleans": [true, false],
+        "escaped": "quote: \" slash: \\ newline: \n tab: \t",
+        "nested": [{"inner": {"values": [-1, 0, u64::MAX]}}],
+    });
+    assert_eq!(decode(bytes)?, expected);
+    Ok(())
 }
 
 #[test]
