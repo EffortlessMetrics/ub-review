@@ -1,0 +1,16 @@
+
+running 11 tests
+test loader_rejects_symlinked_fixture_member ... ok
+test fixed_required_starvation_fixture_joins_sources ... ok
+test loader_rejects_private_transfers_payloads_and_missing_explicit_unknowns ... ok
+test loader_rejects_shortened_wrapper_argv_at_complete_command_join ... ok
+test loader_rejects_swapped_configured_recipes_at_named_rule_join ... ok
+test reordering_preserves_source_joins_without_rewriting_fixed_bytes ... ok
+test loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join ... ok
+test loader_rejects_digest_inventory_paths_and_size_drift ... ok
+test semantic_set_controls_keep_required_timeout_and_witness_boundaries ... ok
+test semantic_source_and_claim_controls_reject_unsupported_joins ... ok
+test semantic_row_controls_reject_authority_and_execution_overclaims ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+

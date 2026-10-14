@@ -1,0 +1,12 @@
+
+running 1 test
+test semantic_set_controls_keep_required_timeout_and_witness_boundaries ... FAILED
+
+failures:
+
+failures:
+    semantic_set_controls_keep_required_timeout_and_witness_boundaries
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.03s
+
+Error: negative control unexpectedly accepted

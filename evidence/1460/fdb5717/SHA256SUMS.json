@@ -1,0 +1,42 @@
+[
+  {
+    "path": "README.md",
+    "bytes": 2023,
+    "sha256": "d8736c918cf5f1e6c0905603a0bbd1071e7d8010348769bb787bba90fc450022"
+  },
+  {
+    "path": "exact-head-all11-output.txt",
+    "bytes": 906,
+    "sha256": "24f51c9e80c6ec5103afa9d512370b3e4f8f52fbbabd41100b0abc860f2bcede"
+  },
+  {
+    "path": "independent-red-green-receipts.json",
+    "bytes": 5489,
+    "sha256": "a946a40972c2fe95c1595a0317b2f1666770b116b3008f8e40ed4b1f192a70f5"
+  },
+  {
+    "path": "overlap-control-validation.log",
+    "bytes": 109901,
+    "sha256": "d99e231a99e100bd071650809b55851a5db2be3251eb1bbfa142e325119c17fb"
+  },
+  {
+    "path": "overlap-doc-final.log",
+    "bytes": 1084,
+    "sha256": "00478dc0806625433c625fee7c291634f99db3b8c29adf12f3a5944447393bb5"
+  },
+  {
+    "path": "precommit-with-ripr.log",
+    "bytes": 757,
+    "sha256": "676bd6c40df69bc26c7500446c938c479e2a0d912ebbdd6259e216a5abd366df"
+  },
+  {
+    "path": "weakened-count-output.txt",
+    "bytes": 339,
+    "sha256": "5cde5f5b3bfa2c5d7596905b7dde55c01612b7c322b3f3994ce60b4fab0dfb17"
+  },
+  {
+    "path": "weakened-count.diff",
+    "bytes": 508,
+    "sha256": "f55aff5bd8982497a3267e2683a614b4fd9d711ce2feae0977f783dcf7916e80"
+  }
+]
