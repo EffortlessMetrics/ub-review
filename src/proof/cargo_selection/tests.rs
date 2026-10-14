@@ -240,6 +240,52 @@ fn native_guard_distinguishes_target_absence_assertion_success_and_metadata_fail
 }
 
 #[test]
+fn unknown_options_decline_only_before_the_harness_terminator() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    fixture(temp.path())?;
+    // Complete selectors isolate unknown options from missing/mixed selection.
+    // The adapter consumes selector values and leaves harness argv after `--`.
+    for (id, suffix, unresolved) in [
+        ("ordinary", vec!["passes"], false),
+        ("unknown-long", vec!["passes", "--mystery"], true),
+        ("unknown-short", vec!["passes", "-Z"], true),
+        ("harness", vec!["passes", "--", "--exact"], false),
+        ("feature-value", vec!["--features", "proof", "passes"], true),
+    ] {
+        let mut tail = vec!["-p", "alpha", "--test", "plain_probe"];
+        tail.extend(suffix);
+        let (result, calls) = invoke(temp.path(), id, &tail)?;
+        assert_eq!(result.unresolved, unresolved, "{id}: {result:?}");
+        assert_eq!(calls, usize::from(!unresolved), "{id}");
+        assert!(
+            result
+                .command
+                .command
+                .ends_with(&spec(temp.path(), &tail).argv.join(" ")),
+            "{id}"
+        );
+        assert!(!result.command.timed_out, "{id}");
+        if unresolved {
+            assert_eq!(result.command.status, "skipped", "{id}");
+            assert_eq!(result.command.exit_code, None, "{id}");
+            assert_eq!(result.command.duration_ms, 0, "{id}");
+            assert!(result.command.reason.contains("unresolved"), "{id}");
+            assert!(
+                !result
+                    .command
+                    .reason
+                    .contains("without integration-test target"),
+                "{id}"
+            );
+        } else {
+            assert_eq!(result.command.status, "passed", "{id}");
+            assert_eq!(result.command.exit_code, Some(0), "{id}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn selectors_outside_exact_adapter_are_unresolved_without_claiming_absence() -> Result<()> {
     let temp = tempfile::tempdir()?;
     fixture(temp.path())?;
