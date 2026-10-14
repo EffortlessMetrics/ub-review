@@ -48,15 +48,21 @@ pub(crate) struct LateSensorDigest {
     pub(crate) status: String,
     pub(crate) reason: String,
     pub(crate) receipt_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) coverage_summary: Option<crate::CoverageSummaryDigest>,
 }
 
 impl LateSensorDigest {
     /// One-line excerpt for routing into a lane continuation prompt.
     pub(crate) fn excerpt(&self) -> String {
-        format!(
+        let mut text = format!(
             "late sensor `{}` status=`{}` reason=`{}` (receipt: {})",
             self.sensor, self.status, self.reason, self.receipt_path
-        )
+        );
+        if let Some(summary) = &self.coverage_summary {
+            text.push_str(&format!("; {}", summary.excerpt()));
+        }
+        text
     }
 }
 
@@ -85,6 +91,8 @@ pub(crate) fn late_sensor_receipt_digests(
                 status,
                 reason,
                 receipt_path,
+                coverage_summary: (id == "coverage")
+                    .then(|| crate::read_coverage_summary_digest(out)),
             }
         })
         .collect()
@@ -180,6 +188,9 @@ pub(crate) fn reporter_prompt(
                 "- `{}`: `{}` - {} (receipt: `{}`)\n",
                 digest.sensor, digest.status, digest.reason, digest.receipt_path
             ));
+            if let Some(summary) = &digest.coverage_summary {
+                prompt.push_str(&format!("  {}\n", summary.excerpt()));
+            }
         }
         prompt.push('\n');
     }
@@ -784,6 +795,7 @@ mod tests {
             status: "failed".to_owned(),
             reason: "exit code Some(101)".to_owned(),
             receipt_path: "sensors/cargo-test/ub-review-sensor-status.json".to_owned(),
+            coverage_summary: None,
         }];
         let prompt = reporter_prompt(&digests, &late);
         assert!(prompt.contains("Late deterministic evidence"));
@@ -1475,6 +1487,7 @@ mod tests {
                 status: "failed".to_owned(),
                 reason: "exit code Some(101)".to_owned(),
                 receipt_path: "sensors/cargo-test/ub-review-sensor-status.json".to_owned(),
+                coverage_summary: None,
             }
             .excerpt()],
         );
