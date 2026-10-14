@@ -124,6 +124,10 @@ PR workflow. See the [GitHub security guidance](#security-references).
 | Large or stalled artifact upload | Compressed and expanded size, dominant member, output limits and task deadline | Stop expansion/rollout and retain bounded diagnostics. A timeout is not a byte limit. |
 | Archive cannot execute | Binary version, OS/architecture/libc, asset ID and digest, install receipt | Restore the verified prior pin. Do not silently compile from source under release-only policy. |
 
+The sensor status receipt is authoritative for the outcome and diagnostic.
+`stdout.txt` and `stderr.txt` may be empty placeholders when a command is
+missing; their presence does not establish that the command ran.
+
 The summary's `Required planner proofs` count is a separate planner/broker
 denominator, not the configured `[[proof.required]]` gate denominator. Use
 `review/gate_outcome.json` and its exact receipt references to understand the
