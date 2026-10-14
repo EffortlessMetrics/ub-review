@@ -98,6 +98,13 @@ pub(crate) fn read_coverage_summary_digest(out: &Path) -> CoverageSummaryDigest 
             && value["reason"]
                 .as_str()
                 .is_some_and(|reason| !reason.trim().is_empty())
+            && value["lcov"]["path"]
+                .as_str()
+                .is_some_and(|path| !path.trim().is_empty())
+            && value["lcov"]["present"].as_bool().is_some()
+            && ["line_totals", "function_totals"].iter().all(|totals| {
+                value[totals]["found"].as_u64().is_some() && value[totals]["hit"].as_u64().is_some()
+            })
     });
     let (status, reason) = match usable {
         Some(value) => (
@@ -211,6 +218,172 @@ mod tests {
     use anyhow::Result;
 
     use crate::*;
+
+    #[test]
+    fn coverage_summary_survives_unreadable_process_receipts() -> Result<()> {
+        use crate::tests::{sensor_plan, test_diff, test_plan};
+
+        for phase in [SensorPhase::Fast, SensorPhase::Late] {
+            for malformed in [false, true] {
+                let temp = tempfile::tempdir()?;
+                let out = temp.path();
+                let mut sensor = sensor_plan("coverage", "cargo", true);
+                sensor.phase = phase;
+                let plan = test_plan(vec![sensor.clone()]);
+                write_sensor_status(
+                    out,
+                    &sensor,
+                    SensorStatusWrite {
+                        status: "ok",
+                        argv: &[],
+                        duration_ms: 0,
+                        reason: "completed",
+                        exit_code: Some(0),
+                        timed_out: false,
+                    },
+                )?;
+                let path = out.join("sensors/coverage/ub-review-sensor-status.json");
+                if malformed {
+                    fs::write(&path, "{")?;
+                } else {
+                    fs::remove_file(&path)?;
+                }
+                let report = render_summary(out, &plan, &test_diff())?;
+                assert!(
+                    report.contains("lcov.info not present"),
+                    "{phase:?}/{malformed}: {report}"
+                );
+                assert_eq!(
+                    report.matches("coverage summary `not_collected`").count(),
+                    1
+                );
+                assert!(!report.contains("No planned sensor evidence is currently missing."));
+                assert!(!report.contains("coverage ran;"));
+                if matches!(phase, SensorPhase::Late) {
+                    assert!(report.contains("coverage scheduled in the late evidence phase"));
+                } else {
+                    assert!(report.contains("coverage receipt absent"));
+                }
+                let late = late_sensor_receipt_digests(out, &["coverage".to_owned()]);
+                assert_eq!(late[0].status, "receipt-absent");
+                assert!(reporter_prompt(&[], &late).contains("lcov.info not present"));
+                let continuation = lane_continuation_prompt(
+                    "tests",
+                    "reviewer",
+                    "prior",
+                    "question",
+                    "summary",
+                    &[],
+                    &[late[0].excerpt()],
+                );
+                assert!(continuation.contains("lcov.info not present"));
+
+                fs::remove_file(out.join("sensors/coverage/coverage-summary.json"))?;
+                let unstarted = render_summary(out, &plan, &test_diff())?;
+                assert!(!unstarted.contains("coverage summary"));
+                assert_eq!(
+                    unstarted.contains("No planned sensor evidence is currently missing."),
+                    matches!(phase, SensorPhase::Late)
+                );
+                sensor.run = false;
+                sensor.required = false;
+                fs::write(
+                    out.join("sensors/coverage/coverage-summary.json"),
+                    serde_json::to_vec(&coverage_summary_receipt(&out.join("sensors/coverage")))?,
+                )?;
+                let disabled = render_summary(out, &test_plan(vec![sensor]), &test_diff())?;
+                assert!(!disabled.contains("coverage summary"));
+                assert!(disabled.contains("No planned sensor evidence is currently missing."));
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn coverage_summary_requires_essential_structure_and_types() -> Result<()> {
+        use crate::tests::{sensor_plan, test_diff, test_plan};
+
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        let sensor = sensor_plan("coverage", "cargo", true);
+        write_sensor_status(
+            out,
+            &sensor,
+            SensorStatusWrite {
+                status: "ok",
+                argv: &[],
+                duration_ms: 0,
+                reason: "completed",
+                exit_code: Some(0),
+                timed_out: false,
+            },
+        )?;
+        let path = out.join("sensors/coverage/coverage-summary.json");
+        let mut valid = coverage_summary_receipt(&out.join("sensors/coverage"));
+        valid["status"] = serde_json::json!("collected");
+        valid["reason"] = serde_json::json!("lcov.info parsed");
+        valid["lcov"]["present"] = serde_json::json!(true);
+        let metadata = serde_json::json!({"schema": COVERAGE_SUMMARY_SCHEMA, "execution_surface_only": true, "correctness_claim": false, "status": "collected", "reason": "lcov.info parsed"});
+        let mut variants = vec![metadata];
+        for field in ["lcov", "line_totals", "function_totals"] {
+            let mut missing = valid.clone();
+            missing
+                .as_object_mut()
+                .ok_or_else(|| anyhow::anyhow!("expected object"))?
+                .remove(field);
+            variants.push(missing);
+            for wrong in [
+                serde_json::Value::Null,
+                serde_json::json!("object"),
+                serde_json::json!([]),
+            ] {
+                let mut value = valid.clone();
+                value[field] = wrong;
+                variants.push(value);
+            }
+        }
+        for (object, field, wrong) in [
+            ("lcov", "path", serde_json::json!(7)),
+            ("lcov", "path", serde_json::json!(" ")),
+            ("lcov", "present", serde_json::json!("true")),
+            ("line_totals", "found", serde_json::json!("0")),
+            ("line_totals", "hit", serde_json::json!(-1)),
+            ("function_totals", "found", serde_json::json!(1.5)),
+            ("function_totals", "hit", serde_json::Value::Null),
+        ] {
+            let mut value = valid.clone();
+            value[object][field] = wrong;
+            variants.push(value);
+        }
+        for (index, value) in variants.into_iter().enumerate() {
+            fs::write(&path, serde_json::to_vec(&value)?)?;
+            let digest = read_coverage_summary_digest(out);
+            assert_eq!(digest.status, "unknown", "variant {index}: {value}");
+            let report = render_summary(out, &test_plan(vec![sensor.clone()]), &test_diff())?;
+            assert!(report.contains(&digest.reason));
+            assert!(!report.contains("coverage summary `collected`"));
+            let late = late_sensor_receipt_digests(out, &["coverage".to_owned()]);
+            assert_eq!(late[0].status, "ok");
+            assert_eq!(late[0].reason, "completed");
+            assert!(reporter_prompt(&[], &late).contains(&digest.reason));
+            assert!(
+                lane_continuation_prompt(
+                    "tests",
+                    "reviewer",
+                    "prior",
+                    "question",
+                    "summary",
+                    &[],
+                    &[late[0].excerpt()]
+                )
+                .contains(&digest.reason)
+            );
+        }
+        valid["line_totals"]["found"] = serde_json::json!(u64::MAX);
+        fs::write(path, serde_json::to_vec(&valid)?)?;
+        assert_eq!(read_coverage_summary_digest(out).status, "collected");
+        Ok(())
+    }
 
     #[test]
     fn coverage_receipts_reach_report_consumers_without_losing_diagnostics() -> Result<()> {

@@ -587,7 +587,39 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
             .join("sensors")
             .join(&sensor.id)
             .join("ub-review-sensor-status.json");
-        let Some(receipt) = read_sensor_receipt(&status_path) else {
+        let receipt = read_sensor_receipt(&status_path);
+        // An emitted telemetry diagnostic survives a missing/malformed process
+        // receipt. Before emission, late work remains scheduled (#325); genuine
+        // out-of-scope skips still do not introduce telemetry gaps.
+        let project_coverage = sensor.id == "coverage"
+            && receipt.as_ref().map_or_else(
+                || sensor.run && out.join("sensors/coverage/coverage-summary.json").exists(),
+                |receipt| {
+                    receipt.status != "skipped"
+                        || is_sensor_evidence_issue(sensor, &receipt.status, &receipt.reason)
+                },
+            );
+        if project_coverage {
+            let summary = read_coverage_summary_digest(out);
+            let detail = summary.excerpt();
+            if summary.status != "collected" {
+                missing.push(detail);
+            } else if receipt
+                .as_ref()
+                .is_none_or(|receipt| receipt.status == "ok")
+            {
+                available.push(detail);
+            } else {
+                failed.push(detail);
+            }
+            if receipt
+                .as_ref()
+                .is_some_and(|receipt| receipt.status == "ok")
+            {
+                continue;
+            }
+        }
+        let Some(receipt) = receipt else {
             if sensor.run {
                 // #325: a late-phase sensor without a receipt is scheduled
                 // work, not missing evidence — its receipt lands before the
@@ -608,23 +640,6 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
             }
             continue;
         };
-        if sensor.id == "coverage"
-            && (receipt.status != "skipped"
-                || is_sensor_evidence_issue(sensor, &receipt.status, &receipt.reason))
-        {
-            let summary = read_coverage_summary_digest(out);
-            let detail = summary.excerpt();
-            if summary.status != "collected" {
-                missing.push(detail);
-            } else if receipt.status == "ok" {
-                available.push(detail);
-            } else {
-                failed.push(detail);
-            }
-            if receipt.status == "ok" {
-                continue;
-            }
-        }
         match receipt.status.as_str() {
             "ok" => available.push(format!(
                 "{} ran; {} available.",
