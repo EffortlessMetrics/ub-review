@@ -1497,6 +1497,7 @@ mod tests {
     struct ScriptedTransport {
         gets: VecDeque<serde_json::Value>,
         sends: VecDeque<HttpPostOutput>,
+        send_attempts: usize,
     }
 
     impl DeliveryTransport for ScriptedTransport {
@@ -1514,10 +1515,30 @@ mod tests {
             _payload_path: &Path,
             _headers: &[&str],
         ) -> Result<HttpPostOutput> {
+            self.send_attempts += 1;
             self.sends
                 .pop_front()
                 .ok_or_else(|| anyhow::anyhow!("scripted send exhausted"))
         }
+    }
+
+    #[test]
+    fn scripted_transport_counts_exhausted_send_attempts() -> Result<()> {
+        let mut transport = ScriptedTransport {
+            gets: VecDeque::new(),
+            sends: VecDeque::new(),
+            send_attempts: 0,
+        };
+        for expected in [1, 2] {
+            let error = transport
+                .send_json("POST", "http://scripted", "token", Path::new("unused"), &[])
+                .err()
+                .ok_or_else(|| anyhow::anyhow!("exhausted send unexpectedly succeeded"))?;
+            ensure!(error.to_string() == "scripted send exhausted");
+            ensure!(transport.sends.is_empty());
+            ensure!(transport.send_attempts == expected);
+        }
+        Ok(())
     }
 
     fn command_status(success: bool) -> Result<std::process::ExitStatus> {
@@ -1572,6 +1593,7 @@ mod tests {
             let (review, payload) = delivery_review();
             let make_transport = || -> Result<ScriptedTransport> {
                 Ok(ScriptedTransport {
+                    send_attempts: 0,
                     gets: VecDeque::from([
                         serde_json::json!({"head": {"sha": HEAD}}),
                         returned("exact body"),
@@ -1647,6 +1669,7 @@ mod tests {
             review.comments.clear();
             payload.comments.clear();
             let mut first = ScriptedTransport {
+                send_attempts: 0,
                 gets: VecDeque::from([
                     serde_json::json!({"head": {"sha": HEAD}}),
                     serde_json::json!([]),
@@ -1666,6 +1689,7 @@ mod tests {
                 fs::create_dir_all(args.out.join("delivery-attempt.json"))?;
             }
             let mut retry = ScriptedTransport {
+                send_attempts: 0,
                 gets: VecDeque::from([
                     serde_json::json!({"head": {"sha": HEAD}}),
                     serde_json::json!([]),
@@ -1703,6 +1727,7 @@ mod tests {
             "commit_id": HEAD, "body": "prior finding"
         });
         let mut first = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::json!({"head": {"sha": HEAD}}),
                 serde_json::json!([source.clone()]),
@@ -1715,6 +1740,7 @@ mod tests {
         );
         ensure!(!args.out.join("delivery-reply-receipts.json").exists());
         let mut retry = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::json!({"head": {"sha": HEAD}}),
                 serde_json::json!([source, {
@@ -1812,6 +1838,8 @@ mod tests {
                 "schema",
                 "digest",
                 "corrupt",
+                "unreadable",
+                "shape",
             ] {
                 let temp = tempfile::tempdir()?;
                 let mut graph = graph_for("src/lib.rs", 12, action, HEAD);
@@ -1837,6 +1865,7 @@ mod tests {
                 let mut reply = observed.clone();
                 reply["in_reply_to_id"] = serde_json::json!(123);
                 let mut first = ScriptedTransport {
+                    send_attempts: 0,
                     gets: if action == "inline" {
                         VecDeque::from([
                             serde_json::json!({"head":{"sha":HEAD}}),
@@ -1863,6 +1892,10 @@ mod tests {
                     &args, &review, &payload, &mut first,
                 )?;
                 ensure!(first.gets.is_empty() && first.sends.is_empty());
+                ensure!(
+                    first.send_attempts == if action == "inline" { 2 } else { 1 },
+                    "{action}/{change}: initial delivery attempt count changed"
+                );
                 let reservation_path = args.out.join("delivery-attempt.json");
                 let saved = fs::read(&reservation_path)?;
                 match change {
@@ -1891,13 +1924,20 @@ mod tests {
                     }
                     "unreserved" => fs::remove_file(&reservation_path)?,
                     "corrupt" => fs::write(&reservation_path, b"{")?,
+                    "unreadable" => {
+                        fs::remove_file(&reservation_path)?;
+                        fs::create_dir(&reservation_path)?;
+                    }
+                    "shape" => fs::write(&reservation_path, b"[]")?,
                     _ => {}
                 }
                 validate_github_review_payload_for_post(&args, &review)?;
                 let before_retry = fs::read(&reservation_path).ok();
+                let was_directory = reservation_path.is_dir();
                 let reply_receipt_path = args.out.join("delivery-reply-receipts.json");
                 let saved_reply_receipt = fs::read(&reply_receipt_path).ok();
                 let mut retry = ScriptedTransport {
+                    send_attempts: 0,
                     gets: VecDeque::from([
                         serde_json::json!({"head":{"sha":HEAD}}),
                         if action == "inline" {
@@ -1912,7 +1952,13 @@ mod tests {
                 let result = execute_pending_review_delivery_with_transport(
                     &args, &review, &payload, &mut retry,
                 );
+                ensure!(
+                    retry.send_attempts == 0,
+                    "{action}/{change}: retry attempted {} sends",
+                    retry.send_attempts
+                );
                 ensure!(retry.sends.is_empty(), "{action}/{change}: retry wrote");
+                ensure!(reservation_path.is_dir() == was_directory);
                 ensure!(
                     fs::read(&reservation_path).ok() == before_retry,
                     "{action}/{change}: reservation changed"
@@ -1924,10 +1970,27 @@ mod tests {
                 if matches!(change, "unchanged" | "unreserved") {
                     ensure!(result?.response["state"] == "already_delivered");
                 } else {
+                    let error = result.err().ok_or_else(|| {
+                        anyhow::anyhow!("{action}/{change}: changed reservation falsely confirmed")
+                    })?;
+                    let expected_error = match change {
+                        "unreadable" => format!(
+                            "read {}; reconcile the previous delivery attempt",
+                            reservation_path.display()
+                        ),
+                        "corrupt" => format!(
+                            "parse {}; reconcile the previous delivery attempt",
+                            reservation_path.display()
+                        ),
+                        _ => "reserved delivery payload or target differs; reconcile the previous delivery attempt".to_owned(),
+                    };
                     ensure!(
-                        result.is_err(),
-                        "{action}/{change}: changed reservation identity falsely confirmed: {:?}",
-                        result.ok().map(|outcome| outcome.response)
+                        error.to_string() == expected_error,
+                        "{action}/{change}: wrong rejection: {error:#}"
+                    );
+                    ensure!(
+                        retry.gets.len() == 2,
+                        "{action}/{change}: rejection reached receipt discovery"
                     );
                 }
             }
@@ -1945,6 +2008,7 @@ mod tests {
         )?;
         let (review, payload) = delivery_review();
         let mut transport = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::json!({"head": {"sha": HEAD}}),
                 serde_json::json!([{
@@ -2142,6 +2206,7 @@ mod tests {
         )?;
         let (review, payload) = delivery_review();
         let mut transport = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::json!({"head": {"sha": HEAD}}),
                 serde_json::json!([{
@@ -2206,6 +2271,7 @@ mod tests {
             r#"{{"id":456,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":"{HEAD}","body":"exact body","in_reply_to_id":123}}"#
         );
         let mut first_transport = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::json!({"head": {"sha": HEAD}}),
                 serde_json::json!([{
@@ -2229,6 +2295,7 @@ mod tests {
         ensure!(first_transport.gets.is_empty() && first_transport.sends.is_empty());
 
         let mut retry_transport = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::json!({"head": {"sha": HEAD}}),
                 serde_json::json!([
@@ -2290,6 +2357,7 @@ mod tests {
         )?;
         let (review, payload) = delivery_review();
         let mut transport = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::json!({"head": {"sha": HEAD}}),
                 serde_json::json!([{
@@ -2341,6 +2409,7 @@ mod tests {
         )?;
         let (review, payload) = delivery_review();
         let mut transport = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::json!({"head": {"sha": HEAD}}),
                 serde_json::json!([{
@@ -2401,6 +2470,7 @@ mod tests {
         )?;
         let (review, payload) = delivery_review();
         let mut transport = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::json!({"head": {"sha": HEAD}}),
                 serde_json::json!([{
@@ -2560,6 +2630,7 @@ mod tests {
             .map(|id| serde_json::json!({"id": id}))
             .collect::<Vec<_>>();
         let mut transport = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::Value::Array(first_page),
                 serde_json::json!([{"id": 100}]),
@@ -2576,6 +2647,7 @@ mod tests {
         ensure!(comments.as_array().is_some_and(|items| items.len() == 101));
         ensure!(transport.gets.is_empty());
         let mut malformed = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([serde_json::json!({"not": "an array"})]),
             sends: VecDeque::new(),
         };
