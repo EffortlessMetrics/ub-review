@@ -143,6 +143,7 @@ fn execute_pending_review_delivery_with_transport(
         &expected_head,
         &current_head,
     )?;
+    validate_reserved_delivery_attempt(args, api, repo, pull_number, &expected_head, api_payload)?;
     let all_planned = build_planned_deliveries(review, &expected_head, claim_graph.as_ref())?;
     let needs_existing_state = all_planned
         .iter()
@@ -468,6 +469,47 @@ fn reserve_delivery_attempt(
     // Other platforms retain process-retry safety without a crash guarantee.
     #[cfg(unix)]
     fs::File::open(&args.out)?.sync_all()?;
+    Ok(())
+}
+
+// Receipt reuse is authorized only for the same prepared payload and target.
+// An absent reservation retains the existing manual reconciliation behavior.
+fn validate_reserved_delivery_attempt(
+    args: &PostArgs,
+    api: &str,
+    repo: &str,
+    pull_number: u64,
+    exact_head_sha: &str,
+    payload: &GitHubReviewPostPayload,
+) -> Result<()> {
+    let path = args.out.join("delivery-attempt.json");
+    let bytes = match fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "read {}; reconcile the previous delivery attempt",
+                    path.display()
+                )
+            });
+        }
+    };
+    let attempt: serde_json::Value = serde_json::from_slice(&bytes).with_context(|| {
+        format!(
+            "parse {}; reconcile the previous delivery attempt",
+            path.display()
+        )
+    })?;
+    ensure!(
+        attempt["schema"] == "ub-review.delivery_attempt.v1"
+            && attempt["api"] == api
+            && attempt["repo"] == repo
+            && attempt["pull_number"] == pull_number
+            && attempt["exact_head_sha"] == exact_head_sha
+            && attempt["payload_digest"] == sha256_hex(&serde_json::to_vec(payload)?),
+        "reserved delivery payload or target differs; reconcile the previous delivery attempt"
+    );
     Ok(())
 }
 
@@ -1455,6 +1497,7 @@ mod tests {
     struct ScriptedTransport {
         gets: VecDeque<serde_json::Value>,
         sends: VecDeque<HttpPostOutput>,
+        send_attempts: usize,
     }
 
     impl DeliveryTransport for ScriptedTransport {
@@ -1472,10 +1515,30 @@ mod tests {
             _payload_path: &Path,
             _headers: &[&str],
         ) -> Result<HttpPostOutput> {
+            self.send_attempts += 1;
             self.sends
                 .pop_front()
                 .ok_or_else(|| anyhow::anyhow!("scripted send exhausted"))
         }
+    }
+
+    #[test]
+    fn scripted_transport_counts_exhausted_send_attempts() -> Result<()> {
+        let mut transport = ScriptedTransport {
+            gets: VecDeque::new(),
+            sends: VecDeque::new(),
+            send_attempts: 0,
+        };
+        for expected in [1, 2] {
+            let error = transport
+                .send_json("POST", "http://scripted", "token", Path::new("unused"), &[])
+                .err()
+                .ok_or_else(|| anyhow::anyhow!("exhausted send unexpectedly succeeded"))?;
+            ensure!(error.to_string() == "scripted send exhausted");
+            ensure!(transport.sends.is_empty());
+            ensure!(transport.send_attempts == expected);
+        }
+        Ok(())
     }
 
     fn command_status(success: bool) -> Result<std::process::ExitStatus> {
@@ -1530,6 +1593,7 @@ mod tests {
             let (review, payload) = delivery_review();
             let make_transport = || -> Result<ScriptedTransport> {
                 Ok(ScriptedTransport {
+                    send_attempts: 0,
                     gets: VecDeque::from([
                         serde_json::json!({"head": {"sha": HEAD}}),
                         returned("exact body"),
@@ -1605,6 +1669,7 @@ mod tests {
             review.comments.clear();
             payload.comments.clear();
             let mut first = ScriptedTransport {
+                send_attempts: 0,
                 gets: VecDeque::from([
                     serde_json::json!({"head": {"sha": HEAD}}),
                     serde_json::json!([]),
@@ -1624,6 +1689,7 @@ mod tests {
                 fs::create_dir_all(args.out.join("delivery-attempt.json"))?;
             }
             let mut retry = ScriptedTransport {
+                send_attempts: 0,
                 gets: VecDeque::from([
                     serde_json::json!({"head": {"sha": HEAD}}),
                     serde_json::json!([]),
@@ -1661,6 +1727,7 @@ mod tests {
             "commit_id": HEAD, "body": "prior finding"
         });
         let mut first = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::json!({"head": {"sha": HEAD}}),
                 serde_json::json!([source.clone()]),
@@ -1673,6 +1740,7 @@ mod tests {
         );
         ensure!(!args.out.join("delivery-reply-receipts.json").exists());
         let mut retry = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::json!({"head": {"sha": HEAD}}),
                 serde_json::json!([source, {
@@ -1693,6 +1761,244 @@ mod tests {
     }
 
     #[test]
+    fn post_path_binds_wire_payload_and_rejects_changed_body_retry() -> Result<()> {
+        let _lock = lock_fake_delivery_tests()?;
+        let temp = tempfile::tempdir()?;
+        let mut responses = successful_delivery_responses();
+        responses.push(FakeHttpResponse {
+            status: 200,
+            body: format!(r#"{{"head":{{"sha":"{HEAD}"}}}}"#),
+        });
+        let (api, handle) = spawn_fake_delivery_api(responses)?;
+        let mut args = delivery_args(temp.path(), &api);
+        args.diff_patch = Some(temp.path().join("diff.patch"));
+        fs::create_dir_all(&args.out)?;
+        fs::write(
+            args.diff_patch
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("missing diff"))?,
+            "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -12 +12 @@\n-old\n+new\n",
+        )?;
+        fs::write(
+            temp.path().join("claim_graph.json"),
+            serde_json::to_vec(&graph_for("src/lib.rs", 12, "inline", HEAD))?,
+        )?;
+        let (mut review, _) = delivery_review();
+        review.body = "## Verification questions\n\n- Confirm the guard proof.".to_owned();
+        let payload = github_review_post_payload(&review)?;
+        fs::write(&args.review_json, serde_json::to_vec_pretty(&review)?)?;
+        let first = post_github_review(&args)?;
+        ensure!(first.status == "ok");
+        let prepared_bytes = fs::read(args.out.join("github-review-post-payload.json"))?;
+        let pending_bytes = fs::read(args.out.join("delivery-pending-review-payload.json"))?;
+        let submitted_bytes = fs::read(args.out.join("delivery-submit-review-payload.json"))?;
+        ensure!(prepared_bytes == serde_json::to_vec_pretty(&payload)?);
+        let reservation_bytes = fs::read(args.out.join("delivery-attempt.json"))?;
+        let reservation: serde_json::Value = serde_json::from_slice(&reservation_bytes)?;
+        ensure!(reservation["payload_digest"] == sha256_hex(&serde_json::to_vec(&payload)?));
+        review
+            .body
+            .push_str("\n- Confirm the new retry-only claim.");
+        fs::write(&args.review_json, serde_json::to_vec_pretty(&review)?)?;
+        validate_github_review_payload_for_post(&args, &review)?;
+        let retry = post_github_review(&args);
+        let requests = handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("fake API thread failed"))??;
+        ensure!(requests.len() == 6);
+        ensure!(requests[1].1.as_bytes() == pending_bytes);
+        ensure!(requests[4].1.as_bytes() == submitted_bytes);
+        let pending: serde_json::Value = serde_json::from_slice(&pending_bytes)?;
+        ensure!(pending["body"] == payload.body && pending["comments"][0]["body"] == "exact body");
+        let submitted: serde_json::Value = serde_json::from_slice(&submitted_bytes)?;
+        ensure!(submitted["body"] == payload.body && submitted["event"] == "COMMENT");
+        ensure!(
+            retry.is_err(),
+            "changed body falsely confirmed by post path"
+        );
+        ensure!(fs::read(args.out.join("delivery-attempt.json"))? == reservation_bytes);
+        ensure!(
+            fs::read(args.out.join("github-review-post-payload.json"))?
+                == serde_json::to_vec_pretty(&github_review_post_payload(&review)?)?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn reserved_receipt_reuse_rejects_changed_payload_and_context() -> Result<()> {
+        for action in ["inline", "reply"] {
+            for change in [
+                "unchanged",
+                "unreserved",
+                "body",
+                "api",
+                "repo",
+                "pull",
+                "head",
+                "schema",
+                "digest",
+                "corrupt",
+                "unreadable",
+                "shape",
+            ] {
+                let temp = tempfile::tempdir()?;
+                let mut graph = graph_for("src/lib.rs", 12, action, HEAD);
+                if action == "reply" {
+                    graph["topics"][0]["planned_thread_id"] = serde_json::json!("123");
+                }
+                fs::write(
+                    temp.path().join("claim_graph.json"),
+                    serde_json::to_vec(&graph)?,
+                )?;
+                fs::write(
+                    temp.path().join("diff.patch"),
+                    "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -12 +12 @@\n-old\n+new\n",
+                )?;
+                let mut args = delivery_args(temp.path(), "http://scripted");
+                args.diff_patch = Some(temp.path().join("diff.patch"));
+                let (mut review, _) = delivery_review();
+                review.body = "## Verification questions\n\n- Confirm the guard proof.".to_owned();
+                let mut payload = github_review_post_payload(&review)?;
+                validate_github_review_payload_for_post(&args, &review)?;
+                let observed = serde_json::json!({"id":456,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":HEAD,"body":"exact body"});
+                let source = serde_json::json!({"id":123,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":HEAD,"body":"prior finding"});
+                let mut reply = observed.clone();
+                reply["in_reply_to_id"] = serde_json::json!(123);
+                let mut first = ScriptedTransport {
+                    send_attempts: 0,
+                    gets: if action == "inline" {
+                        VecDeque::from([
+                            serde_json::json!({"head":{"sha":HEAD}}),
+                            serde_json::json!([observed.clone()]),
+                            serde_json::json!({"head":{"sha":HEAD}}),
+                        ])
+                    } else {
+                        VecDeque::from([
+                            serde_json::json!({"head":{"sha":HEAD}}),
+                            serde_json::json!([source.clone()]),
+                            serde_json::json!({"head":{"sha":HEAD}}),
+                        ])
+                    },
+                    sends: if action == "inline" {
+                        VecDeque::from([
+                            scripted_output(r#"{"id":987}"#, true)?,
+                            scripted_output(r#"{"id":987,"state":"commented"}"#, true)?,
+                        ])
+                    } else {
+                        VecDeque::from([scripted_output(&serde_json::to_string(&reply)?, true)?])
+                    },
+                };
+                execute_pending_review_delivery_with_transport(
+                    &args, &review, &payload, &mut first,
+                )?;
+                ensure!(first.gets.is_empty() && first.sends.is_empty());
+                ensure!(
+                    first.send_attempts == if action == "inline" { 2 } else { 1 },
+                    "{action}/{change}: initial delivery attempt count changed"
+                );
+                let reservation_path = args.out.join("delivery-attempt.json");
+                let saved = fs::read(&reservation_path)?;
+                match change {
+                    "body" => {
+                        review
+                            .body
+                            .push_str("\n- Confirm the new retry-only claim.");
+                        payload = github_review_post_payload(&review)?;
+                    }
+                    "api" => args.github_api_url = "http://another-api".to_owned(),
+                    "repo" => args.repo = Some("another/repo".to_owned()),
+                    "pull" => args.pull_number = Some(43),
+                    "head" => {
+                        let mut value: serde_json::Value = serde_json::from_slice(&saved)?;
+                        value["exact_head_sha"] = serde_json::json!("another-head");
+                        fs::write(&reservation_path, serde_json::to_vec(&value)?)?;
+                    }
+                    "schema" | "digest" => {
+                        let mut value: serde_json::Value = serde_json::from_slice(&saved)?;
+                        value[if change == "schema" {
+                            "schema"
+                        } else {
+                            "payload_digest"
+                        }] = serde_json::json!("corrupted");
+                        fs::write(&reservation_path, serde_json::to_vec(&value)?)?;
+                    }
+                    "unreserved" => fs::remove_file(&reservation_path)?,
+                    "corrupt" => fs::write(&reservation_path, b"{")?,
+                    "unreadable" => {
+                        fs::remove_file(&reservation_path)?;
+                        fs::create_dir(&reservation_path)?;
+                    }
+                    "shape" => fs::write(&reservation_path, b"[]")?,
+                    _ => {}
+                }
+                validate_github_review_payload_for_post(&args, &review)?;
+                let before_retry = fs::read(&reservation_path).ok();
+                let was_directory = reservation_path.is_dir();
+                let reply_receipt_path = args.out.join("delivery-reply-receipts.json");
+                let saved_reply_receipt = fs::read(&reply_receipt_path).ok();
+                let mut retry = ScriptedTransport {
+                    send_attempts: 0,
+                    gets: VecDeque::from([
+                        serde_json::json!({"head":{"sha":HEAD}}),
+                        if action == "inline" {
+                            serde_json::json!([observed])
+                        } else {
+                            serde_json::json!([source, reply])
+                        },
+                        serde_json::json!({"head":{"sha":HEAD}}),
+                    ]),
+                    sends: VecDeque::new(),
+                };
+                let result = execute_pending_review_delivery_with_transport(
+                    &args, &review, &payload, &mut retry,
+                );
+                ensure!(
+                    retry.send_attempts == 0,
+                    "{action}/{change}: retry attempted {} sends",
+                    retry.send_attempts
+                );
+                ensure!(retry.sends.is_empty(), "{action}/{change}: retry wrote");
+                ensure!(reservation_path.is_dir() == was_directory);
+                ensure!(
+                    fs::read(&reservation_path).ok() == before_retry,
+                    "{action}/{change}: reservation changed"
+                );
+                ensure!(
+                    fs::read(&reply_receipt_path).ok() == saved_reply_receipt,
+                    "{action}/{change}: reply receipt changed"
+                );
+                if matches!(change, "unchanged" | "unreserved") {
+                    ensure!(result?.response["state"] == "already_delivered");
+                } else {
+                    let error = result.err().ok_or_else(|| {
+                        anyhow::anyhow!("{action}/{change}: changed reservation falsely confirmed")
+                    })?;
+                    let expected_error = match change {
+                        "unreadable" => format!(
+                            "read {}; reconcile the previous delivery attempt",
+                            reservation_path.display()
+                        ),
+                        "corrupt" => format!(
+                            "parse {}; reconcile the previous delivery attempt",
+                            reservation_path.display()
+                        ),
+                        _ => "reserved delivery payload or target differs; reconcile the previous delivery attempt".to_owned(),
+                    };
+                    ensure!(
+                        error.to_string() == expected_error,
+                        "{action}/{change}: wrong rejection: {error:#}"
+                    );
+                    ensure!(
+                        retry.gets.len() == 2,
+                        "{action}/{change}: rejection reached receipt discovery"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn generic_transport_path_preserves_receipts_and_payload_boundaries() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let graph = graph_for("src/lib.rs", 12, "inline", HEAD);
@@ -1702,6 +2008,7 @@ mod tests {
         )?;
         let (review, payload) = delivery_review();
         let mut transport = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::json!({"head": {"sha": HEAD}}),
                 serde_json::json!([{
@@ -1899,6 +2206,7 @@ mod tests {
         )?;
         let (review, payload) = delivery_review();
         let mut transport = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::json!({"head": {"sha": HEAD}}),
                 serde_json::json!([{
@@ -1963,6 +2271,7 @@ mod tests {
             r#"{{"id":456,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":"{HEAD}","body":"exact body","in_reply_to_id":123}}"#
         );
         let mut first_transport = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::json!({"head": {"sha": HEAD}}),
                 serde_json::json!([{
@@ -1986,6 +2295,7 @@ mod tests {
         ensure!(first_transport.gets.is_empty() && first_transport.sends.is_empty());
 
         let mut retry_transport = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::json!({"head": {"sha": HEAD}}),
                 serde_json::json!([
@@ -2047,6 +2357,7 @@ mod tests {
         )?;
         let (review, payload) = delivery_review();
         let mut transport = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::json!({"head": {"sha": HEAD}}),
                 serde_json::json!([{
@@ -2098,6 +2409,7 @@ mod tests {
         )?;
         let (review, payload) = delivery_review();
         let mut transport = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::json!({"head": {"sha": HEAD}}),
                 serde_json::json!([{
@@ -2158,6 +2470,7 @@ mod tests {
         )?;
         let (review, payload) = delivery_review();
         let mut transport = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::json!({"head": {"sha": HEAD}}),
                 serde_json::json!([{
@@ -2317,6 +2630,7 @@ mod tests {
             .map(|id| serde_json::json!({"id": id}))
             .collect::<Vec<_>>();
         let mut transport = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([
                 serde_json::Value::Array(first_page),
                 serde_json::json!([{"id": 100}]),
@@ -2333,6 +2647,7 @@ mod tests {
         ensure!(comments.as_array().is_some_and(|items| items.len() == 101));
         ensure!(transport.gets.is_empty());
         let mut malformed = ScriptedTransport {
+            send_attempts: 0,
             gets: VecDeque::from([serde_json::json!({"not": "an array"})]),
             sends: VecDeque::new(),
         };
