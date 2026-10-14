@@ -3255,7 +3255,11 @@ mod tests {
             &snapshot,
             &[],
             0,
-            Some("merge-test-digest"),
+            Some(&crate::RevisionRef {
+                digest: "merge-test-digest".to_owned(),
+                semantics: "merge_result".to_owned(),
+                reviewed_commit: "c".to_owned(),
+            }),
         );
         ensure!(accounting.total == 1);
         ensure!(accounting.proven == 0);
@@ -3356,7 +3360,11 @@ mod tests {
             &snapshot,
             &[],
             0,
-            Some("shared-id-digest"),
+            Some(&crate::RevisionRef {
+                digest: "shared-id-digest".to_owned(),
+                semantics: "merge_result".to_owned(),
+                reviewed_commit: "c".to_owned(),
+            }),
         );
         ensure!(accounting.total == 1);
         ensure!(accounting.unproven == 1);
@@ -3639,7 +3647,11 @@ mod tests {
                     &snapshot,
                     &[],
                     0,
-                    Some("constraint-digest"),
+                    Some(&crate::RevisionRef {
+                        digest: "constraint-digest".to_owned(),
+                        semantics: "merge_result".to_owned(),
+                        reviewed_commit: "c".to_owned(),
+                    }),
                 );
                 ensure!(accounting.total == usize::from(required));
                 ensure!(accounting.proven == 0);
