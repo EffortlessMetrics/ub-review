@@ -1,0 +1,47 @@
+[
+  {
+    "path": "README.md",
+    "bytes": 1770,
+    "sha256": "d3e967745e5846915e41ab67e47c773ee43b10749bfe149189df7faf0f803d28"
+  },
+  {
+    "path": "artifact-verifier.log",
+    "bytes": 5503,
+    "sha256": "d1eb9ad418fafc433978ed259211962f17d5eb41f9532ab6961fc7ec8c21d534"
+  },
+  {
+    "path": "exact-head-positive-output.txt",
+    "bytes": 906,
+    "sha256": "5b3820e103e3698fba6cbe2f0f5907a36899ca95127814f8d646b65c0985d486"
+  },
+  {
+    "path": "independent-mutation-output.txt",
+    "bytes": 2170,
+    "sha256": "cb010b645dbd953d514cd09e302b0f99bd93d3eb592b8af3ebeda60141d4f621"
+  },
+  {
+    "path": "mutation-receipts.json",
+    "bytes": 2091,
+    "sha256": "9628da525e282ea50c555016ed5006555cd424719bc606c46b799766b1983bc7"
+  },
+  {
+    "path": "native-chain-final.log",
+    "bytes": 112072,
+    "sha256": "6eb419be52aa749a0ecf861343b5d5716532154b84aef9a178db8b5c4d5dbd37"
+  },
+  {
+    "path": "precommit-final.log",
+    "bytes": 844,
+    "sha256": "cf29678a8afe057cb91817283185c34ed5171cce662ef806c5714770d525028c"
+  },
+  {
+    "path": "ripr-summary.json",
+    "bytes": 730,
+    "sha256": "8291598b9abe7e4ccc97459865bcf59ad4a0f4946496effa615732255bf8f093"
+  },
+  {
+    "path": "source-comparison-final.json",
+    "bytes": 9188,
+    "sha256": "fa9174175ba43509b44c250950a4ff6de5343f719d28242c995e87c3d6a9911d"
+  }
+]

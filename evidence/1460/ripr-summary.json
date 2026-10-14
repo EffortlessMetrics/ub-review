@@ -1,0 +1,17 @@
+{
+  "advisory": true,
+  "base": "3dbcc2be9768b082c0896dc2360e950ffbd56a65",
+  "finding_count": 1569,
+  "merge_base": "3dbcc2be9768b082c0896dc2360e950ffbd56a65",
+  "mode": "ready",
+  "ripr_version": "0.10.0",
+  "schema": "ub-review.local_ripr.v1",
+  "status": "completed",
+  "suppressed_exposure_gaps": 0,
+  "unsuppressed_exposure_gaps": 203,
+  "candidate_head": "46bfbd5e2a1f8d2a78d2aaecfaffcf7df78da564",
+  "candidate_tree": "410b67ab138bc8f5075ea9b7e71c3081831560a7",
+  "ripr_executable_sha256": "b14f844c990b55e5b3d9f7daa43085cf016824fc8f6f55753efa8159dc5fe432",
+  "install_command": "cargo install --locked --version 0.10.0 ripr",
+  "interpretation": "advisory completion; 203 unresolved gaps; no strict-zero qualification"
+}

@@ -1,0 +1,41 @@
+[
+  {
+    "case": "truncated_argv",
+    "candidate_commit": "46bfbd5e2a1f8d2a78d2aaecfaffcf7df78da564",
+    "pristine_tree": "410b67ab138bc8f5075ea9b7e71c3081831560a7",
+    "experimental_tree": "209fb1ca863e73ef20261c72ef5fb90dbb972231",
+    "manifest_sha256": "763c3d2453e64c99a9172ba24dea3d197fa562b52e9eac7a262052fc10559736",
+    "manifest_bytes": 24571,
+    "corpus_bytes": 64063,
+    "projection_sha256_unchanged": "5f9dde16010ce8c099de9ad11d4325fbc7915942e44cac438313ce89694aa910",
+    "test_exit": 101,
+    "rejection_join": "wrapper argv not in command log projection",
+    "test": "fresh-pristine-test --exact fixed_required_starvation_fixture_joins_sources --nocapture"
+  },
+  {
+    "case": "swapped_rule_recipes",
+    "candidate_commit": "46bfbd5e2a1f8d2a78d2aaecfaffcf7df78da564",
+    "pristine_tree": "410b67ab138bc8f5075ea9b7e71c3081831560a7",
+    "experimental_tree": "787445942d7b74cec8e5e3ea2ba4870d42af9444",
+    "manifest_sha256": "cbb762177718caa31baa72eedebe542a5515db06f6caf935261cda0c34c77c00",
+    "manifest_bytes": 24606,
+    "corpus_bytes": 64098,
+    "projection_sha256_unchanged": "5f9dde16010ce8c099de9ad11d4325fbc7915942e44cac438313ce89694aa910",
+    "test_exit": 101,
+    "rejection_join": "configured argv/timeout not joined to its named source rule",
+    "test": "fresh-pristine-test --exact fixed_required_starvation_fixture_joins_sources --nocapture"
+  },
+  {
+    "case": "fabricated_wrapper_result",
+    "candidate_commit": "46bfbd5e2a1f8d2a78d2aaecfaffcf7df78da564",
+    "pristine_tree": "410b67ab138bc8f5075ea9b7e71c3081831560a7",
+    "experimental_tree": "8b97caa84f644ce72fec4771875fe10da53a39a8",
+    "manifest_sha256": "6e191cbec534b4deba69429c822a6a7ff88fb65c525f9371e1f02e29ba82e49f",
+    "manifest_bytes": 24636,
+    "corpus_bytes": 64128,
+    "projection_sha256_unchanged": "5f9dde16010ce8c099de9ad11d4325fbc7915942e44cac438313ce89694aa910",
+    "test_exit": 101,
+    "rejection_join": "wrapper outcome differs from source step/report",
+    "test": "fresh-pristine-test --exact fixed_required_starvation_fixture_joins_sources --nocapture"
+  }
+]

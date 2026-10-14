@@ -1,0 +1,23 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running `target/debug/xtask precommit --staged`
+# Precommit summary
+
+- mode: staged
+- changed files: 5
+- affected Rust packages: 1
+  - ub-review
+- blocking findings: 0
+
+## Checks
+
+- pass: fmt
+- pass: cargo check ub-review
+- pass: cargo clippy ub-review
+- missing: cargo-allow (cargo-allow not installed; install: cargo install cargo-allow --locked)
+- missing: ripr (ripr not installed; install: cargo install ripr --locked --version 0.10.0 --force)
+- missing: unsafe-review (unsafe-review not installed; install: cargo install unsafe-review --locked --version 0.3.4 --force)
+- skipped: actionlint (no changed workflow files)
+- missing: ast-grep (ast-grep not installed; install: npm install -g @ast-grep/cli)
+
+Artifacts are under `target/precommit/`.
+TERMINAL_EXIT=0

@@ -1,0 +1,208 @@
+{
+  "base": "3dbcc2be9768b082c0896dc2360e950ffbd56a65",
+  "candidate_commit": "46bfbd5e2a1f8d2a78d2aaecfaffcf7df78da564",
+  "candidate_tree": "410b67ab138bc8f5075ea9b7e71c3081831560a7",
+  "fixture_total_bytes": 64500,
+  "captures_rehashed": [
+    {
+      "capture": "candidate-run",
+      "capture_basis": "connector_response_bytes",
+      "original_path": "/workspace/scratch/2e70149a8e59/validation-overlap-manifest/sources/candidate-run.json",
+      "sha256": "3632e416f6401397149002a9c6279857658d60b1f9e11bfea1afb7a09ce6e3e8",
+      "bytes": 29836,
+      "matched": true
+    },
+    {
+      "capture": "candidate-jobs-full",
+      "capture_basis": "connector_response_bytes",
+      "original_path": "/workspace/scratch/2e70149a8e59/validation-overlap-manifest/sources/candidate-jobs-full.json",
+      "sha256": "30790b03a177d5db1edd2c33bc23d52a86b9bd2bc31199e80420ccec56bae799",
+      "bytes": 12855,
+      "matched": true
+    },
+    {
+      "capture": "baseline-run",
+      "capture_basis": "connector_response_bytes",
+      "original_path": "/workspace/scratch/2e70149a8e59/validation-overlap-manifest/sources/baseline-run.json",
+      "sha256": "71b82334efc302fe9cc5e4152c596ed0a7d9777e6f42f4333d82c6fbd23209c5",
+      "bytes": 29892,
+      "matched": true
+    },
+    {
+      "capture": "baseline-jobs-full",
+      "capture_basis": "connector_response_bytes",
+      "original_path": "/workspace/scratch/2e70149a8e59/validation-overlap-manifest/sources/baseline-jobs-full.json",
+      "sha256": "59fd010b7353fed80d2338b65c25e877c2a13db2c350f09c088c5ed7c84a32d2",
+      "bytes": 41911,
+      "matched": true
+    },
+    {
+      "capture": "candidate-shadow-projection",
+      "capture_basis": "derived_log_projection_bytes",
+      "original_path": "/workspace/scratch/2e70149a8e59/validation-overlap-manifest/sources/candidate-shadow-projection.json",
+      "sha256": "d0470aaa86577d75986745d04521fd2d1f227d4565901495fc21482d0e812e3b",
+      "bytes": 16336,
+      "matched": true
+    },
+    {
+      "capture": "candidate-merge-_ub-review_toml",
+      "capture_basis": "decoded_public_source_bytes",
+      "original_path": "/workspace/scratch/2e70149a8e59/validation-overlap-manifest/sources/candidate-merge-_ub-review_toml.txt",
+      "sha256": "00ea80e9ac5ebfb0fb0d43778a423e0447b2cc5a2c2f70e6ca541e876f9698aa",
+      "bytes": 9604,
+      "matched": true
+    },
+    {
+      "capture": "frozen-main-_github_workflows_independent-baseline_yml",
+      "capture_basis": "decoded_public_source_bytes",
+      "original_path": "/workspace/scratch/2e70149a8e59/validation-overlap-manifest/sources/frozen-main-_github_workflows_independent-baseline_yml.txt",
+      "sha256": "41fae79fd067e78ff1e741e1d8934fe4512dd73621d7c10f3f258a70c2df78f3",
+      "bytes": 5999,
+      "matched": true
+    },
+    {
+      "capture": "candidate-merge-_github_workflows_ub-review-gate_yml",
+      "capture_basis": "decoded_public_source_bytes",
+      "original_path": "/workspace/scratch/2e70149a8e59/validation-overlap-manifest/sources/candidate-merge-_github_workflows_ub-review-gate_yml.txt",
+      "sha256": "90de9847b4ffc8364770f31306aa6297278b820feed65d7c79746ed9cbf82ded",
+      "bytes": 6128,
+      "matched": true
+    },
+    {
+      "capture": "candidate-merge-scripts_reconcile-task-projections_py",
+      "capture_basis": "decoded_public_source_bytes",
+      "original_path": "/workspace/scratch/2e70149a8e59/validation-overlap-manifest/sources/candidate-merge-scripts_reconcile-task-projections_py.txt",
+      "sha256": "73a42f206d1edfe0978b7e6865257025de3fe3ee5303e844dc90365fdd040ff6",
+      "bytes": 52327,
+      "matched": true
+    },
+    {
+      "capture": "candidate-merge-src_proof_tasks_rs",
+      "capture_basis": "decoded_public_source_bytes",
+      "original_path": "/workspace/scratch/2e70149a8e59/validation-overlap-manifest/sources/candidate-merge-src_proof_tasks_rs.txt",
+      "sha256": "8957e9b7ac429dda5cc7c72231f9a9df48c16a4784aae48ef7d45bb125f03961",
+      "bytes": 82948,
+      "matched": true
+    },
+    {
+      "capture": "candidate-job-log",
+      "capture_basis": "decoded_public_source_bytes",
+      "original_path": "/workspace/scratch/2e70149a8e59/validation-overlap-manifest/sources/candidate-job.log",
+      "sha256": "91d16ca90a1262c616ca495b7783d112b2490d72573d0a61d596e957c7b5b495",
+      "bytes": 147253,
+      "matched": true
+    },
+    {
+      "capture": "baseline-job-115707918357-log-log",
+      "capture_basis": "decoded_public_source_bytes",
+      "original_path": "/workspace/scratch/2e70149a8e59/validation-overlap-manifest/sources/baseline-job-115707918357-log.log",
+      "sha256": "bf5cd3ff4d03bbd4bd46931b2d2216c822328181994f4d593ad040b417702542",
+      "bytes": 70126,
+      "matched": true
+    },
+    {
+      "capture": "baseline-job-115707918516-log-log",
+      "capture_basis": "decoded_public_source_bytes",
+      "original_path": "/workspace/scratch/2e70149a8e59/validation-overlap-manifest/sources/baseline-job-115707918516-log.log",
+      "sha256": "64528dae148ab61db93147a27b472b5489de1f42a675f7b0f49919b0b87291d9",
+      "bytes": 65008,
+      "matched": true
+    },
+    {
+      "capture": "baseline-job-115707918657-log-log",
+      "capture_basis": "decoded_public_source_bytes",
+      "original_path": "/workspace/scratch/2e70149a8e59/validation-overlap-manifest/sources/baseline-job-115707918657-log.log",
+      "sha256": "e18c54da80e342be4667a2e026b1151ded02a7a52c8fee47949492d8290bd4c1",
+      "bytes": 74246,
+      "matched": true
+    },
+    {
+      "capture": "baseline-job-115707918663-log-log",
+      "capture_basis": "decoded_public_source_bytes",
+      "original_path": "/workspace/scratch/2e70149a8e59/validation-overlap-manifest/sources/baseline-job-115707918663-log.log",
+      "sha256": "02dff075a68f6fefb17dc6a074b25da019e88e6d25cb92d56da5b6f07a542ba2",
+      "bytes": 73698,
+      "matched": true
+    },
+    {
+      "capture": "baseline-job-115707918679-log-log",
+      "capture_basis": "decoded_public_source_bytes",
+      "original_path": "/workspace/scratch/2e70149a8e59/validation-overlap-manifest/sources/baseline-job-115707918679-log.log",
+      "sha256": "b14e4369497cc2c24d5125af79891bdaf93f6d72ec88515574f91825afffeb92",
+      "bytes": 73707,
+      "matched": true
+    },
+    {
+      "capture": "baseline-job-115707918751-log-log",
+      "capture_basis": "decoded_public_source_bytes",
+      "original_path": "/workspace/scratch/2e70149a8e59/validation-overlap-manifest/sources/baseline-job-115707918751-log.log",
+      "sha256": "ada59a6307cace8bba2d2ef6cff98015d6fcef1bba5215531ea2eac458c21774",
+      "bytes": 56757,
+      "matched": true
+    },
+    {
+      "capture": "baseline-job-115707918757-log-log",
+      "capture_basis": "decoded_public_source_bytes",
+      "original_path": "/workspace/scratch/2e70149a8e59/validation-overlap-manifest/sources/baseline-job-115707918757-log.log",
+      "sha256": "36564cc9f8b0671a0f14acd82dff55d018f78ab862249b6ede8316deecb6bec2",
+      "bytes": 221482,
+      "matched": true
+    },
+    {
+      "capture": "baseline-job-115708295715-log-log",
+      "capture_basis": "decoded_public_source_bytes",
+      "original_path": "/workspace/scratch/2e70149a8e59/validation-overlap-manifest/sources/baseline-job-115708295715-log.log",
+      "sha256": "3daa518af69f5c52c7adf82a237661cc5f04ef056fd3f76be39561ccba80be43",
+      "bytes": 7883,
+      "matched": true
+    }
+  ],
+  "inherited_30_projections_unchanged": true,
+  "prior_independent_review_receipt": "/workspace/scratch/2e70149a8e59/review-native-ci-fixture-32e0a5fc/review-evidence/source-comparison.json",
+  "selected_original_line_projections_rematched": [
+    "required-config",
+    "baseline-definition",
+    "candidate-tolerance",
+    "sensor-interpretation",
+    "proof-interpretation",
+    "candidate-checkout",
+    "baseline-policy",
+    "baseline-fmt",
+    "baseline-doc",
+    "baseline-check",
+    "baseline-clippy",
+    "baseline-verifier",
+    "baseline-test",
+    "candidate-test-projections",
+    "candidate-test-publication",
+    "candidate-test-transactions",
+    "candidate-test-bootstrap",
+    "candidate-artifact-verifier",
+    "candidate-reconcile-tasks",
+    "candidate-reconcile-publication",
+    "candidate-source-bootstrap",
+    "candidate-review-run",
+    "candidate-gate-consumer",
+    "baseline-finalizer-consumer",
+    "candidate-coverage-publication-consumer"
+  ],
+  "publication_shadow": {
+    "original_log_line": 1516,
+    "source_capture": "candidate-job-log",
+    "selected_fields_exact": true,
+    "selected_value": {
+      "schema": "ub-review.publication_boundary_reconciliation.v1",
+      "authority": "shadow-only",
+      "status": "coherent",
+      "input_unavailable": false,
+      "revision": {
+        "digest": "d5a4a78ee848b9efc97a2227d04e9309f1ebdf0dc0007c236300bebed6bb1db0",
+        "pr_head_commit": "0ce3c632cbd19e102dc49c24a59f30f48bb5935d",
+        "reviewed_commit": "4fd2812df756e609ce350c27a62149af633516a3",
+        "semantics": "merge_result"
+      }
+    }
+  },
+  "projection_file_sha256": "5f9dde16010ce8c099de9ad11d4325fbc7915942e44cac438313ce89694aa910",
+  "scope": "Source-capture hashes and selected projections only; producer artifact bytes remain uninspected."
+}
