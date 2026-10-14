@@ -280,6 +280,43 @@ diff_classes = ["docs-only"]
 }
 
 #[test]
+fn static_plan_preserves_disabled_defaults_and_applicable_custom_lanes() -> Result<()> {
+    let _guard = cli_subprocess_test_lock()?;
+    let repo = fixture("src/lib.rs", "", "[review]\nenable_default_lanes = false\n")?;
+    preview(repo.path(), "disabled", &[], &[])?;
+    let out = repo.path().join("disabled-unknown");
+    let error = run_expect_failure(
+        repo.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &plan_args(&out, &["--lanes", "correctness"])?,
+    )?;
+    assert!(
+        error.contains("unknown lane selector(s): correctness"),
+        "{error}"
+    );
+    assert!(!out.exists());
+    let custom = fixture(
+        "src/lib.rs",
+        "",
+        "[review]\nenable_default_lanes = false\n[[lanes]]\nid = \"repo-only\"\nfocus = \"Check custom contract\"\n",
+    )?;
+    preview(custom.path(), "custom", &[], &["repo-only"])?;
+    preview(
+        custom.path(),
+        "custom-selected",
+        &["--lanes", "repo-only"],
+        &["repo-only"],
+    )?;
+    preview(
+        custom.path(),
+        "custom-excluded",
+        &["--except-lanes", "repo-only"],
+        &[],
+    )?;
+    Ok(())
+}
+
+#[test]
 fn static_plan_without_write_applies_selectors_without_creating_artifacts() -> Result<()> {
     let _guard = cli_subprocess_test_lock()?;
     let repo = fixture("src/lib.rs", "", "")?;
