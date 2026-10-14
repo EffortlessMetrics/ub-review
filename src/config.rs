@@ -1128,7 +1128,8 @@ fn sanitize_providers_section(table: &mut toml::value::Table, errors: &mut Vec<P
         errors.push(PolicyError {
             section: "providers".to_owned(),
             detail: format!(
-                "invalid [providers] value {value}; expected a table with `policy`, `minimax`, and `opencode` keys"
+                "invalid [providers]: expected a table with `policy`, `minimax`, and `opencode` keys, found {}",
+                value.type_str()
             ),
         });
         table.remove("providers");
@@ -1162,7 +1163,10 @@ fn sanitize_providers_section(table: &mut toml::value::Table, errors: &mut Vec<P
         {
             errors.push(PolicyError {
                 section: format!("providers.{provider}"),
-                detail: format!("invalid [providers.{provider}] value {value}; expected a table"),
+                detail: format!(
+                    "invalid [providers.{provider}]: expected a table, found {}",
+                    value.type_str()
+                ),
             });
             providers.remove(provider);
             continue;
@@ -1914,7 +1918,7 @@ phase = "sometime"
         assert_eq!(malformed.policy_errors[0].section, "providers");
         assert_eq!(
             malformed.policy_errors[0].detail,
-            "invalid [providers] value \"disabled\"; expected a table with `policy`, `minimax`, and `opencode` keys"
+            "invalid [providers]: expected a table with `policy`, `minimax`, and `opencode` keys, found string"
         );
         assert_eq!(malformed.providers.policy, "");
         assert_eq!(malformed.impact.resolved_mode(), "active");
@@ -2107,8 +2111,9 @@ phase = "sometime"
                     || text.contains("SYNTHETIC_FIELD_1427")
             })
         });
-        let effective_leaks = leaks[0].clone()?;
-        let gate_leaks = leaks[1].clone()?;
+        let [effective_leaks, gate_leaks] = leaks;
+        let effective_leaks = effective_leaks?;
+        let gate_leaks = gate_leaks?;
         anyhow::ensure!(
             !effective_leaks && !gate_leaks,
             "synthetic rejected-payload disclosure: effective-config.json={effective_leaks}, review/gate_outcome.json={gate_leaks}"
