@@ -608,6 +608,23 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
             }
             continue;
         };
+        if sensor.id == "coverage"
+            && (receipt.status != "skipped"
+                || is_sensor_evidence_issue(sensor, &receipt.status, &receipt.reason))
+        {
+            let summary = read_coverage_summary_digest(out);
+            let detail = summary.excerpt();
+            if summary.status != "collected" {
+                missing.push(detail);
+            } else if receipt.status == "ok" {
+                available.push(detail);
+            } else {
+                failed.push(detail);
+            }
+            if receipt.status == "ok" {
+                continue;
+            }
+        }
         match receipt.status.as_str() {
             "ok" => available.push(format!(
                 "{} ran; {} available.",
