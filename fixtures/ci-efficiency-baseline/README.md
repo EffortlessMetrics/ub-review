@@ -5,7 +5,7 @@ adds no production behavior and does not complete #1270 or establish reuse.
 
 - Candidate: [run 38520204127 / gate job 115707925898](https://github.com/EffortlessMetrics/ub-review/actions/runs/38520204127/job/115707925898), merge result `4fd2812df756e609ce350c27a62149af633516a3`
 - Independent baseline: [run 38520201117](https://github.com/EffortlessMetrics/ub-review/actions/runs/38520201117), raw head `0ce3c632cbd19e102dc49c24a59f30f48bb5935d`, protected workflow definition `3dbcc2be9768b082c0896dc2360e950ffbd56a65`
-- [Owner issue](https://github.com/EffortlessMetrics/ub-review/issues/1270) and [closeout boundary](https://github.com/EffortlessMetrics/ub-review/issues/1270#issuecomment-5702958987)
+- [Owner issue](https://github.com/EffortlessMetrics/ub-review/issues/1270), [historical closeout boundary](https://github.com/EffortlessMetrics/ub-review/issues/1270#issuecomment-5702958987), and [current preparation scope](https://github.com/EffortlessMetrics/ub-review/issues/1270#issuecomment-6175829187)
 
 The 36 observations comprise 16 wrapper/workflow commands, 14 **nested,
 shadow-reported** process-started tasks (11 sensors and 3 impact proofs), and
