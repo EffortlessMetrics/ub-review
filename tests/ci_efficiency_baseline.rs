@@ -1580,6 +1580,18 @@ fn semantic_set_controls_keep_required_timeout_and_witness_boundaries() -> Resul
         data["sources"]["projections"]["shadow"]["value"]["issues"].clone(),
         "timeout diagnostic erased",
     )?;
+    let mut data = serde_json::to_value(&corpus)?;
+    data["manifest"]["overlaps"]
+        .as_array_mut()
+        .context("overlaps missing")?
+        .pop()
+        .context("overlap missing")?;
+    rejected_value(
+        &corpus,
+        "/manifest/overlaps",
+        data["manifest"]["overlaps"].clone(),
+        "fixed overlap inventory changed",
+    )?;
     for (identity, removed, reason) in [
         (
             "cross-workflow-check",
