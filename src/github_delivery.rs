@@ -1579,6 +1579,11 @@ mod tests {
         reserve_delivery_attempt(&args, "http://scripted", "owner/repo", 42, HEAD, &payload)?;
         let bytes = fs::read(args.out.join("delivery-attempt.json"))?;
         let value: serde_json::Value = serde_json::from_slice(&bytes)?;
+        ensure!(
+            value["schema"] == "ub-review.delivery_attempt.v1",
+            "reservation schema changed"
+        );
+        ensure!(value["api"] == "http://scripted", "reservation API changed");
         ensure!(value["repo"] == "owner/repo" && value["pull_number"] == 42);
         ensure!(value["exact_head_sha"] == HEAD);
         ensure!(value["payload_digest"] == sha256_hex(&serde_json::to_vec(&payload)?));
