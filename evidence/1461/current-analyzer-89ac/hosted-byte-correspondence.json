@@ -1,0 +1,121 @@
+{
+  "workflow_run": {
+    "id": 38631520667,
+    "job_id": 116084066974,
+    "url": "https://github.com/EffortlessMetrics/ub-review/actions/runs/38631520667",
+    "conclusion": "failure"
+  },
+  "artifact": {
+    "id": 11926772048,
+    "name": "ub-review-gate",
+    "metadata_url": "https://api.github.com/repos/EffortlessMetrics/ub-review/actions/artifacts/11926772048",
+    "bytes": 48780475,
+    "sha256": "7150ad46fff968009f79a9637ae0697cac06fd92904bd692ecd8da0b6b7283e2",
+    "bundled": false
+  },
+  "named_member_correspondence": {
+    "input/diff.patch": {
+      "byte_identical_to_retained_comparison_patch": true,
+      "bytes": 94214,
+      "sha256": "4e541b2d25ee596a5c5f199babb983c028bcb07f416648242cc37a9101f183f0"
+    },
+    "sensors/ripr/gate-decision.json": {
+      "byte_identical_to_retained_released_local_badge": true,
+      "bytes": 760606,
+      "sha256": "59e3a8291fb99986f826b2cd8f48f93f91911dacda7b33766a57e69a3e2dadc1",
+      "projection_bundled_as": "released-badge-projection.json"
+    },
+    "sensors/ripr/exposure-gaps.ripr.stdout": {
+      "bytes": 501493837,
+      "sha256": "cf1b689e636a2f4204c3b0eae2db8e47a394c55b29d9a5fe0ee098e9c9ecdbaf",
+      "streamed_findings": 1689,
+      "findings_equal_envelope_count": true,
+      "raw_bundled": false
+    },
+    "input/revision-admission.json": {
+      "bytes": 920,
+      "sha256": "5052b039ea0fbee092e4b9791ca84000e05f096f544a32b18c552e6d3ae1840c"
+    },
+    "review/gate_outcome.json": {
+      "bytes": 3144,
+      "sha256": "c9ec40458557b571a0b0080297d1f03139ed083f6f23a090ece376056572a1d9"
+    },
+    "review/tool-gate-outcomes.json": {
+      "bytes": 974,
+      "sha256": "bab698dd2496a2609836ef3505db8a8b7b54bcd4f3c55b97620384c6d48f5f1e"
+    }
+  },
+  "merge_identity": {
+    "commit": "91542b37859461fad395cd7b8b2dbc7c329109e1",
+    "tree": "cc08312e4c857994a153a537082f6776b0fc54a7",
+    "parents": [
+      "3dbcc2be9768b082c0896dc2360e950ffbd56a65",
+      "e5fc48da60bc1b887cfdc4efc2ee28d942a0a279"
+    ],
+    "verification": "Fetched git commit object independently inspected; merge tree equals compared consumer head tree.",
+    "admission_semantics": "merge_result",
+    "admission_identity_digest": "07a44b0982d79310f132f73ea849dcaa3cbb530737b43bf5883ac5438f3de04e",
+    "worktree_dirty": true,
+    "dirty_caveat": "Tree equality and exact patch/badge bytes do not erase the recorded dirty-worktree admission."
+  },
+  "gate_projection": {
+    "conclusion": "fail",
+    "blocking_reasons": [
+      {
+        "kind": "tool-gate",
+        "id": "ripr",
+        "detail": "new_unsuppressed=313 exceeds configured maximum 0",
+        "receipt": "review/tool-gate-outcomes.json#ripr",
+        "next_action": "inspect review/tool-gate-outcomes.json#ripr and sensors/ripr/exposure-gaps.json; fix or suppress the reported findings until new_unsuppressed <= 0"
+      }
+    ],
+    "required_proof": {
+      "matched": 3,
+      "passed": 0,
+      "failed": 0,
+      "skipped": 3
+    },
+    "model_coverage": {
+      "lanes_total": 13,
+      "lanes_usable": 0,
+      "budget_exhausted_lanes": 0,
+      "budget_exhausted": false
+    },
+    "not_proven_reasons": [
+      "required-proof: 3 of 3 required proof requests produced no passing receipt",
+      "required-planner-proof: 3 of 3 required planner proof tasks ended without a satisfying receipt; inspect task status and receipt results in review/proof_portfolio.json, review/proof_receipts.json, and review/gate_outcome.json",
+      "model-coverage: 0 of 13 model lanes produced usable output"
+    ],
+    "tool_outcomes": [
+      {
+        "schema": "ub-review.tool_gate_outcome.v1",
+        "tool": "ripr",
+        "policy": {
+          "scope": "on-diff",
+          "max_new_unsuppressed": 0
+        },
+        "required": true,
+        "planned_run": true,
+        "sensor_status": "ok",
+        "sensor_reason": "completed",
+        "sensor_receipt_path": "sensors/ripr/ub-review-sensor-status.json",
+        "status_source": "tool-status.json",
+        "outcome": "failed",
+        "evaluated": true,
+        "reason": "new_unsuppressed=313 exceeds configured maximum 0",
+        "metrics": {
+          "new_unsuppressed": 313
+        },
+        "source_artifacts": [
+          "sensors/ripr/ub-review-sensor-status.json",
+          "tool-status.json",
+          "sensors/ripr/gate-decision.json",
+          "sensors/ripr/exposure-gaps.json"
+        ],
+        "packet_policy": "gate-only",
+        "gate_policy": "trust-affecting"
+      }
+    ]
+  },
+  "binary_identity": "Matching released local badge bytes and version do not independently attest the hosted executable digest."
+}

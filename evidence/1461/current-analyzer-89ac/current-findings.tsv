@@ -1,0 +1,856 @@
+id	path	line	class	owner	owner_start_line	owner_end_line	cargo_target
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:2d62fee6	./src/task_projection_reconciliation/reader.rs	16	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:6573e340	./src/task_projection_reconciliation/reader.rs	17	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:0dc5460a	./src/task_projection_reconciliation/reader.rs	18	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:3eada82c	./src/task_projection_reconciliation/reader.rs	19	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:dd1ccf3e	./src/task_projection_reconciliation/reader.rs	20	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:eca5ead5	./src/task_projection_reconciliation/reader.rs	21	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:3f741aa1	./src/task_projection_reconciliation/reader.rs	23	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:3eaf05bf	./src/task_projection_reconciliation/reader.rs	29	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:4b44811c	./src/task_projection_reconciliation/reader.rs	30	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:640a45bb	./src/task_projection_reconciliation/reader.rs	31	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:c02dc113	./src/task_projection_reconciliation/reader.rs	32	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:5faa60e5	./src/task_projection_reconciliation/reader.rs	33	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:ffbeadf5	./src/task_projection_reconciliation/reader.rs	34	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:779c1668	./src/task_projection_reconciliation/reader.rs	35	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:3691d9bb	./src/task_projection_reconciliation/reader.rs	39	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:7f7554f0	./src/task_projection_reconciliation/reader.rs	41	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:0863113d	./src/task_projection_reconciliation/reader.rs	42	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:910ec9d3	./src/task_projection_reconciliation/reader.rs	44	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:0056a34c	./src/task_projection_reconciliation/reader.rs	46	weakly_exposed	JsonValue::as_object	45	50	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:5dfc6d45	./src/task_projection_reconciliation/reader.rs	47	weakly_exposed	JsonValue::as_object	45	50	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:0594d1d0	./src/task_projection_reconciliation/reader.rs	47	weakly_exposed	JsonValue::as_object	45	50	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:5766cfa9	./src/task_projection_reconciliation/reader.rs	48	weakly_exposed	JsonValue::as_object	45	50	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:d0bdb3dd	./src/task_projection_reconciliation/reader.rs	52	weakly_exposed	JsonValue::as_array	51	56	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:3de5f27a	./src/task_projection_reconciliation/reader.rs	53	weakly_exposed	JsonValue::as_array	51	56	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:2c23470b	./src/task_projection_reconciliation/reader.rs	53	weakly_exposed	JsonValue::as_array	51	56	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:2e9c2ac8	./src/task_projection_reconciliation/reader.rs	54	weakly_exposed	JsonValue::as_array	51	56	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:09573c98	./src/task_projection_reconciliation/reader.rs	58	weakly_exposed	JsonValue::as_str	57	62	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:9976dc0b	./src/task_projection_reconciliation/reader.rs	59	weakly_exposed	JsonValue::as_str	57	62	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:e1cb41f4	./src/task_projection_reconciliation/reader.rs	59	weakly_exposed	JsonValue::as_str	57	62	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:12addd65	./src/task_projection_reconciliation/reader.rs	60	weakly_exposed	JsonValue::as_str	57	62	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:7e036116	./src/task_projection_reconciliation/reader.rs	64	weakly_exposed	JsonValue::is_object	63	65	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:f97b66f6	./src/task_projection_reconciliation/reader.rs	67	weakly_exposed	JsonValue::is_array	66	68	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:bea5349f	./src/task_projection_reconciliation/reader.rs	70	weakly_exposed	JsonValue::is_string	69	71	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:aa245341	./src/task_projection_reconciliation/reader.rs	73	weakly_exposed	JsonValue::get	72	74	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:48b86c90	./src/task_projection_reconciliation/reader.rs	77	weakly_exposed	JsonValue::as_bool	75	81	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:9c655232	./src/task_projection_reconciliation/reader.rs	78	weakly_exposed	JsonValue::as_bool	75	81	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:d421e14d	./src/task_projection_reconciliation/reader.rs	78	weakly_exposed	JsonValue::as_bool	75	81	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:f3a90d96	./src/task_projection_reconciliation/reader.rs	79	weakly_exposed	JsonValue::as_bool	75	81	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:190bf77d	./src/task_projection_reconciliation/reader.rs	84	weakly_exposed	JsonValue::is_number	82	85	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:b127456c	./src/task_projection_reconciliation/reader.rs	90	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:5452eec3	./src/task_projection_reconciliation/reader.rs	91	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:dc6c4558	./src/task_projection_reconciliation/reader.rs	92	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:7f2098d9	./src/task_projection_reconciliation/reader.rs	93	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:25ac7eb6	./src/task_projection_reconciliation/reader.rs	94	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:85ae8908	./src/task_projection_reconciliation/reader.rs	95	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:87e71ce2	./src/task_projection_reconciliation/reader.rs	96	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:65af5dd2	./src/task_projection_reconciliation/reader.rs	97	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:feaa8843	./src/task_projection_reconciliation/reader.rs	98	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:3866f0c6	./src/task_projection_reconciliation/reader.rs	99	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:52dd80cb	./src/task_projection_reconciliation/reader.rs	100	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:f41bec77	./src/task_projection_reconciliation/reader.rs	103	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:47ec3448	./src/task_projection_reconciliation/reader.rs	105	weakly_exposed	PacketError::fmt	104	117	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:ce0e2cd5	./src/task_projection_reconciliation/reader.rs	105	weakly_exposed	PacketError::fmt	104	117	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:4cc09d15	./src/task_projection_reconciliation/reader.rs	106	weakly_exposed	PacketError::fmt	104	117	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:aee640f9	./src/task_projection_reconciliation/reader.rs	107	weakly_exposed	PacketError::fmt	104	117	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:104925a4	./src/task_projection_reconciliation/reader.rs	108	weakly_exposed	PacketError::fmt	104	117	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:5f73c400	./src/task_projection_reconciliation/reader.rs	109	weakly_exposed	PacketError::fmt	104	117	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:698e48c2	./src/task_projection_reconciliation/reader.rs	110	weakly_exposed	PacketError::fmt	104	117	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:26e580a3	./src/task_projection_reconciliation/reader.rs	111	weakly_exposed	PacketError::fmt	104	117	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:65a5b324	./src/task_projection_reconciliation/reader.rs	112	weakly_exposed	PacketError::fmt	104	117	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:01796940	./src/task_projection_reconciliation/reader.rs	113	weakly_exposed	PacketError::fmt	104	117	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:638c49b3	./src/task_projection_reconciliation/reader.rs	114	weakly_exposed	PacketError::fmt	104	117	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:6860c201	./src/task_projection_reconciliation/reader.rs	115	weakly_exposed	PacketError::fmt	104	117	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:b4c07e7c	./src/task_projection_reconciliation/reader.rs	120	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:cf759e67	./src/task_projection_reconciliation/reader.rs	123	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:7c4f6f65	./src/task_projection_reconciliation/reader.rs	124	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:d3dec098	./src/task_projection_reconciliation/reader.rs	125	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:9cddeed5	./src/task_projection_reconciliation/reader.rs	126	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:24ee73d1	./src/task_projection_reconciliation/reader.rs	127	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:7f78f2c9	./src/task_projection_reconciliation/reader.rs	128	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:f78c4b45	./src/task_projection_reconciliation/reader.rs	131	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:35c627be	./src/task_projection_reconciliation/reader.rs	132	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:197996fe	./src/task_projection_reconciliation/reader.rs	133	weakly_exposed	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:2ec325da	./src/task_projection_reconciliation/reader.rs	134	weakly_exposed	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:75a5819e	./src/task_projection_reconciliation/reader.rs	135	weakly_exposed	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:db11c1de	./src/task_projection_reconciliation/reader.rs	136	weakly_exposed	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:0a6b6992	./src/task_projection_reconciliation/reader.rs	137	weakly_exposed	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:5ce40dac	./src/task_projection_reconciliation/reader.rs	142	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:95bdaa58	./src/task_projection_reconciliation/reader.rs	143	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:ae7b562f	./src/task_projection_reconciliation/reader.rs	144	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:3921ea38	./src/task_projection_reconciliation/reader.rs	145	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:8034b90c	./src/task_projection_reconciliation/reader.rs	149	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:c31e03ae	./src/task_projection_reconciliation/reader.rs	150	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:95bdaa58.2	./src/task_projection_reconciliation/reader.rs	151	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:1fffd455	./src/task_projection_reconciliation/reader.rs	152	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:d9ebbf1b	./src/task_projection_reconciliation/reader.rs	156	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:d859268e	./src/task_projection_reconciliation/reader.rs	157	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:9ca7f18b	./src/task_projection_reconciliation/reader.rs	158	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:745d0831	./src/task_projection_reconciliation/reader.rs	161	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:37836644	./src/task_projection_reconciliation/reader.rs	163	weakly_exposed	JsonShape::matches	162	167	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:abdcc2c1	./src/task_projection_reconciliation/reader.rs	164	weakly_exposed	JsonShape::matches	162	167	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:842b5eb7	./src/task_projection_reconciliation/reader.rs	165	weakly_exposed	JsonShape::matches	162	167	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:1af837cb	./src/task_projection_reconciliation/reader.rs	171	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:230e0fe5	./src/task_projection_reconciliation/reader.rs	172	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:7ace42c0	./src/task_projection_reconciliation/reader.rs	173	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:fbed0771	./src/task_projection_reconciliation/reader.rs	174	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:1a955ab5	./src/task_projection_reconciliation/reader.rs	179	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:c7594fe8	./src/task_projection_reconciliation/reader.rs	180	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:bb8299d2	./src/task_projection_reconciliation/reader.rs	181	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:73a682dd	./src/task_projection_reconciliation/reader.rs	182	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:4ba95446	./src/task_projection_reconciliation/reader.rs	183	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:27841878	./src/task_projection_reconciliation/reader.rs	184	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:6b2f5982	./src/task_projection_reconciliation/reader.rs	185	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:2648c509	./src/task_projection_reconciliation/reader.rs	186	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:bd3c82d6	./src/task_projection_reconciliation/reader.rs	187	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:e61990b0	./src/task_projection_reconciliation/reader.rs	188	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:ae6c7f6e	./src/task_projection_reconciliation/reader.rs	191	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:ce221102	./src/task_projection_reconciliation/reader.rs	193	weakly_exposed	PacketReader::new	192	208	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:666fe04b	./src/task_projection_reconciliation/reader.rs	194	weakly_exposed	PacketReader::new	192	208	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:c452572c	./src/task_projection_reconciliation/reader.rs	195	exposed	PacketReader::new	192	208	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:e7e0753c	./src/task_projection_reconciliation/reader.rs	195	exposed	PacketReader::new	192	208	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:cb2ae0b7	./src/task_projection_reconciliation/reader.rs	197	weakly_exposed	PacketReader::new	192	208	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:3a25d826	./src/task_projection_reconciliation/reader.rs	198	exposed	PacketReader::new	192	208	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:bdfabe4d	./src/task_projection_reconciliation/reader.rs	199	weakly_exposed	PacketReader::new	192	208	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:77234bef	./src/task_projection_reconciliation/reader.rs	200	weakly_exposed	PacketReader::new	192	208	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:52517428	./src/task_projection_reconciliation/reader.rs	201	exposed	PacketReader::new	192	208	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:35fb49f4	./src/task_projection_reconciliation/reader.rs	202	exposed	PacketReader::new	192	208	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:2f8572ae	./src/task_projection_reconciliation/reader.rs	203	weakly_exposed	PacketReader::new	192	208	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:a4f8f475	./src/task_projection_reconciliation/reader.rs	204	exposed	PacketReader::new	192	208	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:d6d05439	./src/task_projection_reconciliation/reader.rs	205	weakly_exposed	PacketReader::new	192	208	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:b4694d5e	./src/task_projection_reconciliation/reader.rs	206	exposed	PacketReader::new	192	208	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:0f1181f7	./src/task_projection_reconciliation/reader.rs	212	exposed	PacketReader::with_limits	210	215	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:7e673a32	./src/task_projection_reconciliation/reader.rs	213	static_unknown	PacketReader::with_limits	210	215	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:7bae2e91	./src/task_projection_reconciliation/reader.rs	214	exposed	PacketReader::with_limits	210	215	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:b9cb2755	./src/task_projection_reconciliation/reader.rs	218	propagation_unknown	PacketReader::sources	217	219	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:5301a895	./src/task_projection_reconciliation/reader.rs	222	propagation_unknown	PacketReader::coverage	221	223	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:186c5f9c	./src/task_projection_reconciliation/reader.rs	226	propagation_unknown	PacketReader::issues	225	227	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:c52cf6cd	./src/task_projection_reconciliation/reader.rs	230	propagation_unknown	PacketReader::issues_overflow	229	231	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:826475fe	./src/task_projection_reconciliation/reader.rs	234	propagation_unknown	PacketReader::input_unavailable	233	235	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:c1583fb2	./src/task_projection_reconciliation/reader.rs	238	static_unknown	PacketReader::mark_unavailable	237	240	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:e0496b96	./src/task_projection_reconciliation/reader.rs	239	weakly_exposed	PacketReader::mark_unavailable	237	240	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:4ef75158	./src/task_projection_reconciliation/reader.rs	243	propagation_unknown	PacketReader::total_bytes	242	244	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:a47ab7c8	./src/task_projection_reconciliation/reader.rs	247	exposed	PacketReader::attempts	246	248	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:520e2ae5	./src/task_projection_reconciliation/reader.rs	251	static_unknown	PacketReader::issue	250	264	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:d6d00dd2	./src/task_projection_reconciliation/reader.rs	252	weakly_exposed	PacketReader::issue	250	264	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:cad3e3ac	./src/task_projection_reconciliation/reader.rs	253	weakly_exposed	PacketReader::issue	250	264	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:0e0940ca	./src/task_projection_reconciliation/reader.rs	254	weakly_exposed	PacketReader::issue	250	264	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:cd05dca4	./src/task_projection_reconciliation/reader.rs	256	infection_unknown	PacketReader::issue	250	264	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:72391982	./src/task_projection_reconciliation/reader.rs	257	propagation_unknown	PacketReader::issue	250	264	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:e6051f5a	./src/task_projection_reconciliation/reader.rs	259	infection_unknown	PacketReader::issue	250	264	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:93d67f51	./src/task_projection_reconciliation/reader.rs	260	weakly_exposed	PacketReader::issue	250	264	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:390f6e5f	./src/task_projection_reconciliation/reader.rs	260	weakly_exposed	PacketReader::issue	250	264	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:bf10b80c	./src/task_projection_reconciliation/reader.rs	262	static_unknown	PacketReader::issue	250	264	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:d0803e9d	./src/task_projection_reconciliation/reader.rs	268	infection_unknown	PacketReader::invalid	266	273	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:0360f464	./src/task_projection_reconciliation/reader.rs	269	weakly_exposed	PacketReader::invalid	266	273	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:1dbe950f	./src/task_projection_reconciliation/reader.rs	269	weakly_exposed	PacketReader::invalid	266	273	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:63d85db4	./src/task_projection_reconciliation/reader.rs	271	static_unknown	PacketReader::invalid	266	273	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:84eb6619	./src/task_projection_reconciliation/reader.rs	272	weakly_exposed	PacketReader::invalid	266	273	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:8670364b	./src/task_projection_reconciliation/reader.rs	278	weakly_exposed	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:8da0f293	./src/task_projection_reconciliation/reader.rs	279	exposed	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:687b007a	./src/task_projection_reconciliation/reader.rs	279	exposed	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:c68f0fba	./src/task_projection_reconciliation/reader.rs	281	static_unknown	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:2def3816	./src/task_projection_reconciliation/reader.rs	282	static_unknown	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:8a8260a5	./src/task_projection_reconciliation/reader.rs	283	infection_unknown	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:8da0f293.2	./src/task_projection_reconciliation/reader.rs	284	exposed	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:687b007a.2	./src/task_projection_reconciliation/reader.rs	284	exposed	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:6912f0b7	./src/task_projection_reconciliation/reader.rs	288	infection_unknown	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:e33ecfe7	./src/task_projection_reconciliation/reader.rs	288	infection_unknown	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:8da0f293.3	./src/task_projection_reconciliation/reader.rs	292	exposed	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:687b007a.3	./src/task_projection_reconciliation/reader.rs	292	exposed	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:41ee2a81	./src/task_projection_reconciliation/reader.rs	294	propagation_unknown	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:00d8f984	./src/task_projection_reconciliation/reader.rs	294	propagation_unknown	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:c7cce4b3	./src/task_projection_reconciliation/reader.rs	295	weakly_exposed	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:833bf23a	./src/task_projection_reconciliation/reader.rs	296	weakly_exposed	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:aaf91788	./src/task_projection_reconciliation/reader.rs	297	reachable_unrevealed	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:9a8ced3d	./src/task_projection_reconciliation/reader.rs	297	weakly_exposed	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:294d825d	./src/task_projection_reconciliation/reader.rs	299	weakly_exposed	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:821e97f5	./src/task_projection_reconciliation/reader.rs	300	weakly_exposed	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:149999ae	./src/task_projection_reconciliation/reader.rs	300	weakly_exposed	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:4431723d	./src/task_projection_reconciliation/reader.rs	301	weakly_exposed	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:280af59e	./src/task_projection_reconciliation/reader.rs	301	infection_unknown	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:ecc52b80	./src/task_projection_reconciliation/reader.rs	302	reachable_unrevealed	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:8e36defc	./src/task_projection_reconciliation/reader.rs	302	weakly_exposed	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:2102e350	./src/task_projection_reconciliation/reader.rs	302	weakly_exposed	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:8430b3a7	./src/task_projection_reconciliation/reader.rs	305	weakly_exposed	PacketReader::confined_path	275	306	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:ebf72e2f	./src/task_projection_reconciliation/reader.rs	309	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:4927eec8	./src/task_projection_reconciliation/reader.rs	310	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:498f219d	./src/task_projection_reconciliation/reader.rs	311	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:233d8983	./src/task_projection_reconciliation/reader.rs	312	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:2ea97081	./src/task_projection_reconciliation/reader.rs	312	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:48636bcf	./src/task_projection_reconciliation/reader.rs	313	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:a3e1e376	./src/task_projection_reconciliation/reader.rs	315	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:1b3a0bc6	./src/task_projection_reconciliation/reader.rs	315	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:cc4fabf6	./src/task_projection_reconciliation/reader.rs	317	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:eaef0124	./src/task_projection_reconciliation/reader.rs	319	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:29ede266	./src/task_projection_reconciliation/reader.rs	319	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:e867ea4b	./src/task_projection_reconciliation/reader.rs	319	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:fca57510	./src/task_projection_reconciliation/reader.rs	321	infection_unknown	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:d488e6dd	./src/task_projection_reconciliation/reader.rs	322	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:ad14e8d4	./src/task_projection_reconciliation/reader.rs	322	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:49155ee2	./src/task_projection_reconciliation/reader.rs	324	static_unknown	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:04b33366	./src/task_projection_reconciliation/reader.rs	325	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:fddac0e6	./src/task_projection_reconciliation/reader.rs	326	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:ef5c23e5	./src/task_projection_reconciliation/reader.rs	326	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:5d39ec0f	./src/task_projection_reconciliation/reader.rs	328	static_unknown	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:26970244	./src/task_projection_reconciliation/reader.rs	329	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:70903114	./src/task_projection_reconciliation/reader.rs	330	static_unknown	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:755bb283	./src/task_projection_reconciliation/reader.rs	331	static_unknown	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:57ad1021	./src/task_projection_reconciliation/reader.rs	333	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:b343cc06	./src/task_projection_reconciliation/reader.rs	334	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:18b28604	./src/task_projection_reconciliation/reader.rs	335	infection_unknown	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:fddac0e6.2	./src/task_projection_reconciliation/reader.rs	336	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:ef5c23e5.2	./src/task_projection_reconciliation/reader.rs	336	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:7f9b5d35	./src/task_projection_reconciliation/reader.rs	338	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:45f36629	./src/task_projection_reconciliation/reader.rs	338	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:a0fab9e9	./src/task_projection_reconciliation/reader.rs	341	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:8a2b2f3f	./src/task_projection_reconciliation/reader.rs	342	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:ec01b90c	./src/task_projection_reconciliation/reader.rs	343	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:0792db37	./src/task_projection_reconciliation/reader.rs	346	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:83a68c6a	./src/task_projection_reconciliation/reader.rs	346	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:1870080c	./src/task_projection_reconciliation/reader.rs	347	weakly_exposed	PacketReader::read_uncached	308	348	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:c68cda72	./src/task_projection_reconciliation/reader.rs	351	infection_unknown	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:8654fdca	./src/task_projection_reconciliation/reader.rs	352	infection_unknown	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:d5ba789a	./src/task_projection_reconciliation/reader.rs	353	exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:a715996f	./src/task_projection_reconciliation/reader.rs	354	exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:d2e15233	./src/task_projection_reconciliation/reader.rs	354	exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:689fe35d	./src/task_projection_reconciliation/reader.rs	357	exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:f09bf8c3	./src/task_projection_reconciliation/reader.rs	357	exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:dca4b920	./src/task_projection_reconciliation/reader.rs	358	weakly_exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:2457536f	./src/task_projection_reconciliation/reader.rs	359	weakly_exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:7819d6bd	./src/task_projection_reconciliation/reader.rs	360	weakly_exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:d5ba789a.2	./src/task_projection_reconciliation/reader.rs	361	exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:6cbb5d91	./src/task_projection_reconciliation/reader.rs	362	exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:40b11439	./src/task_projection_reconciliation/reader.rs	365	exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:dab429db	./src/task_projection_reconciliation/reader.rs	365	exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:405d14cd	./src/task_projection_reconciliation/reader.rs	367	infection_unknown	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:6e6388ca	./src/task_projection_reconciliation/reader.rs	368	exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:6ce08824	./src/task_projection_reconciliation/reader.rs	370	weakly_exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:dd94038e	./src/task_projection_reconciliation/reader.rs	371	weakly_exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:a2f71495	./src/task_projection_reconciliation/reader.rs	371	weakly_exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:4ce6a879	./src/task_projection_reconciliation/reader.rs	372	weakly_exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:ba607b4f	./src/task_projection_reconciliation/reader.rs	372	weakly_exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:2b93b2e3	./src/task_projection_reconciliation/reader.rs	373	weakly_exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:80ab80e3	./src/task_projection_reconciliation/reader.rs	373	weakly_exposed	PacketReader::read	350	375	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:09a84885	./src/task_projection_reconciliation/reader.rs	378	static_unknown	PacketReader::load_json	377	385	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:be5156fc	./src/task_projection_reconciliation/reader.rs	379	exposed	PacketReader::load_json	377	385	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:9e545267	./src/task_projection_reconciliation/reader.rs	380	exposed	PacketReader::load_json	377	385	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:4c163f8c	./src/task_projection_reconciliation/reader.rs	381	infection_unknown	PacketReader::load_json	377	385	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:da1cc21f	./src/task_projection_reconciliation/reader.rs	382	exposed	PacketReader::load_json	377	385	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:43bc9021	./src/task_projection_reconciliation/reader.rs	384	propagation_unknown	PacketReader::load_json	377	385	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:a7e90726	./src/task_projection_reconciliation/reader.rs	387	static_unknown	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:f5353469	./src/task_projection_reconciliation/reader.rs	388	static_unknown	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:b2865754	./src/task_projection_reconciliation/reader.rs	389	static_unknown	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:2590e637	./src/task_projection_reconciliation/reader.rs	390	static_unknown	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:b4f38b81	./src/task_projection_reconciliation/reader.rs	391	static_unknown	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:b34a4a80	./src/task_projection_reconciliation/reader.rs	392	static_unknown	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:53a5b1da	./src/task_projection_reconciliation/reader.rs	393	static_unknown	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:f6ed959e	./src/task_projection_reconciliation/reader.rs	394	exposed	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:4894b0b2	./src/task_projection_reconciliation/reader.rs	394	exposed	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:202eb481	./src/task_projection_reconciliation/reader.rs	395	weakly_exposed	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:5929be02	./src/task_projection_reconciliation/reader.rs	397	infection_unknown	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:18b598f1	./src/task_projection_reconciliation/reader.rs	398	exposed	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:1f48c6c1	./src/task_projection_reconciliation/reader.rs	398	exposed	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:4997a31a	./src/task_projection_reconciliation/reader.rs	399	infection_unknown	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:4176892d	./src/task_projection_reconciliation/reader.rs	399	infection_unknown	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:e2146e0b	./src/task_projection_reconciliation/reader.rs	400	weakly_exposed	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:9ac6b3bc	./src/task_projection_reconciliation/reader.rs	402	exposed	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:0e6b5789	./src/task_projection_reconciliation/reader.rs	402	exposed	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:d3b458f6	./src/task_projection_reconciliation/reader.rs	404	weakly_exposed	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:4982ba6f	./src/task_projection_reconciliation/reader.rs	406	infection_unknown	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:60fea5b4	./src/task_projection_reconciliation/reader.rs	407	weakly_exposed	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:cd9b83ae	./src/task_projection_reconciliation/reader.rs	408	weakly_exposed	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:89093916	./src/task_projection_reconciliation/reader.rs	408	weakly_exposed	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:3c3c4018	./src/task_projection_reconciliation/reader.rs	410	weakly_exposed	PacketReader::load	387	411	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:eddc7e42	./src/task_projection_reconciliation/reader.rs	413	static_unknown	PacketReader::rows	413	435	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:2ed02cdc	./src/task_projection_reconciliation/reader.rs	414	static_unknown	PacketReader::rows	413	435	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:b54a1ace	./src/task_projection_reconciliation/reader.rs	415	static_unknown	PacketReader::rows	413	435	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:f105c507	./src/task_projection_reconciliation/reader.rs	416	static_unknown	PacketReader::rows	413	435	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:c8a58ea7	./src/task_projection_reconciliation/reader.rs	417	static_unknown	PacketReader::rows	413	435	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:e434e1be	./src/task_projection_reconciliation/reader.rs	418	static_unknown	PacketReader::rows	413	435	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:8f799b30	./src/task_projection_reconciliation/reader.rs	419	weakly_exposed	PacketReader::rows	413	435	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:ecf835f1	./src/task_projection_reconciliation/reader.rs	420	weakly_exposed	PacketReader::rows	413	435	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:a37bd062	./src/task_projection_reconciliation/reader.rs	422	weakly_exposed	PacketReader::rows	413	435	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:595598b2	./src/task_projection_reconciliation/reader.rs	423	weakly_exposed	PacketReader::rows	413	435	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:c43f7093	./src/task_projection_reconciliation/reader.rs	424	weakly_exposed	PacketReader::rows	413	435	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:7cd574c2	./src/task_projection_reconciliation/reader.rs	424	weakly_exposed	PacketReader::rows	413	435	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:67be541a	./src/task_projection_reconciliation/reader.rs	426	infection_unknown	PacketReader::rows	413	435	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:9f727f6c	./src/task_projection_reconciliation/reader.rs	426	infection_unknown	PacketReader::rows	413	435	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:ffb64226	./src/task_projection_reconciliation/reader.rs	426	exposed	PacketReader::rows	413	435	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:4b1be6d8	./src/task_projection_reconciliation/reader.rs	430	weakly_exposed	PacketReader::rows	413	435	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:0b445572	./src/task_projection_reconciliation/reader.rs	432	static_unknown	PacketReader::rows	413	435	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:c3e441c7	./src/task_projection_reconciliation/reader.rs	433	exposed	PacketReader::rows	413	435	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:136fc535	./src/task_projection_reconciliation/reader.rs	434	weakly_exposed	PacketReader::rows	413	435	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:af204b08	./src/task_projection_reconciliation/reader.rs	437	static_unknown	PacketReader::strings	437	455	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:8e7bab5d	./src/task_projection_reconciliation/reader.rs	438	static_unknown	PacketReader::strings	437	455	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:cb122653	./src/task_projection_reconciliation/reader.rs	439	static_unknown	PacketReader::strings	437	455	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:33a5220c	./src/task_projection_reconciliation/reader.rs	440	static_unknown	PacketReader::strings	437	455	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:8a49487b	./src/task_projection_reconciliation/reader.rs	441	static_unknown	PacketReader::strings	437	455	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:b2851eb8	./src/task_projection_reconciliation/reader.rs	442	static_unknown	PacketReader::strings	437	455	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:97f07ebd	./src/task_projection_reconciliation/reader.rs	443	infection_unknown	PacketReader::strings	437	455	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:6c49b865	./src/task_projection_reconciliation/reader.rs	443	infection_unknown	PacketReader::strings	437	455	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:be872b82	./src/task_projection_reconciliation/reader.rs	443	exposed	PacketReader::strings	437	455	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:fff621e1	./src/task_projection_reconciliation/reader.rs	450	weakly_exposed	PacketReader::strings	437	455	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:1a00275b	./src/task_projection_reconciliation/reader.rs	452	static_unknown	PacketReader::strings	437	455	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:37797d08	./src/task_projection_reconciliation/reader.rs	453	weakly_exposed	PacketReader::strings	437	455	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:ab9befc0	./src/task_projection_reconciliation/reader.rs	454	weakly_exposed	PacketReader::strings	437	455	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:9d14b198	./src/task_projection_reconciliation/reader.rs	457	static_unknown	PacketReader::mapping	457	478	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:099c45c3	./src/task_projection_reconciliation/reader.rs	458	static_unknown	PacketReader::mapping	457	478	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:6c0ab996	./src/task_projection_reconciliation/reader.rs	459	static_unknown	PacketReader::mapping	457	478	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:2bee838c	./src/task_projection_reconciliation/reader.rs	460	static_unknown	PacketReader::mapping	457	478	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:da5c9441	./src/task_projection_reconciliation/reader.rs	461	static_unknown	PacketReader::mapping	457	478	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:668d9045	./src/task_projection_reconciliation/reader.rs	462	static_unknown	PacketReader::mapping	457	478	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:74f879ac	./src/task_projection_reconciliation/reader.rs	463	static_unknown	PacketReader::mapping	457	478	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:4af77d43	./src/task_projection_reconciliation/reader.rs	464	infection_unknown	PacketReader::mapping	457	478	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:dd7ebcda	./src/task_projection_reconciliation/reader.rs	465	weakly_exposed	PacketReader::mapping	457	478	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:29847d16	./src/task_projection_reconciliation/reader.rs	466	weakly_exposed	PacketReader::mapping	457	478	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:45891270	./src/task_projection_reconciliation/reader.rs	466	weakly_exposed	PacketReader::mapping	457	478	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:afb30b7e	./src/task_projection_reconciliation/reader.rs	467	weakly_exposed	PacketReader::mapping	457	478	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:06539adf	./src/task_projection_reconciliation/reader.rs	467	weakly_exposed	PacketReader::mapping	457	478	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:d5b56165	./src/task_projection_reconciliation/reader.rs	468	weakly_exposed	PacketReader::mapping	457	478	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:c2de810e	./src/task_projection_reconciliation/reader.rs	471	static_unknown	PacketReader::mapping	457	478	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:5f27e3b0	./src/task_projection_reconciliation/reader.rs	472	weakly_exposed	PacketReader::mapping	457	478	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:76ce6898	./src/task_projection_reconciliation/reader.rs	475	infection_unknown	PacketReader::mapping	457	478	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:69d153d6	./src/task_projection_reconciliation/reader.rs	477	weakly_exposed	PacketReader::mapping	457	478	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:f69f5317	./src/task_projection_reconciliation/reader.rs	480	static_unknown	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:37e8d177	./src/task_projection_reconciliation/reader.rs	481	static_unknown	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:cc3a5c28	./src/task_projection_reconciliation/reader.rs	482	static_unknown	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:f3b46078	./src/task_projection_reconciliation/reader.rs	483	static_unknown	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:977f2f19	./src/task_projection_reconciliation/reader.rs	484	static_unknown	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:ec72c0db	./src/task_projection_reconciliation/reader.rs	485	static_unknown	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:f96f724c	./src/task_projection_reconciliation/reader.rs	486	static_unknown	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:709136f3	./src/task_projection_reconciliation/reader.rs	487	static_unknown	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:b78a9eea	./src/task_projection_reconciliation/reader.rs	488	static_unknown	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:aeb5884d	./src/task_projection_reconciliation/reader.rs	489	static_unknown	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:6286bfc9	./src/task_projection_reconciliation/reader.rs	490	static_unknown	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:9a76fa6a	./src/task_projection_reconciliation/reader.rs	491	static_unknown	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:5034b05d	./src/task_projection_reconciliation/reader.rs	492	static_unknown	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:c9513f73	./src/task_projection_reconciliation/reader.rs	493	static_unknown	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:b50462ad	./src/task_projection_reconciliation/reader.rs	494	static_unknown	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:3d47960a	./src/task_projection_reconciliation/reader.rs	496	infection_unknown	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:17ce442e	./src/task_projection_reconciliation/reader.rs	497	static_unknown	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:f3d546dc	./src/task_projection_reconciliation/reader.rs	498	weakly_exposed	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:8712f620	./src/task_projection_reconciliation/reader.rs	505	weakly_exposed	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:512b7418	./src/task_projection_reconciliation/reader.rs	506	weakly_exposed	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:713b091d	./src/task_projection_reconciliation/reader.rs	507	weakly_exposed	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:2ecaed0d	./src/task_projection_reconciliation/reader.rs	508	weakly_exposed	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:bed1fc1c	./src/task_projection_reconciliation/reader.rs	509	weakly_exposed	PacketReader::lease_quantities	480	511	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:72761b0b	./src/task_projection_reconciliation/reader.rs	515	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:97d8dc4b	./src/task_projection_reconciliation/reader.rs	516	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:f0edbd6f	./src/task_projection_reconciliation/reader.rs	517	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:ac306be9	./src/task_projection_reconciliation/reader.rs	518	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:f6a7da7d	./src/task_projection_reconciliation/reader.rs	519	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:08a3f2cb	./src/task_projection_reconciliation/reader.rs	523	weakly_exposed	integer_u32	522	524	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:beabec59	./src/task_projection_reconciliation/reader.rs	527	weakly_exposed	integer_u64	526	528	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:8cb50b12	./src/task_projection_reconciliation/reader.rs	531	weakly_exposed	integer_u128	530	537	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:6d9d8862	./src/task_projection_reconciliation/reader.rs	532	weakly_exposed	integer_u128	530	537	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:94508786	./src/task_projection_reconciliation/reader.rs	533	propagation_unknown	integer_u128	530	537	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:63ca06ac	./src/task_projection_reconciliation/reader.rs	535	weakly_exposed	integer_u128	530	537	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:177e0509	./src/task_projection_reconciliation/reader.rs	540	static_unknown	label	539	565	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:67e26149	./src/task_projection_reconciliation/reader.rs	541	exposed	label	539	565	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:f63ab476	./src/task_projection_reconciliation/reader.rs	542	static_unknown	label	539	565	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:040eccdf	./src/task_projection_reconciliation/reader.rs	546	static_unknown	label	539	565	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:c9ab1159	./src/task_projection_reconciliation/reader.rs	547	infection_unknown	label	539	565	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:e7315964	./src/task_projection_reconciliation/reader.rs	547	infection_unknown	label	539	565	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:e1bb676a	./src/task_projection_reconciliation/reader.rs	551	static_unknown	label	539	565	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:60bf11bf	./src/task_projection_reconciliation/reader.rs	553	static_unknown	label	539	565	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:e93ff1ca	./src/task_projection_reconciliation/reader.rs	556	exposed	label	539	565	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:def13c0d	./src/task_projection_reconciliation/reader.rs	557	infection_unknown	label	539	565	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:ab8951b1	./src/task_projection_reconciliation/reader.rs	558	weakly_exposed	label	539	565	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:89347509	./src/task_projection_reconciliation/reader.rs	560	weakly_exposed	label	539	565	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:0a3a20aa	./src/task_projection_reconciliation/reader.rs	569	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:8957dfb5	./src/task_projection_reconciliation/reader.rs	571	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:cddb6dd6	./src/task_projection_reconciliation/reader.rs	573	weakly_exposed	UniqueJson::deserialize	572	574	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:35ec469a	./src/task_projection_reconciliation/reader.rs	577	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:9529c6d7	./src/task_projection_reconciliation/reader.rs	579	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:c867702c	./src/task_projection_reconciliation/reader.rs	580	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:de4d0cf5	./src/task_projection_reconciliation/reader.rs	583	weakly_exposed	UniqueVisitor::expecting	582	584	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:eaa2c74f	./src/task_projection_reconciliation/reader.rs	587	weakly_exposed	UniqueVisitor::visit_bool	586	588	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:2e793093	./src/task_projection_reconciliation/reader.rs	590	weakly_exposed	UniqueVisitor::visit_i64	589	591	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:d8df5866	./src/task_projection_reconciliation/reader.rs	593	weakly_exposed	UniqueVisitor::visit_u64	592	594	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:9c62e133	./src/task_projection_reconciliation/reader.rs	596	infection_unknown	UniqueVisitor::visit_f64	595	601	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:31899d55	./src/task_projection_reconciliation/reader.rs	597	weakly_exposed	UniqueVisitor::visit_f64	595	601	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:0a52cb96	./src/task_projection_reconciliation/reader.rs	599	weakly_exposed	UniqueVisitor::visit_f64	595	601	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:7a86a1ce	./src/task_projection_reconciliation/reader.rs	603	weakly_exposed	UniqueVisitor::visit_str	602	604	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:0e2ab915	./src/task_projection_reconciliation/reader.rs	606	weakly_exposed	UniqueVisitor::visit_unit	605	607	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:1aed485b	./src/task_projection_reconciliation/reader.rs	610	static_unknown	UniqueVisitor::visit_seq	609	618	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:e76ef53f	./src/task_projection_reconciliation/reader.rs	611	infection_unknown	UniqueVisitor::visit_seq	609	618	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:64a07a06	./src/task_projection_reconciliation/reader.rs	612	infection_unknown	UniqueVisitor::visit_seq	609	618	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:6c08a241	./src/task_projection_reconciliation/reader.rs	613	weakly_exposed	UniqueVisitor::visit_seq	609	618	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:6bfa9a46	./src/task_projection_reconciliation/reader.rs	613	weakly_exposed	UniqueVisitor::visit_seq	609	618	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:f3928a11	./src/task_projection_reconciliation/reader.rs	615	static_unknown	UniqueVisitor::visit_seq	609	618	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:635f1f32	./src/task_projection_reconciliation/reader.rs	617	weakly_exposed	UniqueVisitor::visit_seq	609	618	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:9e38b146	./src/task_projection_reconciliation/reader.rs	621	static_unknown	UniqueVisitor::visit_map	620	632	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:c6f5545e	./src/task_projection_reconciliation/reader.rs	622	infection_unknown	UniqueVisitor::visit_map	620	632	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:132b2b14	./src/task_projection_reconciliation/reader.rs	623	infection_unknown	UniqueVisitor::visit_map	620	632	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:88ce2abd	./src/task_projection_reconciliation/reader.rs	624	weakly_exposed	UniqueVisitor::visit_map	620	632	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:96d4b3ef	./src/task_projection_reconciliation/reader.rs	624	weakly_exposed	UniqueVisitor::visit_map	620	632	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:c5866f28	./src/task_projection_reconciliation/reader.rs	626	infection_unknown	UniqueVisitor::visit_map	620	632	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:f4abb722	./src/task_projection_reconciliation/reader.rs	626	propagation_unknown	UniqueVisitor::visit_map	620	632	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:9f0c5571	./src/task_projection_reconciliation/reader.rs	627	weakly_exposed	UniqueVisitor::visit_map	620	632	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:7996f656	./src/task_projection_reconciliation/reader.rs	627	weakly_exposed	UniqueVisitor::visit_map	620	632	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:aef67fc0	./src/task_projection_reconciliation/reader.rs	629	weakly_exposed	UniqueVisitor::visit_map	620	632	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:4f7dfcb2	./src/task_projection_reconciliation/reader.rs	631	weakly_exposed	UniqueVisitor::visit_map	620	632	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:46609c0f	./src/task_projection_reconciliation/reader.rs	636	infection_unknown	strict_json	635	648	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:459c2542	./src/task_projection_reconciliation/reader.rs	637	exposed	strict_json	635	648	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:382881cc	./src/task_projection_reconciliation/reader.rs	637	exposed	strict_json	635	648	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:e5342ce2	./src/task_projection_reconciliation/reader.rs	639	static_unknown	strict_json	635	648	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:2eecb83f	./src/task_projection_reconciliation/reader.rs	640	weakly_exposed	strict_json	635	648	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:9b8b9b69	./src/task_projection_reconciliation/reader.rs	641	weakly_exposed	strict_json	635	648	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:2e24dbd5	./src/task_projection_reconciliation/reader.rs	642	weakly_exposed	strict_json	635	648	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:10e1bd0c	./src/task_projection_reconciliation/reader.rs	643	weakly_exposed	strict_json	635	648	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:a9287f07	./src/task_projection_reconciliation/reader.rs	644	weakly_exposed	strict_json	635	648	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:field_construction:6c8d28b6	./src/task_projection_reconciliation/reader.rs	645	weakly_exposed	strict_json	635	648	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:aaa1ba34	./src/task_projection_reconciliation/reader.rs	652	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:ee65330a	./src/task_projection_reconciliation/reader.rs	653	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:4991cff5	./src/task_projection_reconciliation/reader.rs	654	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:ff455249	./src/task_projection_reconciliation/reader.rs	655	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:8c840c7a	./src/task_projection_reconciliation/reader.rs	658	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:94f3b69c	./src/task_projection_reconciliation/reader.rs	659	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:5ccb5e36	./src/task_projection_reconciliation/reader.rs	662	infection_unknown	NativeDecoder<'_>::parse	661	672	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:18f52d3a	./src/task_projection_reconciliation/reader.rs	663	weakly_exposed	NativeDecoder<'_>::parse	661	672	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:c8121d5c	./src/task_projection_reconciliation/reader.rs	663	weakly_exposed	NativeDecoder<'_>::parse	661	672	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:5b960609	./src/task_projection_reconciliation/reader.rs	665	weakly_exposed	NativeDecoder<'_>::parse	661	672	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:085b074c	./src/task_projection_reconciliation/reader.rs	666	weakly_exposed	NativeDecoder<'_>::parse	661	672	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:5b960609.2	./src/task_projection_reconciliation/reader.rs	667	weakly_exposed	NativeDecoder<'_>::parse	661	672	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:663ac54f	./src/task_projection_reconciliation/reader.rs	668	infection_unknown	NativeDecoder<'_>::parse	661	672	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:18f52d3a.2	./src/task_projection_reconciliation/reader.rs	669	weakly_exposed	NativeDecoder<'_>::parse	661	672	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:c8121d5c.2	./src/task_projection_reconciliation/reader.rs	669	weakly_exposed	NativeDecoder<'_>::parse	661	672	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:3d8d0988	./src/task_projection_reconciliation/reader.rs	671	weakly_exposed	NativeDecoder<'_>::parse	661	672	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:e0899697	./src/task_projection_reconciliation/reader.rs	675	weakly_exposed	NativeDecoder<'_>::peek	674	676	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:014aa008	./src/task_projection_reconciliation/reader.rs	679	static_unknown	NativeDecoder<'_>::advance	678	688	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:902ecb4a	./src/task_projection_reconciliation/reader.rs	680	static_unknown	NativeDecoder<'_>::advance	678	688	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:a54f2356	./src/task_projection_reconciliation/reader.rs	681	weakly_exposed	NativeDecoder<'_>::advance	678	688	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:8a060976	./src/task_projection_reconciliation/reader.rs	682	weakly_exposed	NativeDecoder<'_>::advance	678	688	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:78020d5f	./src/task_projection_reconciliation/reader.rs	682	weakly_exposed	NativeDecoder<'_>::advance	678	688	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:d1b38607	./src/task_projection_reconciliation/reader.rs	683	infection_unknown	NativeDecoder<'_>::advance	678	688	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:e8576169	./src/task_projection_reconciliation/reader.rs	684	weakly_exposed	NativeDecoder<'_>::advance	678	688	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:e24364d4	./src/task_projection_reconciliation/reader.rs	684	weakly_exposed	NativeDecoder<'_>::advance	678	688	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:cb214810	./src/task_projection_reconciliation/reader.rs	686	static_unknown	NativeDecoder<'_>::advance	678	688	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:8f5f7599	./src/task_projection_reconciliation/reader.rs	687	weakly_exposed	NativeDecoder<'_>::advance	678	688	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:c22bdfd5	./src/task_projection_reconciliation/reader.rs	691	infection_unknown	NativeDecoder<'_>::eat	690	696	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:ae82b753	./src/task_projection_reconciliation/reader.rs	691	weakly_exposed	NativeDecoder<'_>::eat	690	696	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:5050d329	./src/task_projection_reconciliation/reader.rs	692	weakly_exposed	NativeDecoder<'_>::eat	690	696	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:31bccc59	./src/task_projection_reconciliation/reader.rs	694	weakly_exposed	NativeDecoder<'_>::eat	690	696	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:e6fb2a67	./src/task_projection_reconciliation/reader.rs	695	weakly_exposed	NativeDecoder<'_>::eat	690	696	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:7c7e90ab	./src/task_projection_reconciliation/reader.rs	699	infection_unknown	NativeDecoder<'_>::expect	698	704	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:260ec549	./src/task_projection_reconciliation/reader.rs	700	weakly_exposed	NativeDecoder<'_>::expect	698	704	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:42dee82b	./src/task_projection_reconciliation/reader.rs	702	weakly_exposed	NativeDecoder<'_>::expect	698	704	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:bd1c2500	./src/task_projection_reconciliation/reader.rs	707	weakly_exposed	NativeDecoder<'_>::whitespace	706	711	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:aa7f8add	./src/task_projection_reconciliation/reader.rs	708	weakly_exposed	NativeDecoder<'_>::whitespace	706	711	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:4a715e50	./src/task_projection_reconciliation/reader.rs	710	weakly_exposed	NativeDecoder<'_>::whitespace	706	711	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:4b1e5a21	./src/task_projection_reconciliation/reader.rs	714	infection_unknown	NativeDecoder<'_>::literal	713	723	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:40f7e691	./src/task_projection_reconciliation/reader.rs	714	infection_unknown	NativeDecoder<'_>::literal	713	723	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:95cc6306	./src/task_projection_reconciliation/reader.rs	719	weakly_exposed	NativeDecoder<'_>::literal	713	723	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:22807c1e	./src/task_projection_reconciliation/reader.rs	719	weakly_exposed	NativeDecoder<'_>::literal	713	723	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:a0e1b6ab	./src/task_projection_reconciliation/reader.rs	721	weakly_exposed	NativeDecoder<'_>::literal	713	723	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:a965b8cf	./src/task_projection_reconciliation/reader.rs	722	weakly_exposed	NativeDecoder<'_>::literal	713	723	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:147f052b	./src/task_projection_reconciliation/reader.rs	726	infection_unknown	NativeDecoder<'_>::value	725	741	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:0aab5be3	./src/task_projection_reconciliation/reader.rs	727	weakly_exposed	NativeDecoder<'_>::value	725	741	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:aeada5a2	./src/task_projection_reconciliation/reader.rs	727	weakly_exposed	NativeDecoder<'_>::value	725	741	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:81931bc2	./src/task_projection_reconciliation/reader.rs	729	weakly_exposed	NativeDecoder<'_>::value	725	741	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:05ccaf3d	./src/task_projection_reconciliation/reader.rs	730	weakly_exposed	NativeDecoder<'_>::value	725	741	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:0e05fc07	./src/task_projection_reconciliation/reader.rs	731	weakly_exposed	NativeDecoder<'_>::value	725	741	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:63952858	./src/task_projection_reconciliation/reader.rs	732	weakly_exposed	NativeDecoder<'_>::value	725	741	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:e573df46	./src/task_projection_reconciliation/reader.rs	733	weakly_exposed	NativeDecoder<'_>::value	725	741	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:747729a4	./src/task_projection_reconciliation/reader.rs	734	weakly_exposed	NativeDecoder<'_>::value	725	741	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:94fdda38	./src/task_projection_reconciliation/reader.rs	735	weakly_exposed	NativeDecoder<'_>::value	725	741	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:ec9337e4	./src/task_projection_reconciliation/reader.rs	736	weakly_exposed	NativeDecoder<'_>::value	725	741	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:0f73632d	./src/task_projection_reconciliation/reader.rs	737	weakly_exposed	NativeDecoder<'_>::value	725	741	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:cf7e0921	./src/task_projection_reconciliation/reader.rs	738	weakly_exposed	NativeDecoder<'_>::value	725	741	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:1410c8e9	./src/task_projection_reconciliation/reader.rs	739	weakly_exposed	NativeDecoder<'_>::value	725	741	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:35ae1b49	./src/task_projection_reconciliation/reader.rs	739	weakly_exposed	NativeDecoder<'_>::value	725	741	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:410584cd	./src/task_projection_reconciliation/reader.rs	744	infection_unknown	NativeDecoder<'_>::node	743	749	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:fcd9e6ba	./src/task_projection_reconciliation/reader.rs	745	weakly_exposed	NativeDecoder<'_>::node	743	749	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:529a3bed	./src/task_projection_reconciliation/reader.rs	745	weakly_exposed	NativeDecoder<'_>::node	743	749	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:77698206	./src/task_projection_reconciliation/reader.rs	747	static_unknown	NativeDecoder<'_>::node	743	749	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:b750fe4f	./src/task_projection_reconciliation/reader.rs	748	weakly_exposed	NativeDecoder<'_>::node	743	749	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:66f14513	./src/task_projection_reconciliation/reader.rs	752	static_unknown	NativeDecoder<'_>::string	751	768	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:95e6351d	./src/task_projection_reconciliation/reader.rs	753	weakly_exposed	NativeDecoder<'_>::string	751	768	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:f2cdfd6e	./src/task_projection_reconciliation/reader.rs	754	static_unknown	NativeDecoder<'_>::string	751	768	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:24f2ab20	./src/task_projection_reconciliation/reader.rs	755	static_unknown	NativeDecoder<'_>::string	751	768	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:f3a0bea3	./src/task_projection_reconciliation/reader.rs	756	weakly_exposed	NativeDecoder<'_>::string	751	768	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:8f7ac4ab	./src/task_projection_reconciliation/reader.rs	757	weakly_exposed	NativeDecoder<'_>::string	751	768	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:ec290cf1	./src/task_projection_reconciliation/reader.rs	758	weakly_exposed	NativeDecoder<'_>::string	751	768	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:c90cc3a5	./src/task_projection_reconciliation/reader.rs	759	static_unknown	NativeDecoder<'_>::string	751	768	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:04bc5c71	./src/task_projection_reconciliation/reader.rs	760	static_unknown	NativeDecoder<'_>::string	751	768	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:9d2c8cf6	./src/task_projection_reconciliation/reader.rs	761	weakly_exposed	NativeDecoder<'_>::string	751	768	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:836d7bcd	./src/task_projection_reconciliation/reader.rs	762	weakly_exposed	NativeDecoder<'_>::string	751	768	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:ba3396ee	./src/task_projection_reconciliation/reader.rs	762	weakly_exposed	NativeDecoder<'_>::string	751	768	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:8baa3371	./src/task_projection_reconciliation/reader.rs	763	weakly_exposed	NativeDecoder<'_>::string	751	768	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:95595043	./src/task_projection_reconciliation/reader.rs	763	weakly_exposed	NativeDecoder<'_>::string	751	768	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:33610743	./src/task_projection_reconciliation/reader.rs	766	propagation_unknown	NativeDecoder<'_>::string	751	768	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:9d0e6028	./src/task_projection_reconciliation/reader.rs	771	weakly_exposed	NativeDecoder<'_>::array	770	788	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:97b6d580	./src/task_projection_reconciliation/reader.rs	772	weakly_exposed	NativeDecoder<'_>::array	770	788	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:4ae60bf6	./src/task_projection_reconciliation/reader.rs	773	static_unknown	NativeDecoder<'_>::array	770	788	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:75ce5355	./src/task_projection_reconciliation/reader.rs	774	weakly_exposed	NativeDecoder<'_>::array	770	788	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:d24c2867	./src/task_projection_reconciliation/reader.rs	775	weakly_exposed	NativeDecoder<'_>::array	770	788	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:3088790a	./src/task_projection_reconciliation/reader.rs	777	static_unknown	NativeDecoder<'_>::array	770	788	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:6198681e	./src/task_projection_reconciliation/reader.rs	778	infection_unknown	NativeDecoder<'_>::array	770	788	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:cfac1942	./src/task_projection_reconciliation/reader.rs	779	weakly_exposed	NativeDecoder<'_>::array	770	788	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:5bc893a7	./src/task_projection_reconciliation/reader.rs	779	weakly_exposed	NativeDecoder<'_>::array	770	788	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:82f0ede2	./src/task_projection_reconciliation/reader.rs	781	propagation_unknown	NativeDecoder<'_>::array	770	788	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:47fdec2a	./src/task_projection_reconciliation/reader.rs	781	propagation_unknown	NativeDecoder<'_>::array	770	788	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:97b6d580.2	./src/task_projection_reconciliation/reader.rs	782	weakly_exposed	NativeDecoder<'_>::array	770	788	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:75ce5355.2	./src/task_projection_reconciliation/reader.rs	783	weakly_exposed	NativeDecoder<'_>::array	770	788	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:d24c2867.2	./src/task_projection_reconciliation/reader.rs	784	weakly_exposed	NativeDecoder<'_>::array	770	788	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:bfbc68a2	./src/task_projection_reconciliation/reader.rs	786	weakly_exposed	NativeDecoder<'_>::array	770	788	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:3d80de4c	./src/task_projection_reconciliation/reader.rs	791	weakly_exposed	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:69db4961	./src/task_projection_reconciliation/reader.rs	792	weakly_exposed	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:f606809e	./src/task_projection_reconciliation/reader.rs	793	static_unknown	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:acb031dd	./src/task_projection_reconciliation/reader.rs	794	weakly_exposed	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:34740c44	./src/task_projection_reconciliation/reader.rs	795	weakly_exposed	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:58d8bd0d	./src/task_projection_reconciliation/reader.rs	797	static_unknown	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:bcd4b1d0	./src/task_projection_reconciliation/reader.rs	798	infection_unknown	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:2090bc22	./src/task_projection_reconciliation/reader.rs	799	weakly_exposed	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:eb6cbc4a	./src/task_projection_reconciliation/reader.rs	799	weakly_exposed	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:69db4961.2	./src/task_projection_reconciliation/reader.rs	801	weakly_exposed	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:b0ddfef1	./src/task_projection_reconciliation/reader.rs	802	weakly_exposed	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:87db44ea	./src/task_projection_reconciliation/reader.rs	803	weakly_exposed	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:5019f1c8	./src/task_projection_reconciliation/reader.rs	804	infection_unknown	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:2090bc22.2	./src/task_projection_reconciliation/reader.rs	805	weakly_exposed	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:eb6cbc4a.2	./src/task_projection_reconciliation/reader.rs	805	weakly_exposed	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:69db4961.3	./src/task_projection_reconciliation/reader.rs	807	weakly_exposed	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:e23316ba	./src/task_projection_reconciliation/reader.rs	808	weakly_exposed	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:9bf21c49	./src/task_projection_reconciliation/reader.rs	809	weakly_exposed	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:d65524c6	./src/task_projection_reconciliation/reader.rs	810	propagation_unknown	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:0251b619	./src/task_projection_reconciliation/reader.rs	810	propagation_unknown	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:69db4961.4	./src/task_projection_reconciliation/reader.rs	811	weakly_exposed	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:acb031dd.2	./src/task_projection_reconciliation/reader.rs	812	weakly_exposed	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:34740c44.2	./src/task_projection_reconciliation/reader.rs	813	weakly_exposed	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:fbc9491f	./src/task_projection_reconciliation/reader.rs	815	weakly_exposed	NativeDecoder<'_>::object	790	817	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:26e6f83a	./src/task_projection_reconciliation/reader.rs	820	static_unknown	NativeDecoder<'_>::digits	819	825	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:57eba897	./src/task_projection_reconciliation/reader.rs	821	weakly_exposed	NativeDecoder<'_>::digits	819	825	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:73f8c92a	./src/task_projection_reconciliation/reader.rs	822	weakly_exposed	NativeDecoder<'_>::digits	819	825	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:ae92476a	./src/task_projection_reconciliation/reader.rs	824	weakly_exposed	NativeDecoder<'_>::digits	819	825	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:c7345b8a	./src/task_projection_reconciliation/reader.rs	828	static_unknown	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:587c2842	./src/task_projection_reconciliation/reader.rs	829	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:15eaae22	./src/task_projection_reconciliation/reader.rs	830	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:64d0d3ce	./src/task_projection_reconciliation/reader.rs	831	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:bcb562b8	./src/task_projection_reconciliation/reader.rs	832	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:14315beb	./src/task_projection_reconciliation/reader.rs	833	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:ab58c84c	./src/task_projection_reconciliation/reader.rs	835	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:263574ac	./src/task_projection_reconciliation/reader.rs	835	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:5ac8c0ab	./src/task_projection_reconciliation/reader.rs	835	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:c735d823	./src/task_projection_reconciliation/reader.rs	837	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:ab58c84c.2	./src/task_projection_reconciliation/reader.rs	838	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:5ac8c0ab.2	./src/task_projection_reconciliation/reader.rs	838	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:8296c154	./src/task_projection_reconciliation/reader.rs	840	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:94747885	./src/task_projection_reconciliation/reader.rs	841	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:a23cce3e	./src/task_projection_reconciliation/reader.rs	842	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:94747885.2	./src/task_projection_reconciliation/reader.rs	843	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:accb5b46	./src/task_projection_reconciliation/reader.rs	845	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:ab58c84c.3	./src/task_projection_reconciliation/reader.rs	846	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:5ac8c0ab.3	./src/task_projection_reconciliation/reader.rs	846	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:67bfc98f	./src/task_projection_reconciliation/reader.rs	849	static_unknown	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:8d90e998	./src/task_projection_reconciliation/reader.rs	850	static_unknown	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:7be26286	./src/task_projection_reconciliation/reader.rs	851	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:cc84f398	./src/task_projection_reconciliation/reader.rs	852	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:fe8f1dac	./src/task_projection_reconciliation/reader.rs	852	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:e1165487	./src/task_projection_reconciliation/reader.rs	853	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:8c19af5f	./src/task_projection_reconciliation/reader.rs	856	infection_unknown	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:ab58c84c.4	./src/task_projection_reconciliation/reader.rs	857	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:5ac8c0ab.4	./src/task_projection_reconciliation/reader.rs	857	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:9f71a360	./src/task_projection_reconciliation/reader.rs	859	infection_unknown	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:0cc241ae	./src/task_projection_reconciliation/reader.rs	859	weakly_exposed	NativeDecoder<'_>::number	827	864	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:ecdc4db6	./src/task_projection_reconciliation/reader.rs	870	weakly_exposed	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:a5a22eee	./src/task_projection_reconciliation/reader.rs	871	weakly_exposed	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:a7e1140b	./src/task_projection_reconciliation/reader.rs	872	weakly_exposed	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:06357739	./src/task_projection_reconciliation/reader.rs	872	infection_unknown	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:a7b5722b	./src/task_projection_reconciliation/reader.rs	873	weakly_exposed	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:66d344be	./src/task_projection_reconciliation/reader.rs	874	weakly_exposed	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:e43c4229	./src/task_projection_reconciliation/reader.rs	875	weakly_exposed	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:11ebda2c	./src/task_projection_reconciliation/reader.rs	875	weakly_exposed	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:321ed19b	./src/task_projection_reconciliation/reader.rs	875	reachable_unrevealed	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:85a4ff30	./src/task_projection_reconciliation/reader.rs	877	weakly_exposed	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:52ccf53c	./src/task_projection_reconciliation/reader.rs	878	propagation_unknown	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:1c3ccbf1	./src/task_projection_reconciliation/reader.rs	878	propagation_unknown	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:53db6cc5	./src/task_projection_reconciliation/reader.rs	879	static_unknown	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:b6853d63	./src/task_projection_reconciliation/reader.rs	880	infection_unknown	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:2c795139	./src/task_projection_reconciliation/reader.rs	881	propagation_unknown	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:4514645d	./src/task_projection_reconciliation/reader.rs	881	propagation_unknown	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:6a12bfd0	./src/task_projection_reconciliation/reader.rs	883	weakly_exposed	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:0d9467c8	./src/task_projection_reconciliation/reader.rs	885	propagation_unknown	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:e3a283b6	./src/task_projection_reconciliation/reader.rs	885	propagation_unknown	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:d3c2bee8	./src/task_projection_reconciliation/reader.rs	887	weakly_exposed	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:caac6552	./src/task_projection_reconciliation/reader.rs	888	propagation_unknown	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:1a514554	./src/task_projection_reconciliation/reader.rs	888	propagation_unknown	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:7757b046	./src/task_projection_reconciliation/reader.rs	889	static_unknown	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:b6853d63.2	./src/task_projection_reconciliation/reader.rs	890	infection_unknown	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:2c795139.2	./src/task_projection_reconciliation/reader.rs	891	propagation_unknown	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:4514645d.2	./src/task_projection_reconciliation/reader.rs	891	propagation_unknown	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:17f11e3a	./src/task_projection_reconciliation/reader.rs	893	weakly_exposed	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:df054feb	./src/task_projection_reconciliation/reader.rs	894	propagation_unknown	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:d4b32205	./src/task_projection_reconciliation/reader.rs	894	propagation_unknown	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:6a12bfd0.2	./src/task_projection_reconciliation/reader.rs	895	weakly_exposed	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:ca9270b6	./src/task_projection_reconciliation/reader.rs	897	propagation_unknown	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:0d015495	./src/task_projection_reconciliation/reader.rs	897	propagation_unknown	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:aa28ba36	./src/task_projection_reconciliation/reader.rs	900	weakly_exposed	write	869	901	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:e45d4bba	./src/task_projection_reconciliation/reader.rs	902	static_unknown	canonical_json	867	906	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:5b3e84ad	./src/task_projection_reconciliation/reader.rs	903	weakly_exposed	canonical_json	867	906	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:e6766adf	./src/task_projection_reconciliation/reader.rs	904	propagation_unknown	canonical_json	867	906	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:62835f74	./src/task_projection_reconciliation/reader.rs	904	propagation_unknown	canonical_json	867	906	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:243d84a5	./src/task_projection_reconciliation/reader.rs	905	weakly_exposed	canonical_json	867	906	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:30476905	./src/task_projection_reconciliation/reader.rs	911	static_unknown	canonical	908	915	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:2ca32ec8	./src/task_projection_reconciliation/reader.rs	912	weakly_exposed	canonical	908	915	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:4e74e1e6	./src/task_projection_reconciliation/reader.rs	913	propagation_unknown	canonical	908	915	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:side_effect:0fdd811a	./src/task_projection_reconciliation/reader.rs	913	propagation_unknown	canonical	908	915	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:return_value:8dff8517	./src/task_projection_reconciliation/reader.rs	914	weakly_exposed	canonical	908	915	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:90d10ee2	./src/task_projection_reconciliation/reader.rs	917	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:41dee634	./src/task_projection_reconciliation/reader.rs	919	static_unknown	<declaration/outside function>			xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:feea6bed	./src/task_projection_reconciliation/reader.rs	921	weakly_exposed	SortedValue<'_>::serialize	920	945	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:0917de70	./src/task_projection_reconciliation/reader.rs	922	weakly_exposed	SortedValue<'_>::serialize	920	945	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:ab46c71e	./src/task_projection_reconciliation/reader.rs	923	static_unknown	SortedValue<'_>::serialize	920	945	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:3b6cd982	./src/task_projection_reconciliation/reader.rs	924	weakly_exposed	SortedValue<'_>::serialize	920	945	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:bdaa5478	./src/task_projection_reconciliation/reader.rs	925	weakly_exposed	SortedValue<'_>::serialize	920	945	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:d022fac9	./src/task_projection_reconciliation/reader.rs	926	static_unknown	SortedValue<'_>::serialize	920	945	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:212153f8	./src/task_projection_reconciliation/reader.rs	927	weakly_exposed	SortedValue<'_>::serialize	920	945	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:5f5faf0a	./src/task_projection_reconciliation/reader.rs	929	weakly_exposed	SortedValue<'_>::serialize	920	945	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:1cc87022	./src/task_projection_reconciliation/reader.rs	931	weakly_exposed	SortedValue<'_>::serialize	920	945	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:919366af	./src/task_projection_reconciliation/reader.rs	932	weakly_exposed	SortedValue<'_>::serialize	920	945	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:static_unknown:9d4fd446	./src/task_projection_reconciliation/reader.rs	933	static_unknown	SortedValue<'_>::serialize	920	945	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:49d13aa0	./src/task_projection_reconciliation/reader.rs	934	weakly_exposed	SortedValue<'_>::serialize	920	945	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:665c95b4	./src/task_projection_reconciliation/reader.rs	936	weakly_exposed	SortedValue<'_>::serialize	920	945	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:call_deletion:5a95f4f5	./src/task_projection_reconciliation/reader.rs	938	weakly_exposed	SortedValue<'_>::serialize	920	945	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:2547e60c	./src/task_projection_reconciliation/reader.rs	939	weakly_exposed	SortedValue<'_>::serialize	920	945	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:predicate:195892aa	./src/task_projection_reconciliation/reader.rs	939	weakly_exposed	SortedValue<'_>::serialize	920	945	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:error_path:7b83acbd	./src/task_projection_reconciliation/reader.rs	941	weakly_exposed	SortedValue<'_>::serialize	920	945	xtask executable
+probe:src_task_projection_reconciliation_reader.rs:match_arm:fd9715c9	./src/task_projection_reconciliation/reader.rs	943	weakly_exposed	SortedValue<'_>::serialize	920	945	xtask executable
+probe:xtask_src_main.rs:match_arm:2e0e11f5	./xtask/src/main.rs	71	weakly_exposed	run	31	95	xtask executable
+probe:xtask_src_main.rs:error_path:bb20ce13	./xtask/src/main.rs	72	weakly_exposed	run	31	95	xtask executable
+probe:xtask_src_main.rs:predicate:3c5de5df	./xtask/src/main.rs	73	weakly_exposed	run	31	95	xtask executable
+probe:xtask_src_main.rs:call_deletion:1fa4938d	./xtask/src/main.rs	74	weakly_exposed	run	31	95	xtask executable
+probe:xtask_src_main.rs:static_unknown:06112c2f	./xtask/src/main.rs	89	static_unknown	run	31	95	xtask executable
+probe:xtask_src_main.rs:static_unknown:2351c8c1	./xtask/src/main.rs	115	static_unknown	print_help	104	132	xtask executable
+probe:xtask_src_main.rs:call_deletion:4ecb904c	./xtask/src/main.rs	116	weakly_exposed	print_help	104	132	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:65ee0944	./xtask/src/task_projection_reader.rs	16	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:1b94427d	./xtask/src/task_projection_reader.rs	17	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:3ad74bf8	./xtask/src/task_projection_reader.rs	19	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:f7a85602	./xtask/src/task_projection_reader.rs	20	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:20ab05f6	./xtask/src/task_projection_reader.rs	21	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:d2a13f27	./xtask/src/task_projection_reader.rs	22	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:4b36107d	./xtask/src/task_projection_reader.rs	23	weakly_exposed	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:82a4bffc	./xtask/src/task_projection_reader.rs	24	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:f7a85602.2	./xtask/src/task_projection_reader.rs	26	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:19f7b7d5	./xtask/src/task_projection_reader.rs	27	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:d2a13f27.2	./xtask/src/task_projection_reader.rs	28	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:fc42b1c9	./xtask/src/task_projection_reader.rs	29	weakly_exposed	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:82a4bffc.2	./xtask/src/task_projection_reader.rs	30	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:f7a85602.3	./xtask/src/task_projection_reader.rs	32	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:65f21215	./xtask/src/task_projection_reader.rs	33	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:d2a13f27.3	./xtask/src/task_projection_reader.rs	34	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:88ae7a7f	./xtask/src/task_projection_reader.rs	35	weakly_exposed	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:82a4bffc.3	./xtask/src/task_projection_reader.rs	36	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:f7a85602.4	./xtask/src/task_projection_reader.rs	38	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:f5ce0097	./xtask/src/task_projection_reader.rs	39	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:d2a13f27.4	./xtask/src/task_projection_reader.rs	40	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:e2349a8d	./xtask/src/task_projection_reader.rs	41	weakly_exposed	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:82a4bffc.4	./xtask/src/task_projection_reader.rs	42	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:a1b5cf43	./xtask/src/task_projection_reader.rs	44	weakly_exposed	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:d230498d	./xtask/src/task_projection_reader.rs	45	weakly_exposed	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:f7a85602.5	./xtask/src/task_projection_reader.rs	46	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:5013053a	./xtask/src/task_projection_reader.rs	47	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:d2a13f27.5	./xtask/src/task_projection_reader.rs	48	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:1399217b	./xtask/src/task_projection_reader.rs	49	weakly_exposed	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:82a4bffc.5	./xtask/src/task_projection_reader.rs	50	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:7f1e842c	./xtask/src/task_projection_reader.rs	52	weakly_exposed	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:f7a85602.6	./xtask/src/task_projection_reader.rs	53	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:88952c1c	./xtask/src/task_projection_reader.rs	54	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:d2a13f27.6	./xtask/src/task_projection_reader.rs	55	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:b7b63fde	./xtask/src/task_projection_reader.rs	56	weakly_exposed	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:ccc6dc73	./xtask/src/task_projection_reader.rs	57	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:f7a85602.7	./xtask/src/task_projection_reader.rs	59	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:a9863af2	./xtask/src/task_projection_reader.rs	60	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:d2a13f27.7	./xtask/src/task_projection_reader.rs	61	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:50668752	./xtask/src/task_projection_reader.rs	62	weakly_exposed	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:ccc6dc73.2	./xtask/src/task_projection_reader.rs	63	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:f7a85602.8	./xtask/src/task_projection_reader.rs	65	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:9b7ece58	./xtask/src/task_projection_reader.rs	66	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:d2a13f27.8	./xtask/src/task_projection_reader.rs	67	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:775f70a8	./xtask/src/task_projection_reader.rs	68	weakly_exposed	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:82a4bffc.6	./xtask/src/task_projection_reader.rs	69	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:f7a85602.9	./xtask/src/task_projection_reader.rs	71	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:c2fc2fcf	./xtask/src/task_projection_reader.rs	72	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:d2a13f27.9	./xtask/src/task_projection_reader.rs	73	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:95a8a2f9	./xtask/src/task_projection_reader.rs	74	weakly_exposed	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:ccc6dc73.3	./xtask/src/task_projection_reader.rs	75	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:b1874104	./xtask/src/task_projection_reader.rs	77	weakly_exposed	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:side_effect:3a7b1b89	./xtask/src/task_projection_reader.rs	77	reachable_unrevealed	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:f7a85602.10	./xtask/src/task_projection_reader.rs	78	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:352beef9	./xtask/src/task_projection_reader.rs	79	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:d2a13f27.10	./xtask/src/task_projection_reader.rs	80	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:2ba90157	./xtask/src/task_projection_reader.rs	81	weakly_exposed	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:ccc6dc73.4	./xtask/src/task_projection_reader.rs	82	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:b02c2dcc	./xtask/src/task_projection_reader.rs	86	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:f7a85602.11	./xtask/src/task_projection_reader.rs	87	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:5f78e97e	./xtask/src/task_projection_reader.rs	88	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:d2a13f27.11	./xtask/src/task_projection_reader.rs	89	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:c422b6a6	./xtask/src/task_projection_reader.rs	90	weakly_exposed	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:82a4bffc.7	./xtask/src/task_projection_reader.rs	91	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:f7a85602.12	./xtask/src/task_projection_reader.rs	93	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:a1e973ab	./xtask/src/task_projection_reader.rs	94	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:d2a13f27.12	./xtask/src/task_projection_reader.rs	95	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:32799010	./xtask/src/task_projection_reader.rs	96	weakly_exposed	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:82a4bffc.8	./xtask/src/task_projection_reader.rs	97	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:f7a85602.13	./xtask/src/task_projection_reader.rs	99	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:19f7b7d5.2	./xtask/src/task_projection_reader.rs	100	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:d2a13f27.13	./xtask/src/task_projection_reader.rs	101	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:fc42b1c9.2	./xtask/src/task_projection_reader.rs	102	weakly_exposed	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:82a4bffc.9	./xtask/src/task_projection_reader.rs	103	static_unknown	<declaration/outside function>			xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:e1a3d49b	./xtask/src/task_projection_reader.rs	108	static_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:d95b789d	./xtask/src/task_projection_reader.rs	109	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:d0a87b8d	./xtask/src/task_projection_reader.rs	110	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:error_path:82519c57	./xtask/src/task_projection_reader.rs	110	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:cb618d5d	./xtask/src/task_projection_reader.rs	110	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:45c01b55	./xtask/src/task_projection_reader.rs	111	static_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:19aa36b0	./xtask/src/task_projection_reader.rs	112	infection_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:9821ecc6	./xtask/src/task_projection_reader.rs	113	infection_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:f0228dad	./xtask/src/task_projection_reader.rs	114	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:error_path:9a5cf65b	./xtask/src/task_projection_reader.rs	114	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:cfbff4a5	./xtask/src/task_projection_reader.rs	116	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:error_path:a81643d2	./xtask/src/task_projection_reader.rs	116	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:aa895fe2	./xtask/src/task_projection_reader.rs	117	infection_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:e21b7309	./xtask/src/task_projection_reader.rs	118	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:error_path:eb92ebc4	./xtask/src/task_projection_reader.rs	118	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:5ebf6ab5	./xtask/src/task_projection_reader.rs	121	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:d9ab366a	./xtask/src/task_projection_reader.rs	122	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:8c0fc89d	./xtask/src/task_projection_reader.rs	123	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:d5340d96	./xtask/src/task_projection_reader.rs	124	static_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:14228f3e	./xtask/src/task_projection_reader.rs	125	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:5de8c1d0	./xtask/src/task_projection_reader.rs	126	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:47f12de2	./xtask/src/task_projection_reader.rs	127	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:dc14f9ad	./xtask/src/task_projection_reader.rs	128	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:28e81142	./xtask/src/task_projection_reader.rs	129	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:38653da8	./xtask/src/task_projection_reader.rs	130	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:8b546ecc	./xtask/src/task_projection_reader.rs	131	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:03919fc4	./xtask/src/task_projection_reader.rs	133	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:fee73480	./xtask/src/task_projection_reader.rs	134	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:002fdd4a	./xtask/src/task_projection_reader.rs	137	infection_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:dc012a0a	./xtask/src/task_projection_reader.rs	138	static_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:afb4e6fe	./xtask/src/task_projection_reader.rs	140	static_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:bbb50792	./xtask/src/task_projection_reader.rs	142	static_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:4b06bb13	./xtask/src/task_projection_reader.rs	143	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:9d4e2078	./xtask/src/task_projection_reader.rs	144	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:3b9017cf	./xtask/src/task_projection_reader.rs	145	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:5cdcfb9e	./xtask/src/task_projection_reader.rs	146	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:93656a4e	./xtask/src/task_projection_reader.rs	149	static_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:a2d78667	./xtask/src/task_projection_reader.rs	150	infection_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:4a2b0239	./xtask/src/task_projection_reader.rs	151	static_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:cb8b7657	./xtask/src/task_projection_reader.rs	152	static_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:6cd9b9b1	./xtask/src/task_projection_reader.rs	153	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:960a84dc	./xtask/src/task_projection_reader.rs	154	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:634bc74f	./xtask/src/task_projection_reader.rs	156	static_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:b1936ce7	./xtask/src/task_projection_reader.rs	157	infection_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:c10354f5	./xtask/src/task_projection_reader.rs	158	static_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:12d487a0	./xtask/src/task_projection_reader.rs	159	static_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:6d584d83	./xtask/src/task_projection_reader.rs	162	infection_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:a5aca3c8	./xtask/src/task_projection_reader.rs	162	infection_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:8b9a9baf	./xtask/src/task_projection_reader.rs	166	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:f00d6648	./xtask/src/task_projection_reader.rs	168	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:5f5e6190	./xtask/src/task_projection_reader.rs	170	infection_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:c22f9fb0	./xtask/src/task_projection_reader.rs	171	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:02b11f41	./xtask/src/task_projection_reader.rs	173	infection_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:b3c5706a	./xtask/src/task_projection_reader.rs	174	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:d5340d96.2	./xtask/src/task_projection_reader.rs	176	static_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:14228f3e.2	./xtask/src/task_projection_reader.rs	177	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:5de8c1d0.2	./xtask/src/task_projection_reader.rs	178	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:47f12de2.2	./xtask/src/task_projection_reader.rs	179	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:65ce310e	./xtask/src/task_projection_reader.rs	180	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:ffb313c2	./xtask/src/task_projection_reader.rs	180	infection_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:28e81142.2	./xtask/src/task_projection_reader.rs	181	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:ab006184	./xtask/src/task_projection_reader.rs	182	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:bca933a1	./xtask/src/task_projection_reader.rs	183	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:f25aa8d9	./xtask/src/task_projection_reader.rs	184	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:afd1f9da	./xtask/src/task_projection_reader.rs	185	static_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:53b64982	./xtask/src/task_projection_reader.rs	186	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:7114227b	./xtask/src/task_projection_reader.rs	187	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:f2a93479	./xtask/src/task_projection_reader.rs	188	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:error_path:209f3e2f	./xtask/src/task_projection_reader.rs	190	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:c191e791	./xtask/src/task_projection_reader.rs	191	infection_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:41a7c2b7	./xtask/src/task_projection_reader.rs	192	static_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:14228f3e.3	./xtask/src/task_projection_reader.rs	193	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:5de8c1d0.3	./xtask/src/task_projection_reader.rs	194	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:47f12de2.3	./xtask/src/task_projection_reader.rs	195	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:dc14f9ad.2	./xtask/src/task_projection_reader.rs	196	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:28e81142.3	./xtask/src/task_projection_reader.rs	197	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:ab006184.2	./xtask/src/task_projection_reader.rs	198	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:bca933a1.2	./xtask/src/task_projection_reader.rs	199	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:2073e83f	./xtask/src/task_projection_reader.rs	200	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:08254bbd	./xtask/src/task_projection_reader.rs	201	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:field_construction:38653da8.2	./xtask/src/task_projection_reader.rs	202	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:07eecfcb	./xtask/src/task_projection_reader.rs	204	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:fee73480.2	./xtask/src/task_projection_reader.rs	205	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:1072ea75	./xtask/src/task_projection_reader.rs	207	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:9686e593	./xtask/src/task_projection_reader.rs	208	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:b51a51e1	./xtask/src/task_projection_reader.rs	209	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:08a4a1a7	./xtask/src/task_projection_reader.rs	210	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:error_path:7b98042c	./xtask/src/task_projection_reader.rs	210	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:daa9790d	./xtask/src/task_projection_reader.rs	211	infection_unknown	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:ece0e878	./xtask/src/task_projection_reader.rs	211	weakly_exposed	run	107	212	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:534f818b	./xtask/src/task_projection_reader.rs	215	weakly_exposed	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:142f065e	./xtask/src/task_projection_reader.rs	216	weakly_exposed	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:58ea6de4	./xtask/src/task_projection_reader.rs	216	weakly_exposed	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:95ddbfdd	./xtask/src/task_projection_reader.rs	217	weakly_exposed	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:533f7340	./xtask/src/task_projection_reader.rs	217	weakly_exposed	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:60195dbc	./xtask/src/task_projection_reader.rs	218	weakly_exposed	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:fe57faf2	./xtask/src/task_projection_reader.rs	218	weakly_exposed	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:df8d9da4	./xtask/src/task_projection_reader.rs	219	weakly_exposed	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:d7824f0f	./xtask/src/task_projection_reader.rs	219	weakly_exposed	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:fdf040a0	./xtask/src/task_projection_reader.rs	220	weakly_exposed	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:12eaa24b	./xtask/src/task_projection_reader.rs	222	infection_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:b91d3243	./xtask/src/task_projection_reader.rs	223	infection_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:14fc699a	./xtask/src/task_projection_reader.rs	225	infection_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:dcf9a7de	./xtask/src/task_projection_reader.rs	228	weakly_exposed	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:cd31846d	./xtask/src/task_projection_reader.rs	230	infection_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:03227645	./xtask/src/task_projection_reader.rs	231	infection_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:7c50cb7d	./xtask/src/task_projection_reader.rs	232	static_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:e9a17825	./xtask/src/task_projection_reader.rs	233	static_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:0739d94c	./xtask/src/task_projection_reader.rs	235	infection_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:f54f9333	./xtask/src/task_projection_reader.rs	236	static_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:bd89de4e	./xtask/src/task_projection_reader.rs	237	infection_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:517bb040	./xtask/src/task_projection_reader.rs	238	static_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:1fd3edd5	./xtask/src/task_projection_reader.rs	242	infection_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:517bb040.2	./xtask/src/task_projection_reader.rs	245	static_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:2f272963	./xtask/src/task_projection_reader.rs	247	infection_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:b883e0af	./xtask/src/task_projection_reader.rs	248	static_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:08e345c7	./xtask/src/task_projection_reader.rs	249	infection_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:0b35be06	./xtask/src/task_projection_reader.rs	250	weakly_exposed	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:f7ba5ba6	./xtask/src/task_projection_reader.rs	252	static_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:d12f6e05	./xtask/src/task_projection_reader.rs	253	static_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:d43c5dc6	./xtask/src/task_projection_reader.rs	254	weakly_exposed	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:e2ea9bf8	./xtask/src/task_projection_reader.rs	255	infection_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:e9b77226	./xtask/src/task_projection_reader.rs	255	infection_unknown	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:7e4c5b16	./xtask/src/task_projection_reader.rs	260	weakly_exposed	inspect_collections	214	265	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:aa27762d	./xtask/src/task_projection_reader.rs	268	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:6462637f	./xtask/src/task_projection_reader.rs	269	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:b8c2afcf	./xtask/src/task_projection_reader.rs	270	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:66c3e229	./xtask/src/task_projection_reader.rs	271	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:3b547e6c	./xtask/src/task_projection_reader.rs	272	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:f41c2e56	./xtask/src/task_projection_reader.rs	275	infection_unknown	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:3b547e6c.2	./xtask/src/task_projection_reader.rs	276	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:be5be148	./xtask/src/task_projection_reader.rs	278	static_unknown	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:0157c9c6	./xtask/src/task_projection_reader.rs	279	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:b15924d2	./xtask/src/task_projection_reader.rs	280	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:b8c2afcf.2	./xtask/src/task_projection_reader.rs	281	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:66c3e229.2	./xtask/src/task_projection_reader.rs	282	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:3b547e6c.3	./xtask/src/task_projection_reader.rs	283	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:b2ce3d98	./xtask/src/task_projection_reader.rs	286	static_unknown	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:predicate:fa2b3ebd	./xtask/src/task_projection_reader.rs	287	infection_unknown	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:66c3e229.3	./xtask/src/task_projection_reader.rs	288	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:3b547e6c.4	./xtask/src/task_projection_reader.rs	289	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:2557ed0a	./xtask/src/task_projection_reader.rs	291	static_unknown	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:ee49412b	./xtask/src/task_projection_reader.rs	292	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:8dcc7ca4	./xtask/src/task_projection_reader.rs	293	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:error_path:61885fd3	./xtask/src/task_projection_reader.rs	294	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:59f7f39a	./xtask/src/task_projection_reader.rs	296	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:match_arm:b8c2afcf.3	./xtask/src/task_projection_reader.rs	297	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:66c3e229.4	./xtask/src/task_projection_reader.rs	298	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:3b547e6c.5	./xtask/src/task_projection_reader.rs	299	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:722466eb	./xtask/src/task_projection_reader.rs	302	propagation_unknown	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:side_effect:84c3f8c6	./xtask/src/task_projection_reader.rs	302	propagation_unknown	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:call_deletion:b6314800	./xtask/src/task_projection_reader.rs	304	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:b333280e	./xtask/src/task_projection_reader.rs	305	static_unknown	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:static_unknown:122a6f4a	./xtask/src/task_projection_reader.rs	306	static_unknown	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:3654f437	./xtask/src/task_projection_reader.rs	307	infection_unknown	inspect_sensor_inputs	267	310	xtask executable
+probe:xtask_src_task_projection_reader.rs:return_value:bf2d6522	./xtask/src/task_projection_reader.rs	309	weakly_exposed	inspect_sensor_inputs	267	310	xtask executable

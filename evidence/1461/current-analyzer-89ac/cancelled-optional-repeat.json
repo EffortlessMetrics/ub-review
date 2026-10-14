@@ -1,0 +1,20 @@
+{
+  "state": "cancelled; not evidence of determinism or complete analysis",
+  "control": "Graceful interruption (Ctrl-C) after required JSON and badge completed.",
+  "observed_serial_driver_exit": 130,
+  "cancellation_observed_at": "2026-10-14T20:58:08Z",
+  "repeat_started_at": "2026-10-14T20:55:46Z",
+  "repeat_stdout": {
+    "file": "1461-current-complete-repeat-json.json",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "repeat_stderr": {
+    "file": "1461-current-complete-repeat-json.stderr",
+    "bytes": 1571,
+    "sha256": "cef706d0c04141e246a19ce5620493f2a1601155aef1b4113ae4522b25a995b5"
+  },
+  "individual_repeat_exit_unrecorded": true,
+  "completed_outputs_preserved": true,
+  "scope": "Optional repetition cancelled after completed JSON/badge comparison; no source, binary or consumer changes, and no completed output deletion."
+}

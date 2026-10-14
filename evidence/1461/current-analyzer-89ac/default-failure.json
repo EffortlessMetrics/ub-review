@@ -1,0 +1,38 @@
+{
+  "analysis_scope": {
+    "basis": "rust_diff_scope_budget",
+    "downstream_consumable": false,
+    "limitation": "diff_scope_oversized",
+    "repair_route": "analysis/diff-scope-budget",
+    "run_status": "diff_scope_oversized",
+    "scope": "diff"
+  },
+  "findings": [],
+  "mode": "ready",
+  "root": ".",
+  "run_limitations": [
+    {
+      "basis": "rust_diff_scope_budget",
+      "category": "diff_scope_oversized",
+      "downstream_consumable": false,
+      "message": "diff_scope_oversized: 2495 changed Rust lines across 5 Rust files exceed the RIPR_MAX_DIFF_CHANGED_RUST_LINES limit (2000); analysis was not run to protect runner memory before probe expansion. Repair route: reduce the diff scope, split the extraction PR, run a narrower diff, or raise the limit via RIPR_MAX_DIFF_CHANGED_RUST_LINES=<number>.",
+      "repair_route": "analysis/diff-scope-budget",
+      "run_status": "diff_scope_oversized"
+    }
+  ],
+  "schema_version": "0.2",
+  "summary": {
+    "changed_files_by_language": [],
+    "changed_rust_files": 0,
+    "exposed": 0,
+    "findings": 0,
+    "infection_unknown": 0,
+    "no_static_path": 0,
+    "probes": 0,
+    "propagation_unknown": 0,
+    "reachable_unrevealed": 0,
+    "static_unknown": 0,
+    "weakly_exposed": 0
+  },
+  "tool": "ripr"
+}

@@ -1,0 +1,62 @@
+{
+  "exact_id": {
+    "released_inventory": 1689,
+    "current_inventory": 855,
+    "common_ids": 305,
+    "released_only_ids": 1384,
+    "current_only_ids": 550,
+    "common_transitions": {
+      "exposed -> weakly_exposed": 70,
+      "exposed -> exposed": 7,
+      "weakly_exposed -> weakly_exposed": 44,
+      "propagation_unknown -> propagation_unknown": 8,
+      "weakly_exposed -> exposed": 5,
+      "reachable_unrevealed -> weakly_exposed": 17,
+      "infection_unknown -> infection_unknown": 9,
+      "exposed -> infection_unknown": 1,
+      "static_unknown -> static_unknown": 143,
+      "exposed -> reachable_unrevealed": 1
+    },
+    "released_gap_dispositions": {
+      "retained_gap_class": 61,
+      "current_non_gap_class": 5,
+      "no_current_id_counterpart": 247
+    },
+    "current_gap_origins": {
+      "current_only_ID": 305,
+      "exposed": 71,
+      "reachable_unrevealed": 17,
+      "weakly_exposed": 44
+    },
+    "unchanged_ID_expression_correspondence_limits": "ID equality is directly measured; current-only/absent IDs are not assumed to prove new/fixed semantics. Source-coordinate grouping remains separate."
+  },
+  "source_coordinate": {
+    "matching_contract": "Source file + source line + probe family; expression spelling may differ. This is an explicit coordinate grouping, not asserted one-to-one semantic identity.",
+    "common_coordinates": 708,
+    "released_only_coordinates": 981,
+    "current_only_coordinates": 139,
+    "released_test_subject_counts": {
+      "src/task_projection_reconciliation/reader/tests.rs": 31,
+      "xtask/tests/task_projection_reader_parity.rs": 111
+    },
+    "released_test_gap_counts": {
+      "src/task_projection_reconciliation/reader/tests.rs": 7,
+      "xtask/tests/task_projection_reader_parity.rs": 44
+    },
+    "current_test_subject_counts": {
+      "src/task_projection_reconciliation/reader/tests.rs": 0,
+      "xtask/tests/task_projection_reader_parity.rs": 0
+    }
+  },
+  "rendered_target_attribution": {
+    "projection_raw_sha256": "4bea892bf07e23a50f3210eb5f1d634b07fc340f834c8196dfe983107ab87751",
+    "actual_target": "xtask executable; reader source imported by explicit path, not main UB binary",
+    "gap_rows": 437,
+    "gap_rows_with_positive_foreign_target_rendered_relation": 216,
+    "gap_rows_with_foreign_high_confidence_direct_owner_call": 53,
+    "no_foreign_target_in_rendered_sample": 221,
+    "relation_projection_limit": 8,
+    "unrendered_relations_unverified": true
+  },
+  "limits": "Coordinate grouping is not one-to-one semantic identity. Missing/current-only IDs are not proof of fixed/new behavior. Cross-target CLI integration may be valid; typed direct-call receiver identity must still be correct."
+}

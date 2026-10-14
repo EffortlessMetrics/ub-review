@@ -1,0 +1,796 @@
+{
+  "raw_file": "1461-current-complete-json.json",
+  "raw_sha256": "4bea892bf07e23a50f3210eb5f1d634b07fc340f834c8196dfe983107ab87751",
+  "actual_target": "xtask executable",
+  "main_binary_reader_module_registered": false,
+  "selected_rows": [
+    {
+      "id": "probe:src_task_projection_reconciliation_reader.rs:match_arm:0056a34c",
+      "class": "weakly_exposed",
+      "probe": {
+        "id": "probe:src_task_projection_reconciliation_reader.rs:match_arm:0056a34c",
+        "family": "match_arm",
+        "delta": "control",
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "line": 46,
+        "expression": "match self"
+      },
+      "stages": {
+        "reach": "yes",
+        "infect": "yes",
+        "propagate": "yes",
+        "observe": "yes",
+        "discriminate": "weak"
+      },
+      "oracle_kind": "exact_value",
+      "oracle_strength": "strong",
+      "stop_reasons": [
+        "fixture_opaque"
+      ],
+      "related_total": 233,
+      "related_tests": [
+        {
+          "name": "actual_reader_matches_python_packet_sources_and_cached_bytes",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 113,
+          "oracle_strength": "strong",
+          "oracle_kind": "exact_value",
+          "oracle": "ensure!(\nexit == 0 && native[\"reader_status\"] == \"inputs_read\",\n\"reader inputs unavailable: {native}\"\n);",
+          "relation_reason": "direct_owner_call",
+          "relation_confidence": "high"
+        },
+        {
+          "name": "tool_policy_known_keys_match_serialized_fields",
+          "file": "src/main.rs",
+          "line": 15624,
+          "oracle_strength": "strong",
+          "oracle_kind": "exact_value",
+          "oracle": "assert_eq!(serialized_keys, known);",
+          "relation_reason": "direct_owner_call",
+          "relation_confidence": "high"
+        },
+        {
+          "name": "serde_json_ambient_contract_keeps_private_number_keys_as_objects",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 399,
+          "oracle_strength": "weak",
+          "oracle_kind": "relational_check",
+          "oracle": "ensure!(\nvalue.is_object(),\n\"root parser reclassified an ordinary object: {value}\"\n);",
+          "relation_reason": "owner_named_test",
+          "relation_confidence": "medium"
+        },
+        {
+          "name": "serde_json_ambient_contract_keeps_private_raw_value_keys_as_objects",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 422,
+          "oracle_strength": "weak",
+          "oracle_kind": "relational_check",
+          "oracle": "ensure!(\nvalue.is_object(),\n\"root parser reclassified an ordinary object: {value}\"\n);",
+          "relation_reason": "owner_named_test",
+          "relation_confidence": "medium"
+        },
+        {
+          "name": "actual_reader_matches_python_strict_json_on_bounded_grammar_vectors",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 212,
+          "oracle_strength": "weak",
+          "oracle_kind": "relational_check",
+          "oracle": "ensure!(\npython.stderr.is_empty(),\n\"Python grammar comparator failed: {}\",\nString::from_utf8_lossy(&python.stderr)\n);",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "actual_reader_records_explicit_tighter_python_encoding_and_number_boundary",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 260,
+          "oracle_strength": "weak",
+          "oracle_kind": "relational_check",
+          "oracle": "ensure!(\npython.status.success(),\n\"Python tightened-boundary baseline changed: {}\",\nString::from_utf8_lossy(&python.stderr)\n);",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "adoption_docs_match_setup_ci_current_surface",
+          "file": "tests/cli_contract.rs",
+          "line": 2,
+          "oracle_strength": "weak",
+          "oracle_kind": "relational_check",
+          "oracle": "assert!(\n                !text.contains(stale),\n                \"{name} leaked stale setup-ci adoption claim `{stale}`\"\n            );",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "aggregate_cap_accepts_exact_total_then_refuses_even_empty_input",
+          "file": "src/task_projection_reconciliation/reader/tests.rs",
+          "line": 136,
+          "oracle_strength": "strong",
+          "oracle_kind": "exact_value",
+          "oracle": "ensure!(reader.total_bytes() == 6);",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        }
+      ],
+      "evidence": [
+        "A related test observes a value or effect near the changed behavior",
+        "Changed behavior appears to influence match arm result: match self",
+        "Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified)",
+        "Reachable tests can plausibly activate this changed behavior",
+        "Related tests appear to reach as_object: actual_reader_matches_python_packet_sources_and_cached_bytes, tool_policy_known_keys_match_serialized_fields, serde_json_ambient_contract_keeps_private_number_keys_as_objects"
+      ],
+      "evidence_path": [
+        "reach yes: Related tests appear to reach as_object: actual_reader_matches_python_packet_sources_and_cached_bytes, tool_policy_known_keys_match_serialized_fields, serde_json_ambient_contract_keeps_private_number_keys_as_objects",
+        "infection yes: Reachable tests can plausibly activate this changed behavior",
+        "propagation yes: Changed behavior appears to influence match arm result: match self",
+        "observation yes: A related test observes a value or effect near the changed behavior",
+        "discriminator weak: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified)",
+        "local flow reaches match arm result: match self (line 46)",
+        "related test xtask/tests/task_projection_reader_parity.rs:113 actual_reader_matches_python_packet_sources_and_cached_bytes uses strong exact value oracle: ensure!(\nexit == 0 && native[\"reader_status\"] == \"inputs_read\",\n\"reader inputs unavailable: {native}\"\n);",
+        "related test src/main.rs:15624 tool_policy_known_keys_match_serialized_fields uses strong exact value oracle: assert_eq!(serialized_keys, known);",
+        "related test xtask/tests/task_projection_reader_parity.rs:399 serde_json_ambient_contract_keeps_private_number_keys_as_objects uses weak relational check oracle: ensure!(\nvalue.is_object(),\n\"root parser reclassified an ordinary object: {value}\"\n);",
+        "related test xtask/tests/task_projection_reader_parity.rs:422 serde_json_ambient_contract_keeps_private_raw_value_keys_as_objects uses weak relational check oracle: ensure!(\nvalue.is_object(),\n\"root parser reclassified an ordinary object: {value}\"\n);",
+        "related test xtask/tests/task_projection_reader_parity.rs:212 actual_reader_matches_python_strict_json_on_bounded_grammar_vectors uses weak relational check oracle: ensure!(\npython.stderr.is_empty(),\n\"Python grammar comparator failed: {}\",\nString::from_utf8_lossy(&python.stderr)\n);",
+        "source table row value \"ROADMAP\" at line 20",
+        "source table row value \"README\" at line 25",
+        "source table row value \":\" at line 222",
+        "source table row value \"{\" at line 222",
+        "source table row value \"}\" at line 222",
+        "source table row value true at line 222",
+        "source table row value \":1,\" at line 227",
+        "source table row value \":2}\" at line 227"
+      ],
+      "missing": [
+        "No strong discriminator was detected"
+      ],
+      "owner_kind": null,
+      "source_owner": {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "name": "JsonValue::as_object",
+        "start_line": 45,
+        "end_line": 50,
+        "derivation": "Rust1.95/ra_ap_syntax0.0.349 actual AST, innermost containing function",
+        "actual_cargo_target": "xtask executable",
+        "main_ub_review_target": false
+      }
+    },
+    {
+      "id": "probe:src_task_projection_reconciliation_reader.rs:error_path:aaf91788",
+      "class": "reachable_unrevealed",
+      "probe": {
+        "id": "probe:src_task_projection_reconciliation_reader.rs:error_path:aaf91788",
+        "family": "error_path",
+        "delta": "value",
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "line": 297,
+        "expression": "return Err(PacketError::SymlinkInput)"
+      },
+      "stages": {
+        "reach": "yes",
+        "infect": "yes",
+        "propagate": "yes",
+        "observe": "no",
+        "discriminate": "no"
+      },
+      "oracle_kind": "exact_value",
+      "oracle_strength": "strong",
+      "stop_reasons": [
+        "fixture_opaque"
+      ],
+      "related_total": 39,
+      "related_tests": [
+        {
+          "name": "canonical_report_metadata_is_sorted_compact_utf8_without_native_numbers",
+          "file": "src/task_projection_reconciliation/reader/tests.rs",
+          "line": 766,
+          "oracle_strength": "strong",
+          "oracle_kind": "exact_value",
+          "oracle": "ensure!(canonical(&value)? == \"{\\\"a\\\":[1],\\\"z\\\":{\\\"a\\\":1,\\\"β\\\":2},\\\"é\\\":\\\"雪\\\"}\\n\".as_bytes());",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "every_symlink_component_is_rejected_including_broken_links",
+          "file": "src/task_projection_reconciliation/reader/tests.rs",
+          "line": 208,
+          "oracle_strength": "strong",
+          "oracle_kind": "exact_value",
+          "oracle": "ensure!(reader.read(path, false) == Err(PacketError::SymlinkInput));",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "root_is_resolved_once_and_root_symlink_is_allowed",
+          "file": "src/task_projection_reconciliation/reader/tests.rs",
+          "line": 234,
+          "oracle_strength": "strong",
+          "oracle_kind": "exact_value",
+          "oracle": "ensure!(reader.read(\"input\", false)? == Some(b\"original\".as_slice()));",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "serde_json_ambient_contract_rejects_nonfinite_float_exponents",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 445,
+          "oracle_strength": "weak",
+          "oracle_kind": "broad_error",
+          "oracle": "ensure!(\nserde_json::from_slice::<Value>(input.as_bytes()).is_err(),\n\"root parser accepted an out-of-range exponent\"\n);",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "paths_require_canonical_posix_relative_spelling",
+          "file": "src/task_projection_reconciliation/reader/tests.rs",
+          "line": 168,
+          "oracle_strength": "none",
+          "oracle_kind": "unknown",
+          "oracle": "ensure!(\nreader.confined_path(path) == Err(PacketError::UnsafePath),\n\"path should be unsafe\"\n);",
+          "relation_reason": "direct_owner_call",
+          "relation_confidence": "high"
+        },
+        {
+          "name": "actual_reader_matches_python_packet_sources_and_cached_bytes",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 113,
+          "oracle_strength": "none",
+          "oracle_kind": "unknown",
+          "oracle": "ensure!(\nexit == 0 && native[\"reader_status\"] == \"inputs_read\",\n\"reader inputs unavailable: {native}\"\n);",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "actual_reader_matches_python_strict_json_on_bounded_grammar_vectors",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 212,
+          "oracle_strength": "none",
+          "oracle_kind": "unknown",
+          "oracle": "ensure!(\npython.stderr.is_empty(),\n\"Python grammar comparator failed: {}\",\nString::from_utf8_lossy(&python.stderr)\n);",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "actual_reader_records_explicit_tighter_python_encoding_and_number_boundary",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 260,
+          "oracle_strength": "none",
+          "oracle_kind": "unknown",
+          "oracle": "ensure!(\npython.status.success(),\n\"Python tightened-boundary baseline changed: {}\",\nString::from_utf8_lossy(&python.stderr)\n);",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        }
+      ],
+      "evidence": [
+        "Complete propagation witness reaches error variant: Result::Err(PacketError::SymlinkInput)",
+        "No assertion found on related tests",
+        "Reachable tests can plausibly activate this changed behavior",
+        "Related tests appear to reach confined_path: paths_require_canonical_posix_relative_spelling, actual_reader_matches_python_packet_sources_and_cached_bytes, actual_reader_matches_python_strict_json_on_bounded_grammar_vectors",
+        "Related tests were found, but no assertion appears to observe the changed value, error, field, or effect"
+      ],
+      "evidence_path": [
+        "reach yes: Related tests appear to reach confined_path: paths_require_canonical_posix_relative_spelling, actual_reader_matches_python_packet_sources_and_cached_bytes, actual_reader_matches_python_strict_json_on_bounded_grammar_vectors",
+        "infection yes: Reachable tests can plausibly activate this changed behavior",
+        "propagation yes: Complete propagation witness reaches error variant: Result::Err(PacketError::SymlinkInput)",
+        "observation no: Related tests were found, but no assertion appears to observe the changed value, error, field, or effect",
+        "discriminator no: No assertion found on related tests",
+        "local flow reaches error variant: Result::Err(PacketError::SymlinkInput) (line 297)",
+        "related test src/task_projection_reconciliation/reader/tests.rs:766 canonical_report_metadata_is_sorted_compact_utf8_without_native_numbers uses strong exact value oracle: ensure!(canonical(&value)? == \"{\\\"a\\\":[1],\\\"z\\\":{\\\"a\\\":1,\\\"β\\\":2},\\\"é\\\":\\\"雪\\\"}\\n\".as_bytes());",
+        "related test src/task_projection_reconciliation/reader/tests.rs:208 every_symlink_component_is_rejected_including_broken_links uses strong exact value oracle: ensure!(reader.read(path, false) == Err(PacketError::SymlinkInput));",
+        "related test src/task_projection_reconciliation/reader/tests.rs:234 root_is_resolved_once_and_root_symlink_is_allowed uses strong exact value oracle: ensure!(reader.read(\"input\", false)? == Some(b\"original\".as_slice()));",
+        "related test xtask/tests/task_projection_reader_parity.rs:445 serde_json_ambient_contract_rejects_nonfinite_float_exponents uses weak broad error oracle: ensure!(\nserde_json::from_slice::<Value>(input.as_bytes()).is_err(),\n\"root parser accepted an out-of-range exponent\"\n);",
+        "related test src/task_projection_reconciliation/reader/tests.rs:168 paths_require_canonical_posix_relative_spelling uses none unknown oracle: ensure!(\nreader.confined_path(path) == Err(PacketError::UnsafePath),\n\"path should be unsafe\"\n);",
+        "source enum variant value PacketError::InvalidRoot at line 28",
+        "source enum variant value PacketError::InvalidRoot at line 34",
+        "source enum variant value PacketError::UnsafePath at line 91",
+        "source enum variant value PacketError::FileBudgetExceeded at line 93",
+        "source enum variant value PacketError::UnsafePath at line 94",
+        "source enum variant value PacketError::ByteBudgetExceeded at line 118",
+        "source function argument value name = \"review/é.json\" at line 190",
+        "source table row value \":\" at line 222",
+        "missing discriminator PacketError::SymlinkInput: No exact error variant assertion for PacketError::SymlinkInput"
+      ],
+      "missing": [
+        "Missing discriminator value: PacketError::SymlinkInput",
+        "No detected assertion observes the changed value, error, field, or effect",
+        "No exact error variant discriminator was detected",
+        "No relevant oracle was detected"
+      ],
+      "owner_kind": null,
+      "source_owner": {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "name": "PacketReader::confined_path",
+        "start_line": 275,
+        "end_line": 306,
+        "derivation": "Rust1.95/ra_ap_syntax0.0.349 actual AST, innermost containing function",
+        "actual_cargo_target": "xtask executable",
+        "main_ub_review_target": false
+      }
+    },
+    {
+      "id": "probe:src_task_projection_reconciliation_reader.rs:error_path:ecc52b80",
+      "class": "reachable_unrevealed",
+      "probe": {
+        "id": "probe:src_task_projection_reconciliation_reader.rs:error_path:ecc52b80",
+        "family": "error_path",
+        "delta": "value",
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "line": 302,
+        "expression": "return Err(PacketError::InputIo)"
+      },
+      "stages": {
+        "reach": "yes",
+        "infect": "yes",
+        "propagate": "yes",
+        "observe": "no",
+        "discriminate": "no"
+      },
+      "oracle_kind": "exact_value",
+      "oracle_strength": "strong",
+      "stop_reasons": [
+        "fixture_opaque"
+      ],
+      "related_total": 39,
+      "related_tests": [
+        {
+          "name": "canonical_report_metadata_is_sorted_compact_utf8_without_native_numbers",
+          "file": "src/task_projection_reconciliation/reader/tests.rs",
+          "line": 766,
+          "oracle_strength": "strong",
+          "oracle_kind": "exact_value",
+          "oracle": "ensure!(canonical(&value)? == \"{\\\"a\\\":[1],\\\"z\\\":{\\\"a\\\":1,\\\"β\\\":2},\\\"é\\\":\\\"雪\\\"}\\n\".as_bytes());",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "root_is_resolved_once_and_root_symlink_is_allowed",
+          "file": "src/task_projection_reconciliation/reader/tests.rs",
+          "line": 234,
+          "oracle_strength": "strong",
+          "oracle_kind": "exact_value",
+          "oracle": "ensure!(reader.read(\"input\", false)? == Some(b\"original\".as_slice()));",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "serde_json_ambient_contract_rejects_nonfinite_float_exponents",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 445,
+          "oracle_strength": "weak",
+          "oracle_kind": "broad_error",
+          "oracle": "ensure!(\nserde_json::from_slice::<Value>(input.as_bytes()).is_err(),\n\"root parser accepted an out-of-range exponent\"\n);",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "paths_require_canonical_posix_relative_spelling",
+          "file": "src/task_projection_reconciliation/reader/tests.rs",
+          "line": 168,
+          "oracle_strength": "none",
+          "oracle_kind": "unknown",
+          "oracle": "ensure!(\nreader.confined_path(path) == Err(PacketError::UnsafePath),\n\"path should be unsafe\"\n);",
+          "relation_reason": "direct_owner_call",
+          "relation_confidence": "high"
+        },
+        {
+          "name": "actual_reader_matches_python_packet_sources_and_cached_bytes",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 113,
+          "oracle_strength": "none",
+          "oracle_kind": "unknown",
+          "oracle": "ensure!(\nexit == 0 && native[\"reader_status\"] == \"inputs_read\",\n\"reader inputs unavailable: {native}\"\n);",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "actual_reader_matches_python_strict_json_on_bounded_grammar_vectors",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 212,
+          "oracle_strength": "none",
+          "oracle_kind": "unknown",
+          "oracle": "ensure!(\npython.stderr.is_empty(),\n\"Python grammar comparator failed: {}\",\nString::from_utf8_lossy(&python.stderr)\n);",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "actual_reader_records_explicit_tighter_python_encoding_and_number_boundary",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 260,
+          "oracle_strength": "none",
+          "oracle_kind": "unknown",
+          "oracle": "ensure!(\npython.status.success(),\n\"Python tightened-boundary baseline changed: {}\",\nString::from_utf8_lossy(&python.stderr)\n);",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "aggregate_cap_accepts_exact_total_then_refuses_even_empty_input",
+          "file": "src/task_projection_reconciliation/reader/tests.rs",
+          "line": 136,
+          "oracle_strength": "none",
+          "oracle_kind": "unknown",
+          "oracle": "ensure!(reader.read(\"first\", false)?.is_some());",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        }
+      ],
+      "evidence": [
+        "Complete propagation witness reaches error variant: Result::Err(PacketError::InputIo)",
+        "No assertion found on related tests",
+        "Reachable tests can plausibly activate this changed behavior",
+        "Related tests appear to reach confined_path: paths_require_canonical_posix_relative_spelling, actual_reader_matches_python_packet_sources_and_cached_bytes, actual_reader_matches_python_strict_json_on_bounded_grammar_vectors",
+        "Related tests were found, but no assertion appears to observe the changed value, error, field, or effect"
+      ],
+      "evidence_path": [
+        "reach yes: Related tests appear to reach confined_path: paths_require_canonical_posix_relative_spelling, actual_reader_matches_python_packet_sources_and_cached_bytes, actual_reader_matches_python_strict_json_on_bounded_grammar_vectors",
+        "infection yes: Reachable tests can plausibly activate this changed behavior",
+        "propagation yes: Complete propagation witness reaches error variant: Result::Err(PacketError::InputIo)",
+        "observation no: Related tests were found, but no assertion appears to observe the changed value, error, field, or effect",
+        "discriminator no: No assertion found on related tests",
+        "local flow reaches error variant: Result::Err(PacketError::InputIo) (line 302)",
+        "related test src/task_projection_reconciliation/reader/tests.rs:766 canonical_report_metadata_is_sorted_compact_utf8_without_native_numbers uses strong exact value oracle: ensure!(canonical(&value)? == \"{\\\"a\\\":[1],\\\"z\\\":{\\\"a\\\":1,\\\"β\\\":2},\\\"é\\\":\\\"雪\\\"}\\n\".as_bytes());",
+        "related test src/task_projection_reconciliation/reader/tests.rs:234 root_is_resolved_once_and_root_symlink_is_allowed uses strong exact value oracle: ensure!(reader.read(\"input\", false)? == Some(b\"original\".as_slice()));",
+        "related test xtask/tests/task_projection_reader_parity.rs:445 serde_json_ambient_contract_rejects_nonfinite_float_exponents uses weak broad error oracle: ensure!(\nserde_json::from_slice::<Value>(input.as_bytes()).is_err(),\n\"root parser accepted an out-of-range exponent\"\n);",
+        "related test src/task_projection_reconciliation/reader/tests.rs:168 paths_require_canonical_posix_relative_spelling uses none unknown oracle: ensure!(\nreader.confined_path(path) == Err(PacketError::UnsafePath),\n\"path should be unsafe\"\n);",
+        "related test xtask/tests/task_projection_reader_parity.rs:113 actual_reader_matches_python_packet_sources_and_cached_bytes uses none unknown oracle: ensure!(\nexit == 0 && native[\"reader_status\"] == \"inputs_read\",\n\"reader inputs unavailable: {native}\"\n);",
+        "source enum variant value PacketError::InvalidRoot at line 28",
+        "source enum variant value PacketError::InvalidRoot at line 34",
+        "source enum variant value PacketError::UnsafePath at line 91",
+        "source enum variant value PacketError::FileBudgetExceeded at line 93",
+        "source enum variant value PacketError::UnsafePath at line 94",
+        "source enum variant value PacketError::ByteBudgetExceeded at line 118",
+        "source function argument value name = \"review/é.json\" at line 190",
+        "source table row value \":\" at line 222",
+        "missing discriminator PacketError::InputIo: No exact error variant assertion for PacketError::InputIo"
+      ],
+      "missing": [
+        "Missing discriminator value: PacketError::InputIo",
+        "No detected assertion observes the changed value, error, field, or effect",
+        "No exact error variant discriminator was detected",
+        "No relevant oracle was detected"
+      ],
+      "owner_kind": null,
+      "source_owner": {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "name": "PacketReader::confined_path",
+        "start_line": 275,
+        "end_line": 306,
+        "derivation": "Rust1.95/ra_ap_syntax0.0.349 actual AST, innermost containing function",
+        "actual_cargo_target": "xtask executable",
+        "main_ub_review_target": false
+      }
+    },
+    {
+      "id": "probe:src_task_projection_reconciliation_reader.rs:side_effect:321ed19b",
+      "class": "reachable_unrevealed",
+      "probe": {
+        "id": "probe:src_task_projection_reconciliation_reader.rs:side_effect:321ed19b",
+        "family": "side_effect",
+        "delta": "effect",
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "line": 875,
+        "expression": "output.extend(serde_json::to_vec(value).map_err(|_| PacketError::InvalidJson)?)"
+      },
+      "stages": {
+        "reach": "yes",
+        "infect": "yes",
+        "propagate": "yes",
+        "observe": "no",
+        "discriminate": "no"
+      },
+      "oracle_kind": "exact_value",
+      "oracle_strength": "strong",
+      "stop_reasons": [
+        "fixture_opaque"
+      ],
+      "related_total": 39,
+      "related_tests": [
+        {
+          "name": "canonical_report_metadata_is_sorted_compact_utf8_without_native_numbers",
+          "file": "src/task_projection_reconciliation/reader/tests.rs",
+          "line": 766,
+          "oracle_strength": "strong",
+          "oracle_kind": "exact_value",
+          "oracle": "ensure!(canonical(&value)? == \"{\\\"a\\\":[1],\\\"z\\\":{\\\"a\\\":1,\\\"β\\\":2},\\\"é\\\":\\\"雪\\\"}\\n\".as_bytes());",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "json_load_preserves_raw_inventory_on_invalid_json_shape_or_schema",
+          "file": "src/task_projection_reconciliation/reader/tests.rs",
+          "line": 364,
+          "oracle_strength": "strong",
+          "oracle_kind": "exact_value",
+          "oracle": "ensure!(\nreader.load(\"schema.json\", JsonShape::Object, Some(\"expected\"), false)\n== Err(PacketError::UnsupportedSchema)\n);",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "native_decoder_handles_odd_even_backslashes_and_surrogate_keys",
+          "file": "src/task_projection_reconciliation/reader/tests.rs",
+          "line": 603,
+          "oracle_strength": "strong",
+          "oracle_kind": "exact_value",
+          "oracle": "ensure!(native(input)?.as_str() == Some(expected));",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "root_is_resolved_once_and_root_symlink_is_allowed",
+          "file": "src/task_projection_reconciliation/reader/tests.rs",
+          "line": 234,
+          "oracle_strength": "strong",
+          "oracle_kind": "exact_value",
+          "oracle": "ensure!(reader.read(\"input\", false)? == Some(b\"original\".as_slice()));",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "serde_json_ambient_contract_rejects_nonfinite_float_exponents",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 445,
+          "oracle_strength": "weak",
+          "oracle_kind": "broad_error",
+          "oracle": "ensure!(\nserde_json::from_slice::<Value>(input.as_bytes()).is_err(),\n\"root parser accepted an out-of-range exponent\"\n);",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "canonical_json_sorts_nested_utf8_keys_and_retains_exact_u128",
+          "file": "src/task_projection_reconciliation/reader/tests.rs",
+          "line": 351,
+          "oracle_strength": "none",
+          "oracle_kind": "unknown",
+          "oracle": "ensure!(canonical_json(&value)? == \"{\\\"a\\\":[340282366920938463463374607431768211455],\\\"z\\\":{\\\"a\\\":1,\\\"β\\\":2},\\\"é\\\":\\\"雪\\\"}\\n\".as_bytes());",
+          "relation_reason": "direct_owner_call",
+          "relation_confidence": "high"
+        },
+        {
+          "name": "actual_reader_matches_python_packet_sources_and_cached_bytes",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 113,
+          "oracle_strength": "none",
+          "oracle_kind": "unknown",
+          "oracle": "ensure!(\nexit == 0 && native[\"reader_status\"] == \"inputs_read\",\n\"reader inputs unavailable: {native}\"\n);",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "actual_reader_matches_python_strict_json_on_bounded_grammar_vectors",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 212,
+          "oracle_strength": "none",
+          "oracle_kind": "unknown",
+          "oracle": "ensure!(\npython.stderr.is_empty(),\n\"Python grammar comparator failed: {}\",\nString::from_utf8_lossy(&python.stderr)\n);",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        }
+      ],
+      "evidence": [
+        "Changed behavior appears to influence state write: output.extend(serde_json::to_vec(value).map_err(|_| PacketError::InvalidJson)?)",
+        "No assertion found on related tests",
+        "Reachable tests can plausibly activate this changed behavior",
+        "Related tests appear to reach canonical_json: canonical_json_sorts_nested_utf8_keys_and_retains_exact_u128, actual_reader_matches_python_packet_sources_and_cached_bytes, actual_reader_matches_python_strict_json_on_bounded_grammar_vectors",
+        "Related tests were found, but no assertion appears to observe the changed value, error, field, or effect"
+      ],
+      "evidence_path": [
+        "reach yes: Related tests appear to reach canonical_json: canonical_json_sorts_nested_utf8_keys_and_retains_exact_u128, actual_reader_matches_python_packet_sources_and_cached_bytes, actual_reader_matches_python_strict_json_on_bounded_grammar_vectors",
+        "infection yes: Reachable tests can plausibly activate this changed behavior",
+        "propagation yes: Changed behavior appears to influence state write: output.extend(serde_json::to_vec(value).map_err(|_| PacketError::InvalidJson)?)",
+        "observation no: Related tests were found, but no assertion appears to observe the changed value, error, field, or effect",
+        "discriminator no: No assertion found on related tests",
+        "local flow reaches state write: output.extend(serde_json::to_vec(value).map_err(|_| PacketError::InvalidJson)?) (line 875)",
+        "related test src/task_projection_reconciliation/reader/tests.rs:766 canonical_report_metadata_is_sorted_compact_utf8_without_native_numbers uses strong exact value oracle: ensure!(canonical(&value)? == \"{\\\"a\\\":[1],\\\"z\\\":{\\\"a\\\":1,\\\"β\\\":2},\\\"é\\\":\\\"雪\\\"}\\n\".as_bytes());",
+        "related test src/task_projection_reconciliation/reader/tests.rs:364 json_load_preserves_raw_inventory_on_invalid_json_shape_or_schema uses strong exact value oracle: ensure!(\nreader.load(\"schema.json\", JsonShape::Object, Some(\"expected\"), false)\n== Err(PacketError::UnsupportedSchema)\n);",
+        "related test src/task_projection_reconciliation/reader/tests.rs:603 native_decoder_handles_odd_even_backslashes_and_surrogate_keys uses strong exact value oracle: ensure!(native(input)?.as_str() == Some(expected));",
+        "related test src/task_projection_reconciliation/reader/tests.rs:234 root_is_resolved_once_and_root_symlink_is_allowed uses strong exact value oracle: ensure!(reader.read(\"input\", false)? == Some(b\"original\".as_slice()));",
+        "related test xtask/tests/task_projection_reader_parity.rs:445 serde_json_ambient_contract_rejects_nonfinite_float_exponents uses weak broad error oracle: ensure!(\nserde_json::from_slice::<Value>(input.as_bytes()).is_err(),\n\"root parser accepted an out-of-range exponent\"\n);",
+        "source enum variant value PacketError::InvalidRoot at line 28",
+        "source enum variant value PacketError::InvalidRoot at line 34",
+        "source enum variant value PacketError::UnsafePath at line 91",
+        "source enum variant value PacketError::FileBudgetExceeded at line 93",
+        "source enum variant value PacketError::UnsafePath at line 94",
+        "source enum variant value PacketError::ByteBudgetExceeded at line 118",
+        "source table row value \":\" at line 222",
+        "source table row value \"{\" at line 222"
+      ],
+      "missing": [
+        "No detected assertion observes the changed value, error, field, or effect",
+        "No relevant oracle was detected",
+        "No strong discriminator was detected"
+      ],
+      "owner_kind": null,
+      "source_owner": {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "name": "write",
+        "start_line": 869,
+        "end_line": 901,
+        "derivation": "Rust1.95/ra_ap_syntax0.0.349 actual AST, innermost containing function",
+        "actual_cargo_target": "xtask executable",
+        "main_ub_review_target": false
+      }
+    },
+    {
+      "id": "probe:xtask_src_task_projection_reader.rs:side_effect:3a7b1b89",
+      "class": "reachable_unrevealed",
+      "probe": {
+        "id": "probe:xtask_src_task_projection_reader.rs:side_effect:3a7b1b89",
+        "family": "side_effect",
+        "delta": "effect",
+        "file": "./xtask/src/task_projection_reader.rs",
+        "line": 77,
+        "expression": "(\"review/metrics.json\", JsonShape::Object, None, false),"
+      },
+      "stages": {
+        "reach": "yes",
+        "infect": "yes",
+        "propagate": "yes",
+        "observe": "no",
+        "discriminate": "no"
+      },
+      "oracle_kind": "exact_value",
+      "oracle_strength": "strong",
+      "stop_reasons": [
+        "fixture_opaque",
+        "no_changed_rust_line"
+      ],
+      "related_total": 16,
+      "related_tests": [
+        {
+          "name": "serde_json_ambient_contract_rejects_nonfinite_float_exponents",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 445,
+          "oracle_strength": "weak",
+          "oracle_kind": "broad_error",
+          "oracle": "ensure!(\nserde_json::from_slice::<Value>(input.as_bytes()).is_err(),\n\"root parser accepted an out-of-range exponent\"\n);",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "validate_allow_at_keeps_overdue_review_and_same_day_expiry_valid",
+          "file": "xtask/src/main.rs",
+          "line": 3053,
+          "oracle_strength": "strong",
+          "oracle_kind": "exact_value",
+          "oracle": "assert_eq!(report.exceptions, 1);",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "validate_allow_date_validation_rejects_expires_before_review",
+          "file": "xtask/src/main.rs",
+          "line": 2954,
+          "oracle_strength": "strong",
+          "oracle_kind": "exact_value",
+          "oracle": "assert_eq!(msg, expected, \"error should explain the ordering\");",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "validate_allow_date_validation_rejects_expires_before_review",
+          "file": "xtask/src/main.rs",
+          "line": 2954,
+          "oracle_strength": "medium",
+          "oracle_kind": "exact_error_variant",
+          "oracle": "assert_eq!(expired, Err(expected));",
+          "relation_reason": "weak_token_substring",
+          "relation_confidence": "low"
+        },
+        {
+          "name": "actual_reader_matches_python_packet_sources_and_cached_bytes",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 113,
+          "oracle_strength": "none",
+          "oracle_kind": "unknown",
+          "oracle": "ensure!(\nexit == 0 && native[\"reader_status\"] == \"inputs_read\",\n\"reader inputs unavailable: {native}\"\n);",
+          "relation_reason": "assertion_target_affinity",
+          "relation_confidence": "medium"
+        },
+        {
+          "name": "actual_reader_records_explicit_tighter_python_encoding_and_number_boundary",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 260,
+          "oracle_strength": "none",
+          "oracle_kind": "unknown",
+          "oracle": "ensure!(\npython.status.success(),\n\"Python tightened-boundary baseline changed: {}\",\nString::from_utf8_lossy(&python.stderr)\n);",
+          "relation_reason": "assertion_target_affinity",
+          "relation_confidence": "medium"
+        },
+        {
+          "name": "affected_packages_include_all_packages_for_root_manifest_and_lockfile",
+          "file": "xtask/src/main.rs",
+          "line": 2765,
+          "oracle_strength": "none",
+          "oracle_kind": "unknown",
+          "oracle": "assert_eq!(changed_names(manifest_affected), vec![\"ub-review\", \"xtask\"]);",
+          "relation_reason": "assertion_target_affinity",
+          "relation_confidence": "medium"
+        },
+        {
+          "name": "malformed_source_retains_independent_later_input_evidence",
+          "file": "xtask/tests/task_projection_reader_parity.rs",
+          "line": 184,
+          "oracle_strength": "none",
+          "oracle_kind": "unknown",
+          "oracle": "ensure!(\nexit == 2 && native[\"input_unavailable\"] == true,\n\"malformed input did not fail closed\"\n);",
+          "relation_reason": "assertion_target_affinity",
+          "relation_confidence": "medium"
+        }
+      ],
+      "evidence": [
+        "Changed behavior appears to influence call effect: (\"review/metrics.json\", JsonShape::Object, None, false)",
+        "No assertion found on related tests",
+        "Reachable tests can plausibly activate this changed behavior",
+        "Related tests appear to reach changed owner: actual_reader_matches_python_packet_sources_and_cached_bytes, actual_reader_records_explicit_tighter_python_encoding_and_number_boundary, affected_packages_include_all_packages_for_root_manifest_and_lockfile",
+        "Related tests were found, but no assertion appears to observe the changed value, error, field, or effect"
+      ],
+      "evidence_path": [
+        "reach yes: Related tests appear to reach changed owner: actual_reader_matches_python_packet_sources_and_cached_bytes, actual_reader_records_explicit_tighter_python_encoding_and_number_boundary, affected_packages_include_all_packages_for_root_manifest_and_lockfile",
+        "infection yes: Reachable tests can plausibly activate this changed behavior",
+        "propagation yes: Changed behavior appears to influence call effect: (\"review/metrics.json\", JsonShape::Object, None, false)",
+        "observation no: Related tests were found, but no assertion appears to observe the changed value, error, field, or effect",
+        "discriminator no: No assertion found on related tests",
+        "local flow reaches call effect: (\"review/metrics.json\", JsonShape::Object, None, false) (line 77)",
+        "related test xtask/tests/task_projection_reader_parity.rs:445 serde_json_ambient_contract_rejects_nonfinite_float_exponents uses weak broad error oracle: ensure!(\nserde_json::from_slice::<Value>(input.as_bytes()).is_err(),\n\"root parser accepted an out-of-range exponent\"\n);",
+        "related test xtask/src/main.rs:3053 validate_allow_at_keeps_overdue_review_and_same_day_expiry_valid uses strong exact value oracle: assert_eq!(report.exceptions, 1);",
+        "related test xtask/src/main.rs:2954 validate_allow_date_validation_rejects_expires_before_review uses strong exact value oracle: assert_eq!(msg, expected, \"error should explain the ordering\");",
+        "related test xtask/src/main.rs:2954 validate_allow_date_validation_rejects_expires_before_review uses medium exact error variant oracle: assert_eq!(expired, Err(expected));",
+        "related test xtask/tests/task_projection_reader_parity.rs:113 actual_reader_matches_python_packet_sources_and_cached_bytes uses none unknown oracle: ensure!(\nexit == 0 && native[\"reader_status\"] == \"inputs_read\",\n\"reader inputs unavailable: {native}\"\n);",
+        "source function argument value false at line 121",
+        "source function argument value \"status\" at line 135",
+        "source function argument value \"native coverage object\" at line 140",
+        "source function argument value \"../scripts/reconcile-task-projections.py\" at line 145",
+        "source function argument value \"CARGO_MANIFEST_DIR\" at line 145",
+        "source function argument value \"python3\" at line 146",
+        "source function argument value \"-c\" at line 147",
+        "source function argument value false at line 171"
+      ],
+      "missing": [
+        "No detected assertion observes the changed value, error, field, or effect",
+        "No relevant oracle was detected",
+        "No strong discriminator was detected"
+      ],
+      "owner_kind": null,
+      "source_owner": {
+        "file": "./xtask/src/task_projection_reader.rs",
+        "name": "<declaration/outside function>",
+        "start_line": null,
+        "end_line": null,
+        "derivation": "Rust1.95/ra_ap_syntax0.0.349 actual AST, innermost containing function",
+        "actual_cargo_target": "xtask executable",
+        "main_ub_review_target": false
+      }
+    }
+  ],
+  "limits": "Related tests are rendered at most eight per finding. Internal totals are disclosed; omitted relation identities are unverified. This comparison did not execute native controls.",
+  "projection_kind": "Five full representative rows from the complete current finding projection; not the complete raw output.",
+  "adjudication": [
+    {
+      "id": "probe:src_task_projection_reconciliation_reader.rs:match_arm:0056a34c",
+      "owner_issue": "https://github.com/EffortlessMetrics/ripr-swarm/issues/7415",
+      "result": "Concrete incorrect target/receiver attribution: main tool_policy_known_keys_match_serialized_fields uses serde_json::Value.as_object(), not private xtask JsonValue::as_object(). This does not invalidate all weak rows or all cross-target CLI evidence."
+    },
+    {
+      "id": "probe:src_task_projection_reconciliation_reader.rs:error_path:aaf91788",
+      "owner_issues": [
+        "https://github.com/EffortlessMetrics/ripr-swarm/issues/6975",
+        "https://github.com/EffortlessMetrics/ripr-swarm/issues/3161"
+      ],
+      "result": "Candidate private-callee observer path: the same-target symlink test has an exact SymlinkInput assertion, while this row remains reachable_unrevealed. Requires observer-path adjudication."
+    },
+    {
+      "id": "probe:src_task_projection_reconciliation_reader.rs:error_path:ecc52b80",
+      "owner_pr": "https://github.com/EffortlessMetrics/ub-review/pull/1461",
+      "result": "No literal InputIo assertion was located in the two bounded separate test sources. Reconcile native proof before classifying this as an analyzer defect or adding tests."
+    },
+    {
+      "id": "probe:src_task_projection_reconciliation_reader.rs:side_effect:321ed19b",
+      "owner_issues": [
+        "https://github.com/EffortlessMetrics/ripr-swarm/issues/6975",
+        "https://github.com/EffortlessMetrics/ripr-swarm/issues/3161"
+      ],
+      "result": "Candidate canonical byte observer path: exact UTF-8/u128 assertions exist in the same target, while nested write remains reachable_unrevealed. Requires actual private-callee observer-path adjudication."
+    },
+    {
+      "id": "probe:xtask_src_task_projection_reader.rs:side_effect:3a7b1b89",
+      "owner_pr": "https://github.com/EffortlessMetrics/ub-review/pull/1461",
+      "result": "Runtime REVIEW_INPUTS tuple outside a function remains eligible production. Declaration placement is not grounds for test-harness exclusion."
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "purpose": "Hashes and sizes of raw comparison artifacts retained locally, not copies included in this compact public bundle.",
+  "raw_artifacts": [
+    {
+      "file": "1461-current-complete-json.json",
+      "bytes": 17284528,
+      "sha256": "4bea892bf07e23a50f3210eb5f1d634b07fc340f834c8196dfe983107ab87751",
+      "bundled": false
+    },
+    {
+      "file": "1461-current-complete-badge.json",
+      "bytes": 687130,
+      "sha256": "576169059f2cf41f7c4d49603df013f56352c99fb7acea38ce3781abec596a3a",
+      "bundled": false
+    },
+    {
+      "file": "1461-released-dot-badge.json",
+      "bytes": 760606,
+      "sha256": "59e3a8291fb99986f826b2cd8f48f93f91911dacda7b33766a57e69a3e2dadc1",
+      "bundled": false
+    },
+    {
+      "file": "1461-current-complete-json.stderr",
+      "bytes": 5328,
+      "sha256": "8c87acf50a135f687a770be81894a58a773c13aaea93131f80b11ba3586cbcf0",
+      "bundled": false
+    },
+    {
+      "file": "1461-current-complete-badge.stderr",
+      "bytes": 5280,
+      "sha256": "dd737410023a0406ba254acdceacd01424b9f08cece3fef48a546a5e66361b17",
+      "bundled": false
+    }
+  ],
+  "working_projections": [
+    {
+      "file": "1461-current-projection.json",
+      "bytes": 7418099,
+      "sha256": "da2569ea1c5ecdfb55af33b2e051d721829bd630df01dfcbb6f5bc5d906cdf5e",
+      "bundled": false
+    },
+    {
+      "file": "1461-released-projection.json",
+      "bytes": 7842025,
+      "sha256": "23e10d953589fbbf87330e9015a186ad38afd9c67b317debdc3f283093318928",
+      "bundled": false
+    },
+    {
+      "file": "1461-id-correspondence.json",
+      "bytes": 1437510,
+      "sha256": "71ade371de9e1d5fb88ffa7acc32075cc4870c687f286e82b24bfda4800cfec2",
+      "bundled": false
+    },
+    {
+      "file": "1461-coordinate-correspondence.json",
+      "bytes": 419605,
+      "sha256": "a61ab33ce6e7fb8909fcb91c0d8b0b71197006a8016623ec47c41943fd247169",
+      "bundled": false
+    },
+    {
+      "file": "1461-target-attribution.json",
+      "bytes": 774448,
+      "sha256": "235ebe6bfe6d62ef22cea914cffdfd33e9679100bbbf2901ac02831f93f4f006",
+      "bundled": false
+    },
+    {
+      "file": "1461-function-spans.tsv",
+      "bytes": 16298,
+      "sha256": "9e6b126f95a6dd1887de5a97b155eed2676ea73f5ea55c90d77433700aa8ad90",
+      "bundled": false
+    }
+  ],
+  "other_retained_context": "Build/check logs, timestamps/exits, source/config identities, owner snapshots, cancelled repeat stderr and the hosted ZIP remain available locally. Their existence is not a public-download claim.",
+  "hosted_raw_member": {
+    "bytes": 501493837,
+    "sha256": "cf1b689e636a2f4204c3b0eae2db8e47a394c55b29d9a5fe0ee098e9c9ecdbaf",
+    "streamed_findings": 1689,
+    "findings_equal_envelope_count": true,
+    "raw_bundled": false
+  }
+}

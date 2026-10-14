@@ -1,0 +1,41 @@
+{
+  "schema_version": "0.6",
+  "kind": "ripr",
+  "scope": "diff",
+  "basis": "finding_exposure",
+  "label": "ripr",
+  "message": "313",
+  "status": "warn",
+  "color": "orange",
+  "counts": {
+    "unsuppressed_exposure_gaps": 313,
+    "unsuppressed_test_efficiency_findings": 0,
+    "intentional_test_efficiency_findings": 0,
+    "suppressed_exposure_gaps": 0,
+    "suppressed_test_efficiency_findings": 0,
+    "unknowns": 668,
+    "unknowns_test_efficiency": 0,
+    "analyzed_findings": 1689,
+    "analyzed_seams": 0,
+    "analyzed_gap_records": 0,
+    "analyzed_tests": 1258
+  },
+  "reason_counts": {
+    "no_assertion_detected": 0,
+    "smoke_oracle_only": 0,
+    "relational_oracle": 0,
+    "broad_oracle": 0,
+    "assertion_may_not_match_detected_owner": 0,
+    "opaque_helper_or_fixture_boundary": 0,
+    "no_activation_literal_detected": 0,
+    "expected_value_computed_from_detected_owner_path": 0,
+    "duplicate_activation_and_oracle_shape": 0
+  },
+  "policy": {
+    "include_unknowns": false,
+    "fail_on_nonzero": false,
+    "test_intent_path": ".ripr/test_intent.toml",
+    "suppressions_path": ".ripr/suppressions.toml"
+  },
+  "preview_skipped": []
+}

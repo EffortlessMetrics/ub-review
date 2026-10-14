@@ -1,0 +1,4 @@
+ripr progress: loading_input [diff]
+ripr progress: analyzing [diff]
+ripr progress: failed [diff]
+ripr: diff_scope_oversized: 2495 changed Rust lines across 5 Rust files exceed the RIPR_MAX_DIFF_CHANGED_RUST_LINES limit (2000); analysis was not run to protect runner memory before probe expansion. Repair route: reduce the diff scope, split the extraction PR, run a narrower diff, or raise the limit via RIPR_MAX_DIFF_CHANGED_RUST_LINES=<number>.

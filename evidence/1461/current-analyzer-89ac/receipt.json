@@ -1,0 +1,663 @@
+{
+  "format": "ub-review.1461.frozen-source-comparison.v1",
+  "comparison_only": true,
+  "claim_boundary": "Static development-source CLI comparison only. No release/artifact qualification, consumer gate eligibility, test adequacy, native execution, pin/gate change, adoption clearance or merge readiness is established.",
+  "producer": {
+    "head": "89ac47a603092ba7f9f55cf74999b88649621abf",
+    "tree": "412e1306aa80229cebe20a6fd8e1857162fcf933",
+    "binary_sha256": "e9f26175806fd8a7936e37083e7fc5c04341c1cb491cee15ef58ac6e19cc4a13",
+    "version": "ripr 0.11.0 (89ac47a603092ba7f9f55cf74999b88649621abf)",
+    "build_profile": "default_features_dev_debug",
+    "toolchain": "Rust1.95.0/Linux x86_64",
+    "source_inputs": {
+      "Cargo.toml": "71a386f6a70f8d0124270b7db0d02ea6466be05b7a1b97cd34c210b37277dd64",
+      "Cargo.lock": "2ba66485b487e919fd73b1ec4cf784badd847c53c56d7bad34b0fcfc669fd4d5",
+      "rust-toolchain.toml": "12dc5d64dbd96c1b07be2943241d52d9f6127a79ba47a820455ba7b873fc896a",
+      ".cargo/config.toml": "e5bdb9055b7cdd689030fca3b94b244cca1da9c0cc8142e9180cd8c95c18e341",
+      "schemas/ripr/check.schema.json": "bb864fe56560f3ad4eea2d85cee1acf0882f13672467fd277c2eaa4c5e9c1bf5",
+      "crates/ripr/src/config.rs": "56193151b22df916ae0f10ace17f9333b5a4364694bdf1e5ce5ae126e4c3deab",
+      "crates/ripr/src/config/model.rs": "f9e781be864940e6a66d3ccf2d6dc834043a9b36770f8dffa52f6bccce45d03b",
+      "crates/ripr/src/analysis/workspace/source_role.rs": "c7f2d8952b4957341bf78b14773d83993fa6e4e4f09c04cc579c18de606ba28d",
+      "crates/ripr/src/analysis/language/rust/mod.rs": "48b1407a5670809b50c87f31d42f91d77ed8cf5e2c78157f35ddd88d7d6437fa",
+      "crates/ripr/src/analysis/classify/related_tests.rs": "8c78474a57f3c3c36c9997ce686a4d0c96bb7d0317ffba4e673cf51023f274ca",
+      "crates/ripr/src/output/json/report.rs": "787d16ec8b1bf05f721182ddc4d0b4f248dbc4032c77699fa1b0a6449fd8a5e7",
+      "crates/ripr/src/output/badge/model.rs": "273a22c261fadf2cf049f87ee231d7cb452ab8c3b7feb7f2b82b6c3d065e4e83"
+    },
+    "build_command": "cargo build --locked -p ripr --bin ripr --jobs 2",
+    "build_exit": 0,
+    "check_command": "cargo check --locked -p ripr --bin ripr --jobs 2",
+    "check_exit": 0,
+    "schema_identities": {
+      "check_json_version": "0.2",
+      "check_schema_sha256": "bb864fe56560f3ad4eea2d85cee1acf0882f13672467fd277c2eaa4c5e9c1bf5",
+      "native_badge_version": "0.8",
+      "native_badge_model_sha256": "273a22c261fadf2cf049f87ee231d7cb452ab8c3b7feb7f2b82b6c3d065e4e83"
+    }
+  },
+  "consumer": {
+    "head": "e5fc48da60bc1b887cfdc4efc2ee28d942a0a279",
+    "tree": "cc08312e4c857994a153a537082f6776b0fc54a7",
+    "base": "3dbcc2be9768b082c0896dc2360e950ffbd56a65",
+    "patch_bytes": 94214,
+    "patch_sha256": "4e541b2d25ee596a5c5f199babb983c028bcb07f416648242cc37a9101f183f0",
+    "suppression_sha256": "707a4764d449d7f8201a17ec2ec835fc959be36eec83de9264997e1430cba58e",
+    "ub_config_sha256": "00ea80e9ac5ebfb0fb0d43778a423e0447b2cc5a2c2f70e6ca541e876f9698aa",
+    "ripr_config": "none discovered; unchanged built-in defaults; no production_like_targets opt-in",
+    "actual_target": "xtask executable explicitly imports src/task_projection_reconciliation/reader.rs by path; main UB binary does not register this module",
+    "source_role_controls": "reader/tests.rs is cfg(test) descendant in xtask; xtask/tests/task_projection_reader_parity.rs is its separate integration/CLI-evidence target"
+  },
+  "invocation": {
+    "cwd": "Isolated checkout of consumer e5fc48da60bc1b887cfdc4efc2ee28d942a0a279",
+    "json_argv": "<absolute pinned binary> check --root . --diff target/xtask/ripr/diff.patch --mode ready --format json",
+    "badge_argv": "<absolute pinned binary> check --root . --diff target/xtask/ripr/diff.patch --mode ready --format badge-json",
+    "common_environment": {
+      "RAYON_NUM_THREADS": 2
+    },
+    "default_limits": {
+      "partial_diff_file_budget": 200,
+      "partial_diff_line_budget": 1000,
+      "max_diff_changed_rust_lines": 2000,
+      "max_diff_index_files": 10000,
+      "check_findings_bytes": 1000000,
+      "related_tests_render_cap": 8,
+      "CLI_input_max_bytes": 268435456
+    },
+    "supported_comparison_recovery": {
+      "RIPR_PARTIAL_DIFF_LINE_BUDGET": 2495,
+      "RIPR_MAX_DIFF_CHANGED_RUST_LINES": 2495,
+      "RIPR_CHECK_FINDINGS_BYTES": 67108864
+    },
+    "limits_changed_only_for_comparison": true,
+    "consumer_config_pins_suppressions_policies_thresholds_changed": false
+  },
+  "default_current": {
+    "file": "1461-current-default-json.json",
+    "sha256": "3282b10968d24757e20dee2ee9741b7ee8fc71cdf658df5031676ef6362bff48",
+    "exit": 2,
+    "analyzed": false,
+    "selected_Rust_files": 0,
+    "selected_Rust_changed_lines": 0,
+    "omitted_due_preflight": "All 5 changed Rust files / 2,495 lines.",
+    "completeness": "not analyzed; no typed analysis_outcome emitted",
+    "downstream_consumable": false,
+    "gate_eligibility": "non-consumable hard-scope failure; not a clean zero"
+  },
+  "current_primary": {
+    "file": "1461-current-complete-json.json",
+    "bytes": 17284528,
+    "sha256": "4bea892bf07e23a50f3210eb5f1d634b07fc340f834c8196dfe983107ab87751",
+    "exit": 0,
+    "rendered_findings": 855,
+    "schema_validation_errors": 0,
+    "findings_cap_active": false,
+    "selected_Rust_files": 5,
+    "selected_Rust_changed_lines": 2495,
+    "omitted_Rust_files": 0,
+    "omitted_Rust_changed_lines": 0,
+    "gate_eligibility_field": "absent for this full-scope artifact; consumer admission/clearance remains unestablished",
+    "started_at": "2026-10-14T20:30:14Z",
+    "ended_at": "2026-10-14T20:43:05Z"
+  },
+  "current_primary_envelope_projection": {
+    "schema_version": "0.2",
+    "tool": "ripr",
+    "mode": "ready",
+    "root": ".",
+    "summary": {
+      "changed_rust_files": 5,
+      "probes": 855,
+      "findings": 855,
+      "exposed": 42,
+      "weakly_exposed": 433,
+      "reachable_unrevealed": 4,
+      "no_static_path": 0,
+      "infection_unknown": 79,
+      "propagation_unknown": 37,
+      "static_unknown": 260,
+      "changed_files_by_language": [
+        {
+          "language": "rust",
+          "files": 5
+        }
+      ]
+    },
+    "analysis_outcome": {
+      "analysis_complete": true,
+      "outcome": {
+        "schema_version": "0.1",
+        "kind": "complete_with_findings",
+        "identity": {
+          "repository_identity": null,
+          "root_identity": null,
+          "config_identity": null,
+          "base_revision": null,
+          "input_identity": "sha256:4e541b2d25ee596a5c5f199babb983c028bcb07f416648242cc37a9101f183f0",
+          "snapshot_identity": null,
+          "git_candidate_subject": null
+        },
+        "counts": {
+          "changed_file_count": 9,
+          "changed_line_count": 2550,
+          "candidate_line_count": 751,
+          "probe_count": 855,
+          "finding_count": 855
+        },
+        "limitations": [],
+        "claim_boundary": "Static analysis outcome only; no correctness, test-adequacy, runtime-execution, or merge-readiness claim."
+      }
+    }
+  },
+  "current_badge": {
+    "file": "1461-current-complete-badge.json",
+    "bytes": 687130,
+    "sha256": "576169059f2cf41f7c4d49603df013f56352c99fb7acea38ce3781abec596a3a",
+    "exit": 0,
+    "started_at": "2026-10-14T20:43:05Z",
+    "ended_at": "2026-10-14T20:55:46Z",
+    "selected_Rust_files": 5,
+    "selected_Rust_changed_lines": 2495,
+    "omitted_Rust_files": 0,
+    "omitted_Rust_changed_lines": 0,
+    "findings_cap_active": false,
+    "gate_eligibility_field": "absent in full-scope artifact; consumer admission/clearance unestablished"
+  },
+  "current_badge_projection_file": "current-badge-projection.json",
+  "released": {
+    "badge_file": "1461-released-dot-badge.json",
+    "badge_sha256": "59e3a8291fb99986f826b2cd8f48f93f91911dacda7b33766a57e69a3e2dadc1",
+    "raw_member_sha256": "cf1b689e636a2f4204c3b0eae2db8e47a394c55b29d9a5fe0ee098e9c9ecdbaf",
+    "raw_member_bytes": 501493837,
+    "projection_file": "1461-released-projection.json",
+    "projection_sha256": "23e10d953589fbbf87330e9015a186ad38afd9c67b317debdc3f283093318928",
+    "raw_related_relation_limit": 8,
+    "binary": {
+      "file": "Released local RIPR 0.10.0 executable; raw local path omitted.",
+      "version": "ripr 0.10.0",
+      "sha256": "b14f844c990b55e5b3d9f7daa43085cf016824fc8f6f55753efa8159dc5fe432",
+      "hosted_binary_digest_unattested": true
+    }
+  },
+  "released_envelope_projection": {
+    "schema_version": "0.2",
+    "tool": "ripr",
+    "mode": "ready",
+    "root": ".",
+    "base": "origin/main",
+    "summary": {
+      "changed_rust_files": 5,
+      "probes": 1689,
+      "findings": 1689,
+      "exposed": 708,
+      "weakly_exposed": 197,
+      "reachable_unrevealed": 116,
+      "no_static_path": 0,
+      "infection_unknown": 91,
+      "propagation_unknown": 68,
+      "static_unknown": 509
+    }
+  },
+  "released_badge_projection_file": "released-badge-projection.json",
+  "hosted_correspondence_file": "hosted-byte-correspondence.json",
+  "json_badge_correspondence": {
+    "same_typed_outcome": true,
+    "same_unsuppressed_gap_census": true,
+    "same_unknown_census": true,
+    "separate_invocations": true,
+    "repeat_determinism_established": false,
+    "same_finding_count": true
+  },
+  "scope_census": {
+    "input_overall_changed_files": 9,
+    "input_overall_added_removed_lines": 2550,
+    "input_Rust_changed_files": 5,
+    "input_Rust_added_removed_lines": 2495,
+    "default": {
+      "selected_files": 0,
+      "selected_lines": 0,
+      "omitted_files": 5,
+      "omitted_lines": 2495,
+      "cap_state": "pre-analysis hard diff-scope limit exceeded; findings cap not reached",
+      "analysis_complete": "not analyzed; typed analysis_outcome absent",
+      "run_status": "diff_scope_oversized",
+      "exit": 2,
+      "gate_eligibility": "non-consumable; explicit downstream_consumable=false"
+    },
+    "recovery": {
+      "selected_files": 5,
+      "selected_lines": 2495,
+      "omitted_files": 0,
+      "omitted_lines": 0,
+      "rendered_findings": 855,
+      "cap_state": "64MiB findings cap inactive; no partial scope or run limitations",
+      "analysis_complete": true,
+      "analysis_kind": "complete_with_findings",
+      "status": "warn",
+      "exit": 0,
+      "gate_eligibility": "not emitted for full scope; consumer eligibility unestablished"
+    }
+  },
+  "source_census": {
+    "all_current_subjects_actual_target": "xtask executable",
+    "finding_counts_by_file": {
+      "./src/task_projection_reconciliation/reader.rs": 618,
+      "./xtask/src/main.rs": 7,
+      "./xtask/src/task_projection_reader.rs": 230
+    },
+    "gap_counts_by_file": {
+      "./src/task_projection_reconciliation/reader.rs": 316,
+      "./xtask/src/main.rs": 5,
+      "./xtask/src/task_projection_reader.rs": 116
+    },
+    "classification_counts": {
+      "static_unknown": 260,
+      "weakly_exposed": 433,
+      "exposed": 42,
+      "propagation_unknown": 37,
+      "infection_unknown": 79,
+      "reachable_unrevealed": 4
+    },
+    "gap_owner_counts": [
+      {
+        "file": "./xtask/src/task_projection_reader.rs",
+        "function": "run",
+        "count": 62
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "PacketReader::read_uncached",
+        "count": 30
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "NativeDecoder<'_>::number",
+        "count": 25
+      },
+      {
+        "file": "./xtask/src/task_projection_reader.rs",
+        "function": "inspect_sensor_inputs",
+        "count": 22
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "NativeDecoder<'_>::object",
+        "count": 18
+      },
+      {
+        "file": "./xtask/src/task_projection_reader.rs",
+        "function": "<declaration/outside function>",
+        "count": 18
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "SortedValue<'_>::serialize",
+        "count": 15
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "NativeDecoder<'_>::value",
+        "count": 14
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "write",
+        "count": 14
+      },
+      {
+        "file": "./xtask/src/task_projection_reader.rs",
+        "function": "inspect_collections",
+        "count": 14
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "PacketReader::confined_path",
+        "count": 13
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "PacketError::fmt",
+        "count": 12
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "PacketReader::read",
+        "count": 10
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "NativeDecoder<'_>::array",
+        "count": 10
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "NativeDecoder<'_>::string",
+        "count": 9
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "PacketReader::rows",
+        "count": 8
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "PacketReader::mapping",
+        "count": 8
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "NativeDecoder<'_>::parse",
+        "count": 8
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "PacketReader::new",
+        "count": 7
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "PacketReader::load",
+        "count": 7
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "PacketReader::lease_quantities",
+        "count": 6
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "UniqueVisitor::visit_map",
+        "count": 6
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "strict_json",
+        "count": 6
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "NativeDecoder<'_>::advance",
+        "count": 6
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "<declaration/outside function>",
+        "count": 5
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "PacketReader::issue",
+        "count": 5
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "JsonValue::as_object",
+        "count": 4
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "JsonValue::as_array",
+        "count": 4
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "JsonValue::as_str",
+        "count": 4
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "JsonValue::as_bool",
+        "count": 4
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "NativeDecoder<'_>::eat",
+        "count": 4
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "NativeDecoder<'_>::literal",
+        "count": 4
+      },
+      {
+        "file": "./xtask/src/main.rs",
+        "function": "run",
+        "count": 4
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "JsonShape::matches",
+        "count": 3
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "PacketReader::invalid",
+        "count": 3
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "PacketReader::strings",
+        "count": 3
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "integer_u128",
+        "count": 3
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "UniqueVisitor::visit_seq",
+        "count": 3
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "NativeDecoder<'_>::whitespace",
+        "count": 3
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "NativeDecoder<'_>::node",
+        "count": 3
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "NativeDecoder<'_>::digits",
+        "count": 3
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "label",
+        "count": 2
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "UniqueVisitor::visit_f64",
+        "count": 2
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "NativeDecoder<'_>::expect",
+        "count": 2
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "canonical_json",
+        "count": 2
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "canonical",
+        "count": 2
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "JsonValue::is_object",
+        "count": 1
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "JsonValue::is_array",
+        "count": 1
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "JsonValue::is_string",
+        "count": 1
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "JsonValue::get",
+        "count": 1
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "JsonValue::is_number",
+        "count": 1
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "PacketReader::mark_unavailable",
+        "count": 1
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "integer_u32",
+        "count": 1
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "integer_u64",
+        "count": 1
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "UniqueJson::deserialize",
+        "count": 1
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "UniqueVisitor::expecting",
+        "count": 1
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "UniqueVisitor::visit_bool",
+        "count": 1
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "UniqueVisitor::visit_i64",
+        "count": 1
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "UniqueVisitor::visit_u64",
+        "count": 1
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "UniqueVisitor::visit_str",
+        "count": 1
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "UniqueVisitor::visit_unit",
+        "count": 1
+      },
+      {
+        "file": "./src/task_projection_reconciliation/reader.rs",
+        "function": "NativeDecoder<'_>::peek",
+        "count": 1
+      },
+      {
+        "file": "./xtask/src/main.rs",
+        "function": "print_help",
+        "count": 1
+      }
+    ]
+  },
+  "id_census": {
+    "released_inventory": 1689,
+    "current_inventory": 855,
+    "common_ids": 305,
+    "released_only_ids": 1384,
+    "current_only_ids": 550,
+    "common_transitions": {
+      "exposed -> weakly_exposed": 70,
+      "exposed -> exposed": 7,
+      "weakly_exposed -> weakly_exposed": 44,
+      "propagation_unknown -> propagation_unknown": 8,
+      "weakly_exposed -> exposed": 5,
+      "reachable_unrevealed -> weakly_exposed": 17,
+      "infection_unknown -> infection_unknown": 9,
+      "exposed -> infection_unknown": 1,
+      "static_unknown -> static_unknown": 143,
+      "exposed -> reachable_unrevealed": 1
+    },
+    "released_gap_dispositions": {
+      "retained_gap_class": 61,
+      "current_non_gap_class": 5,
+      "no_current_id_counterpart": 247
+    },
+    "current_gap_origins": {
+      "current_only_ID": 305,
+      "exposed": 71,
+      "reachable_unrevealed": 17,
+      "weakly_exposed": 44
+    },
+    "unchanged_ID_expression_correspondence_limits": "ID equality is directly measured; current-only/absent IDs are not assumed to prove new/fixed semantics. Source-coordinate grouping remains separate."
+  },
+  "source_role_census": {
+    "matching_contract": "Source file + source line + probe family; expression spelling may differ. This is an explicit coordinate grouping, not asserted one-to-one semantic identity.",
+    "common_coordinates": 708,
+    "released_only_coordinates": 981,
+    "current_only_coordinates": 139,
+    "released_test_subject_counts": {
+      "src/task_projection_reconciliation/reader/tests.rs": 31,
+      "xtask/tests/task_projection_reader_parity.rs": 111
+    },
+    "released_test_gap_counts": {
+      "src/task_projection_reconciliation/reader/tests.rs": 7,
+      "xtask/tests/task_projection_reader_parity.rs": 44
+    },
+    "current_test_subject_counts": {
+      "src/task_projection_reconciliation/reader/tests.rs": 0,
+      "xtask/tests/task_projection_reader_parity.rs": 0
+    }
+  },
+  "target_attribution_census": {
+    "projection_raw_sha256": "4bea892bf07e23a50f3210eb5f1d634b07fc340f834c8196dfe983107ab87751",
+    "actual_target": "xtask executable; reader source imported by explicit path, not main UB binary",
+    "gap_rows": 437,
+    "gap_rows_with_positive_foreign_target_rendered_relation": 216,
+    "gap_rows_with_foreign_high_confidence_direct_owner_call": 53,
+    "no_foreign_target_in_rendered_sample": 221,
+    "relation_projection_limit": 8,
+    "unrendered_relations_unverified": true
+  },
+  "source_owner_derivation": "Innermost containing Rust AST function span, using Rust 1.95 and already-built ra_ap_syntax 0.0.349; outside-function runtime declarations remain eligible production. All 855 current source owners map to the xtask executable.",
+  "source_owner_census_file": "current-findings.tsv",
+  "representative_rows_file": "owner-examples.json",
+  "performance_nonclaim": "Elapsed observations are retained; development debug versus registry release profiles prevent controlled performance-regression claims. Completion was observed; direct CPU advancement/work-total evidence was not provided.",
+  "schema_adoption_boundary": "Current native badge schema 0.8; frozen local xtask requires version 0.10.0 / schema 0.6. Hosted counts-only admission remains separate under ub-review #1333/#1347. Complete typed output alone does not establish consumer eligibility.",
+  "related_tests_limit": {
+    "rendered_per_finding": 8,
+    "full_internal_relation_totals_disclosed": true,
+    "unrendered_relation_identities_unverified": true
+  },
+  "remaining_index_context_note": "Every current completed invocation retains tests/common/cli_lock.rs:rust_module_ambiguous_parent on stderr; indexed-context limitation is separate from full typed diff outcome.",
+  "cancelled_optional_repeat_file": "cancelled-optional-repeat.json",
+  "repeat_determinism_established": false,
+  "final_public_ref_observation": {
+    "observed_at": "2026-10-14T21:00:35Z",
+    "ref": "refs/heads/main",
+    "observed_head": "30a505bb67e598768b36401aa88095cb7a79c68c",
+    "compared_head": "89ac47a603092ba7f9f55cf74999b88649621abf",
+    "note": "The executable remains bound to compared_head. The later observed head was not rebuilt or compared, and no fix qualification transfers to it."
+  },
+  "tracked_tree_integrity": {
+    "producer_tracked_tree_unchanged": true,
+    "consumer_tracked_tree_unchanged": true
+  },
+  "raw_retention_manifest": "retained-artifacts.json",
+  "bundled_default_failure": "default-failure.json",
+  "independent_native_evidence_url": "https://github.com/EffortlessMetrics/ub-review/tree/bc92afafbd615664a562331e08833a49c8e5d86e/evidence/1461"
+}
