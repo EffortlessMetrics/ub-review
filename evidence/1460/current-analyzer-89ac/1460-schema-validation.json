@@ -1,0 +1,26 @@
+[
+  {
+    "file": "current-absolute-json.json",
+    "errors": []
+  },
+  {
+    "file": "current-complete-absolute-json.json",
+    "errors": []
+  },
+  {
+    "file": "current-complete-dot-json.json",
+    "errors": []
+  },
+  {
+    "file": "current-complete-dot-repeat-json.json",
+    "errors": []
+  },
+  {
+    "file": "current-dot-json.json",
+    "errors": []
+  },
+  {
+    "file": "current-dot-repeat-json.json",
+    "errors": []
+  }
+]

@@ -1,0 +1,853 @@
+{
+  "comparison_only": true,
+  "producer": {
+    "source_head": "89ac47a603092ba7f9f55cf74999b88649621abf",
+    "source_tree": "412e1306aa80229cebe20a6fd8e1857162fcf933",
+    "version": "ripr 0.11.0 (89ac47a603092ba7f9f55cf74999b88649621abf)",
+    "binary_sha256": "e9f26175806fd8a7936e37083e7fc5c04341c1cb491cee15ef58ac6e19cc4a13",
+    "build": "cargo build --locked -p ripr --bin ripr --jobs 2",
+    "check": "cargo check --locked -p ripr --bin ripr --jobs 2",
+    "check_exit": 0,
+    "build_exit": 0,
+    "toolchain": "Rust/Cargo1.95.0/Linux x86_64/default features/dev profile",
+    "source_inputs": {
+      "Cargo.toml": "71a386f6a70f8d0124270b7db0d02ea6466be05b7a1b97cd34c210b37277dd64",
+      "Cargo.lock": "2ba66485b487e919fd73b1ec4cf784badd847c53c56d7bad34b0fcfc669fd4d5",
+      "rust-toolchain.toml": "12dc5d64dbd96c1b07be2943241d52d9f6127a79ba47a820455ba7b873fc896a",
+      ".cargo/config.toml": "e5bdb9055b7cdd689030fca3b94b244cca1da9c0cc8142e9180cd8c95c18e341",
+      "schemas/ripr/check.schema.json": "bb864fe56560f3ad4eea2d85cee1acf0882f13672467fd277c2eaa4c5e9c1bf5",
+      "crates/ripr/src/config.rs": "56193151b22df916ae0f10ace17f9333b5a4364694bdf1e5ce5ae126e4c3deab",
+      "crates/ripr/src/config/model.rs": "f9e781be864940e6a66d3ccf2d6dc834043a9b36770f8dffa52f6bccce45d03b",
+      "crates/ripr/src/analysis/workspace/source_role.rs": "c7f2d8952b4957341bf78b14773d83993fa6e4e4f09c04cc579c18de606ba28d",
+      "crates/ripr/src/analysis/language/rust/mod.rs": "48b1407a5670809b50c87f31d42f91d77ed8cf5e2c78157f35ddd88d7d6437fa",
+      "crates/ripr/src/analysis/classify/related_tests.rs": "8c78474a57f3c3c36c9997ce686a4d0c96bb7d0317ffba4e673cf51023f274ca",
+      "crates/ripr/src/output/json/report.rs": "787d16ec8b1bf05f721182ddc4d0b4f248dbc4032c77699fa1b0a6449fd8a5e7",
+      "crates/ripr/src/output/badge/model.rs": "273a22c261fadf2cf049f87ee231d7cb452ab8c3b7feb7f2b82b6c3d065e4e83"
+    }
+  },
+  "consumer": {
+    "head": "fdb5717688eb266b7b7b427b64104bea6a8ff722",
+    "tree": "4ab0d4eee0ac1f9d37181e663a5dfddb7682cf70",
+    "base": "3dbcc2be9768b082c0896dc2360e950ffbd56a65",
+    "input_patch_bytes": 132398,
+    "input_patch_sha256": "d690685edc7001bc2bfd204b81790d172197ad9331bbd3c6f577613156f95d9e",
+    "source_file_blob": "13a1d07a8180773f9122e03179d88857f41863ef",
+    "source_file_sha256": "129183cfcaf232a79317f654eaf6e877a75f4ec8cb1390c47d3d43b20a798f61",
+    "config_discovery": "No ripr.toml in consumer repository; .git bounds ancestor discovery; built-in defaults, no production_like_targets opt-in",
+    "suppression_config_sha256": "707a4764d449d7f8201a17ec2ec835fc959be36eec83de9264997e1430cba58e",
+    "ub_config_sha256": "00ea80e9ac5ebfb0fb0d43778a423e0447b2cc5a2c2f70e6ca541e876f9698aa",
+    "suppression_schema": 1,
+    "suppression_entries": 5700,
+    "suppression_matches_to_129": 0
+  },
+  "commands": {
+    "cwd": "/workspace/scratch/2e70149a8e59/compare-ripr-main-89ac47a6/consumer",
+    "common": "<absolute-pinned-binary> check --root <. or absolute consumer> --diff target/xtask/ripr/diff.patch --mode ready --format <json or badge-json>",
+    "defaults": {
+      "RAYON_NUM_THREADS": 2,
+      "RIPR_PARTIAL_DIFF_FILE_BUDGET": 200,
+      "RIPR_PARTIAL_DIFF_LINE_BUDGET": 1000,
+      "RIPR_MAX_DIFF_CHANGED_RUST_LINES": 2000,
+      "RIPR_MAX_DIFF_INDEX_FILES": 10000,
+      "RIPR_CHECK_FINDINGS_BYTES": 1000000,
+      "MAX_RELATED_TESTS_PER_FINDING_JSON": 8,
+      "MAX_CLI_INPUT_BYTES": 268435456
+    },
+    "supported_recovery": {
+      "RIPR_PARTIAL_DIFF_LINE_BUDGET": 1832,
+      "other_limits": "unchanged"
+    },
+    "recovery_scope": "Process-local direct comparison resource limit only; no consumer configuration, threshold, suppression, installer or pin change."
+  },
+  "released_baseline": {
+    "version": "ripr0.10.0",
+    "binary_sha256": "b14f844c990b55e5b3d9f7daa43085cf016824fc8f6f55753efa8159dc5fe432",
+    "badge_sha256": "14fdb8acd3e3e299bcbb296549158e876764a17a8932f1423491314a34adf727",
+    "badge_byte_equal_to_historical": true,
+    "counts": {
+      "unsuppressed_exposure_gaps": 129,
+      "unsuppressed_test_efficiency_findings": 0,
+      "intentional_test_efficiency_findings": 0,
+      "suppressed_exposure_gaps": 0,
+      "suppressed_test_efficiency_findings": 0,
+      "unknowns": 738,
+      "unknowns_test_efficiency": 0,
+      "analyzed_findings": 1569,
+      "analyzed_seams": 0,
+      "analyzed_gap_records": 0,
+      "analyzed_tests": 1264
+    }
+  },
+  "outputs": [
+    {
+      "name": "current-absolute-badge.json",
+      "bytes": 687598,
+      "sha256": "0c4aee4042a18d7b34ab6ee730833679c1c68714e4cfbcc028f51d75040b6faf",
+      "exit": 0,
+      "schema_version": "0.8",
+      "summary": {
+        "unsuppressed_exposure_gaps": 0,
+        "unsuppressed_test_efficiency_findings": 0,
+        "intentional_test_efficiency_findings": 0,
+        "suppressed_exposure_gaps": 0,
+        "suppressed_test_efficiency_findings": 0,
+        "unknowns": 0,
+        "unknowns_test_efficiency": 0,
+        "analyzed_findings": 0,
+        "analyzed_seams": 0,
+        "analyzed_gap_records": 0,
+        "analyzed_tests": 0
+      },
+      "analysis_outcome": {
+        "schema_version": "0.1",
+        "kind": "partial_with_limitations",
+        "identity": {
+          "repository_identity": null,
+          "root_identity": null,
+          "config_identity": null,
+          "base_revision": null,
+          "input_identity": "sha256:d690685edc7001bc2bfd204b81790d172197ad9331bbd3c6f577613156f95d9e",
+          "snapshot_identity": null,
+          "git_candidate_subject": null
+        },
+        "counts": {
+          "changed_file_count": 5,
+          "changed_line_count": 2040,
+          "candidate_line_count": 0,
+          "probe_count": 0,
+          "finding_count": 0
+        },
+        "limitations": [
+          {
+            "kind": "diff_scope_oversized",
+            "producer_stage": "analysis_pipeline",
+            "path": null,
+            "affected_items": 1,
+            "bounded_detail": "The run analyzed 1832 changed line(s); every changed file ripr's language adapters read was selected, but the budget was exceeded, so the result stays partial.",
+            "recovery": {
+              "kind": "increase_configured_limit",
+              "detail": "To widen the analyzed partition, raise RIPR_PARTIAL_DIFF_LINE_BUDGET to at least 1832, then re-run."
+            }
+          }
+        ],
+        "claim_boundary": "Static analysis outcome only; no correctness, test-adequacy, runtime-execution, or merge-readiness claim."
+      },
+      "analysis_scope": null,
+      "run_limitations": null,
+      "status": "warn",
+      "message": "analysis-incomplete: partial_with_limitations",
+      "rendered_findings": null,
+      "warnings_count": 5700
+    },
+    {
+      "name": "current-absolute-json.json",
+      "bytes": 3294,
+      "sha256": "f7ff41712975ebbcc31bf1e792b315ce23b6abfa22d68ed5e6e42dc8ceefb21b",
+      "exit": 0,
+      "schema_version": "0.2",
+      "summary": {
+        "changed_rust_files": 1,
+        "probes": 0,
+        "findings": 0,
+        "exposed": 0,
+        "weakly_exposed": 0,
+        "reachable_unrevealed": 0,
+        "no_static_path": 0,
+        "infection_unknown": 0,
+        "propagation_unknown": 0,
+        "static_unknown": 0,
+        "changed_files_by_language": [
+          {
+            "language": "rust",
+            "files": 1
+          }
+        ]
+      },
+      "analysis_outcome": {
+        "analysis_complete": false,
+        "outcome": {
+          "schema_version": "0.1",
+          "kind": "partial_with_limitations",
+          "identity": {
+            "repository_identity": null,
+            "root_identity": null,
+            "config_identity": null,
+            "base_revision": null,
+            "input_identity": "sha256:d690685edc7001bc2bfd204b81790d172197ad9331bbd3c6f577613156f95d9e",
+            "snapshot_identity": null,
+            "git_candidate_subject": null
+          },
+          "counts": {
+            "changed_file_count": 5,
+            "changed_line_count": 2040,
+            "candidate_line_count": 0,
+            "probe_count": 0,
+            "finding_count": 0
+          },
+          "limitations": [
+            {
+              "kind": "diff_scope_oversized",
+              "producer_stage": "analysis_pipeline",
+              "path": null,
+              "affected_items": 1,
+              "bounded_detail": "The run analyzed 1832 changed line(s); every changed file ripr's language adapters read was selected, but the budget was exceeded, so the result stays partial.",
+              "recovery": {
+                "kind": "increase_configured_limit",
+                "detail": "To widen the analyzed partition, raise RIPR_PARTIAL_DIFF_LINE_BUDGET to at least 1832, then re-run."
+              }
+            }
+          ],
+          "claim_boundary": "Static analysis outcome only; no correctness, test-adequacy, runtime-execution, or merge-readiness claim."
+        }
+      },
+      "analysis_scope": {
+        "scope": "diff",
+        "run_status": "limited_partial_scope",
+        "basis": "rust_partial_diff_budget",
+        "downstream_consumable": false,
+        "gate_eligibility": "ineligible",
+        "limitation": "limited_partial_scope",
+        "repair_route": "analysis/diff-scope-budget",
+        "selection_version": "partial-diff-v1",
+        "language_tier_version": "lang-tier-v1",
+        "diff_identity": "sha256:2ce6c0cc3ebca4d08cb49c7a7ef367724c9cf484fe8d9fabb55a122974ec49de",
+        "partition_identity": "efeed98557dff944a4cd65e5d675495aafb73c91ea196860e7654875592260b0",
+        "file_budget": 200,
+        "line_budget": 1000,
+        "budget_disclosures": [],
+        "selected_files": [
+          "tests/ci_efficiency_baseline.rs"
+        ],
+        "selected_changed_lines": 1832,
+        "uninspected_files_lower_bound": 0,
+        "uninspected_changed_lines_lower_bound": 0,
+        "stop_reason": "line_budget_exceeded_on_first_file",
+        "continuation": "partial result: raise RIPR_PARTIAL_DIFF_LINE_BUDGET to at least 1832, then re-run; named partition continuation is not available"
+      },
+      "run_limitations": null,
+      "status": null,
+      "message": null,
+      "rendered_findings": 0,
+      "warnings_count": 0
+    },
+    {
+      "name": "current-complete-absolute-badge.json",
+      "bytes": 687121,
+      "sha256": "1b3c02ba49801793f88343b84c3eb83ad6889538fd76ec7009e0abb032912dc9",
+      "exit": 0,
+      "schema_version": "0.8",
+      "summary": {
+        "unsuppressed_exposure_gaps": 0,
+        "unsuppressed_test_efficiency_findings": 0,
+        "intentional_test_efficiency_findings": 0,
+        "suppressed_exposure_gaps": 0,
+        "suppressed_test_efficiency_findings": 0,
+        "unknowns": 0,
+        "unknowns_test_efficiency": 0,
+        "analyzed_findings": 0,
+        "analyzed_seams": 0,
+        "analyzed_gap_records": 0,
+        "analyzed_tests": 0
+      },
+      "analysis_outcome": {
+        "schema_version": "0.1",
+        "kind": "no_behavioral_candidates",
+        "identity": {
+          "repository_identity": null,
+          "root_identity": null,
+          "config_identity": null,
+          "base_revision": null,
+          "input_identity": "sha256:d690685edc7001bc2bfd204b81790d172197ad9331bbd3c6f577613156f95d9e",
+          "snapshot_identity": null,
+          "git_candidate_subject": null
+        },
+        "counts": {
+          "changed_file_count": 5,
+          "changed_line_count": 2040,
+          "candidate_line_count": 0,
+          "probe_count": 0,
+          "finding_count": 0
+        },
+        "limitations": [],
+        "claim_boundary": "Static analysis outcome only; no correctness, test-adequacy, runtime-execution, or merge-readiness claim."
+      },
+      "analysis_scope": null,
+      "run_limitations": null,
+      "status": "pass",
+      "message": "0",
+      "rendered_findings": null,
+      "warnings_count": 5700
+    },
+    {
+      "name": "current-complete-absolute-json.json",
+      "bytes": 1727,
+      "sha256": "91ffaef0dadf22cc341035c544a58d482e859e985e3aec0e53d80cc6cb27407b",
+      "exit": 0,
+      "schema_version": "0.2",
+      "summary": {
+        "changed_rust_files": 1,
+        "probes": 0,
+        "findings": 0,
+        "exposed": 0,
+        "weakly_exposed": 0,
+        "reachable_unrevealed": 0,
+        "no_static_path": 0,
+        "infection_unknown": 0,
+        "propagation_unknown": 0,
+        "static_unknown": 0,
+        "changed_files_by_language": [
+          {
+            "language": "rust",
+            "files": 1
+          }
+        ]
+      },
+      "analysis_outcome": {
+        "analysis_complete": true,
+        "outcome": {
+          "schema_version": "0.1",
+          "kind": "no_behavioral_candidates",
+          "identity": {
+            "repository_identity": null,
+            "root_identity": null,
+            "config_identity": null,
+            "base_revision": null,
+            "input_identity": "sha256:d690685edc7001bc2bfd204b81790d172197ad9331bbd3c6f577613156f95d9e",
+            "snapshot_identity": null,
+            "git_candidate_subject": null
+          },
+          "counts": {
+            "changed_file_count": 5,
+            "changed_line_count": 2040,
+            "candidate_line_count": 0,
+            "probe_count": 0,
+            "finding_count": 0
+          },
+          "limitations": [],
+          "claim_boundary": "Static analysis outcome only; no correctness, test-adequacy, runtime-execution, or merge-readiness claim."
+        }
+      },
+      "analysis_scope": null,
+      "run_limitations": null,
+      "status": null,
+      "message": null,
+      "rendered_findings": 0,
+      "warnings_count": 0
+    },
+    {
+      "name": "current-complete-dot-badge.json",
+      "bytes": 687121,
+      "sha256": "1b3c02ba49801793f88343b84c3eb83ad6889538fd76ec7009e0abb032912dc9",
+      "exit": 0,
+      "schema_version": "0.8",
+      "summary": {
+        "unsuppressed_exposure_gaps": 0,
+        "unsuppressed_test_efficiency_findings": 0,
+        "intentional_test_efficiency_findings": 0,
+        "suppressed_exposure_gaps": 0,
+        "suppressed_test_efficiency_findings": 0,
+        "unknowns": 0,
+        "unknowns_test_efficiency": 0,
+        "analyzed_findings": 0,
+        "analyzed_seams": 0,
+        "analyzed_gap_records": 0,
+        "analyzed_tests": 0
+      },
+      "analysis_outcome": {
+        "schema_version": "0.1",
+        "kind": "no_behavioral_candidates",
+        "identity": {
+          "repository_identity": null,
+          "root_identity": null,
+          "config_identity": null,
+          "base_revision": null,
+          "input_identity": "sha256:d690685edc7001bc2bfd204b81790d172197ad9331bbd3c6f577613156f95d9e",
+          "snapshot_identity": null,
+          "git_candidate_subject": null
+        },
+        "counts": {
+          "changed_file_count": 5,
+          "changed_line_count": 2040,
+          "candidate_line_count": 0,
+          "probe_count": 0,
+          "finding_count": 0
+        },
+        "limitations": [],
+        "claim_boundary": "Static analysis outcome only; no correctness, test-adequacy, runtime-execution, or merge-readiness claim."
+      },
+      "analysis_scope": null,
+      "run_limitations": null,
+      "status": "pass",
+      "message": "0",
+      "rendered_findings": null,
+      "warnings_count": 5700
+    },
+    {
+      "name": "current-complete-dot-json.json",
+      "bytes": 1595,
+      "sha256": "ebc30da1e187f3434795de5f219a979b516ed22fdf2e090bcf0c17bd38a360a2",
+      "exit": 0,
+      "schema_version": "0.2",
+      "summary": {
+        "changed_rust_files": 1,
+        "probes": 0,
+        "findings": 0,
+        "exposed": 0,
+        "weakly_exposed": 0,
+        "reachable_unrevealed": 0,
+        "no_static_path": 0,
+        "infection_unknown": 0,
+        "propagation_unknown": 0,
+        "static_unknown": 0,
+        "changed_files_by_language": [
+          {
+            "language": "rust",
+            "files": 1
+          }
+        ]
+      },
+      "analysis_outcome": {
+        "analysis_complete": true,
+        "outcome": {
+          "schema_version": "0.1",
+          "kind": "no_behavioral_candidates",
+          "identity": {
+            "repository_identity": null,
+            "root_identity": null,
+            "config_identity": null,
+            "base_revision": null,
+            "input_identity": "sha256:d690685edc7001bc2bfd204b81790d172197ad9331bbd3c6f577613156f95d9e",
+            "snapshot_identity": null,
+            "git_candidate_subject": null
+          },
+          "counts": {
+            "changed_file_count": 5,
+            "changed_line_count": 2040,
+            "candidate_line_count": 0,
+            "probe_count": 0,
+            "finding_count": 0
+          },
+          "limitations": [],
+          "claim_boundary": "Static analysis outcome only; no correctness, test-adequacy, runtime-execution, or merge-readiness claim."
+        }
+      },
+      "analysis_scope": null,
+      "run_limitations": null,
+      "status": null,
+      "message": null,
+      "rendered_findings": 0,
+      "warnings_count": 0
+    },
+    {
+      "name": "current-complete-dot-repeat-json.json",
+      "bytes": 1595,
+      "sha256": "ebc30da1e187f3434795de5f219a979b516ed22fdf2e090bcf0c17bd38a360a2",
+      "exit": 0,
+      "schema_version": "0.2",
+      "summary": {
+        "changed_rust_files": 1,
+        "probes": 0,
+        "findings": 0,
+        "exposed": 0,
+        "weakly_exposed": 0,
+        "reachable_unrevealed": 0,
+        "no_static_path": 0,
+        "infection_unknown": 0,
+        "propagation_unknown": 0,
+        "static_unknown": 0,
+        "changed_files_by_language": [
+          {
+            "language": "rust",
+            "files": 1
+          }
+        ]
+      },
+      "analysis_outcome": {
+        "analysis_complete": true,
+        "outcome": {
+          "schema_version": "0.1",
+          "kind": "no_behavioral_candidates",
+          "identity": {
+            "repository_identity": null,
+            "root_identity": null,
+            "config_identity": null,
+            "base_revision": null,
+            "input_identity": "sha256:d690685edc7001bc2bfd204b81790d172197ad9331bbd3c6f577613156f95d9e",
+            "snapshot_identity": null,
+            "git_candidate_subject": null
+          },
+          "counts": {
+            "changed_file_count": 5,
+            "changed_line_count": 2040,
+            "candidate_line_count": 0,
+            "probe_count": 0,
+            "finding_count": 0
+          },
+          "limitations": [],
+          "claim_boundary": "Static analysis outcome only; no correctness, test-adequacy, runtime-execution, or merge-readiness claim."
+        }
+      },
+      "analysis_scope": null,
+      "run_limitations": null,
+      "status": null,
+      "message": null,
+      "rendered_findings": 0,
+      "warnings_count": 0
+    },
+    {
+      "name": "current-dot-badge.json",
+      "bytes": 687598,
+      "sha256": "0c4aee4042a18d7b34ab6ee730833679c1c68714e4cfbcc028f51d75040b6faf",
+      "exit": 0,
+      "schema_version": "0.8",
+      "summary": {
+        "unsuppressed_exposure_gaps": 0,
+        "unsuppressed_test_efficiency_findings": 0,
+        "intentional_test_efficiency_findings": 0,
+        "suppressed_exposure_gaps": 0,
+        "suppressed_test_efficiency_findings": 0,
+        "unknowns": 0,
+        "unknowns_test_efficiency": 0,
+        "analyzed_findings": 0,
+        "analyzed_seams": 0,
+        "analyzed_gap_records": 0,
+        "analyzed_tests": 0
+      },
+      "analysis_outcome": {
+        "schema_version": "0.1",
+        "kind": "partial_with_limitations",
+        "identity": {
+          "repository_identity": null,
+          "root_identity": null,
+          "config_identity": null,
+          "base_revision": null,
+          "input_identity": "sha256:d690685edc7001bc2bfd204b81790d172197ad9331bbd3c6f577613156f95d9e",
+          "snapshot_identity": null,
+          "git_candidate_subject": null
+        },
+        "counts": {
+          "changed_file_count": 5,
+          "changed_line_count": 2040,
+          "candidate_line_count": 0,
+          "probe_count": 0,
+          "finding_count": 0
+        },
+        "limitations": [
+          {
+            "kind": "diff_scope_oversized",
+            "producer_stage": "analysis_pipeline",
+            "path": null,
+            "affected_items": 1,
+            "bounded_detail": "The run analyzed 1832 changed line(s); every changed file ripr's language adapters read was selected, but the budget was exceeded, so the result stays partial.",
+            "recovery": {
+              "kind": "increase_configured_limit",
+              "detail": "To widen the analyzed partition, raise RIPR_PARTIAL_DIFF_LINE_BUDGET to at least 1832, then re-run."
+            }
+          }
+        ],
+        "claim_boundary": "Static analysis outcome only; no correctness, test-adequacy, runtime-execution, or merge-readiness claim."
+      },
+      "analysis_scope": null,
+      "run_limitations": null,
+      "status": "warn",
+      "message": "analysis-incomplete: partial_with_limitations",
+      "rendered_findings": null,
+      "warnings_count": 5700
+    },
+    {
+      "name": "current-dot-json.json",
+      "bytes": 3162,
+      "sha256": "4b3d7997f3f79f93479ef09e2c34f5b81cf99f24553fa8f6693631533d8feb35",
+      "exit": 0,
+      "schema_version": "0.2",
+      "summary": {
+        "changed_rust_files": 1,
+        "probes": 0,
+        "findings": 0,
+        "exposed": 0,
+        "weakly_exposed": 0,
+        "reachable_unrevealed": 0,
+        "no_static_path": 0,
+        "infection_unknown": 0,
+        "propagation_unknown": 0,
+        "static_unknown": 0,
+        "changed_files_by_language": [
+          {
+            "language": "rust",
+            "files": 1
+          }
+        ]
+      },
+      "analysis_outcome": {
+        "analysis_complete": false,
+        "outcome": {
+          "schema_version": "0.1",
+          "kind": "partial_with_limitations",
+          "identity": {
+            "repository_identity": null,
+            "root_identity": null,
+            "config_identity": null,
+            "base_revision": null,
+            "input_identity": "sha256:d690685edc7001bc2bfd204b81790d172197ad9331bbd3c6f577613156f95d9e",
+            "snapshot_identity": null,
+            "git_candidate_subject": null
+          },
+          "counts": {
+            "changed_file_count": 5,
+            "changed_line_count": 2040,
+            "candidate_line_count": 0,
+            "probe_count": 0,
+            "finding_count": 0
+          },
+          "limitations": [
+            {
+              "kind": "diff_scope_oversized",
+              "producer_stage": "analysis_pipeline",
+              "path": null,
+              "affected_items": 1,
+              "bounded_detail": "The run analyzed 1832 changed line(s); every changed file ripr's language adapters read was selected, but the budget was exceeded, so the result stays partial.",
+              "recovery": {
+                "kind": "increase_configured_limit",
+                "detail": "To widen the analyzed partition, raise RIPR_PARTIAL_DIFF_LINE_BUDGET to at least 1832, then re-run."
+              }
+            }
+          ],
+          "claim_boundary": "Static analysis outcome only; no correctness, test-adequacy, runtime-execution, or merge-readiness claim."
+        }
+      },
+      "analysis_scope": {
+        "scope": "diff",
+        "run_status": "limited_partial_scope",
+        "basis": "rust_partial_diff_budget",
+        "downstream_consumable": false,
+        "gate_eligibility": "ineligible",
+        "limitation": "limited_partial_scope",
+        "repair_route": "analysis/diff-scope-budget",
+        "selection_version": "partial-diff-v1",
+        "language_tier_version": "lang-tier-v1",
+        "diff_identity": "sha256:2ce6c0cc3ebca4d08cb49c7a7ef367724c9cf484fe8d9fabb55a122974ec49de",
+        "partition_identity": "efeed98557dff944a4cd65e5d675495aafb73c91ea196860e7654875592260b0",
+        "file_budget": 200,
+        "line_budget": 1000,
+        "budget_disclosures": [],
+        "selected_files": [
+          "tests/ci_efficiency_baseline.rs"
+        ],
+        "selected_changed_lines": 1832,
+        "uninspected_files_lower_bound": 0,
+        "uninspected_changed_lines_lower_bound": 0,
+        "stop_reason": "line_budget_exceeded_on_first_file",
+        "continuation": "partial result: raise RIPR_PARTIAL_DIFF_LINE_BUDGET to at least 1832, then re-run; named partition continuation is not available"
+      },
+      "run_limitations": null,
+      "status": null,
+      "message": null,
+      "rendered_findings": 0,
+      "warnings_count": 0
+    },
+    {
+      "name": "current-dot-repeat-json.json",
+      "bytes": 3162,
+      "sha256": "4b3d7997f3f79f93479ef09e2c34f5b81cf99f24553fa8f6693631533d8feb35",
+      "exit": 0,
+      "schema_version": "0.2",
+      "summary": {
+        "changed_rust_files": 1,
+        "probes": 0,
+        "findings": 0,
+        "exposed": 0,
+        "weakly_exposed": 0,
+        "reachable_unrevealed": 0,
+        "no_static_path": 0,
+        "infection_unknown": 0,
+        "propagation_unknown": 0,
+        "static_unknown": 0,
+        "changed_files_by_language": [
+          {
+            "language": "rust",
+            "files": 1
+          }
+        ]
+      },
+      "analysis_outcome": {
+        "analysis_complete": false,
+        "outcome": {
+          "schema_version": "0.1",
+          "kind": "partial_with_limitations",
+          "identity": {
+            "repository_identity": null,
+            "root_identity": null,
+            "config_identity": null,
+            "base_revision": null,
+            "input_identity": "sha256:d690685edc7001bc2bfd204b81790d172197ad9331bbd3c6f577613156f95d9e",
+            "snapshot_identity": null,
+            "git_candidate_subject": null
+          },
+          "counts": {
+            "changed_file_count": 5,
+            "changed_line_count": 2040,
+            "candidate_line_count": 0,
+            "probe_count": 0,
+            "finding_count": 0
+          },
+          "limitations": [
+            {
+              "kind": "diff_scope_oversized",
+              "producer_stage": "analysis_pipeline",
+              "path": null,
+              "affected_items": 1,
+              "bounded_detail": "The run analyzed 1832 changed line(s); every changed file ripr's language adapters read was selected, but the budget was exceeded, so the result stays partial.",
+              "recovery": {
+                "kind": "increase_configured_limit",
+                "detail": "To widen the analyzed partition, raise RIPR_PARTIAL_DIFF_LINE_BUDGET to at least 1832, then re-run."
+              }
+            }
+          ],
+          "claim_boundary": "Static analysis outcome only; no correctness, test-adequacy, runtime-execution, or merge-readiness claim."
+        }
+      },
+      "analysis_scope": {
+        "scope": "diff",
+        "run_status": "limited_partial_scope",
+        "basis": "rust_partial_diff_budget",
+        "downstream_consumable": false,
+        "gate_eligibility": "ineligible",
+        "limitation": "limited_partial_scope",
+        "repair_route": "analysis/diff-scope-budget",
+        "selection_version": "partial-diff-v1",
+        "language_tier_version": "lang-tier-v1",
+        "diff_identity": "sha256:2ce6c0cc3ebca4d08cb49c7a7ef367724c9cf484fe8d9fabb55a122974ec49de",
+        "partition_identity": "efeed98557dff944a4cd65e5d675495aafb73c91ea196860e7654875592260b0",
+        "file_budget": 200,
+        "line_budget": 1000,
+        "budget_disclosures": [],
+        "selected_files": [
+          "tests/ci_efficiency_baseline.rs"
+        ],
+        "selected_changed_lines": 1832,
+        "uninspected_files_lower_bound": 0,
+        "uninspected_changed_lines_lower_bound": 0,
+        "stop_reason": "line_budget_exceeded_on_first_file",
+        "continuation": "partial result: raise RIPR_PARTIAL_DIFF_LINE_BUDGET to at least 1832, then re-run; named partition continuation is not available"
+      },
+      "run_limitations": null,
+      "status": null,
+      "message": null,
+      "rendered_findings": 0,
+      "warnings_count": 0
+    }
+  ],
+  "correspondence": {
+    "historical_rows": 129,
+    "current_counterparts": 0,
+    "old_buckets": {
+      "declaration_subject_with_rendered_same_target_relations; omitted_relations_unverified": 7,
+      "foreign_Cargo_target_relation_positively_rendered; omitted_relations_unverified": 57,
+      "rendered_same_target_relations; omitted_relations_unverified": 65
+    },
+    "file": "1460-row-correspondence.json"
+  },
+  "controls": {
+    "production-owner": {
+      "sha256": "09d18f39bbed2f49572cf9eea7b9d837c6c596e24d52971cffbe97ee0086211e",
+      "summary": {
+        "changed_rust_files": 1,
+        "probes": 1,
+        "findings": 1,
+        "exposed": 0,
+        "weakly_exposed": 0,
+        "reachable_unrevealed": 0,
+        "no_static_path": 0,
+        "infection_unknown": 1,
+        "propagation_unknown": 0,
+        "static_unknown": 0,
+        "changed_files_by_language": [
+          {
+            "language": "rust",
+            "files": 1
+          }
+        ]
+      },
+      "analysis_outcome": {
+        "analysis_complete": true,
+        "outcome": {
+          "schema_version": "0.1",
+          "kind": "complete_with_findings",
+          "identity": {
+            "repository_identity": null,
+            "root_identity": null,
+            "config_identity": null,
+            "base_revision": null,
+            "input_identity": "sha256:5e674f7c4964fce864db694a405daa52a758360bd174ff5c8e3b76199693d720",
+            "snapshot_identity": null,
+            "git_candidate_subject": null
+          },
+          "counts": {
+            "changed_file_count": 1,
+            "changed_line_count": 2,
+            "candidate_line_count": 1,
+            "probe_count": 1,
+            "finding_count": 1
+          },
+          "limitations": [],
+          "claim_boundary": "Static analysis outcome only; no correctness, test-adequacy, runtime-execution, or merge-readiness claim."
+        }
+      }
+    },
+    "cfg-test": {
+      "sha256": "40057ad74bb7693cc3c6dee5849c108b14337b1c94cde96494fdeb44c29d9fd3",
+      "summary": {
+        "changed_rust_files": 1,
+        "probes": 0,
+        "findings": 0,
+        "exposed": 0,
+        "weakly_exposed": 0,
+        "reachable_unrevealed": 0,
+        "no_static_path": 0,
+        "infection_unknown": 0,
+        "propagation_unknown": 0,
+        "static_unknown": 0,
+        "changed_files_by_language": [
+          {
+            "language": "rust",
+            "files": 1
+          }
+        ]
+      },
+      "analysis_outcome": {
+        "analysis_complete": true,
+        "outcome": {
+          "schema_version": "0.1",
+          "kind": "no_behavioral_candidates",
+          "identity": {
+            "repository_identity": null,
+            "root_identity": null,
+            "config_identity": null,
+            "base_revision": null,
+            "input_identity": "sha256:60918865b3eaea95a5233a98e14a10fe209fa661945ad5a52fe4c80a3c3b16d7",
+            "snapshot_identity": null,
+            "git_candidate_subject": null
+          },
+          "counts": {
+            "changed_file_count": 1,
+            "changed_line_count": 2,
+            "candidate_line_count": 0,
+            "probe_count": 0,
+            "finding_count": 0
+          },
+          "limitations": [],
+          "claim_boundary": "Static analysis outcome only; no correctness, test-adequacy, runtime-execution, or merge-readiness claim."
+        }
+      }
+    }
+  },
+  "nonclaims": [
+    "release qualification",
+    "public package identity",
+    "consumer adoption or pinned-adapter compatibility",
+    "required gate clearance",
+    "oracle promotion or adequate tests",
+    "fix of foreign-target or fallible-helper or relative-member-root defects"
+  ],
+  "remaining_index_context_note": "tests/common/cli_lock.rs:rust_module_ambiguous_parent"
+}
