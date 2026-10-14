@@ -1,0 +1,103 @@
+   Compiling xtask v0.1.0 (/workspace/scratch/2e70149a8e59/audit-reader-inputio-e5fc48d/xtask)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.94s
+     Running unittests src/main.rs (/workspace/scratch/2e70149a8e59/audit-reader-inputio-195-target/debug/deps/xtask-73afb058809d4af4)
+
+running 72 tests
+test ripr_install_hint_uses_the_content_addressed_identity_contract ... ok
+test task_projection_reader::reader::tests::canonical_json_sorts_nested_utf8_keys_and_retains_exact_u128 ... ok
+test task_projection_reader::reader::tests::aggregate_overflow_reads_remaining_plus_one_and_charges_probe ... ok
+test task_projection_reader::reader::tests::bounded_row_and_string_helpers_fail_closed ... ok
+test task_projection_reader::reader::tests::aggregate_cap_accepts_exact_total_then_refuses_even_empty_input ... ok
+test task_projection_reader::reader::tests::file_overflow_charges_exactly_one_probe_byte_and_caches_error ... ok
+test task_projection_reader::reader::tests::canonical_report_metadata_is_sorted_compact_utf8_without_native_numbers ... ok
+test task_projection_reader::reader::tests::input_must_be_a_regular_file_and_missing_child_is_unavailable ... ok
+test task_projection_reader::reader::tests::integer_domains_reject_bool_fraction_negative_and_overflow ... ok
+test task_projection_reader::reader::tests::mapping_missing_or_null_is_empty_but_nonobject_is_invalid ... ok
+test task_projection_reader::reader::tests::issues_are_deduplicated_bounded_and_sanitize_control_text ... ok
+test task_projection_reader::reader::tests::missing_optional_input_remains_cached_on_required_revisit ... ok
+test task_projection_reader::reader::tests::labels_use_bounded_debug_printable_unicode_rendering ... ok
+test task_projection_reader::reader::tests::file_cap_accepts_exact_limit_and_empty_files ... ok
+test task_projection_reader::reader::tests::native_decoder_handles_odd_even_backslashes_and_surrogate_keys ... ok
+test task_projection_reader::reader::tests::json_load_preserves_raw_inventory_on_invalid_json_shape_or_schema ... ok
+test task_projection_reader::reader::tests::lease_quantities_obey_u32_and_u64_domains_without_bool_coercion ... ok
+test task_projection_reader::reader::tests::every_symlink_component_is_rejected_including_broken_links ... ok
+test task_projection_reader::reader::tests::native_decoder_independently_enforces_json_lexical_grammar ... ok
+test task_projection_reader::reader::tests::production_limits_are_pinned ... ok
+test task_projection_reader::reader::tests::real_private_number_keys_remain_objects ... ok
+test task_projection_reader::reader::tests::root_must_exist_and_be_a_directory ... ok
+test task_projection_reader::reader::tests::strict_json_rejects_recursive_and_escape_decoded_duplicate_keys ... ok
+test task_projection_reader::reader::tests::root_is_resolved_once_and_root_symlink_is_allowed ... ok
+test task_projection_reader::reader::tests::strict_json_rejects_nonfinite_numbers_encoding_bom_and_trailing_data ... ok
+test task_projection_reader::reader::tests::paths_require_canonical_posix_relative_spelling ... ok
+test task_projection_reader::reader::tests::successful_reads_cache_raw_bytes_and_source_digest ... ok
+test task_projection_reader::reader::tests::unique_attempt_limit_counts_missing_and_invalid_names ... ok
+test tests::affected_packages_include_package_manifest_changes ... ok
+test tests::affected_packages_include_all_packages_for_root_manifest_and_lockfile ... ok
+test tests::clippy_findings_do_not_expand_empty_line_sets_to_whole_file ... ok
+test tests::bun_gate_pin_policy_accepts_consistent_docs ... ok
+test tests::clip_capture_bounds_streams_with_head_tail_and_marker ... ok
+test tests::bun_gate_pin_policy_rejects_example_pin_drift ... ok
+test tests::epoch_to_ymd_matches_known_dates ... ok
+test tests::local_ripr_console_capture_is_bounded_and_keeps_head_and_tail ... ok
+test tests::clippy_findings_match_absolute_diagnostic_paths ... ok
+test tests::local_ripr_options_and_rust_input_contract_are_explicit ... ok
+test tests::local_ripr_missing_tool_is_loud_and_clears_stale_artifacts ... ok
+test tests::local_ripr_fake_tool_receives_exact_ready_mode_argv_and_preserves_outputs ... ok
+test tests::local_ripr_schema_reconciles_suppressed_and_exposed_findings ... ok
+test task_projection_reader::reader::tests::path_metadata_io_failure_is_distinct_and_cached ... ok
+test tests::local_ripr_clean_and_non_rust_diffs_are_explicit_skips ... ok
+test tests::missing_tool_install_hints_match_standard_runner_fixes ... ok
+test tests::parse_policy_date_accepts_valid_yyyy_mm_dd ... ok
+test tests::missing_tool_receipt_is_never_success_and_carries_install_hint ... ok
+test tests::parse_policy_date_rejects_impossible_calendar_dates ... ok
+test tests::parse_policy_date_rejects_bad_shapes ... ok
+test tests::precommit_out_dir_starts_fresh ... ok
+test tests::ripr_suppression_ledger_policy_accepts_well_formed_entries ... ok
+test tests::ripr_suppression_ledger_policy_rejects_headerless_append ... ok
+test tests::ripr_suppression_ledger_policy_rejects_duplicate_finding_id ... ok
+test tests::ripr_suppression_ledger_policy_rejects_malformed_toml ... ok
+test tests::ripr_suppression_ledger_policy_rejects_missing_required_field ... ok
+test tests::ripr_suppression_ledger_policy_rejects_non_table_entries ... ok
+test tests::ripr_suppression_ledger_policy_rejects_non_array_suppressions_key ... ok
+test tests::local_ripr_no_common_ancestor_has_actionable_shallow_clone_error ... ok
+test tests::smoke_script_locks_every_cargo_invocation ... ok
+test tests::ripr_suppression_ledger_policy_rejects_whitespace_only_required_field ... ok
+test tests::today_uses_the_actual_wall_clock_date ... ok
+test tests::validate_allow_at_keeps_overdue_review_and_same_day_expiry_valid ... ok
+test tests::validate_allow_at_uses_injected_date_for_expiry_boundary ... ok
+test tests::validate_allow_date_validation_rejects_expires_before_review ... ok
+test tests::validate_allow_date_validation_rejects_unparseable_dates ... ok
+test tests::validate_allow_date_validation_rejects_review_before_created ... ok
+test tests::local_ripr_nonzero_tool_exit_preserves_raw_output_and_fails ... ok
+test tests::local_ripr_rejects_untracked_rust_and_missing_merge_base ... ok
+test tests::local_ripr_unsuppressed_count_is_advisory_not_a_local_threshold ... ok
+test tests::smoke_base_rejects_shallow_and_empty_history_with_actionable_errors ... ok
+test tests::local_ripr_wrong_version_and_malformed_badge_fail_closed ... ok
+test task_projection_reader::reader::tests::native_decoder_bounds_source_depth_containers_and_total_nodes ... ok
+test task_projection_reader::reader::tests::exact_production_file_aggregate_and_attempt_limits ... ok
+
+test result: ok. 72 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.14s
+
+     Running tests/smoke_base_cli.rs (/workspace/scratch/2e70149a8e59/audit-reader-inputio-195-target/debug/deps/smoke_base_cli-9a26dbc847881c91)
+
+running 1 test
+test smoke_base_cli_prints_one_usable_resolved_revision ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/task_projection_reader_parity.rs (/workspace/scratch/2e70149a8e59/audit-reader-inputio-195-target/debug/deps/task_projection_reader_parity-ab76208b8113547c)
+
+running 10 tests
+test serde_json_ambient_contract_keeps_private_number_keys_as_objects ... ok
+test serde_json_ambient_contract_keeps_private_raw_value_keys_as_objects ... ok
+test malformed_source_retains_independent_later_input_evidence ... ok
+test serde_json_ambient_contract_rejects_nonfinite_float_exponents ... ok
+test sensor_parent_symlink_cannot_escape_reader_root ... ok
+test worker_reader_preserves_full_u128_duration_domain ... ok
+test escaped_source_inventory_report_overflow_retains_bounded_unavailable_receipt ... ok
+test actual_reader_matches_python_packet_sources_and_cached_bytes ... ok
+test actual_reader_records_explicit_tighter_python_encoding_and_number_boundary ... ok
+test actual_reader_matches_python_strict_json_on_bounded_grammar_vectors ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+

@@ -1,0 +1,50 @@
+   Compiling xtask v0.1.0 (/workspace/scratch/2e70149a8e59/review-reader-inputio-6549a9f/xtask)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.74s
+     Running unittests src/main.rs (/workspace/scratch/2e70149a8e59/review-reader-inputio-target/debug/deps/xtask-73afb058809d4af4)
+
+running 30 tests
+test task_projection_reader::reader::tests::canonical_report_metadata_is_sorted_compact_utf8_without_native_numbers ... ok
+test task_projection_reader::reader::tests::canonical_json_sorts_nested_utf8_keys_and_retains_exact_u128 ... ok
+test task_projection_reader::reader::tests::bounded_row_and_string_helpers_fail_closed ... ok
+test task_projection_reader::reader::tests::aggregate_overflow_reads_remaining_plus_one_and_charges_probe ... ok
+test task_projection_reader::reader::tests::aggregate_cap_accepts_exact_total_then_refuses_even_empty_input ... ok
+test task_projection_reader::reader::tests::every_symlink_component_is_rejected_including_broken_links ... ok
+test task_projection_reader::reader::tests::file_overflow_charges_exactly_one_probe_byte_and_caches_error ... ok
+test task_projection_reader::reader::tests::integer_domains_reject_bool_fraction_negative_and_overflow ... ok
+test task_projection_reader::reader::tests::issues_are_deduplicated_bounded_and_sanitize_control_text ... ok
+test task_projection_reader::reader::tests::lease_quantities_obey_u32_and_u64_domains_without_bool_coercion ... ok
+test task_projection_reader::reader::tests::json_load_preserves_raw_inventory_on_invalid_json_shape_or_schema ... ok
+test task_projection_reader::reader::tests::mapping_missing_or_null_is_empty_but_nonobject_is_invalid ... ok
+test task_projection_reader::reader::tests::missing_optional_input_remains_cached_on_required_revisit ... ok
+test task_projection_reader::reader::tests::labels_use_bounded_debug_printable_unicode_rendering ... ok
+test task_projection_reader::reader::tests::native_decoder_handles_odd_even_backslashes_and_surrogate_keys ... ok
+test task_projection_reader::reader::tests::production_limits_are_pinned ... ok
+test task_projection_reader::reader::tests::native_decoder_independently_enforces_json_lexical_grammar ... ok
+test task_projection_reader::reader::tests::paths_require_canonical_posix_relative_spelling ... ok
+test task_projection_reader::reader::tests::file_cap_accepts_exact_limit_and_empty_files ... ok
+test task_projection_reader::reader::tests::input_must_be_a_regular_file_and_missing_child_is_unavailable ... ok
+test task_projection_reader::reader::tests::real_private_number_keys_remain_objects ... ok
+test task_projection_reader::reader::tests::root_must_exist_and_be_a_directory ... ok
+test task_projection_reader::reader::tests::strict_json_rejects_recursive_and_escape_decoded_duplicate_keys ... ok
+test task_projection_reader::reader::tests::unique_attempt_limit_counts_missing_and_invalid_names ... ok
+test task_projection_reader::reader::tests::strict_json_rejects_nonfinite_numbers_encoding_bom_and_trailing_data ... ok
+test task_projection_reader::reader::tests::successful_reads_cache_raw_bytes_and_source_digest ... ok
+test task_projection_reader::reader::tests::root_is_resolved_once_and_root_symlink_is_allowed ... ok
+test task_projection_reader::reader::tests::path_metadata_io_failure_is_distinct_and_cached ... ok
+test task_projection_reader::reader::tests::native_decoder_bounds_source_depth_containers_and_total_nodes ... ok
+test task_projection_reader::reader::tests::exact_production_file_aggregate_and_attempt_limits ... ok
+
+test result: ok. 30 passed; 0 failed; 0 ignored; 0 measured; 42 filtered out; finished in 2.23s
+
+     Running tests/smoke_base_cli.rs (/workspace/scratch/2e70149a8e59/review-reader-inputio-target/debug/deps/smoke_base_cli-9a26dbc847881c91)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/task_projection_reader_parity.rs (/workspace/scratch/2e70149a8e59/review-reader-inputio-target/debug/deps/task_projection_reader_parity-ab76208b8113547c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+

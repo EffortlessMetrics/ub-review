@@ -1,0 +1,19 @@
+   Compiling xtask v0.1.0 (/workspace/scratch/2e70149a8e59/audit-reader-inputio-e5fc48d/xtask)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.83s
+     Running unittests src/main.rs (/workspace/scratch/2e70149a8e59/audit-reader-inputio-195-target/debug/deps/xtask-73afb058809d4af4)
+
+running 1 test
+test task_projection_reader::reader::tests::path_metadata_io_failure_is_distinct_and_cached ... FAILED
+
+failures:
+
+---- task_projection_reader::reader::tests::path_metadata_io_failure_is_distinct_and_cached stdout ----
+Error: Condition failed: `reader.confined_path(&name) == Err(PacketError::InputIo)`
+
+
+failures:
+    task_projection_reader::reader::tests::path_metadata_io_failure_is_distinct_and_cached
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 71 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p xtask --bin xtask`

@@ -1,0 +1,127 @@
+{
+  "subject": {
+    "head": "6549a9fed193bba0b5857a1d7f3b776d743a9c8c",
+    "tree": "c6bf736b53e6bd4dca2a1cc0fcb3a854800a3c9c",
+    "sole_parent": "e5fc48da60bc1b887cfdc4efc2ee28d942a0a279",
+    "changed_paths": {
+      "src/task_projection_reconciliation/reader/tests.rs": {
+        "added": 26,
+        "removed": 0
+      }
+    }
+  },
+  "environment": {
+    "cwd": "/workspace/scratch/2e70149a8e59/review-reader-inputio-6549a9f",
+    "cargo_target_dir": "/workspace/scratch/2e70149a8e59/review-reader-inputio-target",
+    "rustc": "1.95.0 (59807616e 2026-04-14)",
+    "cargo": "1.95.0 (f2d3ce0bd 2026-03-21)",
+    "cargo_build_jobs": 2,
+    "cargo_incremental": 0,
+    "platform": "x86_64-unknown-linux-gnu",
+    "environment_source": "/workspace/scratch/2e70149a8e59/toolchains/env.sh"
+  },
+  "checks": [
+    {
+      "command": "cargo test -p xtask --locked task_projection_reader",
+      "exit": 0,
+      "outcome": "30 reader unit tests passed",
+      "log": "pristine-reader.log"
+    },
+    {
+      "command": "cargo test -p xtask --locked",
+      "exit": 0,
+      "outcome": "72 unit + 1 smoke + 10 CLI/parity = 83 tests passed",
+      "log": "pristine-all-xtask.log"
+    },
+    {
+      "command": "cargo clippy -p xtask --all-targets --locked -- -D warnings",
+      "exit": 0,
+      "log": "pristine-clippy.log"
+    },
+    {
+      "command": "cargo fmt --all -- --check",
+      "exit": 0,
+      "log": "pristine-fmt.log"
+    },
+    {
+      "command": "git diff --check HEAD^ HEAD",
+      "exit": 0,
+      "log": "identity.txt"
+    },
+    {
+      "command": "cargo test -p xtask --locked task_projection_reader",
+      "exit": 0,
+      "outcome": "pristine restored; all 30 reader unit tests passed",
+      "log": "restored-reader.log"
+    }
+  ],
+  "controls": [
+    {
+      "name": "inputio-to-unsafepath",
+      "mutated_tree": "cd049895b0ea7bd8491b3130df16820789bfeeab",
+      "mutation": "reader.rs:302 Err(_) => return Err(PacketError::InputIo) changed to UnsafePath",
+      "old_suite_command": "cargo test -p xtask --locked -- --skip path_metadata_io_failure_is_distinct_and_cached",
+      "old_suite_exit": 0,
+      "old_suite_outcome": "71 unchanged unit + 1 smoke + 10 CLI/parity = 82 tests pass; only new test skipped",
+      "command": "cargo test -p xtask --locked path_metadata_io_failure_is_distinct_and_cached",
+      "exit": 101,
+      "failure": "direct confined_path assertion: Err(UnsafePath) vs Err(InputIo)"
+    },
+    {
+      "name": "inputio-fallthrough",
+      "mutated_tree": "e0f961951cdd3aed671b304a6ff151c04aa5e80a",
+      "mutation": "reader.rs:302 metadata-error arm changed to fall through",
+      "command": "cargo test -p xtask --locked path_metadata_io_failure_is_distinct_and_cached",
+      "exit": 101,
+      "failure": "direct confined_path assertion"
+    },
+    {
+      "name": "inputio-cache-bypass",
+      "mutated_tree": "a86127961f545b3d5bc95a13bad2d23e5c08af1d",
+      "mutation": "reader.rs:351 re-enter uncached read branch for CachedInput::Failed(InputIo)",
+      "command": "cargo test -p xtask --locked path_metadata_io_failure_is_distinct_and_cached",
+      "exit": 101,
+      "failure": "load_json zero-budget cached revisit: Err(FileBudgetExceeded) vs Err(InputIo)"
+    }
+  ],
+  "scope": "Independent local exact-head review of Linux metadata InputIo test-only delta. No GitHub write, hosted qualification, merge/adoption authorization or full reconciler clearance.",
+  "artifact_sha256": {
+    "candidate.patch": "90f4077ca5629b14009da901419ea66a48093bc889ca82fdd037521289bf9fd9",
+    "identity.txt": "92dcfe4b82f70930c0b8bb94a289bc3f1256c27d6d4eeff3c80a25c286808cf9",
+    "inputio-cache-bypass-identity.txt": "84b91db7fcfb30c27a62cce3ea172041c65aee7d59f91e17a104c316e1ac4fab",
+    "inputio-cache-bypass-new-test.exit": "39b8dc3fc8b44765c8e6f1adee04c5b465e555ab791cc42d0d9e810d5b64297c",
+    "inputio-cache-bypass-new-test.log": "50adcc4d51f56256430c356526d4a3cf16b2a491e2c4fd29511cfb39b3e81c33",
+    "inputio-cache-bypass.patch": "fd2f7bcdf5a86cf58984b1b4da86fa4b8b33ee2169d7fc0ba539de99258ed7ff",
+    "inputio-fallthrough-identity.txt": "1b76a7cb94a6fbdf6f7be890a5ead525c38f3fb98c34fe3123ebaaa929b4c9a8",
+    "inputio-fallthrough-new-test.exit": "39b8dc3fc8b44765c8e6f1adee04c5b465e555ab791cc42d0d9e810d5b64297c",
+    "inputio-fallthrough-new-test.log": "b75ee467be95617b3e62bd5c217a1d8f15b7a3edbfefc9a471d0fd4cab68568c",
+    "inputio-fallthrough.patch": "7997f9b0f31239b27d11d1da916517fa6c97cfb1b8190f5f6c95bcfcc4fc99cf",
+    "inputio-to-unsafepath-identity.txt": "d02efedfaa27d48e6e9786f51d1dd98166e221f0e7e3bef640222fb7f8eafa6d",
+    "inputio-to-unsafepath-new-test.exit": "39b8dc3fc8b44765c8e6f1adee04c5b465e555ab791cc42d0d9e810d5b64297c",
+    "inputio-to-unsafepath-new-test.log": "babc4b238479cd8e7086538948a603dd4454470486c58c79cc45e2e417e2fade",
+    "inputio-to-unsafepath-old-suite.log": "df76be3dc2fbea5cf60eb7f24f9ebd1033418a84577b9b7f900b42dd00e8a0bd",
+    "inputio-to-unsafepath.patch": "99245ff85954027718dd9214d206e604d8f086be59d094fa1c225e8b18d75e30",
+    "linux-fixture.txt": "9d00ac34e5e029d9dedf97851b400bb64876ecc863ad976f80d3e1df03381b47",
+    "parent-review-bridge.txt": "66f38e39a76e91d28be54f6fe1e9df404e267334e02f703ee9456c680da065aa",
+    "pristine-all-xtask.log": "10efc2fd4819b9a7b789d5b4bbebbb44fe7a789dac991249c5b2d3daf5f67630",
+    "pristine-checks-completed.txt": "e4639d95f594df6ea9cc7faa54e6c9c719f3cf2d566c570edd5b99d0c108d3b8",
+    "pristine-clippy.log": "80f6c195d6876b8e2c1faf488cd254f94a33eb80acbdd0f3bd24873e7c43df92",
+    "pristine-fmt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "pristine-reader.log": "98cc115392dec6ebc0daa7c8cde71737f7e184c3835f9ab77c7d4162e1fc110f",
+    "restored-identity.txt": "ce03ec703ff2aeecb6bbb44c4cdfa90620d66b05b72a332d539d0f3e8c9efd82",
+    "restored-reader.log": "5b105bc17e4d2bb2e31269b126d702d93081b27919a3ce96dafce071303416f1",
+    "published-identity-557d7f82.txt": "925efc00c82bbead55c808f4487ac868e5c212cbcb988d8ba27c1ac5198e5f5b"
+  },
+  "published_head_bridge": {
+    "observed_at": "2026-10-14T21:18:38Z",
+    "published_head": "557d7f82e2584c85f7b8c25ba6ca1aaf3ca45a43",
+    "frozen_head": "6549a9fed193bba0b5857a1d7f3b776d743a9c8c",
+    "sole_parent": "e5fc48da60bc1b887cfdc4efc2ee28d942a0a279",
+    "tree": "c6bf736b53e6bd4dca2a1cc0fcb3a854800a3c9c",
+    "content_diff_exit": 0,
+    "native_rerun_performed": false,
+    "claim": "Fetched published commit object has the identical sole parent and tree as independently reviewed candidate. Same scoped source-review, native positives and compiled-control evidence apply. No remote-ref or hosted qualification claim.",
+    "raw_identity_receipt": "published-identity-557d7f82.txt",
+    "pre_bridge_report_sha256": "422beae0d13287026f25b1dff06da43aa3c4e427abcde2f98c068ed4ab72af5d"
+  }
+}

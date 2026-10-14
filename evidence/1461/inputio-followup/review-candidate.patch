@@ -1,0 +1,37 @@
+diff --git a/src/task_projection_reconciliation/reader/tests.rs b/src/task_projection_reconciliation/reader/tests.rs
+index 6dc7623..2668418 100644
+--- a/src/task_projection_reconciliation/reader/tests.rs
++++ b/src/task_projection_reconciliation/reader/tests.rs
+@@ -203,6 +203,32 @@ fn input_must_be_a_regular_file_and_missing_child_is_unavailable() -> Result<()>
+     Ok(())
+ }
+ 
++#[cfg(target_os = "linux")]
++#[test]
++fn path_metadata_io_failure_is_distinct_and_cached() -> Result<()> {
++    let root = tempdir()?;
++    // Linux rejects this oversized component independently of permissions.
++    let name = "x".repeat(64 * 1024);
++    let mut reader = PacketReader::new(root.path())?;
++    ensure!(reader.confined_path(&name) == Err(PacketError::InputIo));
++    ensure!(reader.attempts() == 0);
++    ensure!(reader.read(&name, false) == Err(PacketError::InputIo));
++    // A cached failure remains available even when no new attempt is allowed.
++    reader.limits.input_files = 0;
++    ensure!(reader.load_json(&name, true) == Err(PacketError::InputIo));
++    ensure!(reader.attempts() == 1 && reader.total_bytes() == 0);
++    ensure!(reader.sources().is_empty() && reader.input_unavailable());
++    ensure!(reader.coverage().get(&name).map(String::as_str) == Some("invalid"));
++    ensure!(reader.issues().len() == 1);
++    ensure!(
++        reader
++            .issues()
++            .iter()
++            .all(|issue| issue.code == "invalid_projection")
++    );
++    Ok(())
++}
++
+ #[cfg(unix)]
+ #[test]
+ fn every_symlink_component_is_rejected_including_broken_links() -> Result<()> {

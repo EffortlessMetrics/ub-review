@@ -1,0 +1,13 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running `/workspace/scratch/2e70149a8e59/audit-reader-inputio-195-target/debug/xtask policy-check`
+warning: /workspace/scratch/2e70149a8e59/audit-reader-inputio-e5fc48d/policy/allow.toml exception `clippy-too-many-arguments-artifact-writers` `review_after` (2026-10-10) is overdue — review or renew
+warning: /workspace/scratch/2e70149a8e59/audit-reader-inputio-e5fc48d/policy/allow.toml exception `task-ledger-shadow` `review_after` (2026-09-27) is overdue — review or renew
+warning: /workspace/scratch/2e70149a8e59/audit-reader-inputio-e5fc48d/policy/allow.toml exception `non-rust-github-actions` `review_after` (2026-10-10) is overdue — review or renew
+warning: /workspace/scratch/2e70149a8e59/audit-reader-inputio-e5fc48d/policy/allow.toml exception `non-rust-config-toml` `review_after` (2026-09-03) is overdue — review or renew
+warning: /workspace/scratch/2e70149a8e59/audit-reader-inputio-e5fc48d/policy/allow.toml exception `non-rust-repo-gate-config` `review_after` (2026-09-06) is overdue — review or renew
+warning: /workspace/scratch/2e70149a8e59/audit-reader-inputio-e5fc48d/policy/allow.toml exception `non-rust-gitattributes` `review_after` (2026-09-21) is overdue — review or renew
+warning: /workspace/scratch/2e70149a8e59/audit-reader-inputio-e5fc48d/policy/allow.toml exception `non-rust-release-scripts` `review_after` (2026-10-10) is overdue — review or renew
+warning: /workspace/scratch/2e70149a8e59/audit-reader-inputio-e5fc48d/policy/allow.toml exception `non-rust-fixtures` `review_after` (2026-09-03) is overdue — review or renew
+warning: /workspace/scratch/2e70149a8e59/audit-reader-inputio-e5fc48d/policy/allow.toml exception `non-rust-action-metadata` `review_after` (2026-09-03) is overdue — review or renew
+warning: /workspace/scratch/2e70149a8e59/audit-reader-inputio-e5fc48d/policy/allow.toml exception `non-rust-ast-grep-rules` `review_after` (2026-09-03) is overdue — review or renew
+policy check passed: 6 policy files, 15 allow receipts, 5 CI lanes, 2 risk packs

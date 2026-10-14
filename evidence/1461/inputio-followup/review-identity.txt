@@ -1,0 +1,32 @@
+2026-10-14T21:13:53Z
+/workspace/scratch/2e70149a8e59/review-reader-inputio-6549a9f
+6549a9fed193bba0b5857a1d7f3b776d743a9c8c
+c6bf736b53e6bd4dca2a1cc0fcb3a854800a3c9c
+e5fc48da60bc1b887cfdc4efc2ee28d942a0a279
+3dbcc2be9768b082c0896dc2360e950ffbd56a65
+cc08312e4c857994a153a537082f6776b0fc54a7
+26	0	src/task_projection_reconciliation/reader/tests.rs
+/workspace/scratch/2e70149a8e59/toolchains/cargo/bin/rustc
+/workspace/scratch/2e70149a8e59/toolchains/cargo/bin/cargo
+rustc 1.95.0 (59807616e 2026-04-14)
+binary: rustc
+commit-hash: 59807616e1fa2540724bfbac14d7976d7e4a3860
+commit-date: 2026-04-14
+host: x86_64-unknown-linux-gnu
+release: 1.95.0
+LLVM version: 22.1.2
+cargo 1.95.0 (f2d3ce0bd 2026-03-21)
+release: 1.95.0
+commit-hash: f2d3ce0bd7f24a49f8f72d9000448f8838c4e850
+commit-date: 2026-03-21
+host: x86_64-unknown-linux-gnu
+libgit2: 1.9.2 (sys:0.20.4 vendored)
+libcurl: 8.15.0-DEV (sys:0.4.83+curl-8.15.0 vendored ssl:OpenSSL/3.5.4)
+ssl: OpenSSL 3.5.4 30 Sep 2025
+os: Debian 13.0.0 [64-bit]
+/workspace/scratch/2e70149a8e59/toolchains/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu
+Linux 320bf68c5273 6.18.44 #1 SMP Sat Sep 26 20:02:31 UTC 2026 x86_64 GNU/Linux
+CARGO_TARGET_DIR=/workspace/scratch/2e70149a8e59/review-reader-inputio-target
+CARGO_BUILD_JOBS=2
+CARGO_INCREMENTAL=0
+PATH=/workspace/scratch/2e70149a8e59/toolchains/review-tools/bin:/workspace/scratch/2e70149a8e59/toolchains/cargo/bin:/opt/codex/runtimes/codex-primary-runtime/dependencies/bin/override:/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin:/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin:/opt/codex/runtimes/codex-primary-runtime/dependencies/bin:/opt/codex/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/agent/.local/bin:/opt/codex/runtimes/codex-primary-runtime/dependencies/bin/fallback

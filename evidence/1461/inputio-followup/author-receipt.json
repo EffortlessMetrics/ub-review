@@ -1,0 +1,189 @@
+{
+  "disposition": "confirmed narrow consumer test-oracle gap; production observed correct; local test-only repair frozen",
+  "frozen_subject": {
+    "head": "e5fc48da60bc1b887cfdc4efc2ee28d942a0a279",
+    "tree": "cc08312e4c857994a153a537082f6776b0fc54a7",
+    "base": "3dbcc2be9768b082c0896dc2360e950ffbd56a65"
+  },
+  "probe": "error_path:ecc52b80",
+  "production_location": "src/task_projection_reconciliation/reader.rs:302 PacketReader::confined_path",
+  "candidate": {
+    "head": "6549a9fed193bba0b5857a1d7f3b776d743a9c8c",
+    "tree": "c6bf736b53e6bd4dca2a1cc0fcb3a854800a3c9c",
+    "parent": "e5fc48da60bc1b887cfdc4efc2ee28d942a0a279"
+  },
+  "changed_paths": [
+    "src/task_projection_reconciliation/reader/tests.rs"
+  ],
+  "added_lines": 26,
+  "test_name": "path_metadata_io_failure_is_distinct_and_cached",
+  "platform_gate": "cfg(target_os = \"linux\")",
+  "fixture": {
+    "component_ascii": "x",
+    "component_bytes": 65536,
+    "permissions_changes": false,
+    "root_assumptions": false,
+    "special_files": false,
+    "races": false
+  },
+  "authoritative_execution": {
+    "cwd": "/workspace/scratch/2e70149a8e59/audit-reader-inputio-e5fc48d",
+    "rustc": "1.95.0 (59807616e 2026-04-14)",
+    "cargo": "1.95.0 (f2d3ce0bd 2026-03-21)",
+    "CARGO_TARGET_DIR": "/workspace/scratch/2e70149a8e59/audit-reader-inputio-195-target",
+    "CARGO_BUILD_JOBS": 2,
+    "CARGO_INCREMENTAL": "0"
+  },
+  "controls": [
+    {
+      "name": "diagnostic mutant, original suite",
+      "tree": "4bc111d0858a674bc155e8b6d4247b985b338c30",
+      "mutation": "confined_path generic metadata Err maps to UnsafePath instead of InputIo",
+      "command": "cargo test -p xtask --locked --jobs 2",
+      "exit": 0,
+      "passed": {
+        "unit": 71,
+        "smoke_cli": 1,
+        "reader_cli": 10
+      },
+      "log": "mutant-existing-suite-195.log"
+    },
+    {
+      "name": "diagnostic mutant, final new test",
+      "tree": "cd049895b0ea7bd8491b3130df16820789bfeeab",
+      "mutation": "same diagnostic change, plus final candidate test",
+      "command": "cargo test -p xtask --locked --jobs 2 path_metadata_io_failure_is_distinct_and_cached",
+      "exit": 101,
+      "compiled": true,
+      "observed": "direct confined_path enum assertion fails Err(UnsafePath) versus Err(InputIo)",
+      "log": "mutant-gated-test-195.log"
+    },
+    {
+      "name": "fallthrough mutant, final new test",
+      "tree": "e0f961951cdd3aed671b304a6ff151c04aa5e80a",
+      "mutation": "confined_path generic metadata Err falls through with empty block",
+      "command": "cargo test -p xtask --locked --jobs 2 path_metadata_io_failure_is_distinct_and_cached",
+      "exit": 101,
+      "compiled": true,
+      "observed": "direct confined_path InputIo assertion fails",
+      "log": "mutant-ignore-test-195.log"
+    }
+  ],
+  "final_validation": [
+    {
+      "command": "cargo test -p xtask --locked --jobs 2",
+      "exit": 0,
+      "passed": {
+        "unit": 72,
+        "smoke_cli": 1,
+        "reader_cli": 10
+      },
+      "log": "final-xtask-195.log"
+    },
+    {
+      "command": "cargo fmt --all -- --check",
+      "exit": 0,
+      "log": "final-fmt-195.log"
+    },
+    {
+      "command": "cargo clippy -p xtask --all-targets --locked --jobs 2 -- -D warnings",
+      "exit": 0,
+      "log": "final-clippy-195.log"
+    },
+    {
+      "command": "cargo run -p xtask --locked --jobs 2 -- policy-check",
+      "exit": 0,
+      "log": "final-policy-195.log",
+      "warnings": "existing overdue policy receipt warnings retained"
+    },
+    {
+      "command": "git diff --check e5fc48da60bc1b887cfdc4efc2ee28d942a0a279 HEAD; git diff --exit-code; git status --porcelain",
+      "exit": 0,
+      "observed": "clean frozen candidate"
+    }
+  ],
+  "preliminary_execution_correction": "Outer-directory --manifest-path invocations selected ambient stable Rust 1.99.0, not repository pin. Both preliminary gap/kill and restored positives were retained, but final proof was independently rerun from lab cwd under Rust/Cargo 1.95.0 with separate target. An outer-directory cargo fmt attempt lacked ambient stable cargo-fmt; final repository-cwd pinned fmt passed.",
+  "limits": [
+    "No observed production correctness bug; this repairs missing test discrimination.",
+    "Fixture is explicitly Linux-only, matching current Ubuntu workflows; no Windows/macOS execution or universal filesystem-error guarantee.",
+    "This exercises confined_path generic symlink_metadata error, not independent fs::metadata, File::open or read_to_end error origins.",
+    "No full workspace check/test/doc/precommit, hosted checks, formal independent review, remote mutation or merge qualification.",
+    "A fully platform-independent OS-error fixture would require an injection seam or separately qualified platform fixtures; no production seam added."
+  ],
+  "immutability": {
+    "candidate_worktree_clean": true,
+    "production_and_policy_config_changed": false,
+    "original_author_reader_and_tests_identical_to_frozen_subject": true,
+    "remote_writes": false
+  },
+  "retained_files": {
+    "toolchain-195.txt": {
+      "bytes": 312,
+      "sha256": "1001c1cc5907c71831f1c5067bcd584cc6e5facd0bd4ba38d150c6f3f5c6d777"
+    },
+    "os-error-trigger.rs": {
+      "bytes": 463,
+      "sha256": "8654004cf7575fdf608634423753fb06060706611632c4ffa9d328ad6f1b1b66"
+    },
+    "os-error-trigger-195.log": {
+      "bytes": 144,
+      "sha256": "a423aabc950a6574156397a0361360cbdecb3f8e3ed2770bafe631a850ff91a3"
+    },
+    "followup-test.patch": {
+      "bytes": 1587,
+      "sha256": "90f4077ca5629b14009da901419ea66a48093bc889ca82fdd037521289bf9fd9"
+    },
+    "mutant-diagnostic.patch": {
+      "bytes": 606,
+      "sha256": "99245ff85954027718dd9214d206e604d8f086be59d094fa1c225e8b18d75e30"
+    },
+    "mutant-ignore.patch": {
+      "bytes": 573,
+      "sha256": "7997f9b0f31239b27d11d1da916517fa6c97cfb1b8190f5f6c95bcfcc4fc99cf"
+    },
+    "mutant-existing-suite-195.log": {
+      "bytes": 9251,
+      "sha256": "874a6cf504f0957ff8be1dd0f7ec8eaabb80f3e6060422d8b83773e51a32fbf0"
+    },
+    "mutant-gated-test-195.log": {
+      "bytes": 917,
+      "sha256": "4f533549db542f5ce5becf3410cee1bd436552aa3a8facbf9613a5f4e1986508"
+    },
+    "mutant-ignore-test-195.log": {
+      "bytes": 883,
+      "sha256": "9b493ad2cfa6829a8d4ee94a7cf1cefbe3aa0b5f61d2fd6926e94db44bfce09e"
+    },
+    "final-xtask-195.log": {
+      "bytes": 8126,
+      "sha256": "56c173a4f2833f3c52bc0a1e74cf610840a9c5fcd92a20a763fa3d2961e88237"
+    },
+    "final-fmt-195.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "final-clippy-195.log": {
+      "bytes": 1171,
+      "sha256": "c53790257048030f6be798f6097a933efe72b25890dfc585a6972ed0b925705c"
+    },
+    "final-policy-195.log": {
+      "bytes": 2095,
+      "sha256": "abb1b5f5f7cb91fe054ce8b5de6e61a44303ed1810ae681e2743008e07bfc084"
+    },
+    "mutant-existing-suite.log": {
+      "bytes": 9143,
+      "sha256": "b19dd45d81d10c354354a567c0c9e072434a919d68d4e5e2960bc6d5ab4c2a08"
+    },
+    "mutant-new-test.log": {
+      "bytes": 872,
+      "sha256": "3b89ff74e6d0343ddac233b8c003bc8b622dbcbdc0e6f7f2a19cf52d6f732856"
+    },
+    "mutant-gated-test.log": {
+      "bytes": 872,
+      "sha256": "66202e793ece832d6276db2b0d576a44a3a890e91545b22208d95586a9f4e160"
+    },
+    "restored-plus-test.log": {
+      "bytes": 8018,
+      "sha256": "398a9c52bd6107405ef9cf077cc2caa6f42d1441d2a2954d7fe786a67b23ace8"
+    }
+  }
+}
