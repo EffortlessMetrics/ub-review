@@ -144,6 +144,35 @@ fn currentness_1067_schema_counter_and_completeness_controls() -> Result<()> {
 }
 
 #[test]
+fn currentness_1067_agreed_typed_counts_require_retained_row_denominator() -> Result<()> {
+    for (finding_count, probe_count) in [
+        (0, 46),
+        (45, 46),
+        (47, 46),
+        (46, 0),
+        (46, 45),
+        (46, 47),
+        (0, 0),
+        (45, 45),
+        (47, 47),
+    ] {
+        let (mut raw, mut badge) = fixture(true);
+        // Retained rows, raw summary and native counts stay at 46; only the
+        // mutually agreeing typed outcome counts carry a false denominator.
+        badge["analysis_outcome"]["counts"] =
+            json!({"finding_count": finding_count, "probe_count": probe_count});
+        raw["analysis_outcome"]["outcome"] = badge["analysis_outcome"].clone();
+        let error = verify(&raw, &badge, Admission::CandidateA734, CANDIDATE_SOURCE)
+            .err()
+            .ok_or_else(|| {
+                anyhow::anyhow!("accepted typed counts ({finding_count}, {probe_count})")
+            })?;
+        assert_eq!(error.to_string(), "typed denominator");
+    }
+    Ok(())
+}
+
+#[test]
 fn currentness_1067_duplicate_ids_and_keys_reject() {
     let (mut raw, badge) = fixture(true);
     raw["findings"][45]["id"] = raw["findings"][0]["id"].clone();
