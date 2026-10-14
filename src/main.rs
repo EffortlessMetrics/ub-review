@@ -4456,7 +4456,11 @@ fn cmd_plan(args: PlanArgs) -> Result<()> {
         prepare_plan(&args.review, args.allow_heavy, &args.selectors)?;
     // Plan previews use the standard run defaults, including applicable repo
     // lanes. Resolve selectors before printing or publishing any artifacts.
-    let mut lanes = review_lanes_for_width(STANDARD_LANE_WIDTH, &plan);
+    let mut lanes = if config.review.enable_default_lanes {
+        review_lanes_for_width(STANDARD_LANE_WIDTH, &plan)
+    } else {
+        Vec::new()
+    };
     merge_repo_lanes_into(&mut lanes, &plan.repo_lanes);
     let include = parse_selector_set(&args.selectors.lanes, "--lanes")?;
     let exclude = parse_selector_set(&args.selectors.except_lanes, "--except-lanes")?;
