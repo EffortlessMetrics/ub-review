@@ -103,15 +103,32 @@ pub(crate) fn coverage_summary_receipt(dir: &Path) -> serde_json::Value {
             status = "collected";
             reason = "lcov.info parsed";
         }
-        for line in text.lines().filter(|_| status == "collected") {
-            if let Some(value) = line.strip_prefix("LF:") {
-                lines_found += parse_lcov_count(value);
+        for line in text.lines() {
+            if status != "collected" {
+                break;
+            }
+            let field = if let Some(value) = line.strip_prefix("LF:") {
+                Some((&mut lines_found, value))
             } else if let Some(value) = line.strip_prefix("LH:") {
-                lines_hit += parse_lcov_count(value);
+                Some((&mut lines_hit, value))
             } else if let Some(value) = line.strip_prefix("FNF:") {
-                functions_found += parse_lcov_count(value);
-            } else if let Some(value) = line.strip_prefix("FNH:") {
-                functions_hit += parse_lcov_count(value);
+                Some((&mut functions_found, value))
+            } else {
+                line.strip_prefix("FNH:")
+                    .map(|value| (&mut functions_hit, value))
+            };
+            if let Some((total, value)) = field {
+                if let Some(sum) = total.checked_add(parse_lcov_count(value)) {
+                    *total = sum;
+                } else {
+                    status = "unknown";
+                    reason = "lcov.info coverage totals overflow";
+                    lines_found = 0;
+                    lines_hit = 0;
+                    functions_found = 0;
+                    functions_hit = 0;
+                    break;
+                }
             }
         }
     }
@@ -142,6 +159,66 @@ mod tests {
     use anyhow::Result;
 
     use crate::*;
+
+    #[test]
+    fn coverage_summary_rejects_aggregate_count_overflow() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        for count in ["LF", "LH", "FNF", "FNH"] {
+            fs::write(
+                temp.path().join("lcov.info"),
+                format!(
+                    "SF:src/a.rs\nLF:1\nLH:1\nFNF:1\nFNH:1\nend_of_record\nSF:src/b.rs\n{count}:18446744073709551615\nend_of_record\n"
+                ),
+            )?;
+            let receipt = super::coverage_summary_receipt(temp.path());
+            assert_eq!(receipt["status"], "unknown");
+            assert_eq!(receipt["reason"], "lcov.info coverage totals overflow");
+            for totals in ["line_totals", "function_totals"] {
+                assert_eq!(receipt[totals]["found"], 0);
+                assert_eq!(receipt[totals]["hit"], 0);
+            }
+            assert_eq!(receipt["lcov"]["present"], true);
+            assert_eq!(receipt["correctness_claim"], false);
+            for status in ["ok", "failed", "timed_out", "missing"] {
+                super::write_coverage_status_receipt(
+                    temp.path(),
+                    SensorStatusWrite {
+                        status,
+                        argv: &[],
+                        duration_ms: 0,
+                        reason: "process outcome",
+                        exit_code: None,
+                        timed_out: status == "timed_out",
+                    },
+                )?;
+                let sidecar: serde_json::Value =
+                    serde_json::from_slice(&fs::read(temp.path().join("status.json"))?)?;
+                assert_eq!(sidecar["status"], status);
+                assert_eq!(sidecar["reason"], "process outcome");
+                assert_eq!(sidecar["summary"]["status"], "unknown");
+                assert_eq!(sidecar["lcov"]["present"], true);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn coverage_summary_accepts_representable_count_limits() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let record = "SF:src/a.rs\nLF:18446744073709551615\nLH:18446744073709551615\nFNF:18446744073709551615\nFNH:18446744073709551615\nend_of_record";
+        for separator in ["\n", "\r\n"] {
+            let text = format!("{record}\nSF:src/a.rs\nLF:0\nLH:0\nFNF:0\nFNH:0\nend_of_record")
+                .replace('\n', separator);
+            fs::write(temp.path().join("lcov.info"), text)?;
+            let receipt = super::coverage_summary_receipt(temp.path());
+            assert_eq!(receipt["status"], "collected");
+            for totals in ["line_totals", "function_totals"] {
+                assert_eq!(receipt[totals]["found"], u64::MAX);
+                assert_eq!(receipt[totals]["hit"], u64::MAX);
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn coverage_summary_rejects_truncated_record() -> Result<()> {
