@@ -2049,16 +2049,97 @@ phase = "sometime"
         Ok(())
     }
 
+    #[test]
+    fn provider_shape_writer_failures_reject_partial_plan_artifacts() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let blocked = out.join("input/claims.md");
+        fs::create_dir_all(&blocked)?;
+        let expected = fs::write(&blocked, b"independent control")
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("directory must reject the control write"))?;
+        let result = provider_shape_artifacts_in(
+            "[providers]\nminimax = [\"SYNTHETIC_PRIVATE_VALUE_1427\"]\n",
+            temp.path(),
+        );
+        let effective: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("effective-config.json"))?)?;
+        anyhow::ensure!(
+            effective["policy_errors"]
+                == serde_json::json!([
+                    {"section": "providers.minimax", "detail": "invalid [providers.minimax]: expected a table, found array"}
+                ])
+        );
+        let error = result.err().ok_or_else(|| {
+            anyhow::anyhow!("partial plan artifacts must not count as writer success")
+        })?;
+        let io = error
+            .root_cause()
+            .downcast_ref::<std::io::Error>()
+            .ok_or_else(|| anyhow::anyhow!("writer failure must retain its I/O cause: {error}"))?;
+        anyhow::ensure!(io.kind() == expected.kind());
+        anyhow::ensure!(!out.join("review/gate_outcome.json").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn provider_shape_writer_failures_reject_partial_review_artifacts() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let blocked = out.join("review/provider-preflight-status.json");
+        fs::create_dir_all(&blocked)?;
+        let expected = fs::write(&blocked, b"independent control")
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("directory must reject the control write"))?;
+        let result = provider_shape_artifacts_in(
+            "[providers]\nminimax = [\"SYNTHETIC_PRIVATE_VALUE_1427\"]\n",
+            temp.path(),
+        );
+        let effective: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("effective-config.json"))?)?;
+        let gate: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/gate_outcome.json"))?)?;
+        anyhow::ensure!(
+            effective["policy_errors"]
+                == serde_json::json!([
+                    {"section": "providers.minimax", "detail": "invalid [providers.minimax]: expected a table, found array"}
+                ])
+        );
+        anyhow::ensure!(gate["conclusion"] == "fail");
+        anyhow::ensure!(
+            gate["reasons"]
+                == serde_json::json!([
+                    {"kind": "policy", "id": "providers.minimax", "detail": "invalid [providers.minimax]: expected a table, found array", "receipt": "effective-config.json"}
+                ])
+        );
+        let error = result.err().ok_or_else(|| {
+            anyhow::anyhow!("partial review artifacts must not count as writer success")
+        })?;
+        let io = error
+            .root_cause()
+            .downcast_ref::<std::io::Error>()
+            .ok_or_else(|| anyhow::anyhow!("writer failure must retain its I/O cause: {error}"))?;
+        anyhow::ensure!(io.kind() == expected.kind());
+        Ok(())
+    }
+
     // Exercise the real file reader and both production artifact writers with
     // model work disabled, synthetic inputs, and no sensor or proof execution.
     fn provider_shape_artifacts(
         text: &str,
     ) -> Result<(Config, serde_json::Value, serde_json::Value)> {
         let temp = tempfile::tempdir()?;
-        let config_path = temp.path().join("synthetic.toml");
+        provider_shape_artifacts_in(text, temp.path())
+    }
+
+    fn provider_shape_artifacts_in(
+        text: &str,
+        root: &Path,
+    ) -> Result<(Config, serde_json::Value, serde_json::Value)> {
+        let config_path = root.join("synthetic.toml");
         fs::write(&config_path, text)?;
         let config = Config::load_or_default(&config_path, Some("gh-runner"))?;
-        let out = temp.path().join("out");
+        let out = root.join("out");
         let plan = crate::tests::test_plan(Vec::new());
         let diff = crate::tests::test_diff();
         let box_state = crate::BoxState {
@@ -2086,7 +2167,7 @@ phase = "sometime"
         let event_log = crate::EventLog::open(&out.join("events.ndjson"))?;
         let started = std::time::Instant::now();
         crate::write_review_artifacts(
-            temp.path(),
+            root,
             &out,
             &config,
             &diff,
