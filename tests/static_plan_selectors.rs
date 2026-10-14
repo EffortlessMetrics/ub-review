@@ -337,3 +337,26 @@ fn static_plan_without_write_applies_selectors_without_creating_artifacts() -> R
     assert!(!out.exists());
     Ok(())
 }
+
+#[cfg(unix)]
+#[test]
+fn plan_args_rejects_non_utf8_output_path() -> Result<()> {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let out = PathBuf::from(OsString::from_vec(b"fixture-output-\xff".to_vec()));
+    assert!(
+        out.to_str().is_none(),
+        "control must contain a non-UTF8 output path"
+    );
+    match plan_args(&out, &[]) {
+        Err(error) => assert!(
+            error.to_string().starts_with("path is not valid UTF-8: "),
+            "fixture adapter returned the wrong error: {error}"
+        ),
+        Ok(arguments) => anyhow::bail!(
+            "non-UTF8 fixture path was silently converted into successful arguments: {arguments:?}"
+        ),
+    }
+    Ok(())
+}
