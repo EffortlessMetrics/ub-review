@@ -190,6 +190,9 @@ fn execute_pending_review_delivery_with_transport(
     // has no new inline comments, deliver the replies directly and retain the
     // exact current-head receipt packet without manufacturing a review id.
     if !review.comments.is_empty() && remaining_inline.is_empty() {
+        if !remaining_replies.is_empty() {
+            reserve_delivery_attempt(args, api, repo, pull_number, &expected_head, api_payload)?;
+        }
         let replies = execute_reply_deliveries(
             ReplyDeliveryContext {
                 args,
@@ -267,6 +270,7 @@ fn execute_pending_review_delivery_with_transport(
     let pending_payload_path = args.out.join("delivery-pending-review-payload.json");
     write_json(&pending_payload_path, &pending_payload)?;
 
+    reserve_delivery_attempt(args, api, repo, pull_number, &expected_head, api_payload)?;
     let mut review_id = None;
     let result = (|| -> Result<PendingReviewPostOutcome> {
         let pending = transport.send_json(
@@ -481,6 +485,49 @@ fn execute_pending_review_delivery_with_transport(
     }
 }
 
+// Reserve before the first remote write, retaining even a partial reservation
+// after failure. An absent response cannot prove the server did not publish.
+// Exact receipted reuse happens before this boundary; another write requires
+// explicit reconciliation of the previous attempt, never an automatic retry.
+fn reserve_delivery_attempt(
+    args: &PostArgs,
+    api: &str,
+    repo: &str,
+    pull_number: u64,
+    exact_head_sha: &str,
+    payload: &GitHubReviewPostPayload,
+) -> Result<()> {
+    use std::io::Write;
+
+    let reservation = serde_json::to_vec_pretty(&serde_json::json!({
+        "schema": "ub-review.delivery_attempt.v1",
+        "api": api,
+        "repo": repo,
+        "pull_number": pull_number,
+        "exact_head_sha": exact_head_sha,
+        "payload_digest": sha256_hex(&serde_json::to_vec(payload)?),
+    }))?;
+    fs::create_dir_all(&args.out)?;
+    let path = args.out.join("delivery-attempt.json");
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .with_context(|| {
+            format!(
+                "reserve {}; reconcile the previous delivery attempt before another GitHub write",
+                path.display()
+            )
+        })?;
+    file.write_all(&reservation)?;
+    file.sync_all()?;
+    // Unix permits syncing the containing directory as well as the new file.
+    // Other platforms retain process-retry safety without a crash guarantee.
+    #[cfg(unix)]
+    fs::File::open(&args.out)?.sync_all()?;
+    Ok(())
+}
+
 fn load_claim_graph(args: &PostArgs) -> Result<serde_json::Value> {
     let graph_path = args
         .review_json
@@ -685,6 +732,20 @@ fn prior_confirmed_deliveries(
             receipts.extend(array.iter().cloned());
         }
     }
+    let reserved_attempt = args.out.join("delivery-attempt.json").exists();
+    let transaction_path = args.out.join("delivery-transaction.json");
+    let inline_submission_confirmed = if reserved_attempt {
+        if transaction_path.exists() {
+            let value: serde_json::Value = serde_json::from_slice(&fs::read(&transaction_path)?)?;
+            let transaction: DeliveryTransaction = serde_json::from_value(value.clone())?;
+            transaction.state() == &DeliveryTransactionState::ReceiptsPersisted
+                && value["exact_head_sha"] == exact_head_sha
+        } else {
+            false
+        }
+    } else {
+        true
+    };
     let mut confirmed = Vec::new();
     let mut confirmed_comment_ids = BTreeSet::new();
     for item in planned {
@@ -705,7 +766,11 @@ fn prior_confirmed_deliveries(
                     == Some(&serde_json::Value::String(exact_head_sha.to_owned()))
                 && receipt.get("comment_id").is_some()
         });
-        if current.is_some() && (receipt_match || item.action() == DeliveryAction::Reply) {
+        if current.is_some()
+            && ((receipt_match
+                && (item.action() == DeliveryAction::Reply || inline_submission_confirmed))
+                || (item.action() == DeliveryAction::Reply && !reserved_attempt))
+        {
             let comment_id = json_identifier(
                 current.ok_or_else(|| anyhow::anyhow!("confirmed current comment absent"))?,
                 "id",
@@ -1516,6 +1581,192 @@ mod tests {
             },
             http_status: Some(if success { 200 } else { 500 }),
         })
+    }
+
+    #[test]
+    fn lost_submission_response_retry_never_sends_another_review() -> Result<()> {
+        uncertain_delivery_retry(false)
+    }
+
+    #[test]
+    fn receipt_write_failure_retry_never_sends_another_review() -> Result<()> {
+        uncertain_delivery_retry(true)
+    }
+
+    fn uncertain_delivery_retry(receipt_write_failure: bool) -> Result<()> {
+        {
+            let temp = tempfile::tempdir()?;
+            fs::write(
+                temp.path().join("claim_graph.json"),
+                serde_json::to_vec(&graph_for("src/lib.rs", 12, "inline", HEAD))?,
+            )?;
+            let args = delivery_args(temp.path(), "http://scripted");
+            if receipt_write_failure {
+                fs::create_dir_all(args.out.join("post-stdout.json"))?;
+            }
+            let (review, payload) = delivery_review();
+            let make_transport = || -> Result<ScriptedTransport> {
+                Ok(ScriptedTransport {
+                    gets: VecDeque::from([
+                        serde_json::json!({"head": {"sha": HEAD}}),
+                        returned("exact body"),
+                        serde_json::json!({"head": {"sha": HEAD}}),
+                    ]),
+                    sends: VecDeque::from([
+                        scripted_output(r#"{"id":987}"#, true)?,
+                        scripted_output(r#"{"id":987,"state":"commented"}"#, true)?,
+                    ]),
+                })
+            };
+            let mut first = make_transport()?;
+            if !receipt_write_failure {
+                // The server accepted submission; its response was lost in transit.
+                first.sends[1] = scripted_output("", false)?;
+                first.sends.push_back(scripted_output("", false)?);
+            }
+            ensure!(
+                execute_pending_review_delivery_with_transport(
+                    &args, &review, &payload, &mut first
+                )
+                .is_err(),
+                "uncertain delivery claimed success"
+            );
+            ensure!(!args.out.join("delivery-receipts.json").exists());
+            if receipt_write_failure {
+                fs::remove_dir(args.out.join("post-stdout.json"))?;
+            }
+            let mut retry = make_transport()?;
+            let result = execute_pending_review_delivery_with_transport(
+                &args, &review, &payload, &mut retry,
+            );
+            ensure!(
+                retry.sends.len() == 2,
+                "retry sent duplicate review after receipt_write_failure={receipt_write_failure}"
+            );
+            ensure!(result.is_err(), "uncertain delivery retry claimed success");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn delivery_reservation_is_exclusive_and_contains_no_token() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let args = delivery_args(temp.path(), "http://scripted");
+        let (_, payload) = delivery_review();
+        reserve_delivery_attempt(&args, "http://scripted", "owner/repo", 42, HEAD, &payload)?;
+        let bytes = fs::read(args.out.join("delivery-attempt.json"))?;
+        let value: serde_json::Value = serde_json::from_slice(&bytes)?;
+        ensure!(
+            value["schema"] == "ub-review.delivery_attempt.v1",
+            "reservation schema changed"
+        );
+        ensure!(value["api"] == "http://scripted", "reservation API changed");
+        ensure!(value["repo"] == "owner/repo" && value["pull_number"] == 42);
+        ensure!(value["exact_head_sha"] == HEAD);
+        ensure!(value["payload_digest"] == sha256_hex(&serde_json::to_vec(&payload)?));
+        ensure!(!String::from_utf8_lossy(&bytes).contains("test-token"));
+        ensure!(
+            reserve_delivery_attempt(&args, "http://scripted", "owner/repo", 42, HEAD, &payload)
+                .is_err()
+        );
+        ensure!(fs::read(args.out.join("delivery-attempt.json"))? == bytes);
+        Ok(())
+    }
+
+    #[test]
+    fn body_only_delivery_retry_and_unwritable_reservation_never_post() -> Result<()> {
+        for prior_success in [false, true] {
+            let temp = tempfile::tempdir()?;
+            let args = delivery_args(temp.path(), "http://scripted");
+            let (mut review, mut payload) = delivery_review();
+            review.comments.clear();
+            payload.comments.clear();
+            let mut first = ScriptedTransport {
+                gets: VecDeque::from([
+                    serde_json::json!({"head": {"sha": HEAD}}),
+                    serde_json::json!([]),
+                    serde_json::json!({"head": {"sha": HEAD}}),
+                ]),
+                sends: VecDeque::from([
+                    scripted_output(r#"{"id":987}"#, true)?,
+                    scripted_output(r#"{"id":987,"state":"commented"}"#, true)?,
+                ]),
+            };
+            if prior_success {
+                execute_pending_review_delivery_with_transport(
+                    &args, &review, &payload, &mut first,
+                )?;
+                ensure!(first.sends.is_empty());
+            } else {
+                fs::create_dir_all(args.out.join("delivery-attempt.json"))?;
+            }
+            let mut retry = ScriptedTransport {
+                gets: VecDeque::from([
+                    serde_json::json!({"head": {"sha": HEAD}}),
+                    serde_json::json!([]),
+                ]),
+                sends: VecDeque::from([scripted_output(r#"{"id":988}"#, true)?]),
+            };
+            let result = execute_pending_review_delivery_with_transport(
+                &args, &review, &payload, &mut retry,
+            );
+            ensure!(result.is_err());
+            ensure!(result.err().is_some_and(|error| {
+                format!("{error:#}").contains("reconcile the previous delivery attempt")
+            }));
+            ensure!(
+                retry.sends.len() == 1,
+                "body-only retry created another review"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn unreceipted_reply_after_response_loss_cannot_claim_delivery() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let args = delivery_args(temp.path(), "http://scripted");
+        let mut graph = graph_for("src/lib.rs", 12, "reply", HEAD);
+        graph["topics"][0]["planned_thread_id"] = serde_json::json!("123");
+        fs::write(
+            temp.path().join("claim_graph.json"),
+            serde_json::to_vec(&graph)?,
+        )?;
+        let (review, payload) = delivery_review();
+        let source = serde_json::json!({
+            "id": 123, "path": "src/lib.rs", "line": 12, "side": "RIGHT",
+            "commit_id": HEAD, "body": "prior finding"
+        });
+        let mut first = ScriptedTransport {
+            gets: VecDeque::from([
+                serde_json::json!({"head": {"sha": HEAD}}),
+                serde_json::json!([source.clone()]),
+            ]),
+            sends: VecDeque::from([scripted_output("", false)?]),
+        };
+        ensure!(
+            execute_pending_review_delivery_with_transport(&args, &review, &payload, &mut first)
+                .is_err()
+        );
+        ensure!(!args.out.join("delivery-reply-receipts.json").exists());
+        let mut retry = ScriptedTransport {
+            gets: VecDeque::from([
+                serde_json::json!({"head": {"sha": HEAD}}),
+                serde_json::json!([source, {
+                    "id": 456, "path": "src/lib.rs", "line": 12, "side": "RIGHT",
+                    "commit_id": HEAD, "body": "exact body", "in_reply_to_id": 123
+                }]),
+                serde_json::json!({"head": {"sha": HEAD}}),
+            ]),
+            sends: VecDeque::from([scripted_output("", false)?]),
+        };
+        ensure!(
+            execute_pending_review_delivery_with_transport(&args, &review, &payload, &mut retry)
+                .is_err(),
+            "response loss plus missing receipt was called delivered"
+        );
+        ensure!(retry.sends.len() == 1, "unreceipted reply was posted again");
+        Ok(())
     }
 
     #[test]
@@ -2773,6 +3024,26 @@ mod tests {
             prior_confirmed_deliveries(&args, &planned, Some(&current), HEAD)?.len() == 1,
             "exact current receipt was not reused"
         );
+        let (_, payload) = delivery_review();
+        reserve_delivery_attempt(&args, "http://scripted", "owner/repo", 42, HEAD, &payload)?;
+        let mut transaction = DeliveryTransaction::new(HEAD, planned.clone())?;
+        for state in [
+            DeliveryTransactionState::PendingReviewCreated,
+            DeliveryTransactionState::CommentsCreated,
+            DeliveryTransactionState::CommentsReconciled,
+            DeliveryTransactionState::HeadRevalidated,
+        ] {
+            transaction.transition(state)?;
+        }
+        write_transaction(&args.out, &transaction)?;
+        ensure!(
+            prior_confirmed_deliveries(&args, &planned, Some(&current), HEAD)?.is_empty(),
+            "pre-submission reconciliation was falsely reused as delivered"
+        );
+        transaction.transition(DeliveryTransactionState::Submitted)?;
+        transaction.transition(DeliveryTransactionState::ReceiptsPersisted)?;
+        write_transaction(&args.out, &transaction)?;
+        ensure!(prior_confirmed_deliveries(&args, &planned, Some(&current), HEAD)?.len() == 1);
         let stale_current = serde_json::json!([{
             "id": 456,
             "path": "src/lib.rs",
