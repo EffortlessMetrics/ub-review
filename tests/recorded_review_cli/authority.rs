@@ -219,6 +219,25 @@ fn clean_and_findings_never_acquire_ci_authority_when_ci_is_absent_or_adverse() 
 
 #[test]
 fn forged_execution_and_ci_fields_fail_through_real_file_and_replay_boundaries() -> Result<()> {
+    // A single object value only detects tolerant Value decoders. Typed optional
+    // fields can reject that object yet accept scalar/array authority claims.
+    for (shape, forged) in [
+        ("object", json!({"forged":true})),
+        ("true", json!(true)),
+        ("false", json!(false)),
+        ("zero", json!(0)),
+        ("one", json!(1)),
+        ("string", json!("passed")),
+        ("argv", json!(["/bin/true", "--recorded-only"])),
+        ("empty-array", json!([])),
+        ("null", Value::Null),
+    ] {
+        assert_forged_fields_reject(shape, &forged)?;
+    }
+    Ok(())
+}
+
+fn assert_forged_fields_reject(shape: &str, forged: &Value) -> Result<()> {
     for field in AUTHORITY_FIELDS {
         for location in [
             "intake",
@@ -239,12 +258,12 @@ fn forged_execution_and_ci_fields_fail_through_real_file_and_replay_boundaries()
             })?;
             if ["intake", "answer", "plan"].contains(&location) {
                 if location == "intake" {
-                    h.f.intake[field] = json!({"forged":true});
+                    h.f.intake[field] = forged.clone();
                 } else {
                     let name = format!("{location}.json");
                     let mut object: Value =
                         serde_json::from_slice(&fs::read(h.f.root.path().join(&name))?)?;
-                    object[field] = json!({"forged":true});
+                    object[field] = forged.clone();
                     h.f.intake[location] = put(&h.f, &name, &object)?;
                     // Keep the answer->plan identity valid, so unknown-field admission is exercised.
                     if location == "answer" {
@@ -263,19 +282,19 @@ fn forged_execution_and_ci_fields_fail_through_real_file_and_replay_boundaries()
                     let out = h.f.invoke(operation, &[])?;
                     assert!(
                         !out.status.success(),
-                        "{field} at {location} accepted by {operation}"
+                        "{field} ({shape}) at {location} accepted by {operation}"
                     );
                     assert!(out.stdout.is_empty());
                 }
             } else {
                 let mut view: Value = serde_json::from_slice(&original.stdout)?;
                 if location == "wrapper" {
-                    view[field] = json!({"forged":true});
+                    view[field] = forged.clone();
                 } else if location == "prepared_payload_binding" {
-                    view[location][field] = json!({"forged":true});
+                    view[location][field] = forged.clone();
                 } else {
                     let mut component = decode_bytes(&view[location])?;
-                    component[field] = json!({"forged":true});
+                    component[field] = forged.clone();
                     view[location] = json!(serde_json::to_vec(&component)?);
                 }
                 let bytes = serde_json::to_vec(&view)?;
@@ -298,7 +317,7 @@ fn forged_execution_and_ci_fields_fail_through_real_file_and_replay_boundaries()
             stderr: original.stderr,
         })?;
         let mut view: Value = serde_json::from_slice(&original.stdout)?;
-        view[field] = json!({"forged":true});
+        view[field] = forged.clone();
         let bytes = serde_json::to_vec(&view)?;
         fs::write(f.root.path().join("forged-source.json"), &bytes)?;
         rejected(
