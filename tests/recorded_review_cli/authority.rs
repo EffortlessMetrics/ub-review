@@ -621,8 +621,6 @@ mod effects {
                     forged["whole_review_delivery"] = json!("confirmed");
                     view_bytes = serde_json::to_vec(&forged)?;
                 }
-                let view_pin = hash(&view_bytes);
-                fs::write(h.f.root.path().join("effect-view.json"), &view_bytes)?;
                 if shape == "late_payload" {
                     let mut payload: Value =
                         serde_json::from_slice(&fs::read(h.f.root.path().join("payload.json"))?)?;
@@ -632,6 +630,39 @@ mod effects {
                     // failure reaches prepared-payload semantic validation.
                     h.repin_payload_and_chain()?;
                     h.admit(1)?;
+                    if operation == "agent-replay" {
+                        // Observation replay precedes prepared-payload validation.
+                        // Match its repinned subject and watermark exactly, so
+                        // stale component bytes cannot mask the intended failure.
+                        let wrapper: Value = serde_json::from_slice(&view_bytes)?;
+                        let mut observations = decode_bytes(&wrapper["observation_view_json"])?;
+                        observations["subject"] = h.subject.clone();
+                        observations["watermark"] = serde_json::from_slice(&fs::read(
+                            h.f.root.path().join("watermark.json"),
+                        )?)?;
+                        let mut bytes = serde_json::to_vec(&observations)?;
+                        bytes.push(b'\n');
+                        let mut binding = wrapper["prepared_payload_binding"].clone();
+                        binding["payload_digest"] =
+                            h.f.intake["observations"]["payload"]["sha256"].clone();
+                        binding["payload_source_digest"] =
+                            h.f.intake["observations"]["payload_source_digest"].clone();
+                        // Preserve the producer's wrapper field order and each
+                        // component's trailing newline for the final byte comparison.
+                        let mut wire = String::from_utf8(view_bytes)?;
+                        for (name, replacement) in [
+                            ("observation_view_json", json!(bytes)),
+                            ("prepared_payload_binding", binding),
+                        ] {
+                            let old =
+                                format!("\"{name}\":{}", serde_json::to_string(&wrapper[name])?);
+                            let new =
+                                format!("\"{name}\":{}", serde_json::to_string(&replacement)?);
+                            assert_eq!(wire.matches(&old).count(), 1);
+                            wire = wire.replacen(&old, &new, 1);
+                        }
+                        view_bytes = wire.into_bytes();
+                    }
                 }
                 if shape == "late_observation" {
                     let mut event: Value = serde_json::from_slice(&h.events[1])?;
@@ -640,6 +671,8 @@ mod effects {
                     h.rechain()?;
                     h.admit(2)?;
                 }
+                let view_pin = hash(&view_bytes);
+                fs::write(h.f.root.path().join("effect-view.json"), &view_bytes)?;
                 let f = &h.f;
                 let intake = if shape == "malformed" {
                     b"{ invalid recorded intake".to_vec()
