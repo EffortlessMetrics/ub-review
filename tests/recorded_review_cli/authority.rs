@@ -486,6 +486,7 @@ mod effects {
             Path::new(&root).join("observer-marker"),
             b"trusted test calibration",
         )?;
+        fs::remove_file(Path::new(&root).join("observer-marker"))?;
         Ok(())
     }
 
@@ -500,6 +501,7 @@ mod effects {
             .unwrap_or_else(|| temporary.path());
         fs::create_dir_all(logs)?;
         let probe_root = tempfile::tempdir()?;
+        let probe_before = snapshot(probe_root.path())?;
         let test_binary = std::env::current_exe()?;
         let probe_name = "agent_result::authority::effects::trace_probe";
         let (probe, probe_trace) = trace(
@@ -518,7 +520,7 @@ mod effects {
             "probe failed: {}",
             String::from_utf8_lossy(&probe.stderr)
         );
-        assert!(probe_root.path().join("observer-marker").is_file());
+        assert_eq!(snapshot(probe_root.path())?, probe_before);
         let caught = forbidden(&probe_trace, &test_binary).join("\n");
         assert!(
             caught.contains("execve(\"/bin/true\""),
@@ -529,12 +531,22 @@ mod effects {
             "observer missed loopback network"
         );
         assert!(
-            caught.contains("observer-marker") && caught.contains("O_CREAT"),
+            caught
+                .lines()
+                .any(|line| line.contains("observer-marker") && line.contains("O_CREAT")),
             "observer missed marker creation"
         );
         assert!(
-            caught.contains("write("),
+            caught
+                .lines()
+                .any(|line| line.contains("write(") && line.contains("trusted test calibration")),
             "observer missed non-stdout write"
+        );
+        assert!(
+            caught
+                .lines()
+                .any(|line| line.contains("unlink(") && line.contains("observer-marker")),
+            "observer missed marker removal"
         );
 
         let executable = Path::new(env!("CARGO_BIN_EXE_ub-review"));
@@ -749,7 +761,7 @@ mod effects {
         }
         assert_eq!(cases, 23);
         println!(
-            "23 observed cases; calibration detects child execution, loopback connection and file write. Traces: {}",
+            "23 observed cases; calibration detects child execution, loopback connection and transient create/write/unlink with unchanged fixture bytes/modes. Traces: {}",
             logs.display()
         );
         Ok(())
