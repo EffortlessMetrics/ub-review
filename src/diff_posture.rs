@@ -85,3 +85,67 @@ pub(crate) fn review_posture_for_diff_class(diff_class: DiffClass) -> &'static s
         DiffClass::DocsOnly | DiffClass::ArtifactOnlySmoke => DOCS_ONLY_POSTURE,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_lanes_preserve_each_diff_class_contract() {
+        let language_mix = classify_language_mix(&["src/lib.rs".to_owned()]);
+        for (diff_class, expected_ids) in [
+            (
+                DiffClass::SourceUb,
+                vec![
+                    "ub",
+                    "source-route",
+                    "tests",
+                    "arch",
+                    "opposition",
+                    "security",
+                ],
+            ),
+            (
+                DiffClass::SourceGeneral,
+                vec![
+                    "correctness",
+                    "tests-red-green",
+                    "source-route",
+                    "architecture",
+                    "opposition",
+                ],
+            ),
+            (
+                DiffClass::TestsOnly,
+                vec![
+                    "tests-red-green",
+                    "tests-oracle",
+                    "proof-request",
+                    "opposition",
+                ],
+            ),
+            (
+                DiffClass::WorkflowTooling,
+                vec![
+                    "tooling-script-proof",
+                    "tooling-policy",
+                    "tooling-opposition",
+                ],
+            ),
+            (DiffClass::DocsOnly, vec![]),
+            (DiffClass::ArtifactOnlySmoke, vec![]),
+        ] {
+            let lanes = default_lanes_for_diff_context(diff_class, &language_mix);
+            assert_eq!(
+                lanes
+                    .iter()
+                    .map(|lane| lane.id.as_str())
+                    .collect::<Vec<_>>(),
+                expected_ids
+            );
+        }
+        let native = default_lanes_for_diff_context(DiffClass::SourceUb, &language_mix);
+        assert!(native[0].role.starts_with("Rust "));
+        assert!(native[0].focus.contains("pointer provenance"));
+    }
+}
