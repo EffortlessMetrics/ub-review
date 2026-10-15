@@ -909,7 +909,7 @@ mod tests {
     }
 
     #[test]
-    fn render_review_results_preserves_enforcement_evidence_and_gap_rows() -> Result<()> {
+    fn artifact_render_review_results_preserves_enforcement_evidence_and_gap_rows() -> Result<()> {
         let temp = tempfile::tempdir()?;
         fs::create_dir_all(temp.path().join("review"))?;
         fs::write(
@@ -922,6 +922,20 @@ mod tests {
         )?;
         let mut summary = String::new();
         render_review_results(&mut summary, temp.path());
+        assert_eq!(
+            summary.lines().take(9).collect::<Vec<_>>(),
+            [
+                "",
+                "## Review results",
+                "",
+                "A successful workflow or gate enforcement pass does not establish usable model review or proof.",
+                "",
+                "- Gate enforcement conclusion: `pass` with `0` blocking reasons (`review/gate_outcome.json`)",
+                "- Analysis result: `limited`",
+                "- Evidence gate result: `not_proven`",
+                "- Not proven: required proof unavailable",
+            ]
+        );
         assert!(summary.contains("- Gate enforcement conclusion: `pass` with `0` blocking reasons (`review/gate_outcome.json`)\n"));
         assert!(summary.contains("- Analysis result: `limited`\n"));
         assert!(summary.contains("- Evidence gate result: `not_proven`\n"));

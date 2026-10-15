@@ -254,6 +254,10 @@ pub(crate) fn artifact_proof_receipt_is_failure(receipt: &ProofReceipt) -> bool 
     )
 }
 
+pub(crate) fn artifact_proof_receipt_is_unavailable(receipt: &ProofReceipt) -> bool {
+    proof_receipt_is_missing_evidence(receipt) || receipt.result == "skipped_nightly"
+}
+
 pub(crate) fn review_decision(
     missing_or_failed_sensor_evidence: &[SensorEvidenceIssue],
     missing_or_failed_model_evidence: &[ModelEvidenceIssue],
@@ -275,7 +279,7 @@ pub(crate) fn review_decision(
         || proof_receipts
             .iter()
             .filter(|receipt| receipt.head.eq_ignore_ascii_case(reviewed_head))
-            .any(proof_receipt_is_missing_evidence)
+            .any(artifact_proof_receipt_is_unavailable)
     {
         "No blocking finding after bounded review; evidence is incomplete."
     } else {
@@ -1304,6 +1308,49 @@ mod output_degradation_tests {
         assert_eq!(receipt.original_item_count, receipt.final_item_count);
         assert_eq!(receipt.max_bytes, 60);
         assert_eq!(receipt.max_bullets, 12);
+    }
+
+    #[test]
+    fn artifact_review_decision_scopes_failure_gap_and_quiet_results() {
+        for (result, expected) in [
+            (
+                "head_failed",
+                "Needs focused proof failure resolved before upstream.",
+            ),
+            (
+                "failed",
+                "Needs focused proof failure resolved before upstream.",
+            ),
+            (
+                "sanitizer_ub_detected",
+                "Needs focused proof failure resolved before upstream.",
+            ),
+            (
+                "timed_out",
+                "No blocking finding after bounded review; evidence is incomplete.",
+            ),
+            (
+                "skipped_nightly",
+                "No blocking finding after bounded review; evidence is incomplete.",
+            ),
+            (
+                "head_passed",
+                "No blocking finding after bounded review; residual risk remains for human review.",
+            ),
+        ] {
+            let mut receipt = crate::tests::test_proof_receipt(result, "passed");
+            assert_eq!(
+                review_decision(&[], &[], &[], &[], std::slice::from_ref(&receipt), "head"),
+                expected,
+                "{result}"
+            );
+            receipt.head = "older-head".to_owned();
+            assert_eq!(
+                review_decision(&[], &[], &[], &[], &[receipt], "head"),
+                "No blocking finding after bounded review; residual risk remains for human review.",
+                "{result}"
+            );
+        }
     }
 
     #[test]

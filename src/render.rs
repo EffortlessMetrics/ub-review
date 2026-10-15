@@ -148,7 +148,8 @@ pub(crate) fn render_review_body(
         .iter()
         .filter(|receipt| receipt.head.eq_ignore_ascii_case(&diff.head))
         .filter(|receipt| {
-            artifact_proof_receipt_is_failure(receipt) || proof_receipt_is_missing_evidence(receipt)
+            artifact_proof_receipt_is_failure(receipt)
+                || artifact_proof_receipt_is_unavailable(receipt)
         })
         .collect::<Vec<_>>();
     text.push_str("\n## Missing or failed evidence\n\n");
@@ -539,7 +540,7 @@ mod artifact_proof_tests {
     use super::*;
     use crate::tests::{test_diff, test_plan, test_proof_receipt};
 
-    fn body(receipts: &[ProofReceipt], audience: ReviewBodyAudience) -> String {
+    fn artifact_proof_body(receipts: &[ProofReceipt], audience: ReviewBodyAudience) -> String {
         let mut plan = test_plan(Vec::new());
         plan.head = "display-only-plan-head".to_owned();
         render_review_body(
@@ -564,7 +565,7 @@ mod artifact_proof_tests {
             let mut receipt = test_proof_receipt(result, "failed");
             receipt.head = "head".to_owned();
             receipt.id = "private-failure-id".to_owned();
-            let rendered = body(&[receipt.clone()], ReviewBodyAudience::Artifact);
+            let rendered = artifact_proof_body(&[receipt.clone()], ReviewBodyAudience::Artifact);
             assert!(
                 rendered.contains("Needs focused proof failure resolved before upstream."),
                 "{result}"
@@ -577,7 +578,7 @@ mod artifact_proof_tests {
                 !rendered.contains("## No blocking finding after checking"),
                 "{result}"
             );
-            let public = body(&[receipt], ReviewBodyAudience::PullRequest);
+            let public = artifact_proof_body(&[receipt], ReviewBodyAudience::PullRequest);
             assert!(!public.contains("private-failure-id"), "{result}");
             assert!(!public.contains("private-context"), "{result}");
             if result == "head_failed" {
@@ -586,7 +587,7 @@ mod artifact_proof_tests {
             } else {
                 assert_eq!(
                     public,
-                    body(&[], ReviewBodyAudience::PullRequest),
+                    artifact_proof_body(&[], ReviewBodyAudience::PullRequest),
                     "{result}"
                 );
             }
@@ -601,13 +602,14 @@ mod artifact_proof_tests {
             "sanitizer_ub_detected",
             "timed_out",
             "skipped_budget",
+            "skipped_nightly",
         ] {
             let mut stale = test_proof_receipt(result, "failed");
             stale.head = "older-head".to_owned();
             stale.id = "private-stale-id".to_owned();
             let current = test_proof_receipt("head_passed", "passed");
             let receipts = [stale, current];
-            let rendered = body(&receipts, ReviewBodyAudience::Artifact);
+            let rendered = artifact_proof_body(&receipts, ReviewBodyAudience::Artifact);
             let current_section = rendered
                 .split("## Other-head proof evidence (audit only)")
                 .next()
@@ -632,9 +634,14 @@ mod artifact_proof_tests {
 
     #[test]
     fn artifact_proof_gap_and_quiet_controls_remain_distinct() {
-        for result in ["timed_out", "skipped_budget", "head_passed"] {
+        for result in [
+            "timed_out",
+            "skipped_budget",
+            "skipped_nightly",
+            "head_passed",
+        ] {
             let receipt = test_proof_receipt(result, "passed");
-            let rendered = body(&[receipt], ReviewBodyAudience::Artifact);
+            let rendered = artifact_proof_body(&[receipt], ReviewBodyAudience::Artifact);
             assert!(
                 rendered.contains("## No blocking finding after checking"),
                 "{result}"
