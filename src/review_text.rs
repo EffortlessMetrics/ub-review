@@ -245,23 +245,37 @@ pub(crate) fn lower_first_ascii(value: &str) -> String {
     }
 }
 
+/// Artifact review failures include both integrated and worker receipt vocabulary.
+/// Publication and gate classification deliberately retain their own contracts.
+pub(crate) fn artifact_proof_receipt_is_failure(receipt: &ProofReceipt) -> bool {
+    matches!(
+        receipt.result.as_str(),
+        "head_failed" | "failed" | "sanitizer_ub_detected"
+    )
+}
+
 pub(crate) fn review_decision(
     missing_or_failed_sensor_evidence: &[SensorEvidenceIssue],
     missing_or_failed_model_evidence: &[ModelEvidenceIssue],
     inline_comments: &[ReviewInlineComment],
     summary_only_findings: &[SummaryOnlyFinding],
     proof_receipts: &[ProofReceipt],
+    reviewed_head: &str,
 ) -> &'static str {
     if has_actionable_review_finding(inline_comments, summary_only_findings) {
         "Needs reviewer attention before upstream: grounded findings or summary-only concerns remain."
     } else if proof_receipts
         .iter()
-        .any(|receipt| receipt.result == "head_failed")
+        .filter(|receipt| receipt.head.eq_ignore_ascii_case(reviewed_head))
+        .any(artifact_proof_receipt_is_failure)
     {
         "Needs focused proof failure resolved before upstream."
     } else if !missing_or_failed_sensor_evidence.is_empty()
         || !missing_or_failed_model_evidence.is_empty()
-        || proof_receipts.iter().any(proof_receipt_is_missing_evidence)
+        || proof_receipts
+            .iter()
+            .filter(|receipt| receipt.head.eq_ignore_ascii_case(reviewed_head))
+            .any(proof_receipt_is_missing_evidence)
     {
         "No blocking finding after bounded review; evidence is incomplete."
     } else {

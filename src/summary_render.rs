@@ -908,6 +908,29 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn render_review_results_preserves_enforcement_evidence_and_gap_rows() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        fs::create_dir_all(temp.path().join("review"))?;
+        fs::write(
+            temp.path().join("review/gate_outcome.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "conclusion": "pass", "reasons": [],
+                "analysis_result": "limited", "gate_result": "not_proven",
+                "not_proven_reasons": ["required proof unavailable"]
+            }))?,
+        )?;
+        let mut summary = String::new();
+        render_review_results(&mut summary, temp.path());
+        assert!(summary.contains("- Gate enforcement conclusion: `pass` with `0` blocking reasons (`review/gate_outcome.json`)\n"));
+        assert!(summary.contains("- Analysis result: `limited`\n"));
+        assert!(summary.contains("- Evidence gate result: `not_proven`\n"));
+        assert!(summary.contains("- Not proven: required proof unavailable\n"));
+        assert!(!summary.contains("Evidence results unavailable or invalid"));
+        assert!(!summary.contains("Analysis result: `clean`"));
+        Ok(())
+    }
+
     /// F5 portfolio-to-summary consistency: the rendered summary retains
     /// the deferred required task's identities, verbatim reason, receipt
     /// absence, and the exact revision digest from the gate artifact.
