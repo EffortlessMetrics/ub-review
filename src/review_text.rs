@@ -1343,18 +1343,33 @@ mod output_degradation_tests {
                 "No blocking finding after bounded review; residual risk remains for human review.",
             ),
         ] {
-            let mut receipt = crate::tests::test_proof_receipt(result, "passed");
-            assert_eq!(
-                review_decision(&[], &[], &[], &[], std::slice::from_ref(&receipt), "head"),
-                expected,
-                "{result}"
-            );
-            receipt.head = "older-head".to_owned();
-            assert_eq!(
-                review_decision(&[], &[], &[], &[], &[receipt], "head"),
-                "No blocking finding after bounded review; residual risk remains for human review.",
-                "{result}"
-            );
+            for reviewed_head in ["head", "0123456789abcdef0123456789abcdef01234567"] {
+                let mut receipt = crate::tests::test_proof_receipt(result, "passed");
+                receipt.head = reviewed_head.to_ascii_uppercase();
+                assert_eq!(
+                    review_decision(
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        std::slice::from_ref(&receipt),
+                        reviewed_head
+                    ),
+                    expected,
+                    "{result}: current {reviewed_head}"
+                );
+                receipt.head = if reviewed_head == "head" {
+                    "older-head"
+                } else {
+                    "HEAD"
+                }
+                .to_owned();
+                assert_eq!(
+                    review_decision(&[], &[], &[], &[], &[receipt], reviewed_head),
+                    "No blocking finding after bounded review; residual risk remains for human review.",
+                    "{result}: stale for {reviewed_head}"
+                );
+            }
         }
     }
 
