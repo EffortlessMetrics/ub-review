@@ -2244,6 +2244,75 @@ mod tests {
     }
 
     #[test]
+    fn seeded_stream_closes_failed_broker_before_propagating_io_error() -> Result<()> {
+        for required in [true, false] {
+            let temp = tempfile::tempdir()?;
+            let out = temp.path().join("blocked-output");
+            fs::write(&out, b"preserve output blocker")?;
+            let diff = test_diff();
+            let mut profile = Profile::default();
+            profile.budgets.proof_max_focused_test_files = 0;
+            profile.budgets.proof_max_focused_tests = 0;
+            profile.budgets.proof_total_timeout_sec = 0;
+            let args = test_run_args(out.clone());
+            let events_path = temp.path().join("events.ndjson");
+            let event_log = crate::EventLog::open(&events_path)?;
+            let run_started = Instant::now();
+            let requests = if required {
+                vec![proof_request("required-output-error", true)]
+            } else {
+                Vec::new()
+            };
+            let error = run_seeded_proof_stream_v0(
+                temp.path(),
+                &out,
+                &diff,
+                &profile,
+                &args,
+                &requests,
+                &event_log,
+                &run_started,
+                &BoxState {
+                    cpus: 4,
+                    free_mem_mb: Some(8_192),
+                    free_disk_mb: Some(20_000),
+                    load_1m: Some(0.25),
+                    github_actions: false,
+                },
+                &build_impact_plan(temp.path(), &diff.changed_files, "shadow"),
+                None,
+            )
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("blocked output unexpectedly succeeded"))?;
+            ensure!(error.downcast_ref::<std::io::Error>().is_some());
+            ensure!(fs::read(&out)? == b"preserve output blocker");
+            let events = fs::read_to_string(&events_path)?
+                .lines()
+                .map(serde_json::from_str::<serde_json::Value>)
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            let proof_events = events
+                .iter()
+                .filter(|event| {
+                    event["kind"] == "proof_loop_started" || event["kind"] == "proof_loop_finished"
+                })
+                .collect::<Vec<_>>();
+            ensure!(proof_events.len() == 2);
+            ensure!(proof_events[0]["kind"] == "proof_loop_started");
+            ensure!(proof_events[1]["kind"] == "proof_loop_finished");
+            let stage = if required {
+                "seeded-required-broker"
+            } else {
+                "initial-diff-broker"
+            };
+            ensure!(proof_events[0]["payload"]["stage"] == stage);
+            ensure!(proof_events[1]["payload"]["stage"] == stage);
+            ensure!(proof_events[1]["payload"]["status"] == "failed");
+            ensure!(!out.join("review/proof_receipts.json").exists());
+        }
+        Ok(())
+    }
+
+    #[test]
     fn broker_replans_after_discriminating_test_receipt_before_build_wind_down() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
