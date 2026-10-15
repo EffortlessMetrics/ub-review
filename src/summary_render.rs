@@ -182,6 +182,9 @@ pub(crate) fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Res
 
 pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
     let Some(metrics) = read_review_metrics(out) else {
+        // Gate receipts can survive an interrupted metrics write. Their
+        // evidence verdicts must remain visible when re-rendering that run.
+        render_gate_summary(text, out);
         return;
     };
     let runtime = metrics
@@ -297,21 +300,7 @@ pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
         "- Loop detail: model `{model_wall}`, local proof `{proof_wall}`, compiler `{compiler_wall}`\n"
     ));
     text.push_str(&format!("- Terminal state: `{terminal_state}`\n"));
-    if let Some(gate) = read_gate_outcome(out) {
-        let conclusion = gate
-            .get("conclusion")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("unknown");
-        let blocking_reasons = gate
-            .get("reasons")
-            .and_then(serde_json::Value::as_array)
-            .map(Vec::len)
-            .unwrap_or(0);
-        text.push_str(&format!(
-            "- Gate: `{conclusion}` with `{blocking_reasons}` blocking reasons (`review/gate_outcome.json`)\n"
-        ));
-        render_planner_required_proofs(text, &gate);
-    }
+    render_gate_summary(text, out);
     text.push_str(&format!(
         "- Model lanes: `{usable_lanes}/{total_lanes}` usable (`{ok_lanes}` ok, `{degraded_lanes}` degraded)\n"
     ));
@@ -360,6 +349,51 @@ pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
             cal.inline_comments, cal.summary_comments, cal.gate
         ));
     }
+}
+
+/// Project the separated verdicts without copying raw reason or request IDs.
+/// Legacy receipts have no separated results; absence stays explicitly unknown.
+fn render_gate_summary(text: &mut String, out: &Path) {
+    let Some(gate) = read_gate_outcome(out) else {
+        return;
+    };
+    let conclusion = summary_verdict(&gate, "conclusion", &["pass", "fail", "inconclusive"]);
+    let blocking_reasons = gate
+        .get("reasons")
+        .and_then(serde_json::Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
+    text.push_str(&format!(
+        "- Gate: `{conclusion}` with `{blocking_reasons}` blocking reasons (`review/gate_outcome.json`)\n"
+    ));
+    for (label, field, allowed) in [
+        (
+            "Analysis result",
+            "analysis_result",
+            &["clean", "findings", "limited", "not_proven"][..],
+        ),
+        (
+            "Publication result",
+            "publication_result",
+            &["posted", "not_needed", "failed", "not_proven"][..],
+        ),
+        (
+            "Evidence gate result",
+            "gate_result",
+            &["pass", "finding", "not_proven"][..],
+        ),
+    ] {
+        let verdict = summary_verdict(&gate, field, allowed);
+        text.push_str(&format!("- {label}: `{verdict}`\n"));
+    }
+    render_planner_required_proofs(text, &gate);
+}
+
+fn summary_verdict<'a>(gate: &'a serde_json::Value, field: &str, allowed: &[&str]) -> &'a str {
+    gate.get(field)
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| allowed.contains(value))
+        .unwrap_or("unknown")
 }
 
 /// Compact calibration summary extracted from review/calibration.json.
@@ -713,6 +747,104 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn summary_retains_evidence_verdicts_alongside_enforcement() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        fs::create_dir_all(out.join("review"))?;
+        // These are receipt projections, not executor/provider reproductions:
+        // upstream classification and enforcement remain owned by gate.rs.
+        for (case, analysis, publication, verdict) in [
+            (
+                "analysis and publication unproven",
+                "not_proven",
+                "not_proven",
+                "not_proven",
+            ),
+            (
+                "analysis unproven",
+                "not_proven",
+                "not_needed",
+                "not_proven",
+            ),
+            ("demonstrated finding", "findings", "not_needed", "finding"),
+            ("publication failed", "findings", "failed", "not_proven"),
+            ("complete control", "clean", "not_needed", "pass"),
+        ] {
+            let gate = serde_json::json!({
+                "conclusion": "pass",
+                "analysis_result": analysis,
+                "publication_result": publication,
+                "gate_result": verdict,
+                "reasons": [],
+                "not_proven_reasons": ["private-request-id: private-lane-id"]
+            });
+            fs::write(
+                out.join("review/gate_outcome.json"),
+                serde_json::to_vec(&gate)?,
+            )?;
+            // An interrupted run may retain its gate receipt without metrics.
+            for with_metrics in [false, true] {
+                if with_metrics {
+                    fs::write(out.join("review/metrics.json"), "{}")?;
+                }
+                let summary = render_summary(
+                    out,
+                    &crate::tests::test_plan(Vec::new()),
+                    &crate::tests::test_diff(),
+                )?;
+                for expected in [
+                    "- Gate: `pass`".to_owned(),
+                    format!("- Analysis result: `{analysis}`"),
+                    format!("- Publication result: `{publication}`"),
+                    format!("- Evidence gate result: `{verdict}`"),
+                ] {
+                    assert!(summary.contains(&expected), "{case}: {summary}");
+                }
+                assert!(!summary.contains("private-request-id"));
+                assert!(!summary.contains("private-lane-id"));
+            }
+            fs::remove_file(out.join("review/metrics.json"))?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn summary_does_not_infer_verdicts_from_legacy_or_unrecognized_fields() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        fs::create_dir_all(out.join("review"))?;
+        for gate in [
+            serde_json::json!({"conclusion": "pass", "reasons": []}),
+            serde_json::json!({
+                "conclusion": "private-request-id",
+                "analysis_result": "private-request-id",
+                "publication_result": ["posted"],
+                "gate_result": "pass`\n- forged verdict",
+            }),
+        ] {
+            fs::write(
+                out.join("review/gate_outcome.json"),
+                serde_json::to_vec(&gate)?,
+            )?;
+            let mut summary = String::new();
+            render_review_efficiency_section(&mut summary, out);
+            for label in [
+                "Analysis result",
+                "Publication result",
+                "Evidence gate result",
+            ] {
+                assert!(
+                    summary.contains(&format!("- {label}: `unknown`")),
+                    "{summary}"
+                );
+            }
+            assert!(!summary.contains("private-request-id"));
+            assert!(!summary.contains("forged verdict"));
+        }
+        Ok(())
+    }
 
     #[test]
     fn lane_packet_model_display_resolves_encoded_hostile_lane_id() -> Result<()> {

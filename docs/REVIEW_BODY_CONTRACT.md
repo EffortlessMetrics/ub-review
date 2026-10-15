@@ -93,6 +93,17 @@ Everything else stays in artifacts:
   failed observation; and absent audits retain no-provider-content semantics.
   None of these classifications is public reporter content.
 
+The artifact/Actions running summary displays the enforcement-policy gate
+conclusion separately from `analysis_result`, `publication_result`, and
+`gate_result` in `review/gate_outcome.json`. An enforcement `pass` can coexist
+with `not_proven` evidence or failed publication. The summary retains these
+verdicts even if metrics are absent; legacy or unrecognized verdicts display as
+`unknown`. This projection copies only recognized verdict values, keeping raw
+reason and request identities in the receipt. It does not change enforcement
+or admit status dumps into the PR review body. Focused regression fixtures in
+`src/summary_render.rs` cover incomplete evidence, failed publication,
+demonstrated findings, a clean control, and missing or malformed verdict fields.
+
 Missing-proof receipts are public only when their `head` matches the current
 review head and at least one `request_ids` value exactly matches the topic's
 structural claim ID, an exact observation ID or dedupe key compiled into that
