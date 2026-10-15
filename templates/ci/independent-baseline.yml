@@ -8,18 +8,60 @@ name: ub-review/independent-baseline
 # outcome. This is not the full hostile-head-safe coordinator boundary.
 on:
   pull_request_target:
-    types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled, converted_to_draft]
+    types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled, converted_to_draft, edited, closed]
 
 permissions:
   contents: read
 
+# Preserve active qualification; irrelevant events get independent cheap runs.
+# Native pending replacement is not the complete #1288 terminal-accounting contract.
 concurrency:
-  group: ub-review-independent-baseline-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: ub-review-independent-baseline-${{ github.event.pull_request.number || github.ref }}-${{ github.event.action == 'labeled' && github.event.label.name == 'merge-ready' && 'qualification' || format('observe-{0}', github.run_id) }}
+  cancel-in-progress: false
 
 jobs:
+  admission:
+    name: current admission snapshot
+    if: ${{ github.event.action == 'labeled' && github.event.label.name == 'merge-ready' && github.event.pull_request.state == 'open' && !github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'merge-ready') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_PR: ${{ github.event.pull_request.number }}
+      EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+      EXPECTED_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+      EXPECTED_BASE: ${{ github.event.pull_request.base.sha }}
+      EXPECTED_BASE_REF: ${{ github.event.pull_request.base.ref }}
+      EXPECTED_BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
+      EXPECTED_UPDATED: ${{ github.event.pull_request.updated_at }}
+      EVENT_ACTION: ${{ github.event.action }}
+      EVENT_LABEL: ${{ github.event.label.name }}
+    steps:
+      - name: Check fresh label edge against live PR
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$EVENT_ACTION" = labeled
+          test "${EVENT_LABEL,,}" = merge-ready
+          test -n "$EXPECTED_PR"
+          # Never execute candidate files or accept a caller-selected API endpoint.
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$EXPECTED_PR" > "$RUNNER_TEMP/admission-live-pr.json"
+          jq -e \
+            --arg head "$EXPECTED_HEAD" --arg head_repo "$EXPECTED_HEAD_REPO" \
+            --arg base "$EXPECTED_BASE" --arg base_ref "$EXPECTED_BASE_REF" \
+            --arg base_repo "$EXPECTED_BASE_REPO" --arg updated "$EXPECTED_UPDATED" \
+            '.state == "open" and .draft == false and
+             .head.sha == $head and .head.repo.full_name == $head_repo and
+             .base.sha == $base and .base.ref == $base_ref and .base.repo.full_name == $base_repo and
+             .updated_at == $updated and
+             any(.labels[]; (.name | ascii_downcase) == "merge-ready")' \
+            "$RUNNER_TEMP/admission-live-pr.json" > /dev/null
+
   evidence:
-    if: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.state == 'open' && !github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'merge-ready') }}
+    needs: admission
+    if: ${{ needs.admission.result == 'success' }}
     name: independent evidence / ${{ matrix.check }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -101,13 +143,24 @@ jobs:
 
   finalize:
     name: ub-review/independent-baseline
-    needs: evidence
+    needs: [admission, evidence]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
+      pull-requests: read
     env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_PR: ${{ github.event.pull_request.number }}
+      EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+      EXPECTED_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+      EXPECTED_BASE: ${{ github.event.pull_request.base.sha }}
+      EXPECTED_BASE_REF: ${{ github.event.pull_request.base.ref }}
+      EXPECTED_BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
+      EXPECTED_UPDATED: ${{ github.event.pull_request.updated_at }}
+      EVENT_ACTION: ${{ github.event.action }}
+      EVENT_LABEL: ${{ github.event.label.name }}
       CANDIDATE_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
       CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
       EVIDENCE_RESULT: ${{ needs.evidence.result }}
@@ -162,3 +215,19 @@ jobs:
             echo "independent baseline evidence ended $EVIDENCE_RESULT for exact candidate $CANDIDATE_SHA" >&2
             exit 1
           fi
+          set -euo pipefail
+          test "$EVENT_ACTION" = labeled
+          test "${EVENT_LABEL,,}" = merge-ready
+          test -n "$EXPECTED_PR"
+          # Never execute candidate files or accept a caller-selected API endpoint.
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$EXPECTED_PR" > "$RUNNER_TEMP/admission-live-pr.json"
+          jq -e \
+            --arg head "$EXPECTED_HEAD" --arg head_repo "$EXPECTED_HEAD_REPO" \
+            --arg base "$EXPECTED_BASE" --arg base_ref "$EXPECTED_BASE_REF" \
+            --arg base_repo "$EXPECTED_BASE_REPO" --arg updated "$EXPECTED_UPDATED" \
+            '.state == "open" and .draft == false and
+             .head.sha == $head and .head.repo.full_name == $head_repo and
+             .base.sha == $base and .base.ref == $base_ref and .base.repo.full_name == $base_repo and
+             .updated_at == $updated and
+             any(.labels[]; (.name | ascii_downcase) == "merge-ready")' \
+            "$RUNNER_TEMP/admission-live-pr.json" > /dev/null

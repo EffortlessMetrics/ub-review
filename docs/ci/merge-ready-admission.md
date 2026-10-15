@@ -20,9 +20,13 @@ explicitly remains a seed, not a live protection export. #937 describes an
 older only-gate protection posture; it is not proof of current settings.
 The live protection read failed exactly:
 `Get "https://api.github.com/repos/EffortlessMetrics/ub-review/branches/main/protection": Forbidden`.
-Thus current required context/app IDs, strictness, rulesets, merge queue and
-external required checks are **unknown**. Do not infer them from job names or
-an API failure's presumed cause. CLI open-PR and issue reads likewise returned
+The parent subsequently reported a live branch summary requiring
+`ub-review/gate` from GitHub App **15368**, and an empty ruleset list. This is
+parent-supplied current evidence; the earlier local read failure is retained
+above. An empty ruleset list does not establish the full classic protection
+policy. The independent baseline is **not** in that reported required set;
+#1285 owns that separate protection gap. No protection mutation is proposed.
+CLI open-PR and issue reads likewise returned
 `Post "https://api.github.com/graphql": Forbidden`; REST open pulls returned
 `Get "https://api.github.com/repos/EffortlessMetrics/ub-review/pulls?state=open&per_page=100": Forbidden`.
 Connected GitHub search/fetch reads succeeded and supplied current owner leads.
@@ -31,41 +35,74 @@ Connected GitHub search/fetch reads succeeded and supplied current owner leads.
 
 `templates/ci/ub-review-gate.yml` and `templates/ci/independent-baseline.yml`
 are dormant full workflow candidates, outside GitHub's workflow directory.
-Active workflows are byte-for-byte unchanged. The existing permissions, check
-commands, tools, timeouts, artifacts and trust split remain. The existing
-manual gate stays active today; the dormant replacement intentionally only
-handles PR admission. Owners must decide manual recovery separately at cutover.
+Active workflows are byte-for-byte unchanged. Existing heavy proof commands,
+tools, timeouts, artifacts and the two proof populations remain. The source-only
+Tower (#1334/#1335/#1338) path has no CI sufficiency authority and is not invoked.
 
-Both candidates subscribe to opened, reopened, ready_for_review, synchronize,
-labeled, unlabeled and converted_to_draft. Heavy evidence jobs require an open,
-non-draft PR whose current event label set contains the whole name `merge-ready` (case-insensitive Actions
-`contains` matching).
-A label already present admits synchronize/reopened/ready transitions; a draft
-or absent/removed label does not. Labels are sticky across pushes: owners must
-remove the label to return a repair to preparation. This does not encode
-human review approval or per-SHA authorization. Unrelated label edits while
-admitted also rerun evidence; keeping a single native predicate avoids another
-API/controller boundary. No savings or <=20-minute claim is established.
+Heavy qualification requires a **fresh labeled event** whose event label is
+`merge-ready`, an open non-draft event snapshot, and current label presence.
+Actions compares label names case-insensitively. Synchronize, reopening, Ready,
+retarget/edit, closure, draft conversion, removal, and unrelated label events
+never admit heavy qualification just because a label remains attached. Remove
+and reapply `merge-ready` when a repaired head is ready for a new qualification.
+The old sticky-label candidate and its positive synchronize fixtures are
+superseded. Manual workflow_dispatch remains in the gate template for artifact
+recovery; it can execute the original manual proof path, but cannot green the
+protected check because it has no fresh PR label edge/current PR binding.
 
-A skipped required job can count as success in Actions. Therefore the contained
-job becomes `contained candidate evidence`; a no-checkout always-run finalizer
-retains the exact native `ub-review/gate` check name and accepts only
-`needs.gate.result == success`. Failure, cancellation and skipped admission are
-non-green. The existing independent finalizer already rejects non-success and
-retains `ub-review/independent-baseline`. The coverage download/upload job is
-skipped for unadmitted evidence. No custom status writer, checks permission,
-controller, custody store or new platform is introduced.
+Each template now has a cheap no-checkout admission job before heavy allocation,
+and repeats the same live check in its always-run native finalizer after proof.
+The fixed `gh api repos/$GITHUB_REPOSITORY/pulls/$EXPECTED_PR` read must succeed.
+The live PR must be open, non-draft, have the exact head SHA/repository, base
+SHA/ref/repository, event snapshot updated_at and current merge-ready label.
+Missing/failed/malformed reads reject. Snapshot movement rejects even if H is
+unchanged, including retarget or a remove/reapply with a different updated_at.
+This conservative timestamp binding can also reject after comments or other
+activity; it does not assert that timestamps are unique edge IDs.
 
-`tests/merge_ready_admission.rs` exercises both event-family truth tables and
-checks the actual dormant source's predicate, subscriptions, native finalizers,
-unchanged execution bodies, checkout identity and permission boundaries.
-These are local structural/model fixtures, **not** a GitHub expression engine,
-branch-protection proof, race proof, or hosted trigger test. Event delivery can
-race label removal and pushes; existing cancel-in-progress is preserved. An
-in-flight green check can precede the removal event; label absence is not an
-atomic merge interlock. Source-only Tower (#1334/#1335/#1338) has no CI sufficiency
-authority and is neither invoked nor promoted here. CI mode and source-only
-review remain separate.
+Permission delta for **parent review before activation**: new cheap admission
+jobs and the gate no-checkout finalizer request only `pull-requests: read`;
+independent finalize adds that permission to its existing `contents: read`.
+Heavy candidate/evidence jobs and coverage permissions remain unchanged. Tokens
+are only passed to native reads in the no-checkout jobs, never to candidate
+files. No check writer, write scope, controller, custody project or new platform
+is introduced. Parent must verify those authorized reads work for same-repo and
+fork candidates with the proposed permissions.
+
+Skipped protected-name jobs can count as success. Both protected-name finalizers
+are therefore unconditional `always()` jobs, and accept only successful proof
+plus the repeated live admission check. Failure, cancellation, skipped evidence,
+manual recovery and non-edge observations are non-green. The independent receipt
+still describes evidence status, not live admission authority; the final job
+result enforces both. Cheap revocation/observation runs may fail without
+allocating heavy work; unrelated label edits can conservatively invalidate a
+previous check and require another fresh edge. They never reuse a prior green
+result or manufacture success by skipping the protected name.
+
+Concurrency separates qualification edges from observations. Qualification uses
+one per-PR group with `cancel-in-progress: false`, preserving the active run;
+non-edge events and manual recovery use a unique observe-run-id group and cannot
+cancel qualification. Native newest-pending replacement is only preparation for
+#1288, not its complete terminal accounting, duplicate, stale publication or
+lifecycle proof. Older qualification can finish historical artifacts but must
+pass current-state validation to green. Parent coordinates #1288 ownership.
+
+`tests/merge_ready_admission.rs` pins the actual candidate predicates and heavy
+job dependencies, preserved proof populations, manual recovery, concurrency,
+and unskipped native finalizers. It executes the **actual extracted Bash/jq**
+admission/finalizer bodies with a local gh fixture and no network/credentials:
+changed H/repository, draft, closed, unchanged-H retarget/base movement,
+remove/reapply, late and unrelated events, failed/malformed API reads and
+non-success evidence. It also proves a new reapply snapshot can qualify.
+These fixtures do not emulate Actions scheduling, app identity or hosted races.
+
+Remaining native limits: live-read-to-job-completion is not atomic with merge,
+and PR updated_at has finite timestamp precision. Remove/reapply or other
+movement inside the same timestamp quantum can be indistinguishable from the
+old edge; no per-edge nonce/current-run API proof is claimed. Branch protection
+must still enforce the actual current required head/check. Hosted exercises and
+owner review must assess these limits before cutover. No savings, <=20-minute,
+race-free label custody or complete #1288 claim is established.
 
 ## Owner handoff and cutover requirements
 
@@ -76,14 +113,16 @@ Coordinate release/ci through #937/#1285 (containment/protection), #1270/#1275/
 replace their owners or touch their branches. #1460 retains baseline fixtures;
 #1461 owns Rust projection-reader work; #1359 owns xtask path admission.
 
-Before any activation, owners need a successful live required-check/ruleset
-export including GitHub App identities, independent exact-candidate review,
-actionlint, and an explicitly authorized late hosted exercise. Verify native
+Before any activation, owners need the complete live classic-policy/check-identity evidence beyond the
+reported gate/App15368 summary, parent acceptance of the dormant read-permission
+delta, independent exact-candidate review, actionlint and an explicitly
+authorized late hosted exercise. Verify native
 check association with the PR's current head/merge object, especially the
 pull_request_target baseline's protected-base run SHA, required-context matching
 and fork behavior. Exercise draft/open/label/remove/repair/cancel/failure cases
 and demonstrate the finalizers cannot satisfy requirements when unadmitted.
-Preserve the independent baseline as authority until the existing cutover
+Preserve the independent baseline execution; #1285 owns making its protection
+posture match the intended authority before the existing cutover
 programme's obligations are satisfied. This is admission preparation, not
 proof-equivalent retirement or sole-gate promotion.
 
