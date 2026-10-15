@@ -574,6 +574,22 @@ mod tests {
             assert_eq!(actual.model, expected.model);
             assert_eq!(actual.model_display, expected.model_display);
             assert_eq!(actual.receives, expected.receives);
+            if ![
+                "ub",
+                "ub-active-view",
+                "ub-backing-store",
+                "ub-worker-handoff",
+                "ub-gc-detach-transfer",
+                "sibling-paths",
+                "sibling-paths-crypto",
+                "sibling-paths-compression",
+                "sibling-paths-runtime",
+            ]
+            .contains(&actual.id.as_str())
+            {
+                assert_eq!(actual.role, expected.role);
+                assert_eq!(actual.focus, expected.focus);
+            }
         }
     }
 
@@ -642,6 +658,116 @@ mod tests {
             crate::diff_posture::diff_class_posture_heading(plan.diff_class),
             "Native safety"
         );
+    }
+
+    #[test]
+    fn rust_native_lanes_preserve_distinct_safety_contracts() {
+        let plan = native_plan(&["src/ffi.rs"], "+ unsafe boundary();");
+        let mut lanes = plan.lanes.clone();
+        let mut args = crate::tests::test_run_args(PathBuf::from("unused"));
+        for width in [6, 10, 20] {
+            args.lane_width = width;
+            lanes.extend(review_lanes_for_args(&plan, &args));
+        }
+        for (id, role_contract, focus_contracts) in [
+            (
+                "ub",
+                "native-boundary",
+                ["pointer provenance", "aliasing", "drop order", "FFI"],
+            ),
+            (
+                "ub-active-view",
+                "slice extent",
+                [
+                    "slice lengths",
+                    "allocation capacity",
+                    "offsets",
+                    "pointer validity",
+                ],
+            ),
+            (
+                "ub-backing-store",
+                "allocation and aliasing",
+                [
+                    "backing allocations",
+                    "borrow",
+                    "owned snapshots",
+                    "mutation after capture",
+                ],
+            ),
+            (
+                "ub-worker-handoff",
+                "thread and async",
+                [
+                    "async suspension",
+                    "cancellation",
+                    "FFI callbacks",
+                    "Send/Sync",
+                ],
+            ),
+            (
+                "ub-gc-detach-transfer",
+                "drop and foreign-lifetime",
+                [
+                    "drop order",
+                    "ownership transfer",
+                    "callback lifetimes",
+                    "double-free",
+                ],
+            ),
+            (
+                "sibling-paths",
+                "helper and caller",
+                [
+                    "helper callers",
+                    "public API variants",
+                    "sibling implementations",
+                    "concrete affected route",
+                ],
+            ),
+            (
+                "sibling-paths-crypto",
+                "input and output",
+                ["input/output", "ownership", "error", "secret-material"],
+            ),
+            (
+                "sibling-paths-compression",
+                "representation and codec",
+                [
+                    "serialization",
+                    "parsing",
+                    "codec",
+                    "changed representation",
+                ],
+            ),
+            (
+                "sibling-paths-runtime",
+                "runtime and FFI",
+                [
+                    "string/buffer",
+                    "FFI helper callers",
+                    "ownership contracts",
+                    "concrete affected siblings",
+                ],
+            ),
+        ] {
+            let matching = lanes
+                .iter()
+                .filter(|lane| lane.id == id)
+                .collect::<Vec<_>>();
+            assert!(!matching.is_empty(), "missing safety contract lane {id}");
+            for lane in matching {
+                assert!(lane.role.starts_with("Rust "), "{id}: {}", lane.role);
+                assert!(lane.role.contains(role_contract), "{id}: {}", lane.role);
+                for contract in focus_contracts {
+                    assert!(
+                        lane.focus.contains(contract),
+                        "{id} lacks {contract}: {}",
+                        lane.focus
+                    );
+                }
+            }
+        }
     }
 
     #[test]
