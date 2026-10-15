@@ -5166,25 +5166,17 @@ fn lane_turn_artifact_ref(lane: &str, turn: u32) -> String {
 }
 
 /// Acquire the checkout's shared Cargo target for proof execution by waiting
-/// for its late-sensor owner, then open the proof scheduler interval. Keeping
+/// for its late-sensor owner before opening proof scheduler intervals. Keeping
 /// this ordering in one helper makes model-on and model-off runs share the
 /// same no-overlap contract (#1257).
-fn start_initial_proof_after_late_sensors(
+fn join_late_sensors_before_proof(
     late_phase: Option<LateSensorPhase>,
     event_log: &EventLog,
     run_started: &Instant,
-) -> Result<(ActiveRunLoop, Option<RunLoopPhase>)> {
-    let late_sensor_phase = late_phase
+) -> Result<Option<RunLoopPhase>> {
+    late_phase
         .map(|phase| phase.join_phase(event_log, run_started))
-        .transpose()?;
-    let proof_loop = start_run_loop(
-        event_log,
-        run_started,
-        "proof",
-        "proof",
-        "initial-diff-broker",
-    )?;
-    Ok((proof_loop, late_sensor_phase))
+        .transpose()
 }
 
 #[expect(
@@ -5310,12 +5302,8 @@ fn write_review_artifacts(
         let proof_late_phase = late_phase.take();
         thread::scope(|scope| -> Result<()> {
             let proof_handle = scope.spawn(move || {
-                let (initial_proof_loop, late_sensor_phase) =
-                    start_initial_proof_after_late_sensors(
-                        proof_late_phase,
-                        event_log,
-                        run_started,
-                    )?;
+                let late_sensor_phase =
+                    join_late_sensors_before_proof(proof_late_phase, event_log, run_started)?;
                 let (result, proof_phases) = run_seeded_proof_stream_v0(
                     root,
                     out,
@@ -5323,7 +5311,6 @@ fn write_review_artifacts(
                     profile,
                     args,
                     &seeded_proof_requests,
-                    initial_proof_loop,
                     event_log,
                     run_started,
                     box_state,
@@ -5522,29 +5509,28 @@ fn write_review_artifacts(
             model_loop,
             "skipped_model_mode_off",
         )?;
-        let (initial_proof_loop, late_sensor_phase) =
-            start_initial_proof_after_late_sensors(late_phase.take(), event_log, run_started)?;
+        let late_sensor_phase =
+            join_late_sensors_before_proof(late_phase.take(), event_log, run_started)?;
         if let Some(phase) = late_sensor_phase {
             run_loop_tracker.record(phase);
         }
-        proof_result = run_initial_diff_proof_broker_v0(
+        let (seeded_result, proof_phases) = run_seeded_proof_stream_v0(
             root,
             out,
             diff,
             profile,
             args,
-            box_state,
+            &seeded_proof_requests,
+            event_log,
             run_started,
+            box_state,
             impact_plan_ref,
             proof_task_ledger,
         )?;
-        finish_run_loop(
-            event_log,
-            run_started,
-            run_loop_tracker,
-            initial_proof_loop,
-            "completed",
-        )?;
+        proof_result = seeded_result;
+        for phase in proof_phases {
+            run_loop_tracker.record(phase);
+        }
     }
     // #325 stream-as-it-lands join point: the late evidence phase lands here,
     // before anything downstream reads sensor state — the model-request proof
