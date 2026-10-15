@@ -168,7 +168,7 @@ glob = "templates/ci/{ub-review-gate,independent-baseline}.yml"
 category = "dormant-workflow-proposal"
 language = "yaml"
 owner = "release/ci"
-reason = "Inactive native merge-ready-label admission candidates with local trigger fixtures; not loaded by GitHub. Preserve active legacy workflows until owners qualify and explicitly cut over. No controller; dormant admission/finalizer jobs propose pull-requests:read for live current-state checks, requiring owner review before activation."
+reason = "Inactive native merge-ready-label admission candidates with local trigger fixtures; not loaded by GitHub. Preserve active legacy workflows until owners qualify and explicitly cut over. No controller; dormant admission/finalizer jobs propose pull-requests:read for live material/readiness and native reviewDecision reads, requiring owner review before activation. Harmless metadata routes to a separate non-required observation name."
 created = "2026-10-15"
 review_after = "2026-11-15"
 

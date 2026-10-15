@@ -10,6 +10,8 @@ on:
   pull_request:
     types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled, converted_to_draft, edited, closed]
 
+  pull_request_review:
+    types: [submitted, dismissed]
   workflow_dispatch:
 
 # Every job declares its own minimum token permissions. In particular, the
@@ -26,11 +28,13 @@ concurrency:
 jobs:
   admission:
     name: current admission snapshot
-    if: ${{ github.event.action == 'labeled' && github.event.label.name == 'merge-ready' && github.event.pull_request.state == 'open' && !github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'merge-ready') }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
       pull-requests: read
+    outputs:
+      admitted: ${{ steps.current.outputs.admitted }}
+      observation: ${{ steps.current.outputs.observation }}
     env:
       GH_TOKEN: ${{ github.token }}
       EXPECTED_PR: ${{ github.event.pull_request.number }}
@@ -39,33 +43,99 @@ jobs:
       EXPECTED_BASE: ${{ github.event.pull_request.base.sha }}
       EXPECTED_BASE_REF: ${{ github.event.pull_request.base.ref }}
       EXPECTED_BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
-      EXPECTED_UPDATED: ${{ github.event.pull_request.updated_at }}
+      EVENT_NAME: ${{ github.event_name }}
       EVENT_ACTION: ${{ github.event.action }}
       EVENT_LABEL: ${{ github.event.label.name }}
+      EVENT_RETARGET: ${{ github.event.changes.base != null }}
+      EVENT_REVIEW_STATE: ${{ github.event.review.state }}
     steps:
-      - name: Check fresh label edge against live PR
+      - name: Classify event and check current PR
+        id: current
         shell: bash
         run: |
           set -euo pipefail
-          test "$EVENT_ACTION" = labeled
-          test "${EVENT_LABEL,,}" = merge-ready
+          observation() { echo observation=true >> "$GITHUB_OUTPUT"; }
+          if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
+            observation
+            exit 0
+          fi
+          # Metadata-only events need no API read and cannot invalidate proof on an API outage.
+          if [[ "$EVENT_NAME" == pull_request_review && "$EVENT_REVIEW_STATE" == commented ]] ||
+             [[ "$EVENT_NAME" != pull_request_review && ( ( "$EVENT_ACTION" == labeled || "$EVENT_ACTION" == unlabeled ) && "${EVENT_LABEL,,}" != merge-ready ) ]] ||
+             [[ "$EVENT_NAME" != pull_request_review && "$EVENT_ACTION" == edited && "$EVENT_RETARGET" != true ]]; then
+            observation
+            exit 0
+          fi
           test -n "$EXPECTED_PR"
-          # Never execute candidate files or accept a caller-selected API endpoint.
           gh api "repos/$GITHUB_REPOSITORY/pulls/$EXPECTED_PR" > "$RUNNER_TEMP/admission-live-pr.json"
-          jq -e \
+          gh pr view "$EXPECTED_PR" --repo "$GITHUB_REPOSITORY" --json reviewDecision > "$RUNNER_TEMP/admission-review.json"
+          # Native reviewDecision preserves GitHub's review aggregation semantics.
+          jq -e 'has("reviewDecision") and (.reviewDecision == null or
+            .reviewDecision == "APPROVED" or .reviewDecision == "REVIEW_REQUIRED" or
+            .reviewDecision == "CHANGES_REQUESTED")' "$RUNNER_TEMP/admission-review.json" > /dev/null
+          jq -e 'type == "object" and (.head.sha | type == "string") and
+            (.head.repo.full_name | type == "string") and (.base.sha | type == "string") and
+            (.base.ref | type == "string") and (.base.repo.full_name | type == "string") and
+            (.state | type == "string") and (.draft | type == "boolean") and
+            (.labels | type == "array")' "$RUNNER_TEMP/admission-live-pr.json" > /dev/null
+          # A late event for a superseded material subject cannot replace current proof.
+          if ! jq -e \
             --arg head "$EXPECTED_HEAD" --arg head_repo "$EXPECTED_HEAD_REPO" \
             --arg base "$EXPECTED_BASE" --arg base_ref "$EXPECTED_BASE_REF" \
-            --arg base_repo "$EXPECTED_BASE_REPO" --arg updated "$EXPECTED_UPDATED" \
-            '.state == "open" and .draft == false and
-             .head.sha == $head and .head.repo.full_name == $head_repo and
-             .base.sha == $base and .base.ref == $base_ref and .base.repo.full_name == $base_repo and
-             .updated_at == $updated and
-             any(.labels[]; (.name | ascii_downcase) == "merge-ready")' \
+            --arg base_repo "$EXPECTED_BASE_REPO" \
+            '.head.sha == $head and .head.repo.full_name == $head_repo and
+             .base.sha == $base and .base.ref == $base_ref and .base.repo.full_name == $base_repo' \
+            "$RUNNER_TEMP/admission-live-pr.json" > /dev/null; then
+            observation
+            exit 0
+          fi
+          if [[ "$EVENT_NAME" == pull_request_review ]]; then
+            if jq -e '.reviewDecision != "CHANGES_REQUESTED"' "$RUNNER_TEMP/admission-review.json" > /dev/null; then
+              observation
+            fi
+            exit 0
+          fi
+          case "$EVENT_ACTION" in
+            labeled|unlabeled)
+              if [[ "${EVENT_LABEL,,}" != merge-ready ]]; then
+                observation
+                exit 0
+              fi
+              if [[ "$EVENT_ACTION" == unlabeled ]]; then
+                # A delayed withdrawal after reapplication is only an observation.
+                if jq -e 'any(.labels[]; (.name | ascii_downcase) == "merge-ready")' "$RUNNER_TEMP/admission-live-pr.json" > /dev/null; then
+                  observation
+                fi
+                exit 0
+              fi
+              ;;
+            edited)
+              if [[ "$EVENT_RETARGET" != true ]]; then observation; fi
+              exit 0
+              ;;
+            converted_to_draft)
+              if jq -e '.draft == false' "$RUNNER_TEMP/admission-live-pr.json" > /dev/null; then observation; fi
+              exit 0
+              ;;
+            closed)
+              if jq -e '.state == "open"' "$RUNNER_TEMP/admission-live-pr.json" > /dev/null; then observation; fi
+              exit 0
+              ;;
+            synchronize|opened|reopened|ready_for_review)
+              # These need a fresh label edge; never allocate heavy proof here.
+              exit 0
+              ;;
+            *) observation; exit 0 ;;
+          esac
+          jq -e '.state == "open" and .draft == false and
+            any(.labels[]; (.name | ascii_downcase) == "merge-ready")' \
             "$RUNNER_TEMP/admission-live-pr.json" > /dev/null
+          jq -e '.reviewDecision != "CHANGES_REQUESTED"' "$RUNNER_TEMP/admission-review.json" > /dev/null
+          echo admitted=true >> "$GITHUB_OUTPUT"
 
   gate:
     needs: admission
-    if: ${{ always() && (needs.admission.result == 'success' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !cancelled() && (needs.admission.outputs.admitted == 'true' || github.event_name == 'workflow_dispatch') }}
     name: contained candidate evidence
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -209,7 +279,7 @@ jobs:
           fail_ci_if_error: false
 
   admission-result:
-    name: ub-review/gate
+    name: ${{ needs.admission.outputs.observation == 'true' && 'admission observation' || 'ub-review/gate' }}
     needs: [admission, gate]
     if: ${{ always() }}
     runs-on: ubuntu-latest
@@ -224,28 +294,50 @@ jobs:
       EXPECTED_BASE: ${{ github.event.pull_request.base.sha }}
       EXPECTED_BASE_REF: ${{ github.event.pull_request.base.ref }}
       EXPECTED_BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
-      EXPECTED_UPDATED: ${{ github.event.pull_request.updated_at }}
+      EVENT_NAME: ${{ github.event_name }}
       EVENT_ACTION: ${{ github.event.action }}
       EVENT_LABEL: ${{ github.event.label.name }}
+      EVENT_RETARGET: ${{ github.event.changes.base != null }}
+      EVENT_REVIEW_STATE: ${{ github.event.review.state }}
       EVIDENCE_RESULT: ${{ needs.gate.result }}
+      OBSERVATION_ONLY: ${{ needs.admission.outputs.observation }}
     steps:
-      - name: Require current admitted successful candidate evidence
+      - name: Capture cancellation before finalization
+        id: cancellation
+        if: ${{ cancelled() }}
         shell: bash
+        run: echo cancelled=true >> "$GITHUB_OUTPUT"
+      - name: Require current admitted successful candidate evidence
+        if: ${{ always() }}
+        shell: bash
+        env:
+          WORKFLOW_CANCELLED: ${{ steps.cancellation.outputs.cancelled == 'true' }}
         run: |
           set -euo pipefail
+          test "$WORKFLOW_CANCELLED" = false
+          if [[ "$OBSERVATION_ONLY" == true ]]; then exit 0; fi
           test "$EVIDENCE_RESULT" = success
           test "$EVENT_ACTION" = labeled
           test "${EVENT_LABEL,,}" = merge-ready
           test -n "$EXPECTED_PR"
-          # Never execute candidate files or accept a caller-selected API endpoint.
           gh api "repos/$GITHUB_REPOSITORY/pulls/$EXPECTED_PR" > "$RUNNER_TEMP/admission-live-pr.json"
+          gh pr view "$EXPECTED_PR" --repo "$GITHUB_REPOSITORY" --json reviewDecision > "$RUNNER_TEMP/admission-review.json"
+          # Native reviewDecision preserves GitHub's review aggregation semantics.
+          jq -e 'has("reviewDecision") and (.reviewDecision == null or
+            .reviewDecision == "APPROVED" or .reviewDecision == "REVIEW_REQUIRED" or
+            .reviewDecision == "CHANGES_REQUESTED")' "$RUNNER_TEMP/admission-review.json" > /dev/null
           jq -e \
             --arg head "$EXPECTED_HEAD" --arg head_repo "$EXPECTED_HEAD_REPO" \
             --arg base "$EXPECTED_BASE" --arg base_ref "$EXPECTED_BASE_REF" \
-            --arg base_repo "$EXPECTED_BASE_REPO" --arg updated "$EXPECTED_UPDATED" \
-            '.state == "open" and .draft == false and
-             .head.sha == $head and .head.repo.full_name == $head_repo and
-             .base.sha == $base and .base.ref == $base_ref and .base.repo.full_name == $base_repo and
-             .updated_at == $updated and
-             any(.labels[]; (.name | ascii_downcase) == "merge-ready")' \
+            --arg base_repo "$EXPECTED_BASE_REPO" \
+            '.head.sha == $head and .head.repo.full_name == $head_repo and
+             .base.sha == $base and .base.ref == $base_ref and .base.repo.full_name == $base_repo' \
             "$RUNNER_TEMP/admission-live-pr.json" > /dev/null
+          jq -e '.state == "open" and .draft == false and
+            any(.labels[]; (.name | ascii_downcase) == "merge-ready")' \
+            "$RUNNER_TEMP/admission-live-pr.json" > /dev/null
+          jq -e '.reviewDecision != "CHANGES_REQUESTED"' "$RUNNER_TEMP/admission-review.json" > /dev/null
+      - name: Reject workflow cancellation during finalization
+        if: ${{ cancelled() }}
+        shell: bash
+        run: exit 1
