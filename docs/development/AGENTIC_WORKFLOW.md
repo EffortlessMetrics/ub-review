@@ -9,6 +9,10 @@ skills extend this procedure; they do not replace the checks or lane owner.
 Manual session exercises are documented in
 [AGENT_WORKFLOW_EXERCISES.md](AGENT_WORKFLOW_EXERCISES.md).
 
+For source-only Tower review versus integrated CI evidence and the proposed
+late-qualification handoff, use [the transition guide](TOWER_CI_TRANSITIONS.md).
+It describes evidence boundaries and unknown states; it grants no activation.
+
 Work review-fast: one coherent proof obligation per PR, with validation and
 known gaps recorded before handoff or merge. Prefer this ladder over a mega PR:
 

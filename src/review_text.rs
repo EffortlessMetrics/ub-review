@@ -245,23 +245,42 @@ pub(crate) fn lower_first_ascii(value: &str) -> String {
     }
 }
 
+/// Artifact review failures include both integrated and worker receipt vocabulary.
+/// Publication and gate classification deliberately retain their own contracts.
+pub(crate) fn artifact_proof_receipt_is_failure(receipt: &ProofReceipt) -> bool {
+    matches!(
+        receipt.result.as_str(),
+        "head_failed" | "failed" | "sanitizer_ub_detected"
+    )
+}
+
+pub(crate) fn artifact_proof_receipt_is_unavailable(receipt: &ProofReceipt) -> bool {
+    proof_receipt_is_missing_evidence(receipt)
+        || matches!(receipt.result.as_str(), "skipped_nightly" | "skipped")
+}
+
 pub(crate) fn review_decision(
     missing_or_failed_sensor_evidence: &[SensorEvidenceIssue],
     missing_or_failed_model_evidence: &[ModelEvidenceIssue],
     inline_comments: &[ReviewInlineComment],
     summary_only_findings: &[SummaryOnlyFinding],
     proof_receipts: &[ProofReceipt],
+    reviewed_head: &str,
 ) -> &'static str {
     if has_actionable_review_finding(inline_comments, summary_only_findings) {
         "Needs reviewer attention before upstream: grounded findings or summary-only concerns remain."
     } else if proof_receipts
         .iter()
-        .any(|receipt| receipt.result == "head_failed")
+        .filter(|receipt| receipt.head.eq_ignore_ascii_case(reviewed_head))
+        .any(artifact_proof_receipt_is_failure)
     {
         "Needs focused proof failure resolved before upstream."
     } else if !missing_or_failed_sensor_evidence.is_empty()
         || !missing_or_failed_model_evidence.is_empty()
-        || proof_receipts.iter().any(proof_receipt_is_missing_evidence)
+        || proof_receipts
+            .iter()
+            .filter(|receipt| receipt.head.eq_ignore_ascii_case(reviewed_head))
+            .any(artifact_proof_receipt_is_unavailable)
     {
         "No blocking finding after bounded review; evidence is incomplete."
     } else {
@@ -1290,6 +1309,68 @@ mod output_degradation_tests {
         assert_eq!(receipt.original_item_count, receipt.final_item_count);
         assert_eq!(receipt.max_bytes, 60);
         assert_eq!(receipt.max_bullets, 12);
+    }
+
+    #[test]
+    fn artifact_review_decision_scopes_failure_gap_and_quiet_results() {
+        for (result, expected) in [
+            (
+                "head_failed",
+                "Needs focused proof failure resolved before upstream.",
+            ),
+            (
+                "failed",
+                "Needs focused proof failure resolved before upstream.",
+            ),
+            (
+                "sanitizer_ub_detected",
+                "Needs focused proof failure resolved before upstream.",
+            ),
+            (
+                "timed_out",
+                "No blocking finding after bounded review; evidence is incomplete.",
+            ),
+            (
+                "skipped_nightly",
+                "No blocking finding after bounded review; evidence is incomplete.",
+            ),
+            (
+                "skipped",
+                "No blocking finding after bounded review; evidence is incomplete.",
+            ),
+            (
+                "head_passed",
+                "No blocking finding after bounded review; residual risk remains for human review.",
+            ),
+        ] {
+            for reviewed_head in ["head", "0123456789abcdef0123456789abcdef01234567"] {
+                let mut receipt = crate::tests::test_proof_receipt(result, "passed");
+                receipt.head = reviewed_head.to_ascii_uppercase();
+                assert_eq!(
+                    review_decision(
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        std::slice::from_ref(&receipt),
+                        reviewed_head
+                    ),
+                    expected,
+                    "{result}: current {reviewed_head}"
+                );
+                receipt.head = if reviewed_head == "head" {
+                    "older-head"
+                } else {
+                    "HEAD"
+                }
+                .to_owned();
+                assert_eq!(
+                    review_decision(&[], &[], &[], &[], &[receipt], reviewed_head),
+                    "No blocking finding after bounded review; residual risk remains for human review.",
+                    "{result}: stale for {reviewed_head}"
+                );
+            }
+        }
     }
 
     #[test]

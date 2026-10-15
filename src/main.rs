@@ -18655,10 +18655,25 @@ index 1111111..2222222 100644
                         .as_array()
                         .context("model claim evidence")?;
                     assert_eq!(evidence[0]["class"], "ModelInterpretation");
-                    assert_eq!(evidence.len(), if linked { 2 } else { 1 });
-                    if linked {
+                    assert_eq!(
+                        evidence.len(),
+                        if linked && result == "head_failed" {
+                            2
+                        } else {
+                            1
+                        }
+                    );
+                    if linked && result == "head_failed" {
                         assert_eq!(evidence[1]["class"], "ProofReceipt");
                     }
+                    assert_eq!(
+                        graph_json["topics"][0]["proof_receipts"],
+                        if linked {
+                            serde_json::json!(["matrix-gap-proof"])
+                        } else {
+                            serde_json::json!([])
+                        }
+                    );
                 }
             }
         }

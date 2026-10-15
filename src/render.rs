@@ -59,10 +59,16 @@ pub(crate) fn render_review_body(
             inline_comments,
             summary_only_findings,
             proof_receipts,
+            &diff.head,
         )
     ));
 
-    if !has_actionable_review_finding(inline_comments, summary_only_findings) {
+    let has_current_proof_failure = proof_receipts.iter().any(|receipt| {
+        receipt.head.eq_ignore_ascii_case(&diff.head) && artifact_proof_receipt_is_failure(receipt)
+    });
+    if !has_actionable_review_finding(inline_comments, summary_only_findings)
+        && !has_current_proof_failure
+    {
         text.push_str("\n## No blocking finding after checking\n\n");
         text.push_str("- Shared diff packet, changed-file list, diff flags, sensor receipts, model lane receipts, and Bun lane packet prompts.\n");
         text.push_str(
@@ -140,8 +146,10 @@ pub(crate) fn render_review_body(
 
     let incomplete_proofs = proof_receipts
         .iter()
+        .filter(|receipt| receipt.head.eq_ignore_ascii_case(&diff.head))
         .filter(|receipt| {
-            receipt.result == "head_failed" || proof_receipt_is_missing_evidence(receipt)
+            artifact_proof_receipt_is_failure(receipt)
+                || artifact_proof_receipt_is_unavailable(receipt)
         })
         .collect::<Vec<_>>();
     text.push_str("\n## Missing or failed evidence\n\n");
@@ -198,6 +206,25 @@ pub(crate) fn render_review_body(
         ));
     }
 
+    // Match the existing broker/claim-graph head-label boundary. This is not
+    // immutable revision validation: labels and merge-result commits can differ.
+    let other_head_proofs = proof_receipts
+        .iter()
+        .filter(|receipt| !receipt.head.eq_ignore_ascii_case(&diff.head))
+        .collect::<Vec<_>>();
+    if !other_head_proofs.is_empty() {
+        text.push_str("\n## Other-head proof evidence (audit only)\n\n");
+        for receipt in other_head_proofs {
+            text.push_str(&format!(
+                "- Recorded proof result `{}`: `review/proof_receipts.json#{}`; receipt head `{}`, current head `{}`; excluded from this decision.\n",
+                escape_md(&init_markdown_inline_code(&receipt.result)),
+                escape_md(&init_markdown_inline_code(&receipt.id)),
+                escape_md(&init_markdown_inline_code(&receipt.head)),
+                escape_md(&init_markdown_inline_code(&diff.head)),
+            ));
+        }
+    }
+
     if audience.include_successful_lane_table() {
         text.push_str("\n## Model lanes\n\n");
         for lane in model_lanes {
@@ -230,6 +257,14 @@ pub(crate) fn render_pull_request_review_body(
     proof_receipts: &[ProofReceipt],
     review_body_max_bytes: usize,
 ) -> String {
+    // A receipt for another head cannot decide this review or answer its
+    // verification questions. Keep its provenance in the artifact audience.
+    let current_proof_receipts = proof_receipts
+        .iter()
+        .filter(|receipt| receipt.head.eq_ignore_ascii_case(&diff.head))
+        .cloned()
+        .collect::<Vec<_>>();
+    let proof_receipts = current_proof_receipts.as_slice();
     let mut text = String::new();
     let observation_items =
         unique_review_observations_by_claim(unique_review_observations(observations));
@@ -506,4 +541,136 @@ fn proof_receipt_matches_observation(
                 .iter()
                 .any(|id| id == request_id)
     })
+}
+
+#[cfg(test)]
+mod artifact_proof_tests {
+    use super::*;
+    use crate::tests::{test_diff, test_plan, test_proof_receipt};
+
+    fn artifact_proof_body(receipts: &[ProofReceipt], audience: ReviewBodyAudience) -> String {
+        let mut plan = test_plan(Vec::new());
+        plan.head = "display-only-plan-head".to_owned();
+        render_review_body(
+            "private-context",
+            &plan,
+            &test_diff(),
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            receipts,
+            60_000,
+            audience,
+        )
+    }
+
+    #[test]
+    fn artifact_proof_failures_have_consistent_decision_and_heading() {
+        for result in ["head_failed", "failed", "sanitizer_ub_detected"] {
+            let mut receipt = test_proof_receipt(result, "failed");
+            receipt.head = "head".to_owned();
+            receipt.id = "private-failure-id".to_owned();
+            let rendered = artifact_proof_body(&[receipt.clone()], ReviewBodyAudience::Artifact);
+            assert!(
+                rendered.contains("Needs focused proof failure resolved before upstream."),
+                "{result}"
+            );
+            assert!(
+                rendered.contains(&format!("Recorded proof result `{result}`")),
+                "{result}"
+            );
+            assert!(
+                !rendered.contains("## No blocking finding after checking"),
+                "{result}"
+            );
+            let public = artifact_proof_body(&[receipt], ReviewBodyAudience::PullRequest);
+            assert!(!public.contains("private-failure-id"), "{result}");
+            assert!(!public.contains("private-context"), "{result}");
+            if result == "head_failed" {
+                assert!(public.contains("## Test proof"));
+                assert!(public.contains("Focused HEAD proof failed"));
+            } else {
+                assert_eq!(
+                    public,
+                    artifact_proof_body(&[], ReviewBodyAudience::PullRequest),
+                    "{result}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn artifact_proof_other_heads_are_audit_only() {
+        for result in [
+            "head_failed",
+            "failed",
+            "sanitizer_ub_detected",
+            "timed_out",
+            "skipped_budget",
+            "skipped_nightly",
+            "skipped",
+        ] {
+            let mut stale = test_proof_receipt(result, "failed");
+            stale.head = "older-head".to_owned();
+            stale.id = "private-stale-id".to_owned();
+            let current = test_proof_receipt("head_passed", "passed");
+            let receipts = [stale, current];
+            let rendered = artifact_proof_body(&receipts, ReviewBodyAudience::Artifact);
+            let current_section = rendered
+                .split("## Other-head proof evidence (audit only)")
+                .next()
+                .unwrap_or("");
+            assert!(
+                current_section.contains("residual risk remains for human review"),
+                "{result}"
+            );
+            assert!(!current_section.contains("private-stale-id"), "{result}");
+            assert!(
+                rendered.contains("## Other-head proof evidence (audit only)"),
+                "{result}"
+            );
+            assert!(rendered.contains("private-stale-id"), "{result}");
+            assert!(rendered.contains("older-head"), "{result}");
+            assert!(
+                rendered.contains(&format!("Recorded proof result `{result}`")),
+                "{result}"
+            );
+            let public = artifact_proof_body(&receipts, ReviewBodyAudience::PullRequest);
+            assert_eq!(
+                public,
+                artifact_proof_body(&[], ReviewBodyAudience::PullRequest),
+                "{result}"
+            );
+        }
+    }
+
+    #[test]
+    fn artifact_proof_gap_and_quiet_controls_remain_distinct() {
+        for result in [
+            "timed_out",
+            "skipped_budget",
+            "skipped_nightly",
+            "skipped",
+            "head_passed",
+        ] {
+            let receipt = test_proof_receipt(result, "passed");
+            let rendered = artifact_proof_body(&[receipt], ReviewBodyAudience::Artifact);
+            assert!(
+                rendered.contains("## No blocking finding after checking"),
+                "{result}"
+            );
+            assert_eq!(
+                rendered.contains("evidence is incomplete"),
+                result != "head_passed",
+                "{result}"
+            );
+            assert!(
+                !rendered.contains("Needs focused proof failure resolved"),
+                "{result}"
+            );
+        }
+    }
 }

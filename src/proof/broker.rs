@@ -3424,6 +3424,78 @@ mod tests {
     }
 
     #[test]
+    fn review_probe_sanitizer_failure_reaches_artifact_decision() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let diff = test_diff();
+        let profile = Profile::default();
+        let (receipt, _lease) = run_sanitizer_witness_with_runner(
+            temp.path(),
+            &diff,
+            &profile,
+            false,
+            "test_target",
+            60,
+            true,
+            runner_asan,
+        )?;
+        assert_eq!(receipt.result, "sanitizer_ub_detected");
+        assert_eq!(receipt.commands[0].status, "failed");
+        assert!(receipt.commands[0].reason.contains("UB"));
+        let (clean, _) = run_sanitizer_witness_with_runner(
+            temp.path(),
+            &diff,
+            &profile,
+            false,
+            "test_target",
+            60,
+            true,
+            runner_clean,
+        )?;
+        let clean_body = render_review_body(
+            "private-context",
+            &crate::tests::test_plan(Vec::new()),
+            &diff,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[clean],
+            60_000,
+            ReviewBodyAudience::Artifact,
+        );
+        ensure!(clean_body.contains("## Missing or failed evidence\n\n- None recorded."));
+        ensure!(
+            clean_body.contains("No blocking finding after bounded review; residual risk remains")
+        );
+        eprintln!("control sanitizer_clean: no false failure");
+        let body = render_review_body(
+            "private-context",
+            &crate::tests::test_plan(Vec::new()),
+            &diff,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            std::slice::from_ref(&receipt),
+            60_000,
+            ReviewBodyAudience::Artifact,
+        );
+        eprintln!("{body}");
+        ensure!(
+            body.contains("Needs focused proof failure resolved before upstream."),
+            "Sanitizer failure lost from decision"
+        );
+        ensure!(
+            body.contains("sanitizer_ub_detected"),
+            "Sanitizer failure lost from evidence"
+        );
+        Ok(())
+    }
+    #[test]
     fn sanitizer_records_ub_when_fails() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let diff = test_diff();
