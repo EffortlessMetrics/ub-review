@@ -540,25 +540,107 @@ mod effects {
         let executable = Path::new(env!("CARGO_BIN_EXE_ub-review"));
         let mut cases = 0;
         for operation in ["export", "replay", "agent-export", "agent-replay"] {
-            for shape in ["valid", "malformed", "rejected"] {
+            for shape in [
+                "valid",
+                "malformed",
+                "rejected",
+                "late_payload",
+                "late_observation",
+                "late_replay",
+                "retry_prepared",
+                "retry_superseded",
+                "retry_confirmed",
+            ] {
+                if !operation.starts_with("agent")
+                    && !["valid", "malformed", "rejected"].contains(&shape)
+                    || shape == "late_replay" && operation != "agent-replay"
+                {
+                    continue;
+                }
                 let mut h = history(None)?;
+                let prefix = match shape {
+                    "retry_prepared" => Some(3),
+                    "retry_superseded" => Some(4),
+                    "retry_confirmed" => Some(5),
+                    _ => None,
+                };
+                if let Some(count) = prefix {
+                    h.retry_history()?;
+                    h.admit(count)?;
+                }
                 if !operation.starts_with("agent") {
                     source_intake(&mut h.f);
                 }
-                let f = &h.f;
                 let export = if operation.starts_with("agent") {
                     "agent-export"
                 } else {
                     "export"
                 };
-                let out = f.invoke(export, &[])?;
-                successful(Output {
+                let out = h.f.invoke(export, &[])?;
+                let view = successful(Output {
                     status: out.status,
                     stdout: out.stdout.clone(),
                     stderr: out.stderr,
                 })?;
-                let view_pin = hash(&out.stdout);
-                fs::write(f.root.path().join("effect-view.json"), &out.stdout)?;
+                if let Some(count) = prefix {
+                    let observations = decode_bytes(&view["observation_view_json"])?;
+                    assert_eq!(observations["attempts"].as_array().map(Vec::len), Some(2));
+                    assert_eq!(observations["attempts"][0]["remote"]["outcome"], "unknown");
+                    assert_eq!(
+                        observations["attempts"][0]["local_failure"]["stage"],
+                        "submission"
+                    );
+                    assert_eq!(observations["attempts"][1]["attempt_id"], "delivery-2");
+                    assert_eq!(observations["attempts"][1]["retry_of"], "delivery-1");
+                    assert!(observations["attempts"][1]["local_failure"].is_null());
+                    assert_eq!(
+                        observations["attempts"][1]["remote"]["outcome"],
+                        if count == 5 {
+                            "confirmed_inline"
+                        } else {
+                            "unknown"
+                        }
+                    );
+                    assert_eq!(
+                        observations["source_currentness"],
+                        if count >= 4 {
+                            "historical_at_recorded_watermark"
+                        } else {
+                            "at_recorded_source_head"
+                        }
+                    );
+                    assert_eq!(view["whole_review_delivery"], "not_qualified");
+                    assert_eq!(observations["summary_payload_correspondence"], "unverified");
+                    assert!(!String::from_utf8_lossy(&out.stdout).contains("PRIVATE_SENTINEL"));
+                }
+                let mut view_bytes = out.stdout;
+                if shape == "late_replay" {
+                    // Valid JSON and matching file pin; only the final wrapper
+                    // comparison can reject this forged qualification.
+                    let mut forged = view;
+                    forged["whole_review_delivery"] = json!("confirmed");
+                    view_bytes = serde_json::to_vec(&forged)?;
+                }
+                let view_pin = hash(&view_bytes);
+                fs::write(h.f.root.path().join("effect-view.json"), &view_bytes)?;
+                if shape == "late_payload" {
+                    let mut payload: Value =
+                        serde_json::from_slice(&fs::read(h.f.root.path().join("payload.json"))?)?;
+                    payload["body"] = json!("");
+                    h.f.intake["observations"]["payload"] = put(&h.f, "payload.json", &payload)?;
+                    // Keep all byte/metadata/subject/chain pins consistent so
+                    // failure reaches prepared-payload semantic validation.
+                    h.repin_payload_and_chain()?;
+                    h.admit(1)?;
+                }
+                if shape == "late_observation" {
+                    let mut event: Value = serde_json::from_slice(&h.events[1])?;
+                    event["observation"]["stage"] = json!("comment_reconciliation");
+                    h.events[1] = serde_json::to_vec(&event)?;
+                    h.rechain()?;
+                    h.admit(2)?;
+                }
+                let f = &h.f;
                 let intake = if shape == "malformed" {
                     b"{ invalid recorded intake".to_vec()
                 } else {
@@ -593,14 +675,27 @@ mod effects {
                 let (out, raw) = trace(executable, &args, f.root.path(), &logs.join(name), false)?;
                 assert_eq!(
                     out.status.success(),
-                    shape == "valid",
+                    shape == "valid" || prefix.is_some(),
                     "{operation} {shape}: {}",
                     String::from_utf8_lossy(&out.stderr)
                 );
-                if shape == "valid" {
+                if shape == "valid" || prefix.is_some() {
                     successful(out)?;
                 } else {
                     assert!(out.stdout.is_empty());
+                    if shape.starts_with("late_") {
+                        assert!(
+                            String::from_utf8_lossy(&out.stderr).contains(
+                                if operation == "agent-export" {
+                                    "recorded agent validation rejected"
+                                } else {
+                                    "recorded agent replay rejected"
+                                }
+                            ),
+                            "late failure did not reach agent validation: {}",
+                            String::from_utf8_lossy(&out.stderr)
+                        );
+                    }
                 }
                 assert_eq!(
                     snapshot(f.root.path())?,
@@ -619,9 +714,9 @@ mod effects {
                 cases += 1;
             }
         }
-        assert_eq!(cases, 12);
+        assert_eq!(cases, 23);
         println!(
-            "12 observed cases; calibration detects child execution, loopback connection and file write. Traces: {}",
+            "23 observed cases; calibration detects child execution, loopback connection and file write. Traces: {}",
             logs.display()
         );
         Ok(())

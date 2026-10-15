@@ -192,6 +192,22 @@ impl History {
         }
         Ok(())
     }
+    fn retry_history(&mut self) -> Result<()> {
+        // Keep the original failed attempt, then prepare a distinct retry before
+        // a head advance and a late confirmation for that retry.
+        let mut confirmation: Value = serde_json::from_slice(&self.events[2])?;
+        confirmation["attempt_id"] = json!("delivery-2");
+        let mut superseded: Value = serde_json::from_slice(&self.events[3])?;
+        superseded["attempt_id"] = json!("delivery-2");
+        self.events.truncate(2);
+        self.events.push(serde_json::to_vec(&json!({
+            "sequence":3,"previous_sha256":"","attempt_id":"delivery-2",
+            "observation":{"kind":"prepared","retry_of":"delivery-1"}
+        }))?);
+        self.events.push(serde_json::to_vec(&superseded)?);
+        self.events.push(serde_json::to_vec(&confirmation)?);
+        self.rechain()
+    }
     fn admit(&mut self, count: usize) -> Result<()> {
         let stream = serde_json::to_vec(
             &json!({"schema":"ub-review.recorded-delivery-observations.v1","subject":self.subject,"events":self.events}),
@@ -200,11 +216,19 @@ impl History {
             "ub-review.recorded-delivery-genesis.v1",
             self.subject_json.as_bytes(),
         );
+        let mut observed_head = "a".repeat(40);
         for event in self.events.iter().take(count) {
             chain = link(&chain, event);
+            let event: Value = serde_json::from_slice(event)?;
+            if event["observation"]["kind"] == "superseded" {
+                observed_head = event["observation"]["observed_head_sha"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("superseded head absent"))?
+                    .to_owned();
+            }
         }
         let watermark = serde_json::to_vec(
-            &json!({"schema":"ub-review.recorded-delivery-watermark.v1","name":"latest","count":count,"chain_sha256":chain,"observed_head_sha":if count==4 {"f".repeat(40)}else{"a".repeat(40)}}),
+            &json!({"schema":"ub-review.recorded-delivery-watermark.v1","name":"latest","count":count,"chain_sha256":chain,"observed_head_sha":observed_head}),
         )?;
         self.f.intake["observations"]["stream"] = write(&self.f, "stream.json", &stream)?;
         self.f.intake["observations"]["watermark"] = write(&self.f, "watermark.json", &watermark)?;
