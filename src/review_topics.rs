@@ -105,7 +105,10 @@ pub(crate) fn build_active_claim_graph(
             status: "confirmed".to_owned(),
             severity: comment.severity.clone(),
             evidence: vec![EvidenceRef {
-                class: EvidenceClass::ValidatedFact,
+                // Inline admission validates shape and placement, not the
+                // causal mechanism asserted by the model. Repeating a prior
+                // bot finding must not promote interpretation into fact.
+                class: EvidenceClass::ModelInterpretation,
                 reference: format!("inline:{}:{}", comment.path, comment.line),
                 detail: comment.evidence.clone(),
             }],
@@ -875,6 +878,119 @@ mod tests {
         }
         ensure!(!thread_token_is_distinctive("code"));
         ensure!(!thread_token_is_distinctive("line"));
+        Ok(())
+    }
+
+    #[test]
+    fn repeated_bot_finding_keeps_model_provenance_after_inline_validation() -> Result<()> {
+        let head = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        let line_map = std::collections::BTreeSet::from([("src/parser.rs".to_owned(), 12)]);
+        let mut comments = Vec::new();
+        for lane_id in ["tests", "opposition"] {
+            let lane = model_lane(lane_id, "Review", &[], "Inspect parser");
+            let candidate = ModelCandidateComment {
+                severity: "high".to_owned(),
+                confidence: "high".to_owned(),
+                path: "src/parser.rs".to_owned(),
+                line: 12,
+                body: "Parser subscript finding".to_owned(),
+                evidence: "Repeats factory-droid[bot] current-thread: subscript finding".to_owned(),
+                suggestion: None,
+            };
+            comments.push(
+                validate_inline_candidate(&lane, candidate, &line_map)
+                    .map_err(|finding| anyhow::anyhow!("fixture rejected: {}", finding.reason))?,
+            );
+        }
+        for count in [1, 2] {
+            let graph = build_active_claim_graph(
+                head,
+                &[],
+                &comments[..count],
+                &[],
+                &[],
+                &[],
+                &context(head),
+            );
+            for topic in &graph.topics {
+                ensure!(topic.existing_threads == ["current-thread"]);
+                ensure!(topic.thread_disposition == "already_covered");
+                ensure!(
+                    topic
+                        .evidence
+                        .iter()
+                        .all(|evidence| evidence.class == EvidenceClass::ModelInterpretation)
+                );
+                ensure!(topic.evidence.iter().any(|evidence| {
+                    evidence
+                        .detail
+                        .contains("factory-droid[bot] current-thread")
+                }));
+            }
+            ensure!(reconcile_inline_comments(&graph, &comments[..count]).is_empty());
+            let repeated = &graph.claims[0];
+            let mut contrary = repeated.clone();
+            contrary.id = "contrary-model-claim".to_owned();
+            contrary.source_lane = "source-route".to_owned();
+            contrary.supporting_evidence = vec![EvidenceRef {
+                class: EvidenceClass::ModelInterpretation,
+                reference: "observation:contrary".to_owned(),
+                detail: "Source interpretation disagrees with the repeated report".to_owned(),
+            }];
+            let adjudication = adjudicate_conflict(repeated, &contrary);
+            ensure!(adjudication.resolution == ConflictResolution::Unresolved);
+            ensure!(adjudication.winner.is_none());
+        }
+        let graph =
+            build_active_claim_graph(head, &[], &comments[..1], &[], &[], &[], &context(head));
+        let receipt = ProofReceipt {
+            revision: None,
+            schema: "proof".to_owned(),
+            id: "independent-proof".to_owned(),
+            kind: "focused-test".to_owned(),
+            base: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+            head: head.to_owned(),
+            test_patch_mode: "base-plus-tests".to_owned(),
+            requested_by: vec!["tests".to_owned()],
+            request_ids: vec![graph.topics[0].claim_id.clone()],
+            commands: Vec::new(),
+            result: "discriminating".to_owned(),
+            reason: "Separate current-head proof supports the parser mechanism".to_owned(),
+        };
+        let proven = build_active_claim_graph(
+            head,
+            &[],
+            &comments[..1],
+            &[],
+            &[],
+            &[receipt],
+            &context(head),
+        );
+        ensure!(proven.topics[0].thread_disposition == "corroborated_with_new_evidence");
+        ensure!(
+            proven.claims[0].supporting_evidence[0].class == EvidenceClass::ModelInterpretation
+        );
+        ensure!(proven.claims[0].supporting_evidence[1].class == EvidenceClass::ProofReceipt);
+        let serialized = serde_json::to_value(&proven)?;
+        ensure!(
+            serialized["claims"][0]["supporting_evidence"][0]["class"] == "ModelInterpretation"
+        );
+        // With no imported thread, an admissible model report still has the
+        // same provenance. Placement validation cannot verify its mechanism.
+        let graph = build_active_claim_graph(
+            head,
+            &[],
+            &comments[..1],
+            &[],
+            &[],
+            &[],
+            &PrThreadContext {
+                threads: Vec::new(),
+                ..context(head)
+            },
+        );
+        ensure!(graph.topics[0].thread_disposition == "novel");
+        ensure!(graph.claims[0].supporting_evidence[0].class == EvidenceClass::ModelInterpretation);
         Ok(())
     }
 
