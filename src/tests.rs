@@ -592,7 +592,7 @@ fn review_renderer_failed_proof_leads_green_proof_and_verification() -> Result<(
 fn review_renderer_green_proof_does_not_answer_a_source_route_question() -> Result<()> {
     let mut case = discriminating_proof_case();
     case.summary_only_findings.push(summary_finding(
-        "Confirm `Pool::lease` reaches the changed zero-length guard.",
+        "Confirm base+tests red/green proof covers `Pool::lease` reaching the changed zero-length guard.",
     ));
     let surface = case.compile()?;
     let body = &surface.github_review.body;
@@ -601,7 +601,7 @@ fn review_renderer_green_proof_does_not_answer_a_source_route_question() -> Resu
         body.starts_with("## Decision\n\n- Needs one verification check before upstream.\n"),
         "patch discrimination does not establish source-route coverage: {body}"
     );
-    ensure!(body.contains("Confirm `Pool::lease` reaches the changed zero-length guard."));
+    ensure!(body.contains("Confirm base+tests red/green proof covers `Pool::lease` reaching the changed zero-length guard."));
     ensure!(body.contains("HEAD passed (exit 0) and base+tests failed (exit 1)"));
     ensure!(
         body.lines()
@@ -609,6 +609,22 @@ fn review_renderer_green_proof_does_not_answer_a_source_route_question() -> Resu
             .collect::<Vec<_>>()
             == ["## Decision", "## Verification questions", "## Test proof"],
         "question must lead supporting proof: {body}"
+    );
+    // The identical question is answered when it asks only for test evidence.
+    case.summary_only_findings[0].lane = "tests-oracle".to_owned();
+    let test_question = case.compile()?;
+    ensure!(
+        test_question
+            .github_review
+            .body
+            .starts_with("## Test proof\n\n")
+    );
+    ensure!(!test_question.github_review.body.contains("## Decision"));
+    ensure!(
+        !test_question
+            .github_review
+            .body
+            .contains("## Verification questions")
     );
     // Positive/quiet controls prevent 'always needs attention' from passing.
     let proof_only = discriminating_proof_case().compile()?;
