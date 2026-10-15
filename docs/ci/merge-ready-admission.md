@@ -36,73 +36,82 @@ Connected GitHub search/fetch reads succeeded and supplied current owner leads.
 `templates/ci/ub-review-gate.yml` and `templates/ci/independent-baseline.yml`
 are dormant full workflow candidates, outside GitHub's workflow directory.
 Active workflows are byte-for-byte unchanged. Existing heavy proof commands,
-tools, timeouts, artifacts and the two proof populations remain. The source-only
-Tower (#1334/#1335/#1338) path has no CI sufficiency authority and is not invoked.
+tools, timeouts, artifacts and the two proof populations remain. Source-only
+Tower (#1334/#1335/#1338) has no CI sufficiency authority and is not invoked.
 
-Heavy qualification requires a **fresh labeled event** whose event label is
-`merge-ready`, an open non-draft event snapshot, and current label presence.
-Actions compares label names case-insensitively. Synchronize, reopening, Ready,
-retarget/edit, closure, draft conversion, removal, and unrelated label events
-never admit heavy qualification just because a label remains attached. Remove
-and reapply `merge-ready` when a repaired head is ready for a new qualification.
-The old sticky-label candidate and its positive synchronize fixtures are
-superseded. Manual workflow_dispatch remains in the gate template for artifact
-recovery; it can execute the original manual proof path, but cannot green the
-protected check because it has no fresh PR label edge/current PR binding.
+Heavy qualification requires a fresh labeled event for merge-ready and a live
+open, non-draft PR with that label. Actions compares label names without case.
+Sticky synchronize/reopen/Ready, retarget, withdrawal, closure, review and
+unrelated metadata events do not allocate heavy proof. Gate workflow_dispatch
+remains artifact recovery, under a non-required observation result. It cannot
+green the protected PR result without a fresh PR edge and material binding.
 
-Each template now has a cheap no-checkout admission job before heavy allocation,
-and repeats the same live check in its always-run native finalizer after proof.
-The fixed `gh api repos/$GITHUB_REPOSITORY/pulls/$EXPECTED_PR` read must succeed.
-The live PR must be open, non-draft, have the exact head SHA/repository, base
-SHA/ref/repository, event snapshot updated_at and current merge-ready label.
-Missing/failed/malformed reads reject. Snapshot movement rejects even if H is
-unchanged, including retarget or a remove/reapply with a different updated_at.
-This conservative timestamp binding can also reject after comments or other
-activity; it does not assert that timestamps are unique edge IDs.
+A no-checkout admission job uses fixed native gh reads of the live PR and
+GitHub's native reviewDecision before allocation. Successful proof is rechecked
+in the finalizer against live head SHA/repository, base SHA/ref/repository,
+open/non-draft status, current merge-ready label and native reviewDecision.
+CHANGES_REQUESTED blocks; APPROVED/REVIEW_REQUIRED/null defer remaining review
+requirements to native protection. This does not invent approval policy or
+reimplement reviewer aggregation. Gate additionally listens to submitted and
+dismissed pull_request_review events; current blocking review changes invalidate
+its result without re-running heavy proof. Independent baseline checks the same
+live decision when qualifying, without adding a review-event trust source.
+Existing actual findings/proof failures still reject the qualification result.
 
-Permission delta for **parent review before activation**: new cheap admission
-jobs and the gate no-checkout finalizer request only `pull-requests: read`;
-independent finalize adds that permission to its existing `contents: read`.
-Heavy candidate/evidence jobs and coverage permissions remain unchanged. Tokens
-are only passed to native reads in the no-checkout jobs, never to candidate
-files. No check writer, write scope, controller, custody project or new platform
-is introduced. Parent must verify those authorized reads work for same-repo and
-fork candidates with the proposed permissions.
+Harmless comments, title/body edits, unrelated labels, and nonblocking review
+activity do not invalidate existing proof or allocate replacements. updated_at
+is not authority. The admission output explicitly routes irrelevant events to
+a native job name **admission observation**, distinct from ub-review/gate and
+ub-review/independent-baseline. The protected names are emitted only for
+qualification or relevant invalidation (or a failed/unknown admission read).
+Both finalizer jobs always execute; no protected-name skipped success is used.
+Observation jobs may succeed without proof, but their names cannot satisfy the
+required native contexts. Observation baseline runs also skip receipt upload.
 
-Skipped protected-name jobs can count as success. Both protected-name finalizers
-are therefore unconditional `always()` jobs, and accept only successful proof
-plus the repeated live admission check. Failure, cancellation, skipped evidence,
-manual recovery and non-edge observations are non-green. The independent receipt
-still describes evidence status, not live admission authority; the final job
-result enforces both. Cheap revocation/observation runs may fail without
-allocating heavy work; unrelated label edits can conservatively invalidate a
-previous check and require another fresh edge. They never reuse a prior green
-result or manufacture success by skipping the protected name.
+Live subject mismatch routes a delayed event for a superseded head/base to the
+observation name. A late withdrawal after the label has been reapplied likewise
+observes current restored readiness. A current withdrawal, draft, closure,
+head/base transition or blocking review routes to the protected name and fails
+without allocating proof. An unchanged-H retarget is a material transition.
+Ready/reopen/synchronize events require a new explicit edge to qualify. A
+withdrawal while finalization observes absent readiness rejects; if readiness
+is restored for identical material inputs, prior in-flight proof remains usable.
+No unique label-edge custody or history-based invalidation is claimed.
 
-Concurrency separates qualification edges from observations. Qualification uses
-one per-PR group with `cancel-in-progress: false`, preserving the active run;
-non-edge events and manual recovery use a unique observe-run-id group and cannot
-cancel qualification. Native newest-pending replacement is only preparation for
-#1288, not its complete terminal accounting, duplicate, stale publication or
-lifecycle proof. Older qualification can finish historical artifacts but must
-pass current-state validation to green. Parent coordinates #1288 ownership.
+Native cancellation is checked independently of predecessor evidence. Heavy
+jobs use !cancelled(). Finalizers capture cancelled() before the always-run
+verification step, reject that capture even after evidence success, and have a
+separate cancelled()-conditioned exit-1 step after verification for cancellation
+during finalization. If the platform cancels the job itself its conclusion is
+cancelled, not success. Local fixtures exercise the captured-cancellation and
+rejection shell paths; hosted native scheduling/cancellation remains unproven.
 
-`tests/merge_ready_admission.rs` pins the actual candidate predicates and heavy
-job dependencies, preserved proof populations, manual recovery, concurrency,
-and unskipped native finalizers. It executes the **actual extracted Bash/jq**
-admission/finalizer bodies with a local gh fixture and no network/credentials:
-changed H/repository, draft, closed, unchanged-H retarget/base movement,
-remove/reapply, late and unrelated events, failed/malformed API reads and
-non-success evidence. It also proves a new reapply snapshot can qualify.
-These fixtures do not emulate Actions scheduling, app identity or hosted races.
+Qualification keeps its per-PR cancel-in-progress:false group. Non-edge
+observations have unique observe-run-id groups and cannot cancel active proof.
+This prepares #1288 active-run preservation; native pending replacement is not
+its complete terminal accounting or duplicate-run qualification.
 
-Remaining native limits: live-read-to-job-completion is not atomic with merge,
-and PR updated_at has finite timestamp precision. Remove/reapply or other
-movement inside the same timestamp quantum can be indistinguishable from the
-old edge; no per-edge nonce/current-run API proof is claimed. Branch protection
-must still enforce the actual current required head/check. Hosted exercises and
-owner review must assess these limits before cutover. No savings, <=20-minute,
-race-free label custody or complete #1288 claim is established.
+Permission delta for parent review before activation: admission jobs and the
+gate finalizer propose only pull-requests:read; independent finalize adds that
+scope to existing contents:read. Heavy and coverage permissions stay unchanged.
+No-checkout jobs alone receive the read token. The additional native
+reviewDecision read uses the same scope. No check writer, write scope,
+controller, custody service, new platform or Perl-specific validator is added.
+
+Local fixtures pin source predicates, dependency/output routing, native names,
+permissions, manual recovery and cancellation conditions. They execute actual
+extracted Bash/jq with a local gh fixture: material movement, harmless timestamp/
+comment/label changes, delayed events, review decisions, withdrawal/draft/closed,
+unchanged-H retarget, failed reads, evidence failure and own-workflow cancellation.
+They demonstrate harmless events cannot replace protected proof via the
+observation-name expression. They do not emulate GitHub expression evaluation,
+job naming/required-context association, review-event trust or cancellation.
+
+The final live-read-to-native-completion/merge window remains non-atomic. There
+is no timestamp interlock, controller or custody promise. Hosted checks must
+verify native job-name expressions, current-head/base association, fork read
+permissions, harmless-event retention, real revocation/review findings and
+cancellation before cutover. No savings, <=20-minute or race-free claim is made.
 
 ## Owner handoff and cutover requirements
 
