@@ -180,7 +180,61 @@ pub(crate) fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Res
     Ok(text)
 }
 
+/// Render recorded evidence separately from the legacy enforcement conclusion.
+/// This must also work when metrics were not written: absent evidence cannot
+/// inherit a successful command exit or an advisory enforcement pass.
+fn render_review_results(text: &mut String, out: &Path) {
+    let gate = read_gate_outcome(out).unwrap_or(serde_json::Value::Null);
+    let conclusion = gate
+        .get("conclusion")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
+    let blocking_reasons = gate
+        .get("reasons")
+        .and_then(serde_json::Value::as_array)
+        .map(|reasons| reasons.len().to_string())
+        .unwrap_or_else(|| "unknown".to_owned());
+    let analysis = gate
+        .get("analysis_result")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| matches!(*value, "clean" | "findings" | "limited" | "not_proven"));
+    let result = gate
+        .get("gate_result")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| matches!(*value, "pass" | "finding" | "not_proven"));
+    text.push_str("\n## Review results\n\n");
+    text.push_str("A successful workflow or gate enforcement pass does not establish usable model review or proof.\n\n");
+    text.push_str(&format!(
+        "- Gate enforcement conclusion: `{}` with `{blocking_reasons}` blocking reasons (`review/gate_outcome.json`)\n",
+        init_markdown_inline_code(conclusion)
+    ));
+    text.push_str(&format!(
+        "- Analysis result: `{}`\n",
+        analysis.unwrap_or("not_proven")
+    ));
+    text.push_str(&format!(
+        "- Evidence gate result: `{}`\n",
+        result.unwrap_or("not_proven")
+    ));
+    if analysis.is_none() || result.is_none() {
+        text.push_str("- Evidence results unavailable or invalid in `review/gate_outcome.json`; reporting `not_proven`.\n");
+    }
+    if let Some(reasons) = gate
+        .get("not_proven_reasons")
+        .and_then(serde_json::Value::as_array)
+    {
+        for reason in reasons.iter().filter_map(serde_json::Value::as_str) {
+            text.push_str(&format!(
+                "- Not proven: {}\n",
+                sanitize_planner_summary_text(reason)
+            ));
+        }
+    }
+    render_planner_required_proofs(text, &gate);
+}
+
 pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
+    render_review_results(text, out);
     let Some(metrics) = read_review_metrics(out) else {
         return;
     };
@@ -297,21 +351,6 @@ pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
         "- Loop detail: model `{model_wall}`, local proof `{proof_wall}`, compiler `{compiler_wall}`\n"
     ));
     text.push_str(&format!("- Terminal state: `{terminal_state}`\n"));
-    if let Some(gate) = read_gate_outcome(out) {
-        let conclusion = gate
-            .get("conclusion")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("unknown");
-        let blocking_reasons = gate
-            .get("reasons")
-            .and_then(serde_json::Value::as_array)
-            .map(Vec::len)
-            .unwrap_or(0);
-        text.push_str(&format!(
-            "- Gate: `{conclusion}` with `{blocking_reasons}` blocking reasons (`review/gate_outcome.json`)\n"
-        ));
-        render_planner_required_proofs(text, &gate);
-    }
     text.push_str(&format!(
         "- Model lanes: `{usable_lanes}/{total_lanes}` usable (`{ok_lanes}` ok, `{degraded_lanes}` degraded)\n"
     ));
@@ -356,7 +395,7 @@ pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
             cal.proof_changed_conclusions
         ));
         text.push_str(&format!(
-            "- Final review: `{}` inline, `{}` summary | Gate: `{}`\n",
+            "- Final review: `{}` inline, `{}` summary | Enforcement conclusion: `{}`\n",
             cal.inline_comments, cal.summary_comments, cal.gate
         ));
     }
@@ -743,6 +782,129 @@ mod tests {
     fn lane_packet_model_display_returns_none_for_missing_packet() -> Result<()> {
         let temp = tempfile::tempdir()?;
         assert_eq!(lane_packet_model_display(temp.path(), "missing/lane"), None);
+        Ok(())
+    }
+
+    /// A workflow/enforcement pass is not proof of a usable review. These
+    /// fixtures deliberately retain the advisory pass alongside lost evidence.
+    #[test]
+    fn summary_separates_enforcement_from_review_evidence() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        fs::create_dir_all(out.join("review"))?;
+        fs::write(
+            out.join("review/metrics.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "terminal_state": "failed-to-review",
+                "models": {"model_lanes": 2, "model_lane_status_counts": {"preflight_failed": 2}}
+            }))?,
+        )?;
+        let gate = serde_json::json!({
+            "conclusion": "pass", "reasons": [],
+            "analysis_result": "not_proven", "gate_result": "not_proven",
+            "not_proven_reasons": [
+                "terminal-state: the run ended `failed-to-review` (0 of 2 model lanes usable, 0 proof receipts)",
+                "model-coverage: 0 of 2 model lanes produced usable output"
+            ]
+        });
+        let bytes = serde_json::to_vec(&gate)?;
+        fs::write(out.join("review/gate_outcome.json"), &bytes)?;
+        let mut summary = String::new();
+        render_review_efficiency_section(&mut summary, out);
+        for needle in [
+            "Gate enforcement conclusion: `pass`",
+            "Analysis result: `not_proven`",
+            "Evidence gate result: `not_proven`",
+            "model-coverage: 0 of 2",
+            "0 proof receipts",
+            "Model lanes: `0/2` usable",
+            "successful workflow",
+            "does not establish",
+        ] {
+            assert!(summary.contains(needle), "missing {needle}:\n{summary}");
+        }
+        assert_eq!(fs::read(out.join("review/gate_outcome.json"))?, bytes);
+        Ok(())
+    }
+
+    #[test]
+    fn summary_reports_recorded_results_without_metrics() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        fs::create_dir_all(out.join("review"))?;
+        for (analysis, result) in [
+            ("clean", "pass"),
+            ("limited", "pass"),
+            ("findings", "finding"),
+            ("not_proven", "not_proven"),
+        ] {
+            fs::write(
+                out.join("review/gate_outcome.json"),
+                serde_json::to_vec(&serde_json::json!({
+                    "conclusion": "pass", "reasons": [], "analysis_result": analysis,
+                    "gate_result": result, "not_proven_reasons": []
+                }))?,
+            )?;
+            let mut summary = String::new();
+            render_review_efficiency_section(&mut summary, out);
+            assert!(
+                summary.contains(&format!("Analysis result: `{analysis}`")),
+                "{summary}"
+            );
+            assert!(
+                summary.contains(&format!("Evidence gate result: `{result}`")),
+                "{summary}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn summary_missing_results_never_inherit_legacy_pass() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        fs::create_dir_all(out.join("review"))?;
+        for artifact in [
+            None,
+            Some("not-json"),
+            Some(r#"{"conclusion":"pass","reasons":[]}"#),
+        ] {
+            if let Some(artifact) = artifact {
+                fs::write(out.join("review/gate_outcome.json"), artifact)?;
+            }
+            let mut summary = String::new();
+            render_review_efficiency_section(&mut summary, out);
+            assert!(
+                summary.contains("Analysis result: `not_proven`"),
+                "{summary}"
+            );
+            assert!(
+                summary.contains("Evidence gate result: `not_proven`"),
+                "{summary}"
+            );
+            assert!(summary.contains("unavailable"), "{summary}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn summary_missing_evidence_reasons_render_as_literal_text() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        fs::create_dir_all(out.join("review"))?;
+        fs::write(
+            out.join("review/gate_outcome.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "conclusion": "pass", "analysis_result": "not_proven", "gate_result": "not_proven",
+                "not_proven_reasons": ["model-coverage: ![forged](https://evil)\n# pass `clean`"]
+            }))?,
+        )?;
+        let mut summary = String::new();
+        render_review_efficiency_section(&mut summary, out);
+        assert!(summary.contains("model-coverage:"), "{summary}");
+        assert!(!summary.contains("![forged]"), "{summary}");
+        assert!(!summary.contains("\n# pass"), "{summary}");
+        assert!(!summary.contains("`clean`"), "{summary}");
         Ok(())
     }
 

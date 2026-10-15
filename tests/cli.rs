@@ -4620,6 +4620,24 @@ fn model_outage_degrades_review_without_reddening_enforced_gate() -> Result<()> 
         "gate_outcome must name why nothing was proven: {gate}"
     );
     assert_eq!(gate["model_coverage"]["lanes_usable"], 0);
+    // The successful run above must retain the missing-evidence distinction on
+    // the final human-facing surface, not just in the machine artifact.
+    let summary = fs::read_to_string(out.join("running-summary.md"))?;
+    assert!(
+        summary.contains("Gate enforcement conclusion: `pass`"),
+        "{summary}"
+    );
+    assert!(
+        summary.contains("Analysis result: `not_proven`"),
+        "{summary}"
+    );
+    assert!(
+        summary.contains("Evidence gate result: `not_proven`"),
+        "{summary}"
+    );
+    assert!(summary.contains("model-coverage: 0 of"), "{summary}");
+    assert!(!summary.contains("Analysis result: `clean`"), "{summary}");
+    assert!(!summary.contains("| Gate: `pass`"), "{summary}");
     Ok(())
 }
 
