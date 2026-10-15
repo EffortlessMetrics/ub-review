@@ -18402,6 +18402,97 @@ index 1111111..2222222 100644
         assert!(!has_standalone_approval_line(&body));
     }
 
+    /// Observational reproducer: distinct receipt/revision identities collapse
+    /// to the same public evidence text. Invert the equality when repaired.
+    #[test]
+    fn proof_summary_identity_collision_reproducer() -> Result<()> {
+        for result in [
+            "discriminating",
+            "head_failed",
+            "non_discriminating",
+            "timed_out",
+            "skipped_budget",
+            "base_patch_failed",
+        ] {
+            let mut first = test_red_green_proof_receipt(result, "failed");
+            if result == "head_failed" {
+                first.commands[0].status = "failed".to_owned();
+                first.commands[0].exit_code = Some(1);
+            } else if result == "non_discriminating" {
+                first.commands[1].status = "passed".to_owned();
+                first.commands[1].exit_code = Some(0);
+            } else if result == "timed_out" {
+                first.commands[0].status = "timed_out".to_owned();
+                first.commands[0].exit_code = None;
+                first.commands[0].timed_out = true;
+            }
+            first.id = "proof-run-alpha".to_owned();
+            first.revision = Some(super::RevisionRef {
+                digest: "a".repeat(64),
+                semantics: "candidate_head".to_owned(),
+                reviewed_commit: "1".repeat(40),
+            });
+            let mut second = first.clone();
+            second.id = "proof-run-beta".to_owned();
+            second.revision = Some(super::RevisionRef {
+                digest: "b".repeat(64),
+                semantics: "merge_result".to_owned(),
+                reviewed_commit: "2".repeat(40),
+            });
+            anyhow::ensure!(serde_json::to_value(&first)? != serde_json::to_value(&second)?);
+            let mut summaries = Vec::new();
+            for receipt in [&first, &second] {
+                let mut text = String::new();
+                if matches!(result, "discriminating" | "head_failed") {
+                    super::render_proof_receipt_summary(&mut text, receipt);
+                } else {
+                    super::render_missing_proof_receipt_summary(&mut text, receipt);
+                }
+                anyhow::ensure!(!text.contains(&receipt.id));
+                summaries.push(text);
+            }
+            anyhow::ensure!(
+                summaries[0] == summaries[1],
+                "identity collision changed: {result}"
+            );
+            let mut control = first.clone();
+            control.commands[0].command = "cargo test distinct-control".to_owned();
+            let mut control_text = String::new();
+            if matches!(result, "discriminating" | "head_failed") {
+                super::render_proof_receipt_summary(&mut control_text, &control);
+            } else {
+                super::render_missing_proof_receipt_summary(&mut control_text, &control);
+            }
+            anyhow::ensure!(control_text != summaries[0]);
+            println!(
+                "{result}: distinct receipt IDs, revision digests, commits and semantics render identically: {}",
+                summaries[0].trim()
+            );
+            if matches!(result, "discriminating" | "head_failed") {
+                let bodies = [&first, &second].map(|receipt| {
+                    render_review_body(
+                        "shared-context",
+                        &test_plan(Vec::new()),
+                        &test_diff(),
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        std::slice::from_ref(receipt),
+                        60_000,
+                        ReviewBodyAudience::PullRequest,
+                    )
+                });
+                anyhow::ensure!(!bodies[0].is_empty());
+                anyhow::ensure!(bodies[0] == bodies[1]);
+                anyhow::ensure!(bodies[0].contains("## Test proof"));
+            }
+        }
+        Ok(())
+    }
+
     #[test]
     fn pr_review_body_keeps_red_green_question_after_head_only_proof_receipt() {
         let receipt = test_proof_receipt("head_passed", "passed");
