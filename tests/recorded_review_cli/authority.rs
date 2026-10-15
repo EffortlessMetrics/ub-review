@@ -257,6 +257,7 @@ fn assert_forged_fields_reject(shape: &str, forged: &Value) -> Result<()> {
                 stderr: original.stderr,
             })?;
             if ["intake", "answer", "plan"].contains(&location) {
+                let prior = ["answer", "plan"].map(|key| h.f.intake[key]["sha256"].clone());
                 if location == "intake" {
                     h.f.intake[field] = forged.clone();
                 } else {
@@ -273,6 +274,25 @@ fn assert_forged_fields_reject(shape: &str, forged: &Value) -> Result<()> {
                         h.f.intake["plan"] = put(&h.f, "plan.json", &plan)?;
                     }
                 }
+                // Repin every dependent agent identity too: a stale payload or
+                // observation link must not mask weakened answer/plan admission.
+                for (key, old) in ["answer", "plan"].into_iter().zip(prior) {
+                    let old = old
+                        .as_str()
+                        .ok_or_else(|| anyhow::anyhow!("old pin absent"))?;
+                    let new = h.f.intake[key]["sha256"]
+                        .as_str()
+                        .ok_or_else(|| anyhow::anyhow!("new pin absent"))?;
+                    h.subject_json = h.subject_json.replace(old, new);
+                    h.payload_metadata_json = h.payload_metadata_json.replace(old, new);
+                }
+                h.subject = serde_json::from_str(&h.subject_json)?;
+                h.f.intake["observations"]["payload_source_digest"] = json!(domain_hash(
+                    "ub-review.recorded-prepared-payload-source.v1",
+                    h.payload_metadata_json.as_bytes()
+                ));
+                h.rechain()?;
+                h.admit(1)?;
                 let agent_intake = h.f.intake.clone();
                 for operation in ["export", "agent-export"] {
                     h.f.intake = agent_intake.clone();
