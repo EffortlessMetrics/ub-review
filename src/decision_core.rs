@@ -442,6 +442,297 @@ mod tests {
     use crate::*;
 
     #[test]
+    fn proof_only_gaps_need_a_surviving_observation_to_prepare_public_text() -> Result<()> {
+        for result in [
+            "timed_out",
+            "base_patch_failed",
+            "skipped_unresolved",
+            "skipped_budget",
+            "skipped_profile",
+            "non_discriminating",
+        ] {
+            for linked in [false, true] {
+                let mut receipt = test_proof_receipt(result, "skipped");
+                receipt.id = "private-gap-proof".to_owned();
+                receipt.request_ids =
+                    vec![if linked { "gap-link" } else { "other-link" }.to_owned()];
+                receipt.commands.clear();
+                let observation = make_observation(ObservationInput {
+                    index: 0,
+                    lane: "tests-oracle",
+                    question: "changed-route",
+                    claim: "Changed parser route remains unevaluated.",
+                    kind: "missing-evidence",
+                    status: "open",
+                    severity: "medium",
+                    confidence: "high",
+                    path: None,
+                    line: None,
+                    evidence: vec!["bounded source interpretation".to_owned()],
+                    dedupe_key: Some("gap-link"),
+                    source: "model-observation",
+                });
+                let args = crate::tests::test_run_args(PathBuf::from("unused-artifact-root"));
+                let surface = compile_review_surface(ReviewCompilerInput {
+                    shared_context_id: "private-gap-context",
+                    review_body_policy: &ReviewBodyPolicy::default(),
+                    run_pass: RunPass::Manual,
+                    post_review_on: &[],
+                    args: &args,
+                    plan: &crate::tests::test_plan(Vec::new()),
+                    diff: &crate::tests::test_diff(),
+                    model_lanes: &[],
+                    missing_or_failed_sensor_evidence: &[],
+                    missing_or_failed_model_evidence: &[],
+                    inline_comments: &[],
+                    summary_only_findings: &[],
+                    observations: if linked {
+                        std::slice::from_ref(&observation)
+                    } else {
+                        &[]
+                    },
+                    proof_receipts: &[receipt],
+                    suggested_issues: &[],
+                    final_follow_up_tasks: 0,
+                    reporter_distillation: None,
+                })?;
+                assert!(surface.artifact_body.contains("evidence is incomplete."));
+                assert!(surface.artifact_body.contains("private-gap-proof"));
+                assert_eq!(
+                    surface.should_prepare_github_review, linked,
+                    "{result}: {linked}"
+                );
+                assert_eq!(
+                    surface.github_review.body.contains("## Evidence gaps"),
+                    linked
+                );
+                if linked {
+                    assert!(
+                        surface
+                            .github_review
+                            .body
+                            .contains("Changed parser route remains unevaluated.")
+                    );
+                    assert_eq!(surface.review_payload_status, "prepared");
+                } else {
+                    assert!(surface.github_review.body.is_empty());
+                }
+                for private in [
+                    "private-gap-proof",
+                    "gap-link",
+                    "other-link",
+                    "private-gap-context",
+                    "tests-oracle",
+                ] {
+                    assert!(!surface.github_review.body.contains(private));
+                }
+                assert!(
+                    !surface
+                        .github_review
+                        .body
+                        .contains("Needs focused proof failure resolved")
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn proof_only_artifact_decision_does_not_claim_publication() -> Result<()> {
+        for result in [
+            "head_failed",
+            "timed_out",
+            "base_patch_failed",
+            "skipped_unresolved",
+            "skipped_budget",
+            "skipped_profile",
+            "non_discriminating",
+            "head_passed",
+            "discriminating",
+        ] {
+            for model_mode in [ModelMode::Auto, ModelMode::Off] {
+                let temp = tempfile::tempdir()?;
+                let out = temp.path().join("out");
+                let mut args = crate::tests::test_run_args(out.clone());
+                args.model_mode = model_mode;
+                let mut receipt = test_proof_receipt(result, "skipped");
+                receipt.id = "private-proof-publication-invariant".to_owned();
+                receipt.request_ids = vec!["private-request-publication-invariant".to_owned()];
+                for command in &mut receipt.commands {
+                    command.status = match result {
+                        "head_failed" => "failed",
+                        "timed_out" => "timed_out",
+                        "head_passed" | "discriminating" | "non_discriminating" => "passed",
+                        _ => "skipped",
+                    }
+                    .to_owned();
+                    command.exit_code = match command.status.as_str() {
+                        "failed" => Some(101),
+                        "passed" => Some(0),
+                        _ => None,
+                    };
+                }
+                if matches!(
+                    result,
+                    "discriminating" | "non_discriminating" | "base_patch_failed"
+                ) {
+                    receipt.kind = "focused-red-green".to_owned();
+                    receipt.test_patch_mode = "base-plus-tests".to_owned();
+                    let mut baseline = receipt.commands[0].clone();
+                    baseline.side = "base-plus-tests".to_owned();
+                    baseline.status = if result == "discriminating" {
+                        "failed"
+                    } else {
+                        "passed"
+                    }
+                    .to_owned();
+                    baseline.exit_code = Some(if result == "discriminating" { 101 } else { 0 });
+                    if result != "base_patch_failed" {
+                        receipt.commands.push(baseline);
+                    } else {
+                        receipt.commands.clear();
+                    }
+                }
+                write_proof_receipt_artifacts(&out, &[receipt], None)?;
+                let receipts: Vec<ProofReceipt> =
+                    serde_json::from_slice(&fs::read(out.join("review/proof_receipts.json"))?)?;
+                let surface = compile_review_surface(ReviewCompilerInput {
+                    shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                    review_body_policy: &ReviewBodyPolicy::default(),
+                    run_pass: RunPass::Manual,
+                    post_review_on: &[],
+                    args: &args,
+                    plan: &crate::tests::test_plan(Vec::new()),
+                    diff: &crate::tests::test_diff(),
+                    model_lanes: &[],
+                    missing_or_failed_sensor_evidence: &[],
+                    missing_or_failed_model_evidence: &[],
+                    inline_comments: &[],
+                    summary_only_findings: &[],
+                    observations: &[],
+                    proof_receipts: &receipts,
+                    suggested_issues: &[],
+                    final_follow_up_tasks: 0,
+                    reporter_distillation: None,
+                })?;
+                let decision = surface
+                    .artifact_body
+                    .split("## Decision\n\n")
+                    .nth(1)
+                    .and_then(|section| section.lines().next())
+                    .and_then(|line| line.strip_prefix("- "))
+                    .ok_or_else(|| anyhow!("artifact decision missing for {result}"))?;
+                assert_eq!(
+                    decision,
+                    match result {
+                        "head_failed" => "Needs focused proof failure resolved before upstream.",
+                        "head_passed" | "discriminating" =>
+                            "No blocking finding after bounded review; residual risk remains for human review.",
+                        _ => "No blocking finding after bounded review; evidence is incomplete.",
+                    },
+                    "{result}"
+                );
+                if !matches!(result, "head_passed" | "discriminating") {
+                    assert!(surface.artifact_body.contains(&receipts[0].id));
+                }
+                for private_id in [&receipts[0].id, &receipts[0].request_ids[0]] {
+                    assert!(!surface.github_review.body.contains(private_id));
+                }
+                assert!(surface.github_review.comments.is_empty());
+                let prepares = matches!(model_mode, ModelMode::Auto)
+                    && matches!(result, "head_failed" | "discriminating");
+                assert_eq!(surface.should_prepare_github_review, prepares, "{result}");
+                if !matches!(result, "head_failed" | "discriminating") {
+                    assert!(surface.github_review.body.is_empty(), "{result}");
+                } else if result == "head_failed" {
+                    assert!(
+                        surface
+                            .github_review
+                            .body
+                            .contains("Needs focused proof failure resolved before upstream.")
+                    );
+                    assert!(
+                        surface
+                            .github_review
+                            .body
+                            .contains("Focused HEAD proof failed (exit 101)")
+                    );
+                }
+                let review_dir = out.join("review");
+                let review_json = review_dir.join("github-review.json");
+                if prepares {
+                    assert_eq!(surface.review_payload_status, "prepared");
+                    write_github_review_payload(
+                        &review_dir,
+                        &surface.github_review,
+                        &BTreeSet::new(),
+                        &ReviewBodyPolicy::default(),
+                        false,
+                    )?;
+                    let written: GitHubReview = serde_json::from_slice(&fs::read(&review_json)?)?;
+                    assert_eq!(written.body, surface.github_review.body);
+                } else {
+                    write_github_review_skip_receipt(
+                        &review_dir,
+                        GitHubReviewSkipReceipt {
+                            schema_version: 1,
+                            status: "skipped".to_owned(),
+                            reason: surface.terminal_state.reason.clone(),
+                            review_payload_status: surface.review_payload_status.to_owned(),
+                            terminal_state: surface.terminal_state.status.clone(),
+                            github_review_json: None,
+                            run_pass: "manual".to_owned(),
+                            model_mode: model_mode.key().to_owned(),
+                            inline_comments: 0,
+                            summary_only_findings: 0,
+                            missing_or_failed_sensor_evidence: 0,
+                            missing_or_failed_model_evidence: 0,
+                        },
+                    )?;
+                }
+                // Exercise the real post command with no credential: preparing
+                // useful proof text cannot masquerade as a successful delivery.
+                let post_out = temp.path().join("post");
+                let post = cmd_post(PostArgs {
+                    review_json,
+                    diff_patch: None,
+                    out: post_out.clone(),
+                    github_token: None,
+                    repo: None,
+                    pull_number: None,
+                    github_api_url: "http://127.0.0.1:1".to_owned(),
+                    fail_on_post_error: true,
+                });
+                if prepares {
+                    assert!(post.is_err());
+                    let error: serde_json::Value =
+                        serde_json::from_slice(&fs::read(post_out.join("post-error.json"))?)?;
+                    assert_eq!(error["status"], "failed");
+                    assert_eq!(error["error_kind"], "missing_token");
+                    assert_eq!(error["failure_stage"], "preflight");
+                    assert_eq!(error["review_json_valid"], true);
+                    assert_eq!(error["would_post"], false);
+                    assert!(!post_out.join("post-result.json").exists());
+                } else {
+                    post?;
+                    let skipped: serde_json::Value =
+                        serde_json::from_slice(&fs::read(post_out.join("post-result.json"))?)?;
+                    assert_eq!(skipped["status"], "skipped");
+                    assert_eq!(
+                        skipped["review_payload_status"],
+                        surface.review_payload_status
+                    );
+                    assert!(!post_out.join("post-error.json").exists());
+                }
+                let retained: Vec<ProofReceipt> =
+                    serde_json::from_slice(&fs::read(out.join("review/proof_receipts.json"))?)?;
+                assert_eq!(retained[0].result, result);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn skipped_unresolved_is_missing_evidence_without_decisive_proof() -> Result<()> {
         for kind in ["focused-head", "focused-red-green", "focused-build"] {
             let mut receipt = test_proof_receipt("skipped_unresolved", "skipped");
