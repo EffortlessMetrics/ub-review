@@ -1,0 +1,49 @@
+{
+  "schema": "ub-review.proof_receipt.v1",
+  "id": "miri-witness",
+  "kind": "miri-witness",
+  "base": "ff02a44cca4547671d6ad8a7eb97d80151646d37",
+  "head": "6092bc84ec016a2e8c168a7034896fafb347c40c",
+  "revision": {
+    "digest": "9316dfabc4362d9f7ce137045030d592ced55e34d224b093601298f1e617551f",
+    "semantics": "candidate_head",
+    "reviewed_commit": "6092bc84ec016a2e8c168a7034896fafb347c40c"
+  },
+  "test_patch_mode": "head-only",
+  "requested_by": [
+    "worker-test"
+  ],
+  "request_ids": [
+    "claim-a"
+  ],
+  "commands": [
+    {
+      "side": "nightly-preflight",
+      "command": "cargo '+nightly' --version",
+      "env": {},
+      "status": "passed",
+      "exit_code": 0,
+      "timed_out": false,
+      "timeout_sec": 30,
+      "duration_ms": 1,
+      "stdout": "proof/miri-witness/nightly-preflight/stdout.txt",
+      "stderr": "proof/miri-witness/nightly-preflight/stderr.txt",
+      "reason": "completed"
+    },
+    {
+      "side": "head",
+      "command": "cargo '+nightly' miri test worker_test",
+      "env": {},
+      "status": "failed",
+      "exit_code": 1,
+      "timed_out": false,
+      "timeout_sec": 30,
+      "duration_ms": 1,
+      "stdout": "proof/miri-witness/head/stdout.txt",
+      "stderr": "proof/miri-witness/head/stderr.txt",
+      "reason": "controlled exit 1"
+    }
+  ],
+  "result": "failed",
+  "reason": "miri-witness: failed; nightly preflight passed"
+}

@@ -1,0 +1,29 @@
+{
+  "parent": {
+    "head": "6880a4deeccc93d2e795ebd85da85b197cb3c32d",
+    "tree": "f56e29d47f43628c87ad86150dfa54ad6647b815",
+    "status": "",
+    "critical_source_sha256": {
+      "main.rs": "99987e31843bc25388eae3b44da59cba9ec50757aad71cdc5564e91fbb30ad84",
+      "render.rs": "858cb41c8ac3d20360ff7ee4dfcbbc2a47655b4c06671d0accb048265adedec8",
+      "review_text.rs": "9cb8a50500fd267372ab14f378502eaffc44484ceed6a236fcb6c91c9486c54e",
+      "review_compiler.rs": "f56d6a43909cb9b8ae2d3420a1459595059ed33c1b3c0b8d3d72a4fd8b94c006"
+    }
+  },
+  "child": {
+    "head": "00e314080637bacb50ebf49332af9388b3a534b6",
+    "tree": "4f85bd233b3097c48500a58bc02fb73c2ee0a370",
+    "status": "",
+    "critical_source_sha256": {
+      "main.rs": "99987e31843bc25388eae3b44da59cba9ec50757aad71cdc5564e91fbb30ad84",
+      "render.rs": "858cb41c8ac3d20360ff7ee4dfcbbc2a47655b4c06671d0accb048265adedec8",
+      "review_text.rs": "9cb8a50500fd267372ab14f378502eaffc44484ceed6a236fcb6c91c9486c54e",
+      "review_compiler.rs": "f56d6a43909cb9b8ae2d3420a1459595059ed33c1b3c0b8d3d72a4fd8b94c006"
+    }
+  },
+  "recorded_at": "2026-10-15T06:25:12.182326+00:00",
+  "restored_controls": {
+    "child": "proof_only_: 4 passed, 0 failed",
+    "parent": "artifact_decision_accounts_for_proof_only_failure_and_missing_evidence: 1 passed, 0 failed"
+  }
+}

@@ -1,0 +1,33 @@
+[
+  {
+    "schema": "ub-review.proof_receipt.v1",
+    "id": "miri-witness-timed_out-current",
+    "kind": "miri-witness",
+    "base": "origin/main",
+    "head": "HEAD",
+    "test_patch_mode": "head-only",
+    "requested_by": [
+      "tests-oracle"
+    ],
+    "request_ids": [
+      "proof-tests-001"
+    ],
+    "commands": [
+      {
+        "side": "head",
+        "command": "bun bd test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots input'",
+        "env": {},
+        "status": "timed_out",
+        "exit_code": null,
+        "timed_out": true,
+        "timeout_sec": 300,
+        "duration_ms": 42,
+        "stdout": "proof/proof-red-green-test/head/stdout.txt",
+        "stderr": "proof/proof-red-green-test/head/stderr.txt",
+        "reason": "test receipt fixture"
+      }
+    ],
+    "result": "timed_out",
+    "reason": "test receipt fixture"
+  }
+]

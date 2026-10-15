@@ -1,0 +1,28 @@
+   Compiling ub-review v0.1.2 (/workspace/review-1470)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 25.17s
+     Running unittests src/main.rs (/workspace/review-target/debug/deps/ub_review-2156336700d32705)
+
+running 4 tests
+test tests::artifact_decision_accounts_for_proof_only_failure_and_missing_evidence ... ok
+test gate::tests::gate_outcome_blocks_unproven_required_proof_only_when_policy_opts_in ... ok
+skipped GitHub review post; wrote /tmp/.tmpKpc9Pb/post/post-result.json
+skipped GitHub review post; wrote /tmp/.tmpvO6bxg/post/post-result.json
+skipped GitHub review post; wrote /tmp/.tmpDUSrS5/post/post-result.json
+skipped GitHub review post; wrote /tmp/.tmpvFIiZg/post/post-result.json
+skipped GitHub review post; wrote /tmp/.tmplzARNp/post/post-result.json
+skipped GitHub review post; wrote /tmp/.tmpZAVJWr/post/post-result.json
+test decision_core::tests::proof_only_gaps_need_a_surviving_observation_to_prepare_public_text ... ok
+skipped GitHub review post; wrote /tmp/.tmpzkHf84/post/post-result.json
+skipped GitHub review post; wrote /tmp/.tmpAjBHib/post/post-result.json
+skipped GitHub review post; wrote /tmp/.tmp7lNZP3/post/post-result.json
+skipped GitHub review post; wrote /tmp/.tmpy5mY6Q/post/post-result.json
+skipped GitHub review post; wrote /tmp/.tmpFON34U/post/post-result.json
+skipped GitHub review post; wrote /tmp/.tmpk9XESY/post/post-result.json
+skipped GitHub review post; wrote /tmp/.tmpnLteMD/post/post-result.json
+skipped GitHub review post; wrote /tmp/.tmpuwzx1Z/post/post-result.json
+skipped GitHub review post; wrote /tmp/.tmpPk9MM4/post/post-result.json
+skipped GitHub review post; wrote /tmp/.tmpalZ54D/post/post-result.json
+test decision_core::tests::proof_only_artifact_decision_does_not_claim_publication ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 1143 filtered out; finished in 0.01s
+

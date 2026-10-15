@@ -1,0 +1,18 @@
+{
+  "schema": "ub-review.proof_request.v2",
+  "id": "sanitizer-witness",
+  "kind": "sanitizer-witness",
+  "target": "worker_test",
+  "claim_ids": [
+    "claim-a"
+  ],
+  "requested_by": [
+    "worker-test"
+  ],
+  "expected_interpretation": "worker receipt remains canonical",
+  "priority": "high",
+  "timeout_sec": 30,
+  "status": "approved",
+  "base": "ff02a44cca4547671d6ad8a7eb97d80151646d37",
+  "head": "6092bc84ec016a2e8c168a7034896fafb347c40c"
+}

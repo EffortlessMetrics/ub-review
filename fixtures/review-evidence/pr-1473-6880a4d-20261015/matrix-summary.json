@@ -1,0 +1,85 @@
+{
+  "rows_per_head": 105,
+  "identical_parent_child_outputs": true,
+  "parent_matrix_sha256": "05b6f4cccf1eaf8919480a539954fa836ae8ae6d2f0b9a5bf9a8e436b0aeee5a",
+  "child_matrix_sha256": "05b6f4cccf1eaf8919480a539954fa836ae8ae6d2f0b9a5bf9a8e436b0aeee5a",
+  "representative_rows": [
+    {
+      "decision": "- No blocking finding after bounded review; residual risk remains for human review.",
+      "id": "sanitizer-witness-failed-current",
+      "no_blocking_heading": true,
+      "none_recorded": true,
+      "plan_head": "HEAD",
+      "prepare_public": false,
+      "public": "",
+      "receipt_head": "HEAD",
+      "result": "sanitizer_ub_detected"
+    },
+    {
+      "decision": "- No blocking finding after bounded review; residual risk remains for human review.",
+      "id": "miri-witness-failed-current",
+      "no_blocking_heading": true,
+      "none_recorded": true,
+      "plan_head": "HEAD",
+      "prepare_public": false,
+      "public": "",
+      "receipt_head": "HEAD",
+      "result": "failed"
+    },
+    {
+      "decision": "- No blocking finding after bounded review; evidence is incomplete.",
+      "id": "miri-witness-timed_out-current",
+      "no_blocking_heading": true,
+      "none_recorded": false,
+      "plan_head": "HEAD",
+      "prepare_public": false,
+      "public": "",
+      "receipt_head": "HEAD",
+      "result": "timed_out"
+    },
+    {
+      "decision": "- Needs focused proof failure resolved before upstream.",
+      "id": "head_failed-current",
+      "no_blocking_heading": true,
+      "none_recorded": false,
+      "plan_head": "HEAD",
+      "prepare_public": true,
+      "public": "## Decision\n\n- Needs focused proof failure resolved before upstream.\n\n## Test proof\n\n- Focused HEAD proof failed (exit 1): `bun bd test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots input'`. This is a current failure, not a red/green witness.\n",
+      "receipt_head": "HEAD",
+      "result": "head_failed"
+    },
+    {
+      "decision": "- Needs focused proof failure resolved before upstream.",
+      "id": "head_failed-stale",
+      "no_blocking_heading": true,
+      "none_recorded": false,
+      "plan_head": "HEAD",
+      "prepare_public": true,
+      "public": "## Decision\n\n- Needs focused proof failure resolved before upstream.\n\n## Test proof\n\n- Focused HEAD proof failed (exit 1): `bun bd test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots input'`. This is a current failure, not a red/green witness.\n",
+      "receipt_head": "old-head",
+      "result": "head_failed"
+    },
+    {
+      "decision": "- Needs focused proof failure resolved before upstream.",
+      "id": "head_failed-mixed",
+      "no_blocking_heading": true,
+      "none_recorded": false,
+      "plan_head": "HEAD",
+      "prepare_public": true,
+      "public": "## Decision\n\n- Needs focused proof failure resolved before upstream.\n\n## Test proof\n\n- Focused HEAD proof failed (exit 1): `bun bd test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots input'`. This is a current failure, not a red/green witness.\n",
+      "receipt_head": "old-head",
+      "result": "head_failed"
+    },
+    {
+      "decision": "- No blocking finding after bounded review; residual risk remains for human review.",
+      "id": "discriminating-current",
+      "no_blocking_heading": true,
+      "none_recorded": true,
+      "plan_head": "HEAD",
+      "prepare_public": true,
+      "public": "## Test proof\n\n- Focused red/green proof discriminates the patch: HEAD passed (exit 0) and base+tests status unknown for `bun bd test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots input'`.\n",
+      "receipt_head": "HEAD",
+      "result": "discriminating"
+    }
+  ]
+}

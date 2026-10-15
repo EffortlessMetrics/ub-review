@@ -1,0 +1,12 @@
+   Compiling ub-review v0.1.2 (/workspace/review-1470)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 24.54s
+     Running unittests src/main.rs (/workspace/review-target/debug/deps/ub_review-2156336700d32705)
+
+running 1 test
+worker: proof request focused-test (focused-test) result 'failed'; receipt written to /workspace/review-evidence/canonical-worker/focused-test/proof_receipt.json
+worker: proof request miri-witness (miri-witness) result 'failed'; receipt written to /workspace/review-evidence/canonical-worker/miri-witness/proof_receipt.json
+worker: proof request sanitizer-witness (sanitizer-witness) result 'sanitizer_ub_detected'; receipt written to /workspace/review-evidence/canonical-worker/sanitizer-witness/proof_receipt.json
+test worker_proof_tests::independent_canonical_worker_failure_into_compiler ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1148 filtered out; finished in 0.14s
+
