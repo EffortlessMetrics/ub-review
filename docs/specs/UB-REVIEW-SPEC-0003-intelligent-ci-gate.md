@@ -10,6 +10,14 @@ Tool-gate reds are
 diagnosable from artifacts: per-finding gap detail ships in
 `sensors/ripr/exposure-gaps.json` next to the badge receipt (#347 closed).
 
+The maturity/protection receipts above describe the original rollout, not a
+fresh protection read. Current authority is mapped in
+[ARCHITECTURE.md](../ARCHITECTURE.md#current-implementation-boundary): the
+candidate self-gate is contained/model-off and a separate protected-base
+`independent-baseline.yml` checks the exact candidate head. Neither is the
+destination stable coordinator. Live required checks and review approval must
+be read before integration; this document does not grant merge authority.
+
 ## Purpose
 
 Define the surface a repository relies on when it makes `ub-review/gate` its
@@ -76,7 +84,8 @@ this repository's own file is the production example):
   `intelligent-ci-policy` — the lane the policy expander assigns to
   `[[proof.required]]` entries (src/gate.rs `proof_request_is_gate_required`,
   `REQUIRED_PROOF_POLICY_LANE`). Model lanes can also mark proof requests
-  required; those never gate-block. Model output cannot reach the verdict.
+  required; those never gate-block through required-proof selection. The
+  separate explicit `review_forward` policy below can admit reporter verdicts.
 - `[tools.<id>]` with `required = true` — required sensors. On this repo:
   cargo-fmt, cargo-check, cargo-test, cargo-clippy, cargo-doc,
   artifact-verifier, cargo-allow, ripr, unsafe-review, ast-grep, actionlint
@@ -124,6 +133,14 @@ this repository's own file is the production example):
   `blocking` (src/config.rs `GateConfig`). Posting on quiet passes is
   governed solely by `post_review_on`; legacy `synchronize_mode` configs
   receive a deprecation `PolicyError` (#306).
+- `[gate].review_forward` — default `false`. When enabled, the resolved
+  current-head reporter turn also affects `conclusion`: `clear` adds no
+  reason, `changes_requested` fails with `reporter-verdict`, and uncertain,
+  absent, missing-verdict, stale, or malformed reporter evidence makes the
+  gate inconclusive with `reporter-evidence`. Reasons retain the selected
+  turn/thread receipt. This is an explicit policy exception to the default
+  model-advisory posture, not deterministic proof of a code defect
+  (src/gate.rs `build_gate_outcome`; src/reporter.rs).
 - `[gate.blocking]` opt-ins, both default `false` (src/config.rs
   `GateBlockingPolicy`): `required_proof_unproven` blocks when a matched
   `[[proof.required]]` produced no passing receipt (missing receipt or any
@@ -137,7 +154,36 @@ under `fail-on-gate` `auto`), `fail-on-gate` (`auto`/`true`/`false`),
 `run-pass: auto` resolved
 from `github.event.action` via `UB_REVIEW_GITHUB_EVENT_ACTION` (action.yml).
 Model keys are optional inputs; their absence degrades the review, never the
-verdict.
+default verdict. An opted-in `review_forward` gate requires usable reporter
+evidence and can become inconclusive when that evidence is unavailable.
+
+### Current proof selection and candidate binding
+
+`configured_required_proof_requests` expands enabled `[[proof.required]]`
+entries only in `intelligent-ci`. Language and diff-class selectors must both
+match; an empty selector list or `all`/`any`/`*` is a wildcard. A matched entry
+with `required = false` is still requested as optional proof, but cannot enter
+the gate-required denominator. There is no separate `proof.recommended` stream.
+Model/planner recommendations go through the approved proof broker and budgets;
+their `required` flag alone grants no policy-lane authority. Required planner
+portfolio accounting below is a separate advisory denominator.
+
+Revision admission supplies the immutable reviewed state; receipts carry
+revision references and current-head terminal routing rejects receipts for a
+different head (src/revision_admission.rs; src/proof/planner.rs
+`receipt_matches_request_on_head`). Planner-required satisfaction additionally
+requires the current revision digest. The legacy configured-proof gate joins
+receipts by request id; it is not a standalone stale-packet verifier. Preserve
+the admitted packet and its verifier joins when handing off proof. A merge-result
+reviewed commit and a PR-head commit are distinct identities, with the delivery
+limitation recorded in ARCHITECTURE.md.
+
+`gate-check` enforces legacy `conclusion` under `fail-on-gate`; additive result
+fields and shadow projections do not replace it. The protected-base independent
+baseline separately aggregates GitHub job outcomes. Current workflow timeouts
+are 60 minutes for the candidate gate and 45 minutes per baseline evidence job;
+they do not establish a single normally <=20-minute late qualification gate.
+That staging/authority migration remains integration-owner work.
 
 Note: this repository's `.ub-review.toml` also carries a `[providers]`
 section. `policy` is used only when CLI/env provider policy is `auto`, and
@@ -343,10 +389,12 @@ required-proof-unproven / tool-gate-missing-evidence    (only when the repo
                                                          [gate.blocking];
                                                          surfaces as
                                                          blocking-finding)
+reporter changes_requested / unavailable decision     (only with
+                                                        review_forward = true)
 ```
 
-Never reds (docs/adr/0002; src/gate.rs gate outcome logic never reads
-provider state):
+Advisory under the default `review_forward = false` posture (the gate does
+not directly read provider state):
 
 ```text
 model or provider failures, including fallback use and missing model keys
@@ -586,15 +634,16 @@ a verdict on every head SHA; quiet synchronize/reopened passes leaving a
 truthful `skipped_pass_policy` receipt.
 
 What can break the gate?
-Only repo-written policy outcomes: failed required proof from
+Repo-written policy outcomes: failed required proof from
 `[[proof.required]]` (lane `intelligent-ci-policy`), an exceeded
 `[tools.*.gate]` threshold, required-sensor evidence gaps (intelligent-ci
 mode), policy parse errors, internal failures via the missing-artifact
 fail-closed path — plus the two `[gate.blocking]` opt-ins if the repo
-enables them (surfacing as `blocking-finding` reasons).
+enables them (surfacing as `blocking-finding` reasons), and the explicit
+`review_forward` reporter-verdict/evidence exception described above.
 
 What is only advisory?
-Everything model- or provider-shaped, optional sensor gaps, non-required
+With `review_forward = false`, model/provider-shaped results; optional sensor gaps, non-required
 tool results, `missing_evidence` tool-gate outcomes under default policy,
 and `evidence_gaps_advisory` generally.
 
