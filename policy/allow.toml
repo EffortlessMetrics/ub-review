@@ -149,3 +149,13 @@ reason = "Runs the actual composite Action Bash resolver with recording Cargo an
 created = "2026-09-05"
 review_after = "2026-12-05"
 expires = "2027-03-05"
+
+[[exception]]
+id = "recorded-review-authority-effect-controls"
+kind = "process-spawn"
+path = "tests/recorded_review_cli/authority.rs"
+owner = "ub-review/tests"
+reason = "Linux opt-in recorded-review effect regression traces the built CLI and this trusted test executable with /usr/bin/strace. Calibration runs /bin/true, a task-local loopback connection and a temporary marker write; no candidate code, credentials, external endpoint or production executor is used. Trace output is task-local; missing tracing support fails the explicit ignored test."
+created = "2026-10-15"
+review_after = "2026-11-15"
+expires = "2026-12-15"

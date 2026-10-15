@@ -416,3 +416,6 @@ fn real_cli_replay_rejects_repinned_projection_authority_and_erased_history() ->
     }
     Ok(())
 }
+
+#[path = "authority.rs"]
+mod authority;
