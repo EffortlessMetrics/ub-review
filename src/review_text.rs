@@ -250,11 +250,18 @@ pub(crate) fn review_decision(
     missing_or_failed_model_evidence: &[ModelEvidenceIssue],
     inline_comments: &[ReviewInlineComment],
     summary_only_findings: &[SummaryOnlyFinding],
+    proof_receipts: &[ProofReceipt],
 ) -> &'static str {
     if has_actionable_review_finding(inline_comments, summary_only_findings) {
         "Needs reviewer attention before upstream: grounded findings or summary-only concerns remain."
+    } else if proof_receipts
+        .iter()
+        .any(|receipt| receipt.result == "head_failed")
+    {
+        "Needs focused proof failure resolved before upstream."
     } else if !missing_or_failed_sensor_evidence.is_empty()
         || !missing_or_failed_model_evidence.is_empty()
+        || proof_receipts.iter().any(proof_receipt_is_missing_evidence)
     {
         "No blocking finding after bounded review; evidence is incomplete."
     } else {

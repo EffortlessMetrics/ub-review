@@ -57,7 +57,8 @@ pub(crate) fn render_review_body(
             missing_or_failed_sensor_evidence,
             missing_or_failed_model_evidence,
             inline_comments,
-            summary_only_findings
+            summary_only_findings,
+            proof_receipts,
         )
     ));
 
