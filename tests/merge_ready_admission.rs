@@ -147,10 +147,11 @@ fn dormant_candidates_preserve_execution_and_native_finalizers() -> Result<()> {
         let admission = shell(&candidate, "Check fresh label edge against live PR")?;
         let finalizer = shell(&candidate, final_step)?;
         ensure!(
-            finalizer.ends_with(
+            finalizer.trim_end().ends_with(
                 admission
                     .strip_prefix("set -euo pipefail\n")
                     .context("admission errexit")?
+                    .trim_end()
             ),
             "same live check before/after proof"
         );
