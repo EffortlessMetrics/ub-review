@@ -66,7 +66,14 @@ to test preservation. Seven baseline worker identities must remain distinct.
 `P` below means the native finalizer `ub-review/gate` or
 `ub-review/independent-baseline`; it does not imply that branch policy requires
 both. `O` means `admission observation`, which must never satisfy P. Except the
-manual recovery and review rows, exercise both native event families.
+manual recovery and review rows, exercise both native event families:
+`pull_request` for gate and `pull_request_target` for baseline. Baseline workers
+must be named `independent evidence / fmt`, `/ check`, `/ clippy`, `/ test`,
+`/ doc`, `/ policy`, and `/ verifier` (each with the full prefix). The reported
+required gate identity is `ub-review/gate` from App **15368**; refresh the actual
+policy before acceptance. A matching display name or suite/head association
+alone does not establish required-context matching. Record check-run head SHA
+separately from event head/base and `github.sha`, particularly for baseline.
 
 | Scenario / rerunnable stimulus | Evidence allocation | Expected native outcome |
 | --- | --- | --- |
@@ -101,7 +108,7 @@ need an independent reviewer and an existing suitable authorized policy surface;
 do not install policy to manufacture a pass. API outage injection likewise needs
 an explicitly scoped fixture; never modify real access to produce it.
 
-## Local source evidence and limits
+## Historical local source evidence and limits
 
 Preferred warm rerun at the exact candidate, from an isolated checkout:
 
@@ -109,7 +116,7 @@ Preferred warm rerun at the exact candidate, from an isolated checkout:
 cargo test --locked --offline --test merge_ready_admission -- --nocapture
 ```
 
-This continuation's command could not start: `cargo: command not found`.
+The original continuation's command could not start: `cargo: command not found`.
 No Rust build/test or fresh actionlint result is claimed. The issue's earlier
 3/3 Rust and independent review receipts remain historical exact-source proof.
 A temporary local Python driver instead extracted the actual Bash bodies from
@@ -119,6 +126,9 @@ sticky rejection, metadata/API-outage preservation, material mismatch,
 revocation, native review decisions, predecessor failure/skips and cancellation
 shell paths. This is shell execution, not GitHub expression/scheduling emulation.
 No harness is added to the repository; the durable Rust fixtures remain canonical.
+This count is a historical author report, not an independently reproduced
+assertion inventory. The temporary driver and result JSON are not retained here;
+the digest below alone cannot establish which fixtures or assertions ran.
 Local result JSON SHA256:
 `7bf42c3d6651df231e0a375ce7e573be8383b8c2b999791427ec3a1f35d85eef`.
 The existing cached xtask binary's policy-check passed (six policy files,
@@ -129,6 +139,55 @@ exact-candidate Rust baseline. `git diff --check` passes.
 Active workflow diff against the base is empty. No source repair is justified
 by the scheduler refusal. Only this documentation is added.
 
+## Independent review follow-up (2026-10-15)
+
+Reviewed documentation commit `63eed46bfc6ed0745319968a91d4dab8b114c284`
+(tree `48d57112aa8dc3a9917a851f56a4792468a33067`) against the source subject
+above in an isolated worktree. Connected issue #1465 and its three comments
+confirm the recorded owner boundaries and billing stop. Git branch reads still
+resolve `candidate/merge-ready-admission-20261015` to `0528c882` and
+`task/1465-rehearsal-matrix` to `63eed46`. The preserved sandbox README confirms
+the body controls; no hosted run was started or retried.
+
+Found a test-realism mismatch: the canonical local runner defaulted both
+workflows to `pull_request`, and exercised baseline review-event classification
+despite no baseline review subscription. The scoped test repair supplies each
+native event family, limits review-triggered scenarios to gate, and retains
+blocking-review rejection on qualification/finalization for both families.
+Structural assertions now pin baseline's absence of review/dispatch triggers
+and its seven distinct worker names. Templates and active workflows are unchanged.
+
+The original documentation revision passes **3/3** focused Rust tests. After the
+test repair, the same command passes **3/3**, including a restored positive run
+after three disposable controls: changing baseline to `pull_request`, adding an
+unsubscribed baseline review trigger, and removing gate's captured-cancellation
+guard each produces the expected test failure (exit 101). The cancellation
+control runs the actual finalizer shell with successful predecessor evidence;
+it does not establish native cancellation timing. These controls remain local
+experiments, not candidate changes or hosted proof.
+
+Rebuilt `cargo xtask policy-check` passes (six policy files, 16 receipts), with
+the same ten inherited overdue-review warnings. Staged
+`cargo xtask precommit --staged` passes for these two paths/one Rust package:
+fmt, package check and Clippy on diff, zero blocking findings. cargo-allow,
+ripr, unsafe-review and ast-grep are unavailable; actionlint is skipped because
+no workflow changes. This is scoped local validation, not full analyzer clearance.
+
+Reproduction uses the existing Rust 1.95.0 toolchain at
+`/workspace/.rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin` on PATH,
+`CARGO_HOME=/workspace/.cargo`, `RUSTUP_HOME=/workspace/.rustup`, and a separate
+`CARGO_TARGET_DIR=/tmp/ub-review-rehearsal-target`, with Bash 5.2.37 and jq 1.7.
+The initial default-Cargo-home attempt failed offline dependency resolution
+(`chrono` missing); selecting the existing populated cache enabled execution.
+No fresh actionlint or full workspace test pass is claimed by this follow-up.
+
+Live open-PR lookup failed exactly:
+`Post "https://api.github.com/graphql": Forbidden`.
+Formal PR review state and complete overlapping PR ownership therefore remain
+unknown; issue/source ownership reads are not a substitute for that clearance.
+The lane owner retains hosted resumption and integration. The billing hold,
+smoke-first restart, policy/reviewer prerequisites and rollback below still apply.
+
 ## Stop and rollback
 
 On an unexpected behavioral result, stop matrix advancement, retain exact
@@ -136,8 +195,10 @@ run/check/artifact and source identities, and return the smallest counterexample
 to release/ci. Leave failed checks intact; do not weaken conditions or rename
 protected checks to obtain green. Cancellation outcomes require native evidence.
 
-For this dormant documentation branch, revert its documentation commit; active
-CI is untouched. For sandbox continuation, stop new fixture events, terminalize
+For this dormant branch, revert the scoped documentation/test follow-up to
+restore the reviewed documentation commit; active CI is untouched. The original
+documentation commit can separately be reverted. For sandbox continuation,
+stop new fixture events, terminalize
 only task-owned runs if necessary with an explicit cancellation receipt, and
 retain the failed attempts and private evidence. Do not delete the sandbox as
 cleanup. A future separately authorized production cutover must first retain

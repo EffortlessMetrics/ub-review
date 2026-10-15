@@ -4,14 +4,16 @@ use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 
 const EVENTS: &str = "types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled, converted_to_draft, edited, closed]";
-const TEMPLATES: [(&str, &str, &str); 2] = [
+const TEMPLATES: [(&str, &str, &str, &str); 2] = [
     (
         "ub-review-gate",
+        "pull_request",
         "gate",
         "Require current admitted successful candidate evidence",
     ),
     (
         "independent-baseline",
+        "pull_request_target",
         "evidence",
         "Enforce independent baseline",
     ),
@@ -108,11 +110,11 @@ fn shell(source: &str, step: &str) -> Result<String> {
 
 #[test]
 fn dormant_candidates_preserve_execution_and_native_finalizers() -> Result<()> {
-    for (name, job, final_step) in TEMPLATES {
+    for (name, event_name, job, final_step) in TEMPLATES {
         let active = std::fs::read_to_string(format!(".github/workflows/{name}.yml"))?;
         let candidate = workflow(name)?;
         ensure!(!active.contains("merge-ready"), "legacy remains active");
-        ensure!(candidate.contains(EVENTS));
+        ensure!(candidate.contains(&format!("  {event_name}:\n    {EVENTS}")));
         ensure!(candidate.contains("      observation: ${{ steps.current.outputs.observation }}"));
         ensure!(candidate.contains("      admitted: ${{ steps.current.outputs.admitted }}"));
         ensure!(candidate.contains(&format!("  {job}:\n    needs: admission\n")));
@@ -154,6 +156,14 @@ fn dormant_candidates_preserve_execution_and_native_finalizers() -> Result<()> {
                 candidate.contains("  pull_request_review:\n    types: [submitted, dismissed]")
             );
             ensure!(candidate.contains("needs.gate.result != 'skipped' && always()"));
+        } else {
+            ensure!(!candidate.contains("  pull_request_review:"));
+            ensure!(!candidate.contains("  workflow_dispatch:"));
+            ensure!(candidate.contains("    name: independent evidence / ${{ matrix.check }}"));
+            ensure!(
+                candidate
+                    .contains("        check: [fmt, check, clippy, test, doc, policy, verifier]")
+            );
         }
         let admission = shell(&candidate, "Classify event and check current PR")?;
         let finalizer = shell(&candidate, final_step)?;
@@ -171,8 +181,8 @@ fn dormant_candidates_preserve_execution_and_native_finalizers() -> Result<()> {
     Ok(())
 }
 
-fn live_pr() -> Value {
-    json!({"state":"open", "draft":false, "updated_at":"2026-10-15T03:00:00Z",
+fn live_pr(event_name: &str) -> Value {
+    json!({"fixture_event_name":event_name, "state":"open", "draft":false, "updated_at":"2026-10-15T03:00:00Z",
         "head":{"sha":"head-a", "repo":{"full_name":"EffortlessMetrics/ub-review"}},
         "base":{"sha":"base-a", "ref":"main", "repo":{"full_name":"EffortlessMetrics/ub-review"}},
         "labels":[{"name":"merge-ready"}]})
@@ -294,11 +304,11 @@ fn execute(
 #[cfg(unix)]
 #[test]
 fn material_live_checks_and_harmless_observations() -> Result<()> {
-    for (name, _, final_step) in TEMPLATES {
+    for (name, event_name, _, final_step) in TEMPLATES {
         let source = workflow(name)?;
         let admission = shell(&source, "Classify event and check current PR")?;
         let finalizer = shell(&source, final_step)?;
-        let original = live_pr();
+        let original = live_pr(event_name);
         let fresh = execute(
             &admission,
             &original,
@@ -432,22 +442,28 @@ fn material_live_checks_and_harmless_observations() -> Result<()> {
             .success
         );
         let mut review = original.clone();
-        review["fixture_event_name"] = json!("pull_request_review");
-        for decision in [json!("APPROVED"), json!("REVIEW_REQUIRED"), Value::Null] {
-            review["fixture_review_decision"] = decision;
-            let quiet = execute(&admission, &review, "submitted", "", "skipped", "0")?;
-            ensure!(quiet.observation && !quiet.admitted);
+        // Baseline has no review subscription; its decision is read on qualification.
+        if event_name == "pull_request" {
+            review["fixture_event_name"] = json!("pull_request_review");
+            for decision in [json!("APPROVED"), json!("REVIEW_REQUIRED"), Value::Null] {
+                review["fixture_review_decision"] = decision;
+                let quiet = execute(&admission, &review, "submitted", "", "skipped", "0")?;
+                ensure!(quiet.observation && !quiet.admitted);
+            }
+            review["fixture_review_state"] = json!("commented");
+            let comment = execute(&admission, &review, "submitted", "", "skipped", "1")?;
+            ensure!(
+                comment.success && comment.observation && !comment.admitted,
+                "review comment avoids API invalidation"
+            );
+            review["fixture_review_state"] = json!("changes_requested");
+            review["fixture_review_decision"] = json!("CHANGES_REQUESTED");
+            let blocked = execute(&admission, &review, "submitted", "", "skipped", "0")?;
+            ensure!(!blocked.observation && !blocked.admitted);
         }
-        review["fixture_review_state"] = json!("commented");
-        let comment = execute(&admission, &review, "submitted", "", "skipped", "1")?;
-        ensure!(
-            comment.success && comment.observation && !comment.admitted,
-            "review comment avoids API invalidation"
-        );
-        review["fixture_review_state"] = json!("changes_requested");
+        review["fixture_event_name"] = json!(event_name);
+        review["fixture_review_state"] = json!("");
         review["fixture_review_decision"] = json!("CHANGES_REQUESTED");
-        let blocked = execute(&admission, &review, "submitted", "", "skipped", "0")?;
-        ensure!(!blocked.observation && !blocked.admitted);
         ensure!(
             !execute(
                 &finalizer,
