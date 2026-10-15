@@ -16010,7 +16010,7 @@ required_proof_unprooven = true
         let summary = render_summary(&out, &plan, &diff)?;
         assert!(
             summary
-                .contains("- Gate: `pass` with `0` blocking reasons (`review/gate_outcome.json`)")
+                .contains("- Gate enforcement conclusion: `pass` with `0` blocking reasons (`review/gate_outcome.json`)")
         );
         Ok(())
     }
@@ -18893,7 +18893,7 @@ index 1111111..2222222 100644
             "running summary must carry the gate-failure status"
         );
         assert!(
-            summary.contains("Gate:")
+            summary.contains("Gate enforcement conclusion:")
                 && (summary.contains("inconclusive") || summary.contains("fail")),
             "running summary must carry the gate status"
         );
