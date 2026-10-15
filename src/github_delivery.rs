@@ -1769,6 +1769,238 @@ mod tests {
         Ok(())
     }
 
+    // Count attempts before consuming a scripted response: an exhausted queue must
+    // never turn an unwanted duplicate write into an apparently safe error.
+    struct InteractionTransport {
+        inner: ScriptedTransport,
+        writes: Vec<(String, String)>,
+    }
+
+    impl DeliveryTransport for InteractionTransport {
+        fn fetch_json(&mut self, url: &str, token: &str) -> Result<serde_json::Value> {
+            self.inner.fetch_json(url, token)
+        }
+
+        fn send_json(
+            &mut self,
+            method: &str,
+            url: &str,
+            token: &str,
+            payload_path: &Path,
+            headers: &[&str],
+        ) -> Result<HttpPostOutput> {
+            self.writes.push((method.to_owned(), url.to_owned()));
+            self.inner
+                .send_json(method, url, token, payload_path, headers)
+        }
+    }
+
+    #[test]
+    fn publication_interaction_partial_mixed_delivery_and_retry() -> Result<()> {
+        for failure in [
+            "none",
+            "submit_response",
+            "adapter_receipt",
+            "reply_response",
+            "post_receipt",
+            "retained_before_submit",
+        ] {
+            let temp = tempfile::tempdir()?;
+            let graph = serde_json::json!({
+                "schema":"ub-review.claim_graph.v1", "head_sha":HEAD,
+                "topics":[
+                    {"claim_id":"claim-1","planned_action":"inline","head_sha":HEAD,"path":"src/lib.rs","anchor":12},
+                    {"claim_id":"claim-2","planned_action":"reply","planned_thread_id":"123","head_sha":HEAD,"path":"src/lib.rs","anchor":13}
+                ]
+            });
+            fs::write(
+                temp.path().join("claim_graph.json"),
+                serde_json::to_vec(&graph)?,
+            )?;
+            let (mut review, mut payload) = delivery_review();
+            let mut second = review.comments[0].clone();
+            second.line = 13;
+            second.body = "[tests] second body".to_owned();
+            review.comments.push(second);
+            let mut second_payload = payload.comments[0].clone();
+            second_payload.line = 13;
+            second_payload.body = "[tests] second body".to_owned();
+            payload.comments.push(second_payload);
+            let source = serde_json::json!({"id":123,"path":"src/lib.rs","line":13,"side":"RIGHT","commit_id":HEAD,"body":"prior finding"});
+            let inline = serde_json::json!({"id":456,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":HEAD,"body":"exact body"});
+            let reply = serde_json::json!({"id":457,"path":"src/lib.rs","line":13,"side":"RIGHT","commit_id":HEAD,"body":"second body","in_reply_to_id":123});
+            let args = delivery_args(temp.path(), "http://scripted");
+            let publication = native_publication_fixture(&args, &review)?;
+            let mut first = InteractionTransport {
+                inner: ScriptedTransport {
+                    gets: VecDeque::from([
+                        serde_json::json!({"head":{"sha":HEAD}}),
+                        serde_json::json!([source.clone()]),
+                        serde_json::json!([inline.clone()]),
+                        serde_json::json!({"head":{"sha":HEAD}}),
+                    ]),
+                    sends: VecDeque::from([
+                        scripted_output(r#"{"id":987}"#, true)?,
+                        scripted_output(&reply.to_string(), true)?,
+                        scripted_output(r#"{"id":987,"state":"commented"}"#, true)?,
+                    ]),
+                },
+                writes: Vec::new(),
+            };
+            if failure == "submit_response" {
+                first.inner.sends[2] = scripted_output("", false)?;
+                first.inner.sends.push_back(scripted_output("", false)?);
+            } else if failure == "reply_response" {
+                first.inner.sends[1] = scripted_output("", false)?;
+                first.inner.sends[2] = scripted_output("{}", true)?;
+            } else if failure == "adapter_receipt" {
+                fs::create_dir(args.out.join("post-stdout.json"))?;
+            } else if failure == "post_receipt" {
+                fs::create_dir(args.out.join("post-result.json"))?;
+            }
+            let result = execute_pending_review_delivery_with_transport(
+                &args, &review, &payload, &mut first,
+            );
+            let fully_delivered = matches!(failure, "none" | "post_receipt");
+            if fully_delivered || failure == "retained_before_submit" {
+                let outcome = result?;
+                assert_eq!(
+                    outcome.response["delivery_confirmation"],
+                    serde_json::json!({"kind":"submitted_review", "exact_head_sha":HEAD,
+                        "planned_count":2,"confirmed_count":2})
+                );
+                let finalized = confirm_native_publication(&args, &publication, &review, &outcome);
+                if failure == "post_receipt" {
+                    ensure!(finalized.is_err(), "receipt persistence failure was hidden");
+                    fs::remove_dir(args.out.join("post-result.json"))?;
+                } else {
+                    finalized?;
+                }
+            } else {
+                let error = result
+                    .err()
+                    .ok_or_else(|| anyhow::anyhow!("partial {failure} claimed success"))?;
+                let receipt = build_post_error_receipt(&args, &error);
+                crate::post_command::write_post_receipt_and_finalize(
+                    &args,
+                    Some(&publication),
+                    "post-error.json",
+                    &receipt,
+                )?;
+            }
+            let read_gate = || -> Result<serde_json::Value> {
+                Ok(serde_json::from_slice(&fs::read(
+                    args.review_json.with_file_name("gate_outcome.json"),
+                )?)?)
+            };
+            let first_gate = read_gate()?;
+            assert_eq!(
+                first_gate["publication_result"],
+                if matches!(failure, "none" | "retained_before_submit") {
+                    "posted"
+                } else {
+                    "failed"
+                },
+                "{failure}"
+            );
+            assert_eq!(first_gate["code_gate_result"], "pass");
+            assert_eq!(first_gate["conclusion"], "pass");
+            let reviews_url = "http://scripted/repos/owner/repo/pulls/42/reviews";
+            let mut expected_writes = vec![
+                ("POST".to_owned(), reviews_url.to_owned()),
+                (
+                    "POST".to_owned(),
+                    "http://scripted/repos/owner/repo/pulls/42/comments".to_owned(),
+                ),
+            ];
+            if failure != "reply_response" {
+                expected_writes.push(("POST".to_owned(), format!("{reviews_url}/987/events")));
+            }
+            if matches!(failure, "submit_response" | "reply_response") {
+                expected_writes.push(("DELETE".to_owned(), format!("{reviews_url}/987")));
+            }
+            assert_eq!(first.writes, expected_writes, "{failure}");
+            // Recreate the durable prefix possible at interruption between the
+            // persisted head check and submission. Keep all physical receipts
+            // and a historical successful post result: neither may authorize
+            // current publication when the transaction is not terminal.
+            if failure == "retained_before_submit" {
+                let path = args.out.join("delivery-transaction.json");
+                let mut transaction: serde_json::Value = serde_json::from_slice(&fs::read(&path)?)?;
+                transaction["state"] =
+                    serde_json::to_value(DeliveryTransactionState::HeadRevalidated)?;
+                let typed: DeliveryTransaction = serde_json::from_value(transaction.clone())?;
+                assert_eq!(typed.state(), &DeliveryTransactionState::HeadRevalidated);
+                fs::write(path, serde_json::to_vec(&transaction)?)?;
+                ensure!(args.out.join("delivery-reconciliation.json").is_file());
+                ensure!(args.out.join("delivery-reply-receipts.json").is_file());
+                ensure!(args.out.join("post-result.json").is_file());
+            }
+            let reservation = fs::read(args.out.join("delivery-attempt.json"))?;
+            if failure == "adapter_receipt" {
+                fs::remove_dir(args.out.join("post-stdout.json"))?;
+            }
+            // Even when GitHub lists all physical comments, pending inline
+            // reconciliation and an unreceipted reply do not prove submission.
+            let mut retry = InteractionTransport {
+                inner: ScriptedTransport {
+                    gets: VecDeque::from([
+                        serde_json::json!({"head":{"sha":HEAD}}),
+                        serde_json::json!([source, inline, reply]),
+                        serde_json::json!({"head":{"sha":HEAD}}),
+                    ]),
+                    sends: VecDeque::new(),
+                },
+                writes: Vec::new(),
+            };
+            let retry_publication = crate::post_command::begin_post_publication(&args)?
+                .ok_or_else(|| anyhow::anyhow!("retry publication missing"))?;
+            assert_eq!(read_gate()?["publication_result"], "not_proven");
+            let retried = execute_pending_review_delivery_with_transport(
+                &args, &review, &payload, &mut retry,
+            );
+            ensure!(
+                retry.writes.is_empty(),
+                "{failure}: retry attempted duplicate writes: {:?}",
+                retry.writes
+            );
+            if fully_delivered {
+                let outcome = retried?;
+                assert_eq!(outcome.response["state"], "already_delivered");
+                assert_eq!(
+                    outcome.response["delivery_confirmation"],
+                    serde_json::json!({
+                        "kind":"reconciled_comments", "exact_head_sha":HEAD,
+                        "planned_count":2, "confirmed_count":2
+                    })
+                );
+                confirm_native_publication(&args, &retry_publication, &review, &outcome)?;
+            } else {
+                let error = retried
+                    .err()
+                    .ok_or_else(|| anyhow::anyhow!("{failure}: partial retry falsely confirmed"))?;
+                ensure!(
+                    format!("{error:#}").contains("reconcile the previous delivery attempt"),
+                    "{failure}: {error:#}"
+                );
+                let receipt = build_post_error_receipt(&args, &error);
+                crate::post_command::write_post_receipt_and_finalize(
+                    &args,
+                    Some(&retry_publication),
+                    "post-error.json",
+                    &receipt,
+                )?;
+                assert_eq!(read_gate()?["publication_result"], "failed");
+                assert_eq!(read_gate()?["gate_result"], "not_proven");
+            }
+            assert_eq!(read_gate()?["code_gate_result"], "pass");
+            assert_eq!(
+                fs::read(args.out.join("delivery-attempt.json"))?,
+                reservation
+            );
+        }
+        Ok(())
+    }
     #[test]
     fn generic_transport_path_preserves_receipts_and_payload_boundaries() -> Result<()> {
         let temp = tempfile::tempdir()?;
