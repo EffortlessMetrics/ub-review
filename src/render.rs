@@ -137,8 +137,17 @@ pub(crate) fn render_review_body(
         }
     }
 
+    let incomplete_proofs = proof_receipts
+        .iter()
+        .filter(|receipt| {
+            receipt.result == "head_failed" || proof_receipt_is_missing_evidence(receipt)
+        })
+        .collect::<Vec<_>>();
     text.push_str("\n## Missing or failed evidence\n\n");
-    if missing_or_failed_sensor_evidence.is_empty() && missing_or_failed_model_evidence.is_empty() {
+    if missing_or_failed_sensor_evidence.is_empty()
+        && missing_or_failed_model_evidence.is_empty()
+        && incomplete_proofs.is_empty()
+    {
         text.push_str("- None recorded.\n");
     } else {
         for issue in missing_or_failed_sensor_evidence {
@@ -160,6 +169,32 @@ pub(crate) fn render_review_body(
                 escape_md(&issue.reason)
             ));
         }
+    }
+
+    for receipt in incomplete_proofs {
+        let revision = receipt.revision.as_ref().map_or_else(
+            || {
+                format!(
+                    "revision unrecorded; legacy base `{}`, head `{}`",
+                    init_markdown_inline_code(&receipt.base),
+                    init_markdown_inline_code(&receipt.head),
+                )
+            },
+            |revision| {
+                format!(
+                    "revision `{}`; `{}` commit `{}`",
+                    init_markdown_inline_code(&revision.digest),
+                    init_markdown_inline_code(&revision.semantics),
+                    init_markdown_inline_code(&revision.reviewed_commit),
+                )
+            },
+        );
+        text.push_str(&format!(
+            "- Recorded proof result `{}`: `review/proof_receipts.json#{}`; {}.\n",
+            escape_md(&init_markdown_inline_code(&receipt.result)),
+            escape_md(&init_markdown_inline_code(&receipt.id)),
+            escape_md(&revision),
+        ));
     }
 
     if audience.include_successful_lane_table() {

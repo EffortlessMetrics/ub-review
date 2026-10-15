@@ -18403,6 +18403,98 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn artifact_review_preserves_missing_or_failed_proof_receipts() {
+        let render = |receipts: &[ProofReceipt]| {
+            render_review_body(
+                "shared-context",
+                &test_plan(Vec::new()),
+                &test_diff(),
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                receipts,
+                60_000,
+                ReviewBodyAudience::Artifact,
+            )
+        };
+        assert!(render(&[]).contains("## Missing or failed evidence\n\n- None recorded."));
+        let passing = test_proof_receipt("head_passed", "passed");
+        assert!(render(&[passing]).contains("## Missing or failed evidence\n\n- None recorded."));
+        for result in [
+            "head_failed",
+            "timed_out",
+            "skipped_budget",
+            "non_discriminating",
+        ] {
+            for stamped in [false, true] {
+                let mut receipt = test_proof_receipt(result, "failed");
+                receipt.id = "proof-artifact-gap".to_owned();
+                receipt.commands[0].exit_code = Some(1);
+                if result == "timed_out" {
+                    receipt.commands[0].status = "timed_out".to_owned();
+                    receipt.commands[0].exit_code = None;
+                }
+                if stamped {
+                    receipt.revision = Some(super::RevisionRef {
+                        digest: "a".repeat(64),
+                        semantics: "merge_result".to_owned(),
+                        reviewed_commit: "b".repeat(40),
+                    });
+                }
+                let public_body = render_review_body(
+                    "shared-context",
+                    &test_plan(Vec::new()),
+                    &test_diff(),
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    std::slice::from_ref(&receipt),
+                    60_000,
+                    ReviewBodyAudience::PullRequest,
+                );
+                if result == "head_failed" {
+                    assert!(
+                        public_body
+                            .contains("Needs focused proof failure resolved before upstream.")
+                    );
+                    assert!(public_body.contains("Focused HEAD proof failed (exit 1)"));
+                    assert!(!public_body.contains(&receipt.id));
+                    assert!(!public_body.contains("revision"));
+                } else {
+                    // An optional, unlinked unavailable proof stays artifact-only.
+                    assert!(public_body.is_empty());
+                }
+                let body = render(std::slice::from_ref(&receipt));
+                assert!(
+                    !body.contains("## Missing or failed evidence\n\n- None recorded."),
+                    "{result}: {body}"
+                );
+                assert!(body.contains("review/proof_receipts.json#proof-artifact-gap"));
+                assert!(body.contains(&format!("`{result}`")));
+                if let Some(revision) = &receipt.revision {
+                    assert!(body.contains(&revision.digest));
+                    assert!(body.contains(&revision.reviewed_commit));
+                    assert!(body.contains(&revision.semantics));
+                } else {
+                    assert!(body.contains("revision unrecorded"));
+                    assert!(body.contains("legacy base `origin/main`, head `HEAD`"));
+                }
+                assert_eq!(
+                    body.matches("review/proof_receipts.json#proof-artifact-gap")
+                        .count(),
+                    1
+                );
+            }
+        }
+    }
+
+    #[test]
     fn pr_review_body_keeps_red_green_question_after_head_only_proof_receipt() {
         let receipt = test_proof_receipt("head_passed", "passed");
         let observations = vec![test_observation(
