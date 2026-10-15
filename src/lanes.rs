@@ -50,8 +50,68 @@ pub(crate) fn review_lanes_for_args(plan: &Plan, args: &RunArgs) -> Vec<LanePlan
         }
         (width, _) => review_lanes_for_width(width, plan),
     };
+    specialize_native_lanes_for_language(&mut lanes, plan.diff_class, &plan.language_mix);
     merge_repo_lanes_into(&mut lanes, &plan.repo_lanes);
     lanes
+}
+
+/// Keep the existing native-safety roster and sensor routes, but ask questions
+/// about Rust contracts when Rust is the only known changed language. Unknown
+/// and mixed-language plans retain the full native-runtime focus. Apply this
+/// before merging repo lanes so explicit repository contracts remain authoritative.
+pub(crate) fn specialize_native_lanes_for_language(
+    lanes: &mut [LanePlan],
+    diff_class: DiffClass,
+    language_mix: &LanguageMix,
+) {
+    if diff_class != DiffClass::SourceUb
+        || !matches!(language_mix.languages.as_slice(), [language] if language == "rust")
+    {
+        return;
+    }
+    for lane in lanes {
+        let (role, focus) = match lane.id.as_str() {
+            "ub" => (
+                "Rust native-boundary undefined-behavior review",
+                "Review changed Rust pointer provenance, allocation bounds, initialization, aliasing, ownership, drop order, FFI safety contracts, integer truncation, signedness, and overflow. Follow foreign-runtime invalidation only when the changed route exposes it; require a concrete unsafe or FFI boundary before claiming undefined behavior.",
+            ),
+            "ub-active-view" => (
+                "Rust slice extent and allocation-boundary review",
+                "Check Rust slice lengths, allocation capacity, offsets, initialization, and pointer validity across reallocation or FFI calls. Tie concerns to changed routes and explicit safety contracts.",
+            ),
+            "ub-backing-store" => (
+                "Rust allocation and aliasing review",
+                "Check shared backing allocations, Rust borrow and aliasing invariants, owned snapshots, and mutation after capture at changed unsafe or FFI boundaries.",
+            ),
+            "ub-worker-handoff" => (
+                "Rust thread and async ownership handoff review",
+                "Check Rust ownership and captured references across threads, async suspension, cancellation, and FFI callbacks; verify Send/Sync, synchronization, and lifetime contracts on changed routes.",
+            ),
+            "ub-gc-detach-transfer" => (
+                "Rust drop and foreign-lifetime boundary review",
+                "Check Rust drop order, allocation ownership transfer, foreign-runtime invalidation, callback lifetimes, and double-free or use-after-free risks at changed unsafe or FFI boundaries.",
+            ),
+            "sibling-paths" => (
+                "Rust sibling helper and caller review",
+                "Trace changed Rust helper callers, public API variants, and sibling implementations; bound any proposed follow-up to a concrete affected route.",
+            ),
+            "sibling-paths-crypto" => (
+                "Rust sibling input and output contract review",
+                "Check sibling Rust entrypoints for equivalent input/output, ownership, error, and secret-material contracts when the changed API affects them.",
+            ),
+            "sibling-paths-compression" => (
+                "Rust sibling representation and codec review",
+                "Check related Rust serialization, parsing, codec, or buffer helpers only when they share the changed representation or boundary.",
+            ),
+            "sibling-paths-runtime" => (
+                "Rust runtime and FFI sibling review",
+                "Trace changed Rust runtime, string/buffer, and FFI helper callers and ownership contracts; identify concrete affected siblings before proposing follow-ups.",
+            ),
+            _ => continue,
+        };
+        lane.role = role.to_owned();
+        lane.focus = focus.to_owned();
+    }
 }
 
 pub(crate) fn selected_review_lanes_for_args(plan: &Plan, args: &RunArgs) -> Result<Vec<LanePlan>> {
@@ -488,4 +548,219 @@ pub(crate) fn follow_up_provider_lane() -> LanePlan {
         ],
         "Classify routed follow-up evidence without posting, mutating, or running commands.",
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn native_plan(files: &[&str], patch: &str) -> Plan {
+        let mut plan = crate::tests::test_plan(Vec::new());
+        plan.changed_files = files.iter().map(|path| (*path).to_owned()).collect();
+        let flags = classify_diff(&plan.changed_files, patch);
+        plan.diff_class = classify_diff_class(&plan.changed_files, &flags);
+        plan.language_mix = classify_language_mix(&plan.changed_files);
+        plan.lanes = crate::diff_posture::default_lanes_for_diff_context(
+            plan.diff_class,
+            &plan.language_mix,
+        );
+        plan
+    }
+
+    fn assert_same_roster(actual: &[LanePlan], expected: &[LanePlan]) {
+        assert_eq!(actual.len(), expected.len());
+        for (actual, expected) in actual.iter().zip(expected) {
+            assert_eq!(actual.id, expected.id);
+            assert_eq!(actual.model, expected.model);
+            assert_eq!(actual.model_display, expected.model_display);
+            assert_eq!(actual.receives, expected.receives);
+        }
+    }
+
+    fn assert_rust_focus(lanes: &[LanePlan]) {
+        for lane in lanes {
+            for unrelated in [
+                "ArrayBuffer",
+                "TypedArray",
+                "JS-backed",
+                "JSC",
+                "GC",
+                "JS/native",
+                "PBKDF2",
+                "hashInto",
+                "package-second",
+            ] {
+                assert!(
+                    !lane.focus.contains(unrelated) && !lane.role.contains(unrelated),
+                    "{} retains unrelated {unrelated} axis: {}",
+                    lane.id,
+                    lane.focus
+                );
+            }
+        }
+        assert!(
+            lanes
+                .iter()
+                .any(|lane| lane.receives.iter().any(|id| id == "unsafe-review"))
+        );
+        assert!(
+            lanes
+                .iter()
+                .any(|lane| lane.receives.iter().any(|id| id == "ripr"))
+        );
+    }
+
+    #[test]
+    fn rust_native_lanes_specialize_focus_without_changing_rosters() {
+        let plan = native_plan(&["src/lib.rs"], "+ let p = bytes.as_ptr();");
+        assert_eq!(plan.diff_class, DiffClass::SourceUb);
+        let mut args = crate::tests::test_run_args(PathBuf::from("unused"));
+        for width in [10, 20, 6] {
+            args.lane_width = width;
+            let lanes = review_lanes_for_args(&plan, &args);
+            let legacy = match width {
+                10 => standard_minimax_lanes(),
+                20 => deep_minimax_lanes(),
+                _ => default_lanes(),
+            };
+            assert_same_roster(&lanes, &legacy);
+            assert_rust_focus(&lanes);
+        }
+        args.lane_width = 20;
+        args.provider_policy = ModelProviderPolicy::OpencodeGoWide;
+        let lanes = review_lanes_for_args(&plan, &args);
+        assert_same_roster(&lanes, &opencode_go_wide_lanes());
+        assert_rust_focus(&lanes);
+    }
+
+    #[test]
+    fn rust_native_default_plan_has_specialized_focus() {
+        let plan = native_plan(&["src/lib.rs"], "+ let p = bytes.as_ptr();");
+        assert_same_roster(&plan.lanes, &default_lanes());
+        assert_rust_focus(&plan.lanes);
+        assert_eq!(
+            crate::diff_posture::diff_class_posture_heading(plan.diff_class),
+            "Native safety"
+        );
+    }
+
+    #[test]
+    fn rust_ffi_retains_native_boundary_review() -> Result<()> {
+        let plan = native_plan(
+            &["src/ffi.rs"],
+            "+ unsafe extern \"C\" { fn consume(p: *mut u8); }",
+        );
+        assert_eq!(plan.diff_class, DiffClass::SourceUb);
+        let args = crate::tests::test_run_args(PathBuf::from("unused"));
+        let lanes = review_lanes_for_args(&plan, &args);
+        for id in ["ub-active-view", "ub-worker-handoff"] {
+            let lane = lanes
+                .iter()
+                .find(|lane| lane.id == id)
+                .with_context(|| format!("missing native safety lane {id}"))?;
+            assert!(lane.focus.contains("FFI"));
+        }
+        for id in [
+            "ub-memory-lifetime",
+            "tests-red-green",
+            "tests-oracle",
+            "source-route",
+            "security",
+            "opposition",
+        ] {
+            assert!(lanes.iter().any(|lane| lane.id == id));
+        }
+        assert_rust_focus(&lanes);
+        Ok(())
+    }
+
+    #[test]
+    fn bun_mixed_and_unknown_languages_keep_existing_focus() -> Result<()> {
+        for files in [
+            vec!["src/bun.js/bindings/ArrayBuffer.zig"],
+            vec!["src/lib.rs", "src/native.cpp"],
+            vec!["src/lib.rs", "src/bridge.zig", "src/worker.js"],
+        ] {
+            let plan = native_plan(&files, "+ unsafe boundary();");
+            let mut args = crate::tests::test_run_args(PathBuf::from("unused"));
+            for width in [6, 10, 20] {
+                args.lane_width = width;
+                assert_eq!(
+                    serde_json::to_value(review_lanes_for_args(&plan, &args))?,
+                    serde_json::to_value(review_lanes_for_width(width, &plan))?
+                );
+            }
+            assert_eq!(
+                serde_json::to_value(&plan.lanes)?,
+                serde_json::to_value(default_lanes())?
+            );
+        }
+        let mut plan = native_plan(&["src/lib.rs"], "+ unsafe boundary();");
+        plan.language_mix = LanguageMix::default();
+        plan.lanes = default_lanes();
+        let args = crate::tests::test_run_args(PathBuf::from("unused"));
+        assert_eq!(
+            serde_json::to_value(review_lanes_for_args(&plan, &args))?,
+            serde_json::to_value(standard_minimax_lanes())?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn rust_native_selectors_and_repo_overrides_remain_authoritative() -> Result<()> {
+        let mut plan = native_plan(&["src/lib.rs"], "+ let p = bytes.as_ptr();");
+        let mut args = crate::tests::test_run_args(PathBuf::from("unused"));
+        args.selectors.lanes = "ub-active-view,ub-worker-handoff".to_owned();
+        args.selectors.except_lanes = "ub-worker-handoff".to_owned();
+        let selected = selected_review_lanes_for_args(&plan, &args)?;
+        assert_eq!(
+            selected
+                .iter()
+                .map(|lane| lane.id.as_str())
+                .collect::<Vec<_>>(),
+            ["ub-active-view"]
+        );
+        assert_rust_focus(&selected_review_lanes_for_args(
+            &plan,
+            &crate::tests::test_run_args(PathBuf::from("unused")),
+        )?);
+        args.selectors.lanes = "missing-lane".to_owned();
+        assert!(selected_review_lanes_for_args(&plan, &args).is_err());
+
+        let mut override_lane = model_lane(
+            "ub-active-view",
+            "Repo interop review",
+            &["unsafe-review"],
+            "Repo-owned ArrayBuffer contract.",
+        );
+        override_lane.model = "custom:repo-model".to_owned();
+        plan.repo_lanes.push(override_lane.clone());
+        plan.repo_lanes.push(model_lane(
+            "repo-extra",
+            "Repo route",
+            &["ripr"],
+            "Repo-owned route.",
+        ));
+        args.selectors.lanes = "ub-active-view,repo-extra".to_owned();
+        let selected = selected_review_lanes_for_args(&plan, &args)?;
+        assert_eq!(selected.len(), 2);
+        assert_eq!(
+            serde_json::to_value(&selected[0])?,
+            serde_json::to_value(override_lane)?
+        );
+        assert_eq!(selected[1].id, "repo-extra");
+        Ok(())
+    }
+
+    #[test]
+    fn ordinary_rust_keeps_source_general_coverage() -> Result<()> {
+        let plan = native_plan(&["src/lib.rs"], "+ let count = count + 1;");
+        assert_eq!(plan.diff_class, DiffClass::SourceGeneral);
+        let args = crate::tests::test_run_args(PathBuf::from("unused"));
+        assert_eq!(
+            serde_json::to_value(review_lanes_for_args(&plan, &args))?,
+            serde_json::to_value(source_general_lanes())?
+        );
+        Ok(())
+    }
 }

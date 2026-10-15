@@ -7,13 +7,15 @@ pub(crate) fn default_lanes_for_diff_context(
     diff_class: DiffClass,
     language_mix: &LanguageMix,
 ) -> Vec<LanePlan> {
-    match diff_class {
+    let mut lanes = match diff_class {
         DiffClass::SourceUb => default_lanes(),
         DiffClass::SourceGeneral => source_general_lanes(),
         DiffClass::TestsOnly => tests_only_lanes(),
         DiffClass::WorkflowTooling => workflow_tooling_lanes_for_mix(language_mix),
         DiffClass::DocsOnly | DiffClass::ArtifactOnlySmoke => Vec::new(),
-    }
+    };
+    specialize_native_lanes_for_language(&mut lanes, diff_class, language_mix);
+    lanes
 }
 
 pub(crate) const NO_LGTM_POSTURE: &str = r#"Standalone approval language is banned.
@@ -65,7 +67,7 @@ Do not add source UB, ArrayBuffer, worker-handoff, workflow, or test-proof narra
 
 pub(crate) fn diff_class_posture_heading(diff_class: DiffClass) -> &'static str {
     match diff_class {
-        DiffClass::SourceUb => "Bun UB",
+        DiffClass::SourceUb => "Native safety",
         DiffClass::SourceGeneral => "Source-general",
         DiffClass::TestsOnly => "Tests-only",
         DiffClass::WorkflowTooling => "Workflow/tooling",
