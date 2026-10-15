@@ -257,6 +257,14 @@ pub(crate) fn render_pull_request_review_body(
     proof_receipts: &[ProofReceipt],
     review_body_max_bytes: usize,
 ) -> String {
+    // A receipt for another head cannot decide this review or answer its
+    // verification questions. Keep its provenance in the artifact audience.
+    let current_proof_receipts = proof_receipts
+        .iter()
+        .filter(|receipt| receipt.head.eq_ignore_ascii_case(&diff.head))
+        .cloned()
+        .collect::<Vec<_>>();
+    let proof_receipts = current_proof_receipts.as_slice();
     let mut text = String::new();
     let observation_items =
         unique_review_observations_by_claim(unique_review_observations(observations));
@@ -603,6 +611,7 @@ mod artifact_proof_tests {
             "timed_out",
             "skipped_budget",
             "skipped_nightly",
+            "skipped",
         ] {
             let mut stale = test_proof_receipt(result, "failed");
             stale.head = "older-head".to_owned();
@@ -629,6 +638,12 @@ mod artifact_proof_tests {
                 rendered.contains(&format!("Recorded proof result `{result}`")),
                 "{result}"
             );
+            let public = artifact_proof_body(&receipts, ReviewBodyAudience::PullRequest);
+            assert_eq!(
+                public,
+                artifact_proof_body(&[], ReviewBodyAudience::PullRequest),
+                "{result}"
+            );
         }
     }
 
@@ -638,6 +653,7 @@ mod artifact_proof_tests {
             "timed_out",
             "skipped_budget",
             "skipped_nightly",
+            "skipped",
             "head_passed",
         ] {
             let receipt = test_proof_receipt(result, "passed");

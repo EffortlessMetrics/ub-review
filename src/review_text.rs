@@ -255,7 +255,8 @@ pub(crate) fn artifact_proof_receipt_is_failure(receipt: &ProofReceipt) -> bool 
 }
 
 pub(crate) fn artifact_proof_receipt_is_unavailable(receipt: &ProofReceipt) -> bool {
-    proof_receipt_is_missing_evidence(receipt) || receipt.result == "skipped_nightly"
+    proof_receipt_is_missing_evidence(receipt)
+        || matches!(receipt.result.as_str(), "skipped_nightly" | "skipped")
 }
 
 pub(crate) fn review_decision(
@@ -1331,6 +1332,10 @@ mod output_degradation_tests {
             ),
             (
                 "skipped_nightly",
+                "No blocking finding after bounded review; evidence is incomplete.",
+            ),
+            (
+                "skipped",
                 "No blocking finding after bounded review; evidence is incomplete.",
             ),
             (
