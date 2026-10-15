@@ -847,6 +847,136 @@ mod tests {
     }
 
     #[test]
+    fn summary_verdict_fields_remain_independent_across_metrics_states() -> Result<()> {
+        let fields = [
+            ("conclusion", "Gate", "pass"),
+            ("analysis_result", "Analysis result", "clean"),
+            ("publication_result", "Publication result", "posted"),
+            ("gate_result", "Evidence gate result", "pass"),
+        ];
+        // Cross-field values are deliberately valid in a different field:
+        // a shared union whitelist or fallback from enforcement is unsafe.
+        for (field, _, _) in fields {
+            for invalid in [
+                None,
+                Some(serde_json::Value::Null),
+                Some(serde_json::json!(true)),
+                Some(serde_json::json!(1)),
+                Some(serde_json::json!(["pass"])),
+                Some(serde_json::json!({"result": "pass"})),
+                Some(serde_json::json!(if field == "analysis_result" {
+                    "pass"
+                } else {
+                    "clean"
+                })),
+                Some(serde_json::json!("pass`\n- private-request-id")),
+            ] {
+                let temp = tempfile::tempdir()?;
+                let out = temp.path();
+                fs::create_dir_all(out.join("review"))?;
+                let mut gate = serde_json::json!({
+                    "conclusion": "pass",
+                    "analysis_result": "clean",
+                    "publication_result": "posted",
+                    "gate_result": "pass",
+                    "reasons": [{"id": "private-request-id", "detail": "private-lane-id"}],
+                    "not_proven_reasons": ["private-request-id: private-lane-id"]
+                });
+                let object = gate.as_object_mut().context("gate fixture is an object")?;
+                if let Some(value) = invalid {
+                    object.insert(field.to_owned(), value);
+                } else {
+                    object.remove(field);
+                }
+                fs::write(
+                    out.join("review/gate_outcome.json"),
+                    serde_json::to_vec(&gate)?,
+                )?;
+                for metrics in [None, Some("{}"), Some("{\"runtime\":")] {
+                    if let Some(contents) = metrics {
+                        fs::write(out.join("review/metrics.json"), contents)?;
+                    }
+                    let summary = render_summary(
+                        out,
+                        &crate::tests::test_plan(Vec::new()),
+                        &crate::tests::test_diff(),
+                    )?;
+                    for (sibling, label, known) in fields {
+                        let expected = if sibling == field { "unknown" } else { known };
+                        let prefix = format!("- {label}: ");
+                        let line = summary.lines().find(|line| line.starts_with(&prefix));
+                        let expected_line = if sibling == "conclusion" {
+                            format!(
+                                "- Gate: `{expected}` with `1` blocking reasons (`review/gate_outcome.json`)"
+                            )
+                        } else {
+                            format!("- {label}: `{expected}`")
+                        };
+                        assert_eq!(line, Some(expected_line.as_str()), "{field}: {gate}");
+                        assert_eq!(summary.matches(&prefix).count(), 1);
+                    }
+                    assert!(!summary.contains("private-request-id"));
+                    assert!(!summary.contains("private-lane-id"));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn summary_unusable_gate_receipts_never_synthesize_success() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        fs::create_dir_all(out.join("review"))?;
+        for gate in [
+            None,
+            Some("{"),
+            Some("null"),
+            Some("true"),
+            Some("\"pass\""),
+            Some("1"),
+            Some("[]"),
+            Some("{}"),
+        ] {
+            if let Some(contents) = gate {
+                fs::write(out.join("review/gate_outcome.json"), contents)?;
+            }
+            for metrics in [None, Some("{}"), Some("{\"runtime\":")] {
+                if let Some(contents) = metrics {
+                    fs::write(out.join("review/metrics.json"), contents)?;
+                } else if out.join("review/metrics.json").exists() {
+                    fs::remove_file(out.join("review/metrics.json"))?;
+                }
+                let mut summary = String::new();
+                render_review_efficiency_section(&mut summary, out);
+                for success in [
+                    "- Gate: `pass`",
+                    "- Analysis result: `clean`",
+                    "- Publication result: `posted`",
+                    "- Evidence gate result: `pass`",
+                ] {
+                    assert!(!summary.contains(success), "gate={gate:?}: {summary}");
+                }
+                // Parseable but structurally unusable receipts stay unknown;
+                // an unreadable receipt supplies no verdict at all.
+                for label in [
+                    "Gate",
+                    "Analysis result",
+                    "Publication result",
+                    "Evidence gate result",
+                ] {
+                    let expected = format!("- {label}: `unknown`");
+                    assert_eq!(
+                        summary.contains(&expected),
+                        gate.is_some_and(|value| value != "{")
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn lane_packet_model_display_resolves_encoded_hostile_lane_id() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path();
