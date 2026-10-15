@@ -555,8 +555,23 @@ fn render_planner_required_proofs(text: &mut String, gate: &serde_json::Value) {
                     .join(", ")
             })
             .unwrap_or_else(|| "unknown".to_owned());
+        let diagnostics = task
+            .get("receipt_diagnostics")
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|value| {
+                serde_json::from_value::<crate::gate::PlannerReceiptDiagnostic>(value.clone()).ok()
+            })
+            .map(crate::gate::PlannerReceiptDiagnostic::summary)
+            .collect::<Vec<_>>();
+        let diagnostic = if diagnostics.is_empty() {
+            "diagnostics unavailable; inspect private proof artifacts".to_owned()
+        } else {
+            diagnostics.join("; ")
+        };
         text.push_str(&format!(
-            "- Required planner proof unproven: `{task_id}` ({kind}, {status}): {reason}; requests: {request_ids}; receipts: none; revision `{digest}` (`review/proof_portfolio.json`, `review/gate_outcome.json`)\n"
+            "- Required planner proof unproven: `{task_id}` ({kind}, {status}): {reason}; requests: {request_ids}; receipts: none satisfying; {diagnostic}; revision `{digest}` (`review/proof_portfolio.json`, `review/proof_receipts.json`, `review/gate_outcome.json`)\n"
         ));
     }
 }
@@ -800,6 +815,49 @@ mod tests {
         }
         assert!(!summary.contains("satisfied"), "{summary}");
         Ok(())
+    }
+
+    #[test]
+    fn planner_summary_diagnostics_are_fixed_and_legacy_absence_is_unknown() {
+        for (diagnostics, expected) in [
+            (
+                serde_json::json!(["missing"]),
+                "no run receipts; execute the required task for the admitted revision",
+            ),
+            (
+                serde_json::json!(["wrong_subject"]),
+                "run receipts share no task request id; execute this task's requests",
+            ),
+            (
+                serde_json::json!(["stale_revision"]),
+                "stale receipt revision; rerun for the admitted revision",
+            ),
+            (
+                serde_json::json!(["failed"]),
+                "failed or timed-out receipt; inspect private proof results before retrying",
+            ),
+            (
+                serde_json::Value::Null,
+                "diagnostics unavailable; inspect private proof artifacts",
+            ),
+            (
+                serde_json::json!(["PRIVATE_PAYLOAD\n![leak](https://evil)"]),
+                "diagnostics unavailable; inspect private proof artifacts",
+            ),
+        ] {
+            let gate = serde_json::json!({
+                "planner_required_proofs": {
+                    "total": 1, "proven": 0, "unproven": 1,
+                    "unproven_tasks": [{"receipt_diagnostics": diagnostics}]
+                }
+            });
+            let mut summary = String::new();
+            super::render_planner_required_proofs(&mut summary, &gate);
+            assert!(summary.contains("receipts: none satisfying"), "{summary}");
+            assert!(summary.contains(expected), "{summary}");
+            assert!(!summary.contains("PRIVATE_PAYLOAD"), "{summary}");
+            assert!(!summary.contains("https://evil"), "{summary}");
+        }
     }
 
     /// Portfolio text is untrusted: a crafted task id/reason carrying
