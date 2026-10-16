@@ -513,6 +513,8 @@ pub(crate) fn run_available_model_lanes_with_runner(
             .collect::<BTreeMap<_, _>>();
         for task in &wave {
             remove_internal_audit_artifact(&model_dir, &task.lane.id)?;
+            let receipt = &mut model_lanes[task.index];
+            receipt.attempt_count = Some(receipt.attempt_count.unwrap_or(0).saturating_add(1));
         }
         calls += wave.len();
         let mut results = runner(&context, &model_dir, wave)?;
@@ -600,7 +602,7 @@ pub(crate) fn run_available_model_lanes_with_runner(
                         // the retry itself fails or never gets budget.
                         receipt.status = "planned".to_owned();
                         receipt.reason = format!(
-                            "retrying on fallback {} after primary {status}: {err:#}",
+                            "fallback {} queued after primary {status}: {err:#}",
                             fallback.label()
                         );
                         receipt.http_status = http_status;
@@ -646,7 +648,14 @@ pub(crate) fn run_available_model_lanes_with_runner(
         }
         if receipt.status == "planned" {
             receipt.status = "skipped".to_owned();
-            receipt.reason = "model call budget reached before lane execution".to_owned();
+            receipt.reason = if forced_specs[index].is_some() {
+                format!(
+                    "model call budget reached before fallback retry; {}",
+                    receipt.reason
+                )
+            } else {
+                "model call budget reached before lane execution".to_owned()
+            };
             if is_model_receipt_evidence_issue(receipt) {
                 missing_or_failed_model_evidence.push(model_issue_from_receipt(receipt));
             }
