@@ -88,6 +88,32 @@ pub(crate) fn model_auth_header(spec: &ProviderSpec, token: &str) -> String {
     }
 }
 
+/// Provider routing metadata, not review identity or evidence authority. Each
+/// artifact conversation keeps its session across calls in this process. The
+/// process nonce separates fresh invocations even when they reuse an output
+/// directory; canonicalization keeps relative/absolute aliases in one session.
+pub(crate) fn model_request_headers(spec: &ProviderSpec, lane_dir: &Path) -> Result<Vec<String>> {
+    let mut headers = vec![
+        "Accept: application/json".to_owned(),
+        "Content-Type: application/json".to_owned(),
+        format!("User-Agent: ub-review/{}", env!("CARGO_PKG_VERSION")),
+    ];
+    if spec.provider == ModelProvider::OpenCodeGo {
+        static PROCESS_NONCE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        let nonce = PROCESS_NONCE
+            .get_or_init(|| format!("{}:{:?}", std::process::id(), std::time::SystemTime::now()));
+        let conversation = fs::canonicalize(lane_dir)
+            .with_context(|| format!("canonicalize model conversation {}", lane_dir.display()))?;
+        let mut digest = Sha256::new();
+        digest.update(b"ub-review.provider-session.v1\0");
+        digest.update(nonce.as_bytes());
+        digest.update([0]);
+        digest.update(conversation.as_os_str().as_encoded_bytes());
+        headers.push(format!("x-opencode-session: {:x}", digest.finalize()));
+    }
+    Ok(headers)
+}
+
 #[cfg(test)]
 pub(crate) fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value {
     model_request_payload_parts(spec, None, prompt)
@@ -481,4 +507,108 @@ pub(crate) fn http_status_from_error(err: &anyhow::Error) -> Option<u16> {
     let start = text.find(needle)? + needle.len();
     let end = text[start..].find(')')? + start;
     text[start..end].parse::<u16>().ok()
+}
+
+#[cfg(test)]
+mod provider_session_tests {
+    use super::*;
+
+    fn spec(provider: ModelProvider, endpoint_kind: ProviderEndpointKind) -> ProviderSpec {
+        ProviderSpec {
+            provider,
+            endpoint_kind,
+            model: "local-test-model".to_owned(),
+        }
+    }
+
+    fn session(headers: &[String]) -> Result<&str> {
+        headers
+            .iter()
+            .find_map(|header| header.strip_prefix("x-opencode-session: "))
+            .ok_or_else(|| anyhow::anyhow!("missing provider session"))
+    }
+
+    #[test]
+    fn provider_session_survives_request_replacement_and_path_aliases() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let lane = temp.path().join("lane");
+        fs::create_dir(&lane)?;
+        let spec = spec(ModelProvider::OpenCodeGo, ProviderEndpointKind::OpenAiChat);
+        let initial = model_request_headers(&spec, &lane)?;
+        fs::write(lane.join("request.json"), "changed prompt for retry")?;
+        let retry = model_request_headers(&spec, &lane.join("."))?;
+        assert_eq!(session(&initial)?, session(&retry)?);
+        assert_eq!(session(&initial)?.len(), 64);
+        assert!(
+            session(&initial)?
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn provider_sessions_separate_conversations_and_output_runs() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let spec = spec(ModelProvider::OpenCodeGo, ProviderEndpointKind::OpenAiChat);
+        let mut sessions = BTreeSet::new();
+        for path in [
+            "run-1/preflight",
+            "run-1/lane-a",
+            "run-1/lane-b",
+            "run-2/lane-a",
+        ] {
+            let dir = temp.path().join(path);
+            fs::create_dir_all(&dir)?;
+            let headers = model_request_headers(&spec, &dir)?;
+            assert!(sessions.insert(session(&headers)?.to_owned()));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn provider_session_is_endpoint_independent_and_minimax_omits_it() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let openai = model_request_headers(
+            &spec(ModelProvider::OpenCodeGo, ProviderEndpointKind::OpenAiChat),
+            temp.path(),
+        )?;
+        let anthropic = model_request_headers(
+            &spec(
+                ModelProvider::OpenCodeGo,
+                ProviderEndpointKind::AnthropicMessages,
+            ),
+            temp.path(),
+        )?;
+        assert_eq!(session(&openai)?, session(&anthropic)?);
+        for endpoint in [
+            ProviderEndpointKind::OpenAiChat,
+            ProviderEndpointKind::AnthropicMessages,
+        ] {
+            let headers =
+                model_request_headers(&spec(ModelProvider::MiniMaxDirect, endpoint), temp.path())?;
+            assert!(session(&headers).is_err());
+            assert!(headers.contains(&"Accept: application/json".to_owned()));
+            assert!(headers.contains(&"Content-Type: application/json".to_owned()));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn provider_session_fails_closed_for_missing_conversation_directory() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let missing = temp.path().join("missing");
+        let error = model_request_headers(
+            &spec(ModelProvider::OpenCodeGo, ProviderEndpointKind::OpenAiChat),
+            &missing,
+        )
+        .err()
+        .ok_or_else(|| anyhow::anyhow!("missing conversation accepted"))?;
+        assert!(
+            error
+                .to_string()
+                .contains("canonicalize model conversation")
+        );
+        Ok(())
+    }
 }
