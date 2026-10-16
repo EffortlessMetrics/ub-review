@@ -4998,6 +4998,123 @@ fn model_outage_degrades_review_without_reddening_enforced_gate() -> Result<()> 
     Ok(())
 }
 
+/// A successful preflight does not grant credit to a later disconnected lane.
+/// Recovery reuses the same revision/output path so stale failure state cannot
+/// silently poison the next attempt. This is rerun recovery, not checkpointing.
+#[test]
+fn model_transport_failure_after_preflight_remains_incomplete_and_rerunnable() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let args = [
+        "run",
+        "--dry-run",
+        "--config",
+        path_str(&config)?,
+        "--root",
+        path_str(&repo)?,
+        "--base",
+        "HEAD~1",
+        "--head",
+        "HEAD",
+        "--out",
+        path_str(&out)?,
+        "--mode",
+        "intelligent-ci",
+        "--fail-on-gate",
+        "true",
+        "--no-github-summary",
+        "--model-mode",
+        "auto",
+        "--provider-policy",
+        "minimax-only",
+        "--minimax-provider-kind",
+        "openai",
+        "--lanes",
+        "correctness",
+        "--tools",
+        "cargo-allow",
+        "--model-concurrency",
+        "1",
+        "--max-model-calls",
+        "1",
+        "--model-timeout-sec",
+        "10",
+    ];
+    let mut failed_revision = None;
+    for recovering in [false, true] {
+        let (provider_url, provider) = if recovering {
+            spawn_fake_openai_provider(2)?
+        } else {
+            // First request succeeds (preflight), second disconnects (lane).
+            spawn_fake_openai_provider_with_statuses(vec![200, 0])?
+        };
+        run_with_env(
+            temp.path(),
+            bin,
+            &args,
+            &[
+                ("UB_REVIEW_MINIMAX_API_KEY", "dummy-transport-recovery-key"),
+                ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
+            ],
+        )?;
+        assert_eq!(join_fake_provider(provider)?.len(), 2);
+        let read = |path: &str| -> Result<serde_json::Value> {
+            Ok(serde_json::from_slice(&fs::read(out.join(path))?)?)
+        };
+        let preflight = read("review/provider-preflight-status.json")?;
+        assert_eq!(preflight[0]["status"], "ok");
+        let revision = read("input/revision-admission.json")?;
+        let review = read("review/review.json")?;
+        let lane = review["model_lanes"]
+            .as_array()
+            .and_then(|lanes| lanes.iter().find(|lane| lane["lane"] == "correctness"))
+            .ok_or_else(|| anyhow::anyhow!("correctness lane receipt missing"))?;
+        let gate = read("review/gate_outcome.json")?;
+        let terminal = read("review/terminal_state.json")?;
+        let gaps = review["missing_or_failed_model_evidence"]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("model evidence gaps missing"))?;
+        // Legacy advisory enforcement may pass while semantic review is missing.
+        assert_eq!(gate["conclusion"], "pass");
+        if recovering {
+            assert_eq!(failed_revision.as_ref(), Some(&revision));
+            assert_eq!(lane["status"], "ok");
+            assert_eq!(gate["model_coverage"]["lanes_usable"], 1);
+            assert_eq!(terminal["usable_model_lanes"], 1);
+            assert!(gaps.is_empty(), "stale model failure retained: {gaps:?}");
+        } else {
+            failed_revision = Some(revision);
+            assert_eq!(lane["status"], "failed");
+            // curl reports 000 when the peer closes without an HTTP response.
+            assert_eq!(lane["http_status"], 0);
+            assert_eq!(gate["model_coverage"]["lanes_usable"], 0);
+            assert_eq!(terminal["usable_model_lanes"], 0);
+            assert_eq!(gate["analysis_result"], "not_proven");
+            assert_eq!(gate["gate_result"], "not_proven");
+            assert_eq!(terminal["status"], "artifact-only");
+            assert!(
+                gaps.iter()
+                    .any(|gap| gap["lane"] == "correctness" && gap["status"] == "failed")
+            );
+            assert!(
+                gate["not_proven_reasons"]
+                    .as_array()
+                    .is_some_and(|reasons| !reasons.is_empty())
+            );
+            let lane_dir = out.join("review/model/correctness");
+            assert!(lane_dir.join("request.json").is_file());
+            assert!(!lane_dir.join("content.json").exists());
+            assert!(!fs::read_to_string(lane_dir.join("stderr.txt"))?.is_empty());
+        }
+    }
+    Ok(())
+}
+
 #[test]
 fn intelligent_ci_runs_advisory_proof_planner_lane_before_request_broker() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
