@@ -380,3 +380,26 @@ fn input_changes_during_real_cargo_check_cannot_leave_success_summary() -> Resul
     }
     Ok(())
 }
+
+#[test]
+fn git_failure_during_staged_admission_keeps_no_success_summary() -> Result<()> {
+    let root = fixture("git-comparison-error")?;
+    fs::create_dir_all(root.join("target/precommit"))?;
+    fs::write(root.join("target/precommit/summary.md"), "stale success\n")?;
+    // Use an actual non-repository Git failure, not a mocked executable.
+    fs::rename(root.join(".git"), root.join("target/saved-git"))?;
+    let output = precommit(&root)?;
+    ensure!(!output.status.success());
+    let error = String::from_utf8_lossy(&output.stderr);
+    ensure!(
+        error.contains("could not compare precommit worktree with staged index"),
+        "{error}"
+    );
+    ensure!(!root.join("target/precommit/summary.md").exists());
+    ensure!(
+        !root
+            .join("target/precommit/check-subject-probe.md")
+            .exists()
+    );
+    Ok(())
+}
