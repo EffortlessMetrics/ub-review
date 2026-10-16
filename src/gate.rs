@@ -2121,11 +2121,13 @@ mod tests {
                                     .any(|reason| reason.starts_with("required-sensor-coverage:"))
                             );
                             if blocking && status == "failed" {
-                                assert!(
-                                    gate.reasons[0]
-                                        .next_action
-                                        .as_deref()
-                                        .is_some_and(|action| action.contains("stderr.txt"))
+                                let artifact = serde_json::to_value(&gate)?;
+                                assert_eq!(
+                                    artifact["reasons"][0]["next_action"],
+                                    format!(
+                                        "inspect sensors/{id}/ub-review-sensor-status.json and sensors/{id}/stderr.txt; \
+                                         resolve the analysis or execution failure, then re-run; no passing verdict was produced"
+                                    )
                                 );
                             }
                         } else if !required {
