@@ -23066,84 +23066,92 @@ index 1111111..2222222 100644
     }
 
     #[test]
-    fn stale_prior_resolutions_cannot_satisfy_the_current_revision() {
+    fn stale_prior_resolutions_cannot_satisfy_the_current_revision() -> Result<()> {
         let current = test_candidate_record("candidate-0007-deadbeef1234");
-        let build_prior = |digest: Option<String>| super::ResolvedCandidateRecord {
-            revision: digest.map(|d| crate::RevisionRef {
-                digest: d,
-                semantics: "candidate_head".to_owned(),
-                reviewed_commit: "e".repeat(40),
-            }),
-            candidate_id: "candidate-0001-deadbeef1234".to_owned(),
-            resolved_status: "resolved".to_owned(),
-            resolved_disposition: "dropped".to_owned(),
-            lane: current.lane.clone(),
-            source: current.source.clone(),
-            original_status: current.status.clone(),
-            ..test_resolved_prior()
-        };
         let now_ref = crate::RevisionRef {
             digest: "a".repeat(64),
             semantics: "candidate_head".to_owned(),
             reviewed_commit: "b".repeat(40),
         };
+        let mut wrong_digest = now_ref.clone();
+        wrong_digest.digest = "f".repeat(64);
+        let mut wrong_semantics = now_ref.clone();
+        wrong_semantics.semantics = "merge_result".to_owned();
+        let mut wrong_commit = now_ref.clone();
+        wrong_commit.reviewed_commit = "e".repeat(40);
 
-        // Exact join: the prior resolves and the row carries the ref.
-        let joined = resolved_candidate_records(
-            std::slice::from_ref(&current),
-            &[],
-            &[],
-            &[build_prior(Some("a".repeat(64)))],
-            Some(&now_ref),
-        );
-        assert_eq!(joined[0].resolution_source, "prior-resolved-candidates");
-        assert_eq!(
-            joined[0].revision.as_ref().map(|r| r.digest.clone()),
-            Some("a".repeat(64))
-        );
-
-        // Different revision: fingerprint matches, resolution is refused with
-        // the stale-revision reason token and both digests in evidence.
-        let stale = resolved_candidate_records(
-            std::slice::from_ref(&current),
-            &[],
-            &[],
-            &[build_prior(Some("f".repeat(64)))],
-            Some(&now_ref),
-        );
-        assert_eq!(stale[0].resolution_source, "candidate");
-        assert_eq!(stale[0].resolved_status, "unchanged");
-        assert!(
-            stale[0].reason.contains("[stale_revision]"),
-            "{}",
-            stale[0].reason
-        );
-        assert!(
-            stale[0]
-                .evidence
-                .iter()
-                .any(|line| line.contains(&"f".repeat(64))),
-            "{:?}",
-            stale[0].evidence
-        );
-
-        // Legacy unstamped priors cannot satisfy current-run reuse either.
-        let legacy = resolved_candidate_records(
-            std::slice::from_ref(&current),
-            &[],
-            &[],
-            &[build_prior(None)],
-            Some(&now_ref),
-        );
-        assert_eq!(legacy[0].resolved_status, "unchanged");
-        assert!(
-            legacy[0]
-                .evidence
-                .iter()
-                .any(|line| line.contains("<legacy-unstamped>")),
-            "{:?}",
-            legacy[0].evidence
-        );
+        for disposition in ["dropped", "refuted"] {
+            for (case, revision, reusable) in [
+                ("exact", Some(now_ref.clone()), true),
+                ("digest", Some(wrong_digest.clone()), false),
+                ("semantics", Some(wrong_semantics.clone()), false),
+                ("reviewed_commit", Some(wrong_commit.clone()), false),
+                ("legacy", None, false),
+            ] {
+                let prior = super::ResolvedCandidateRecord {
+                    revision,
+                    candidate_id: "candidate-0001-deadbeef1234".to_owned(),
+                    resolved_status: "resolved".to_owned(),
+                    resolved_disposition: disposition.to_owned(),
+                    lane: current.lane.clone(),
+                    source: current.source.clone(),
+                    original_status: current.status.clone(),
+                    ..test_resolved_prior()
+                };
+                // Exercise the persisted prior-record shape, then the production
+                // resolution and compiler-exclusion consumers.
+                let priors: Vec<ResolvedCandidateRecord> =
+                    serde_json::from_slice(&serde_json::to_vec(&vec![prior])?)?;
+                let records = resolved_candidate_records(
+                    std::slice::from_ref(&current),
+                    &[],
+                    &[],
+                    &priors,
+                    Some(&now_ref),
+                );
+                assert_eq!(records.len(), 1, "{disposition}/{case}");
+                let record = &records[0];
+                assert_eq!(record.revision.as_ref(), Some(&now_ref));
+                if reusable {
+                    assert_eq!(record.resolution_source, "prior-resolved-candidates");
+                    assert_eq!(record.resolved_status, "resolved");
+                    assert_eq!(record.resolved_disposition, disposition);
+                    assert_eq!(
+                        follow_up_resolved_away_candidate_ids(&records),
+                        vec![current.id.clone()]
+                    );
+                } else {
+                    assert_eq!(
+                        record.resolution_source, "candidate",
+                        "{disposition}/{case}"
+                    );
+                    assert_eq!(record.resolved_status, "unchanged", "{disposition}/{case}");
+                    assert_eq!(record.resolved_disposition, current.disposition);
+                    assert!(record.reason.contains("[stale_revision]"), "{case}");
+                    assert!(
+                        record
+                            .evidence
+                            .iter()
+                            .any(|line| line.contains(&now_ref.digest))
+                    );
+                    let prior_digest = if case == "legacy" {
+                        "<legacy-unstamped>"
+                    } else if case == "digest" {
+                        &wrong_digest.digest
+                    } else {
+                        &now_ref.digest
+                    };
+                    assert!(
+                        record
+                            .evidence
+                            .iter()
+                            .any(|line| line.contains(prior_digest))
+                    );
+                    assert!(follow_up_resolved_away_candidate_ids(&records).is_empty());
+                }
+            }
+        }
+        Ok(())
     }
 
     fn test_resolved_prior() -> ResolvedCandidateRecord {
