@@ -2841,6 +2841,9 @@ struct SensorEvidenceIssue {
     sensor: String,
     status: String,
     reason: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exit_code: Option<i32>,
+    timed_out: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -6083,6 +6086,8 @@ fn write_review_artifacts(
                         sensor: "compiler-reconciliation".to_owned(),
                         status: "failed".to_owned(),
                         reason: format!("final compiler reconciliation failed: {error:#}"),
+                        exit_code: None,
+                        timed_out: false,
                     });
                 compiler_inline_comments.clear();
                 compiler_summary_only_findings.clear();
@@ -15427,6 +15432,8 @@ UB_REVIEW_HTTP_STATUS:429
                 sensor: "ripr".to_owned(),
                 status: "missing".to_owned(),
                 reason: "command not found".to_owned(),
+                exit_code: None,
+                timed_out: false,
             }],
             &[ModelEvidenceIssue {
                 lane: "ub-memory-lifetime".to_owned(),
@@ -15607,6 +15614,8 @@ UB_REVIEW_HTTP_STATUS:429
             sensor: "actionlint".to_owned(),
             status: "skipped".to_owned(),
             reason: "disabled by config".to_owned(),
+            exit_code: None,
+            timed_out: false,
         }];
 
         let state = build_review_terminal_state(TerminalStateInput {
@@ -23861,6 +23870,8 @@ index 1111111..2222222 100644
                 sensor: "ripr".to_owned(),
                 status: "missing".to_owned(),
                 reason: "command not found".to_owned(),
+                exit_code: None,
+                timed_out: false,
             }],
             missing_or_failed_model_evidence: vec![
                 ModelEvidenceIssue {
@@ -24719,6 +24730,8 @@ index 1111111..2222222 100644
                 sensor: "unsafe-review".to_owned(),
                 status: "missing".to_owned(),
                 reason: long_text.clone(),
+                exit_code: None,
+                timed_out: false,
             }],
             &[] as &[ModelEvidenceIssue],
             &[] as &[ReviewInlineComment],
