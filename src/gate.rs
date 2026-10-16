@@ -2056,7 +2056,22 @@ mod tests {
                         } else {
                             Vec::new()
                         };
-                        let plan = test_plan(vec![sensor]);
+                        // One real successful receipt prevents whole-instrument
+                        // blackout from masking lost Required evidence.
+                        let healthy = sensor_plan("healthy", "healthy", true);
+                        write_sensor_status(
+                            temp.path(),
+                            &healthy,
+                            SensorStatusWrite {
+                                status: "ok",
+                                argv: &["healthy".to_owned()],
+                                duration_ms: 1,
+                                reason: "completed control",
+                                exit_code: Some(0),
+                                timed_out: false,
+                            },
+                        )?;
+                        let plan = test_plan(vec![sensor, healthy]);
                         let issues = collect_sensor_evidence_issues(temp.path(), &plan);
                         assert_eq!(issues.len(), 1);
                         assert_eq!(issues[0].status, status, "preserve raw process status");
@@ -2100,6 +2115,11 @@ mod tests {
                         if required && !finding {
                             assert_eq!(gate.analysis_result, "not_proven");
                             assert_eq!(gate.gate_result, "not_proven");
+                            assert!(
+                                gate.not_proven_reasons
+                                    .iter()
+                                    .any(|reason| reason.starts_with("required-sensor-coverage:"))
+                            );
                             if blocking && status == "failed" {
                                 assert!(
                                     gate.reasons[0]
@@ -2108,6 +2128,8 @@ mod tests {
                                         .is_some_and(|action| action.contains("stderr.txt"))
                                 );
                             }
+                        } else if !required {
+                            assert_eq!(gate.analysis_result, "limited");
                         }
                     }
                 }
