@@ -2733,6 +2733,47 @@ reason = "whitespace-only owner violates the suppression-health contract"
         Ok(())
     }
 
+    /// Deleted inputs have no added-side hunk to restore their path after the
+    /// name inventory. They must still make Rust checks relevant.
+    #[test]
+    fn changed_files_preserve_deleted_rust_and_manifest_inputs() -> Result<()> {
+        let mut observed = Vec::new();
+        let mut expected = Vec::new();
+        for staged in [false, true] {
+            for path in ["src/lib.rs", "Cargo.toml", "crates/alpha/Cargo.toml"] {
+                let root = initialized_test_repo("deleted-input-selection")?;
+                if path != "src/lib.rs" {
+                    let input = root.join(path);
+                    fs::create_dir_all(input.parent().context("input has no parent")?)?;
+                    fs::write(&input, "[package]\nname = \"fixture\"\n")?;
+                    git_test(&root, &["add", "--", path])?;
+                    git_test(
+                        &root,
+                        &["-c", "commit.gpgsign=false", "commit", "-m", "manifest"],
+                    )?;
+                }
+                fs::remove_file(root.join(path))?;
+                git_test(&root, &["add", "-A"])?;
+                let files = changed_files(&root, staged)?;
+                observed.push((
+                    staged,
+                    path.to_owned(),
+                    files
+                        .iter()
+                        .map(|file| file.path.clone())
+                        .collect::<Vec<_>>(),
+                    relevant_rust_change(&files),
+                ));
+                expected.push((staged, path.to_owned(), vec![path.to_owned()], true));
+            }
+        }
+        assert_eq!(
+            observed, expected,
+            "deleted inputs must remain relevant in both index and HEAD diff modes"
+        );
+        Ok(())
+    }
+
     #[test]
     fn affected_packages_include_package_manifest_changes() -> Result<()> {
         let root = temp_repo_root("manifest")?;
