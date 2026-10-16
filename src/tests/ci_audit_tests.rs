@@ -2772,3 +2772,90 @@ fn ci_repair_ambiguous_correlation_never_earns_adaptive_rightsizing() -> Result<
     );
     Ok(())
 }
+
+#[test]
+fn ci_repair_counts_every_missing_duration_in_consumer_warnings() -> Result<()> {
+    let specs = (1..=20)
+        .map(|id| (id, vec![("test", "success", 600)]))
+        .collect::<Vec<_>>();
+    let mut runs = ci_fixture_runs(&specs)?;
+    for run in runs.iter_mut().skip(1) {
+        run.jobs[0].completed_at = None;
+    }
+    let a = ci_repair_artifacts(runs, Vec::new());
+    let expected = ".github/workflows/ci.yml / test: 19 job durations unavailable; runtime unknown and runner minutes are an observed lower bound";
+    for gaps in [
+        &a.history.evidence_gaps,
+        &a.costs.evidence_gaps,
+        &a.correlation.evidence_gaps,
+        &a.recommendations.evidence_gaps,
+    ] {
+        assert!(gaps.iter().any(|gap| gap == expected), "{gaps:?}");
+    }
+    assert!(a.report.contains(expected));
+    assert_eq!(a.costs.jobs[0].duration_p50_sec, Some(600));
+    assert_eq!(a.costs.jobs[0].runner_minutes_per_month, 10);
+    assert!(a.costs.jobs[0].runner_minutes_is_lower_bound);
+    Ok(())
+}
+
+#[test]
+fn ci_repair_display_name_ambiguity_is_confined_to_its_workflow() -> Result<()> {
+    let mut runs = ci_fixture_runs(&[
+        (1, vec![("same", "failure", 60), ("same", "success", 120)]),
+        (2, vec![("clean", "failure", 60)]),
+    ])?;
+    runs[1].run.workflow_id = 2;
+    let mut workflows = ci_fixture_workflows();
+    workflows.push(serde_json::from_value(serde_json::json!({
+        "id":2,"name":"Other CI","path":".github/workflows/other.yml"
+    }))?);
+    let mut fetch = CiAuditFetch {
+        workflows,
+        runs,
+        pages_fetched: 1,
+        truncated: false,
+        required_checks: ci_no_required_checks(),
+        evidence_gaps: Vec::new(),
+    };
+    let a = build_ci_audit_artifacts("acme/widgets", 30, &[], Some(&fetch), None, Utc::now());
+    let clean = a
+        .correlation
+        .jobs
+        .iter()
+        .find(|row| row.job == "clean")
+        .context("clean workflow row")?;
+    assert_eq!(clean.workflow, ".github/workflows/other.yml");
+    assert_eq!(clean.independent_failures, 1);
+    assert!(!clean.independent_failures_is_lower_bound);
+    let ambiguous = a
+        .correlation
+        .jobs
+        .iter()
+        .find(|row| row.job == "same")
+        .context("ambiguous workflow row")?;
+    assert_eq!(ambiguous.independent_failures, 0);
+    assert!(ambiguous.independent_failures_is_lower_bound);
+    assert!(
+        a.correlation
+            .evidence_gaps
+            .iter()
+            .any(|gap| gap.contains("duplicate job display names"))
+    );
+    assert!(
+        !a.correlation
+            .evidence_gaps
+            .iter()
+            .any(|gap| gap.contains("other.yml"))
+    );
+    fetch.runs.reverse();
+    for run in &mut fetch.runs {
+        run.jobs.reverse();
+    }
+    let b = build_ci_audit_artifacts("acme/widgets", 30, &[], Some(&fetch), None, Utc::now());
+    assert_eq!(
+        serde_json::to_value(&a.correlation)?,
+        serde_json::to_value(&b.correlation)?
+    );
+    Ok(())
+}
