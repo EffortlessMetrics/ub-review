@@ -188,7 +188,7 @@ profile:
 
 The tokmd analyze preset is hardcoded to `bun-ub`
 (`TOKMD_ANALYZE_PRESET` in src/main.rs); no action input overrides it.
-Sensor install uses `tool-bundle: core` (tokmd pinned 1.12.0, cargo-allow,
+Sensor install uses `tool-bundle: core` (tokmd pinned 1.15.0, cargo-allow,
 ripr, unsafe-review, ast-grep, actionlint via
 scripts/install-gh-runner-tools.sh). On a generic hosted runner an install
 miss is an evidence gap; on the standard image it is drift and should fail

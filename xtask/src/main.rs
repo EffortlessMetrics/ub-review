@@ -916,7 +916,7 @@ fn skipped_receipt(name: &str, reason: &str) -> CommandReceipt {
 /// by the missing-tool receipts; versions track scripts/install-gh-runner-tools.sh.
 fn install_hint(name: &str) -> &'static str {
     match name {
-        "tokmd" => "cargo install tokmd --locked --version 1.12.0 --force",
+        "tokmd" => "cargo install tokmd --locked --version 1.15.0 --force",
         "cargo-allow" => "cargo install cargo-allow --locked",
         "ripr" => "cargo install ripr --locked --version 0.10.0 --force",
         "unsafe-review" => "cargo install unsafe-review --locked --version 0.3.4 --force",
@@ -2310,7 +2310,7 @@ mod tests {
         let expected = [
             (
                 "tokmd",
-                "cargo install tokmd --locked --version 1.12.0 --force",
+                "cargo install tokmd --locked --version 1.15.0 --force",
             ),
             ("cargo-allow", "cargo install cargo-allow --locked"),
             (
