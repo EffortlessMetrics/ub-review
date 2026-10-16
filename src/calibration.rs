@@ -396,40 +396,109 @@ mod tests {
     }
 
     #[test]
-    fn calibration_suggested_class_expected_quiet() {
-        let counts = CalibrationCounts::default();
-        let class = suggest_class(0, false, 5, &counts);
-        assert_eq!(class, "expected-quiet");
-    }
-
-    #[test]
-    fn calibration_suggested_class_no_model() {
-        let counts = CalibrationCounts::default();
-        let class = suggest_class(0, false, 0, &counts);
-        assert_eq!(class, "no-model-review");
-    }
-
-    #[test]
-    fn calibration_suggested_class_infra_excluded() {
-        let class = suggest_class(0, true, 5, &CalibrationCounts::default());
-        assert_eq!(class, "infra-excluded");
-    }
-
-    fn suggest_class(
-        proof_changed: usize,
-        infra: bool,
-        lanes_exec: usize,
-        _counts: &CalibrationCounts,
-    ) -> String {
-        if proof_changed > 0 {
-            "proof-changed-conclusion".to_owned()
-        } else if lanes_exec == 0 {
-            "no-model-review".to_owned()
-        } else if infra {
-            "infra-excluded".to_owned()
-        } else {
-            "expected-quiet".to_owned()
+    fn calibration_classifies_serialized_run_evidence() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut lane = crate::ModelLaneReceipt {
+            lane: "correctness".to_owned(),
+            provider: "minimax".to_owned(),
+            model: "MiniMax-M3".to_owned(),
+            endpoint_kind: "anthropic-messages".to_owned(),
+            status: "ok".to_owned(),
+            reason: "classification fixture".to_owned(),
+            duration_ms: None,
+            http_status: None,
+            response_shape: None,
+            fallback_from: None,
+            cache_usage: crate::ModelCacheUsage::default(),
+            cohort_id: String::new(),
+            shared_prefix_hash: String::new(),
+            thread_id: String::new(),
+            turn: 0,
+            cohort_broken: false,
+        };
+        // Pin the compatibility artifact's classification, not reviewer
+        // usefulness or confirmed publication. No proof-effect inputs exist.
+        for (status, thread, gate, inline, summary, expected_class, expected_infra) in [
+            ("ok", "thread", "pass", 0, 0, "expected-quiet", false),
+            ("ok", "thread", "inconclusive", 0, 0, "infra-excluded", true),
+            ("ok", "thread", "inconclusive", 1, 1, "infra-excluded", true),
+            ("skipped", "", "inconclusive", 0, 0, "no-model-review", true),
+            (
+                "ok",
+                "thread",
+                "pass",
+                1,
+                0,
+                "needs-human-classification",
+                false,
+            ),
+            (
+                "ok",
+                "thread",
+                "pass",
+                0,
+                1,
+                "needs-human-classification",
+                false,
+            ),
+            (
+                "degraded",
+                "thread",
+                "pass",
+                0,
+                1,
+                "needs-human-classification",
+                false,
+            ),
+        ] {
+            lane.status = status.to_owned();
+            lane.thread_id = thread.to_owned();
+            write_calibration_artifact(
+                temp.path(),
+                std::slice::from_ref(&lane),
+                &[],
+                &[],
+                &[],
+                inline,
+                summary,
+                gate,
+                "advisory",
+                "abc",
+                "def",
+            )?;
+            let artifact: CalibrationArtifact =
+                serde_json::from_slice(&std::fs::read(temp.path().join("calibration.json"))?)?;
+            let context = format!("{status}/{thread}/{gate}/{inline}/{summary}");
+            assert_eq!(artifact.gate_policy, gate, "{context}");
+            assert_eq!(artifact.counts.lanes_planned, 1, "{context}");
+            assert_eq!(
+                artifact.counts.lanes_executed,
+                usize::from(!thread.is_empty()),
+                "{context}"
+            );
+            assert_eq!(
+                artifact.classification.suggested_class, expected_class,
+                "{context}"
+            );
+            assert_eq!(
+                artifact.classification.infra_excluded, expected_infra,
+                "{context}"
+            );
+            assert_eq!(
+                artifact.classification.run_class, "needs-human-classification",
+                "{context}"
+            );
+            assert!(
+                artifact.classification.human_classification.is_none(),
+                "{context}"
+            );
+            assert_eq!(
+                artifact.counts.lane_conclusions_changed_by_proof, 0,
+                "{context}"
+            );
+            assert!(artifact.notable_events.is_empty(), "{context}");
         }
+        Ok(())
     }
 
     impl CalibrationArtifact {
