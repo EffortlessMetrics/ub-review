@@ -735,9 +735,10 @@ fn prior_resolution_for_candidate<'a>(
             (None, _) => return PriorResolution::Authoritative(prior),
             // Prior without a ref cannot satisfy current-revision reuse.
             (Some(_), None) => stale = Some(PriorResolution::StaleRejected { prior_digest: None }),
-            // Exact digest join required.
+            // Every admitted identity field must agree before a prior can
+            // remove a current review surface.
             (Some(current_ref), Some(prior_ref)) => {
-                if prior_ref.digest == current_ref.digest {
+                if prior_ref == current_ref {
                     return PriorResolution::Authoritative(prior);
                 }
                 stale = Some(PriorResolution::StaleRejected {
