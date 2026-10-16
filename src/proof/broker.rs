@@ -47,7 +47,7 @@ fn current_portfolio_runtime(
     clippy::too_many_arguments,
     reason = "the initial diff broker takes the run's checkout, packet, diff, profile, args, box state, clock, and impact plan; each is a distinct input the broker must not re-derive"
 )]
-pub(crate) fn run_initial_diff_proof_broker_v0(
+pub(crate) fn run_initial_diff_proof_broker_v0<F, G>(
     root: &Path,
     out: &Path,
     diff: &DiffContext,
@@ -56,16 +56,32 @@ pub(crate) fn run_initial_diff_proof_broker_v0(
     box_state: &BoxState,
     run_started: &Instant,
     impact: &ImpactPlan,
+    existing: &ProofBrokerResult,
     task_ledger: Option<&ProofTaskLedger>,
-) -> Result<ProofBrokerResult> {
-    let budget = proof_budget(profile)?;
+    runner: F,
+    prepare_base_plus_tests: G,
+) -> Result<ProofBrokerResult>
+where
+    F: FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+        &mut dyn FnMut(CommandProcessObservation),
+    ) -> Result<CommandStatus>,
+    G: FnMut(&Path, &Path, &DiffContext) -> Result<PathBuf>,
+{
+    let total_budget = proof_budget(profile)?;
+    let budget = remaining_focused_proof_budget(total_budget, &existing.resource_leases);
     let runtime = current_portfolio_runtime(profile, box_state, run_started)?;
     let tasks = focused_test_candidates_from_diff(diff, &[], Some(impact));
     let selection = select_proof_portfolio(ProofPortfolioInput {
         test_tasks: &tasks,
         build_tasks: &[],
         proof_requests: &[],
-        proof_receipts: &[],
+        proof_receipts: &existing.proof_receipts,
         head: &diff.head,
         budget,
         runtime,
@@ -80,19 +96,38 @@ pub(crate) fn run_initial_diff_proof_broker_v0(
         selection.test_tasks,
         task_ledger,
         ProofExecutionPhase::InitialImpact,
-        run_command_to_files_with_spawn_observer,
-        prepare_base_plus_tests_worktree,
+        runner,
+        prepare_base_plus_tests,
     )?;
+    let final_budget = remaining_focused_proof_budget_after(
+        total_budget,
+        &existing.resource_leases,
+        &result.resource_leases,
+    );
+    let receipts = existing
+        .proof_receipts
+        .iter()
+        .chain(&result.proof_receipts)
+        .cloned()
+        .collect::<Vec<_>>();
     let final_selection = select_proof_portfolio(ProofPortfolioInput {
         test_tasks: &tasks,
         build_tasks: &[],
         proof_requests: &[],
-        proof_receipts: &result.proof_receipts,
+        proof_receipts: &receipts,
         head: &diff.head,
-        budget,
+        budget: final_budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
-    write_proof_portfolio_selection_artifact(out, diff, budget, &tasks, &[], &[], final_selection)?;
+    write_proof_portfolio_selection_artifact(
+        out,
+        diff,
+        final_budget,
+        &tasks,
+        &[],
+        &[],
+        final_selection,
+    )?;
     Ok(result)
 }
 
@@ -107,7 +142,6 @@ pub(crate) fn run_seeded_proof_stream_v0(
     profile: &Profile,
     args: &RunArgs,
     seeded_proof_requests: &[ProofRequest],
-    initial_proof_loop: ActiveRunLoop,
     event_log: &EventLog,
     run_started: &Instant,
     box_state: &BoxState,
@@ -115,76 +149,111 @@ pub(crate) fn run_seeded_proof_stream_v0(
     task_ledger: Option<&ProofTaskLedger>,
 ) -> Result<(ProofBrokerResult, Vec<RunLoopPhase>)> {
     let mut phases = Vec::new();
-    let initial_result = run_initial_diff_proof_broker_v0(
-        root,
-        out,
-        diff,
-        profile,
-        args,
-        box_state,
-        run_started,
-        impact,
-        task_ledger,
-    );
-    let initial_status = if initial_result.is_ok() {
-        "completed"
-    } else {
-        "failed"
-    };
-    phases.push(finish_run_loop_phase(
-        event_log,
-        run_started,
-        initial_proof_loop,
-        initial_status,
-    )?);
-    let mut proof_result = initial_result?;
-
-    if has_unreceipted_proof_request_tasks(
-        seeded_proof_requests,
-        &proof_result.proof_receipts,
+    let result = run_seeded_proof_phases(
         &diff.head,
-    ) {
-        let seeded_request_loop = start_run_loop(
-            event_log,
-            run_started,
-            "proof",
-            "proof",
-            "seeded-request-broker",
-        )?;
-        let request_result = run_request_proof_broker_v0(
-            root,
-            out,
-            diff,
-            profile,
-            seeded_proof_requests,
-            &proof_result.proof_receipts,
-            &proof_result.resource_leases,
-            args,
-            box_state,
-            run_started,
-            task_ledger,
-        );
-        let request_status = if request_result.is_ok() {
-            "completed"
-        } else {
-            "failed"
-        };
-        phases.push(finish_run_loop_phase(
-            event_log,
-            run_started,
-            seeded_request_loop,
-            request_status,
-        )?);
-        let request_result = request_result?;
-        proof_result
-            .proof_receipts
-            .extend(request_result.proof_receipts);
-        proof_result
-            .resource_leases
-            .extend(request_result.resource_leases);
-    }
+        seeded_proof_requests,
+        |stage, requests, existing| {
+            let active = start_run_loop(event_log, run_started, "proof", "proof", stage.key())?;
+            let result = if stage == SeededProofStage::InitialImpact {
+                run_initial_diff_proof_broker_v0(
+                    root,
+                    out,
+                    diff,
+                    profile,
+                    args,
+                    box_state,
+                    run_started,
+                    impact,
+                    existing,
+                    task_ledger,
+                    run_command_to_files_with_spawn_observer,
+                    prepare_base_plus_tests_worktree,
+                )
+            } else {
+                run_request_proof_broker_v0(
+                    root,
+                    out,
+                    diff,
+                    profile,
+                    requests,
+                    &existing.proof_receipts,
+                    &existing.resource_leases,
+                    args,
+                    box_state,
+                    run_started,
+                    task_ledger,
+                )
+            };
+            phases.push(finish_run_loop_phase(
+                event_log,
+                run_started,
+                active,
+                if result.is_ok() {
+                    "completed"
+                } else {
+                    "failed"
+                },
+            )?);
+            result
+        },
+    )?;
+    Ok((result, phases))
+}
 
-    Ok((proof_result, phases))
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SeededProofStage {
+    RequiredRequests,
+    InitialImpact,
+    RemainingRequests,
+}
+
+impl SeededProofStage {
+    fn key(self) -> &'static str {
+        match self {
+            Self::RequiredRequests => "seeded-required-broker",
+            Self::InitialImpact => "initial-diff-broker",
+            Self::RemainingRequests => "seeded-request-broker",
+        }
+    }
+}
+
+/// Known Required consumers get the existing request broker before optional
+/// impact work can consume either time or task slots. Every later phase sees
+/// the same accumulated leases and receipts; no budget is reset between them.
+fn run_seeded_proof_phases(
+    head: &str,
+    requests: &[ProofRequest],
+    mut broker: impl FnMut(
+        SeededProofStage,
+        &[ProofRequest],
+        &ProofBrokerResult,
+    ) -> Result<ProofBrokerResult>,
+) -> Result<ProofBrokerResult> {
+    let mut result = ProofBrokerResult {
+        proof_receipts: Vec::new(),
+        resource_leases: Vec::new(),
+    };
+    let required = requests
+        .iter()
+        .filter(|request| request.required)
+        .cloned()
+        .collect::<Vec<_>>();
+    if has_unreceipted_proof_request_tasks(&required, &result.proof_receipts, head) {
+        let required_result = broker(SeededProofStage::RequiredRequests, &required, &result)?;
+        result.proof_receipts.extend(required_result.proof_receipts);
+        result
+            .resource_leases
+            .extend(required_result.resource_leases);
+    }
+    let initial = broker(SeededProofStage::InitialImpact, &[], &result)?;
+    result.proof_receipts.extend(initial.proof_receipts);
+    result.resource_leases.extend(initial.resource_leases);
+    if has_unreceipted_proof_request_tasks(requests, &result.proof_receipts, head) {
+        let remaining = broker(SeededProofStage::RemainingRequests, requests, &result)?;
+        result.proof_receipts.extend(remaining.proof_receipts);
+        result.resource_leases.extend(remaining.resource_leases);
+    }
+    Ok(result)
 }
 
 /// Own the later model-request broker interval at its execution boundary.
@@ -818,7 +887,14 @@ where
     // Diff-derived Cargo candidates are owned by the initial diff broker and
     // already carry receipts by the time a request phase runs; this phase
     // re-plans requested work only.
-    let mut test_candidates = focused_test_candidates_from_diff(diff, &[], None);
+    // A Required-only admission pass must not import optional Bun diff work.
+    // The initial broker remains the owner of the complete diff floor.
+    let mut test_candidates =
+        if !proof_requests.is_empty() && proof_requests.iter().all(|request| request.required) {
+            Vec::new()
+        } else {
+            focused_test_candidates_from_diff(diff, &[], None)
+        };
     merge_focused_test_candidates(
         &mut test_candidates,
         focused_test_candidates_from_v2(&v2_requests),
@@ -2151,13 +2227,6 @@ mod tests {
         let args = test_run_args(out.clone());
         let event_log = crate::EventLog::open(&temp.path().join("events.ndjson"))?;
         let run_started = Instant::now();
-        let initial_loop = crate::start_run_loop(
-            &event_log,
-            &run_started,
-            "proof",
-            "proof",
-            "initial-diff-broker",
-        )?;
 
         let (_, phases) = run_seeded_proof_stream_v0(
             temp.path(),
@@ -2166,7 +2235,6 @@ mod tests {
             &profile,
             &args,
             std::slice::from_ref(&proof_request("seeded", true)),
-            initial_loop,
             &event_log,
             &run_started,
             &BoxState {
@@ -2184,6 +2252,22 @@ mod tests {
             phases
                 .iter()
                 .any(|phase| phase.stage == "seeded-request-broker")
+        );
+        ensure!(
+            phases
+                .iter()
+                .map(|phase| phase.stage.as_str())
+                .collect::<Vec<_>>()
+                == vec![
+                    "seeded-required-broker",
+                    "initial-diff-broker",
+                    "seeded-request-broker"
+                ]
+        );
+        ensure!(
+            phases
+                .windows(2)
+                .all(|pair| pair[0].finished_at_offset_ms <= pair[1].started_at_offset_ms)
         );
         let portfolio = fs::read_to_string(out.join("review/proof_portfolio.json"))?;
         assert!(portfolio.contains("seeded"));
@@ -2373,6 +2457,75 @@ mod tests {
             ensure!(finished.len() == 1);
             ensure!(finished[0]["payload"]["stage"] == "model-request-broker");
             ensure!(finished[0]["payload"]["status"] == tracker.phases[0].status);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn seeded_stream_closes_failed_broker_before_propagating_io_error() -> Result<()> {
+        for required in [true, false] {
+            let temp = tempfile::tempdir()?;
+            let out = temp.path().join("blocked-output");
+            fs::write(&out, b"preserve output blocker")?;
+            let diff = test_diff();
+            let mut profile = Profile::default();
+            profile.budgets.proof_max_focused_test_files = 0;
+            profile.budgets.proof_max_focused_tests = 0;
+            profile.budgets.proof_total_timeout_sec = 0;
+            let args = test_run_args(out.clone());
+            let events_path = temp.path().join("events.ndjson");
+            let event_log = crate::EventLog::open(&events_path)?;
+            let run_started = Instant::now();
+            let requests = if required {
+                vec![proof_request("required-output-error", true)]
+            } else {
+                Vec::new()
+            };
+            let error = run_seeded_proof_stream_v0(
+                temp.path(),
+                &out,
+                &diff,
+                &profile,
+                &args,
+                &requests,
+                &event_log,
+                &run_started,
+                &BoxState {
+                    cpus: 4,
+                    free_mem_mb: Some(8_192),
+                    free_disk_mb: Some(20_000),
+                    load_1m: Some(0.25),
+                    github_actions: false,
+                },
+                &build_impact_plan(temp.path(), &diff.changed_files, "shadow"),
+                None,
+            )
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("blocked output unexpectedly succeeded"))?;
+            ensure!(error.downcast_ref::<std::io::Error>().is_some());
+            ensure!(fs::read(&out)? == b"preserve output blocker");
+            let events = fs::read_to_string(&events_path)?
+                .lines()
+                .map(serde_json::from_str::<serde_json::Value>)
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            let proof_events = events
+                .iter()
+                .filter(|event| {
+                    event["kind"] == "proof_loop_started" || event["kind"] == "proof_loop_finished"
+                })
+                .collect::<Vec<_>>();
+            ensure!(proof_events.len() == 2);
+            ensure!(proof_events[0]["kind"] == "proof_loop_started");
+            ensure!(proof_events[1]["kind"] == "proof_loop_finished");
+            let stage = if required {
+                "seeded-required-broker"
+            } else {
+                "initial-diff-broker"
+            };
+            ensure!(proof_events[0]["payload"]["stage"] == stage);
+            ensure!(proof_events[1]["payload"]["stage"] == stage);
+            ensure!(proof_events[1]["payload"]["status"] == "failed");
+            ensure!(!out.join("review/proof_receipts.json").exists());
         }
         Ok(())
     }
@@ -3659,6 +3812,256 @@ mod tests {
         assert_eq!(receipt.result, "sanitizer_ub_detected");
         assert_eq!(receipt.commands[0].status, "failed");
         assert!(receipt.commands[0].reason.contains("UB"));
+        Ok(())
+    }
+    #[test]
+    fn seeded_required_admission_preserves_time_slots_and_failure_truth() -> Result<()> {
+        for (seconds, slots, timeouts, fail_doc, required_runs, optional_runs, mixed_bun) in [
+            (1800, 4, [600, 600, 600], false, 3, 0, false),
+            (1800, 4, [600, 600, 300], false, 3, 0, false),
+            (1800, 4, [300, 300, 300], false, 3, 1, false),
+            (1800, 2, [600, 600, 300], false, 2, 0, false),
+            (300, 4, [600, 600, 600], false, 0, 0, false),
+            (1800, 0, [600, 600, 300], false, 0, 0, false),
+            (1800, 4, [600, 600, 600], true, 3, 0, false),
+            (1800, 4, [100, 100, 100], false, 3, 2, true),
+        ] {
+            let temp = tempfile::tempdir()?;
+            let out = temp.path().join("out");
+            let mut diff = test_diff();
+            if mixed_bun {
+                diff.changed_files
+                    .push("test/js/bun/md/order.test.ts".to_owned());
+                diff.patch = "+test('required first', () => {});".to_owned();
+            }
+            let requests = [
+                "cargo check --workspace --all-targets --locked",
+                "cargo doc --workspace --no-deps --locked",
+                "cargo xtask policy-check",
+            ]
+            .into_iter()
+            .zip(timeouts)
+            .enumerate()
+            .map(|(index, (command, timeout_sec))| ProofRequest {
+                schema: PROOF_REQUEST_SCHEMA.to_owned(),
+                id: format!("required-{index}"),
+                lane: "intelligent-ci-policy".to_owned(),
+                requested_by: vec!["intelligent-ci-policy".to_owned()],
+                command: command.to_owned(),
+                reason: "Required workspace spine".to_owned(),
+                cost: "focused-build".to_owned(),
+                timeout_sec,
+                required: true,
+                status: "requested".to_owned(),
+            })
+            .collect::<Vec<_>>();
+            let impact = ImpactPlan {
+                schema: crate::artifacts::IMPACT_PLAN_SCHEMA,
+                changed_files: diff.changed_files.clone(),
+                changed_packages: Vec::new(),
+                affected_packages: Vec::new(),
+                evidence_gaps: Vec::new(),
+                selection_mode: "shadow",
+                cargo_lockfile: true,
+                candidate_tasks: ["cli_contract", "authority_incidents", "cli"]
+                    .into_iter()
+                    .enumerate()
+                    .map(|(rank, target)| ImpactCandidateTask {
+                        target: target.to_owned(),
+                        kind: "test".to_owned(),
+                        reason: "changed package integration target".to_owned(),
+                        owning_package: "ub-review".to_owned(),
+                        test_package: "ub-review".to_owned(),
+                        estimated_cost: "low",
+                        expected_value: "high",
+                        rank: rank as u32,
+                        selection: "selected",
+                    })
+                    .collect(),
+            };
+            let mut profile = Profile::default();
+            profile.limits.builds = 1;
+            profile.limits.tests = 3;
+            profile.budgets.proof_max_focused_test_files = 6;
+            profile.budgets.proof_max_focused_tests = slots;
+            profile.budgets.proof_command_timeout_sec = 600;
+            profile.budgets.proof_total_timeout_sec = seconds;
+            profile.budgets.hard_timeout_sec = 3600;
+            let args = test_run_args(out.clone());
+            let box_state = BoxState {
+                cpus: 4,
+                free_mem_mb: Some(16_000),
+                free_disk_mb: Some(90_000),
+                load_1m: Some(0.5),
+                github_actions: false,
+            };
+            let started = Instant::now();
+            let commands = std::cell::RefCell::new(Vec::new());
+            let stages = std::cell::RefCell::new(Vec::new());
+            let result = run_seeded_proof_phases(
+                &diff.head,
+                &requests,
+                |stage, phase_requests, existing| {
+                    stages.borrow_mut().push(stage.key());
+                    let runner = |_root: &Path, argv: &[String], _env: &BTreeMap<String, String>,
+                    _timeout: u64, stdout: &Path, stderr: &Path,
+                    _observe: &mut dyn FnMut(CommandProcessObservation)| {
+                    commands.borrow_mut().push(argv.join(" "));
+                    fs::write(stdout, b"fixture process output\n")?;
+                    fs::write(stderr, b"")?;
+                    let failed = fail_doc && argv.get(1).is_some_and(|arg| arg == "doc");
+                    Ok(CommandStatus { exit_code: Some(if failed { 1 } else { 0 }),
+                        timed_out: false, success: !failed, reason: "injected process result".to_owned(),
+                        duration_ms: 10_000 })
+                };
+                    if stage == SeededProofStage::InitialImpact {
+                        run_initial_diff_proof_broker_v0(
+                            temp.path(),
+                            &out,
+                            &diff,
+                            &profile,
+                            &args,
+                            &box_state,
+                            &started,
+                            &impact,
+                            existing,
+                            None,
+                            runner,
+                            |_root, _out, _diff| {
+                                let base = temp.path().join("base-plus-tests-fixture");
+                                fs::create_dir_all(&base)?;
+                                Ok(base)
+                            },
+                        )
+                    } else {
+                        run_request_proof_broker_v0_with_runners(
+                            temp.path(),
+                            &out,
+                            &diff,
+                            &profile,
+                            phase_requests,
+                            &existing.proof_receipts,
+                            &existing.resource_leases,
+                            &args,
+                            &box_state,
+                            &started,
+                            None,
+                            runner,
+                            |_root, _out, _diff| {
+                                Err(anyhow::anyhow!("build fixture must not prepare base"))
+                            },
+                            runner,
+                        )
+                    }
+                },
+            )?;
+            let commands = commands.into_inner();
+            let required_count = commands
+                .iter()
+                .filter(|command| {
+                    command.starts_with("cargo check ")
+                        || command.starts_with("cargo doc ")
+                        || command.starts_with("cargo xtask ")
+                })
+                .count();
+            let optional_count = commands.len() - required_count;
+            ensure!(
+                required_count == required_runs && optional_count == optional_runs,
+                "seconds={seconds} slots={slots}: required={required_count} optional={optional_count} commands={commands:?}"
+            );
+            ensure!(
+                commands
+                    .iter()
+                    .take(required_runs)
+                    .all(|command| command.starts_with("cargo check ")
+                        || command.starts_with("cargo doc ")
+                        || command.starts_with("cargo xtask ")),
+                "optional work ran before Required commands: {commands:?}"
+            );
+            ensure!(stages.borrow().first() == Some(&"seeded-required-broker"));
+            let granted = result
+                .resource_leases
+                .iter()
+                .filter(|lease| lease.status == "granted")
+                .collect::<Vec<_>>();
+            ensure!(
+                granted.len() <= slots
+                    && granted.iter().map(|lease| lease.timeout_sec).sum::<u64>() <= seconds
+            );
+            ensure!(
+                result
+                    .proof_receipts
+                    .iter()
+                    .flat_map(|receipt| &receipt.commands)
+                    .map(|command| command.timeout_sec)
+                    .sum::<u64>()
+                    <= seconds,
+                "all admitted command ceilings must fit the unchanged allocation"
+            );
+            let required_receipts = result
+                .proof_receipts
+                .iter()
+                .filter(|receipt| !receipt.request_ids.is_empty())
+                .collect::<Vec<_>>();
+            ensure!(required_receipts.len() == required_runs);
+            for receipt in &required_receipts {
+                ensure!(receipt.head == diff.head && receipt.base == diff.base);
+                ensure!(
+                    receipt.request_ids.len() == 1
+                        && requests
+                            .iter()
+                            .any(|request| request.id == receipt.request_ids[0])
+                );
+            }
+            ensure!(
+                required_receipts
+                    .iter()
+                    .filter(|receipt| receipt.result == "head_failed")
+                    .count()
+                    == usize::from(fail_doc)
+            );
+            ensure!(
+                required_receipts
+                    .iter()
+                    .filter(|receipt| required_proof_receipt_class(receipt)
+                        == RequiredProofClass::Failed)
+                    .count()
+                    == usize::from(fail_doc),
+                "failed Required command must remain failed in the gate's receipt classifier"
+            );
+            let artifact: serde_json::Value =
+                serde_json::from_slice(&fs::read(out.join("review/proof_portfolio.json"))?)?;
+            let decisions = artifact["decisions"]
+                .as_array()
+                .ok_or_else(|| anyhow::anyhow!("missing decisions"))?;
+            for request in &requests {
+                let decision = decisions
+                    .iter()
+                    .find(|decision| {
+                        decision["request_ids"].as_array().is_some_and(|ids| {
+                            ids.iter().any(|id| id.as_str() == Some(&request.id))
+                        })
+                    })
+                    .ok_or_else(|| anyhow::anyhow!("missing Required decision {}", request.id))?;
+                ensure!(decision["required"] == true);
+                if !required_receipts
+                    .iter()
+                    .any(|receipt| receipt.request_ids.contains(&request.id))
+                {
+                    ensure!(
+                        decision["status"]
+                            == if seconds == 300 {
+                                "declined_for_higher_value_proof"
+                            } else {
+                                "deferred_by_safe_wind_down"
+                            }
+                            && decision["receipt_ids"]
+                                .as_array()
+                                .is_some_and(|ids| ids.is_empty())
+                    );
+                }
+            }
+        }
         Ok(())
     }
 }
