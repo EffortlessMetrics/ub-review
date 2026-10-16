@@ -1,0 +1,869 @@
+{
+  "generation": "1066-preparatory-blocked-fe728e0dfd909b903f4736593a8593653f4f9371d3a7584bf3c6e467f1a3bcc0",
+  "payload": {
+    "authority": "existing #1066 issue decision vocabulary; inventory attachment only, no new runtime schema",
+    "base_sha": "5a72634d4eec98d5de494598902cc6cac256b508",
+    "base_tree": "284b5c58cd95de6ec8b6451accb4c7cf3d1abed9",
+    "claim_boundary": "Not selected. No Required readiness, accepted compatibility, installed-binary proof, promotion or migration authorization.",
+    "fixtures": [
+      {
+        "path": "fixtures/action-source-lockfile/contract.sh",
+        "sha256": "3fbc5d06ba3062cc7241be1647d0a7b0bdf7274b6d89a2718ba40cb1776784f8"
+      },
+      {
+        "path": "fixtures/authority-incidents/915/review/gate_outcome.json",
+        "sha256": "c0c9bb7ef6b6e5f171883a88597f484903ca570db391e3e777c3804e521f571d"
+      },
+      {
+        "path": "fixtures/authority-incidents/915/review/proof_portfolio.json",
+        "sha256": "fa98422ae1afc6950f165918bff896f75f1e4cfef9f4898d177c585553290305"
+      },
+      {
+        "path": "fixtures/authority-incidents/915/review/proof_receipts.json",
+        "sha256": "725c978cccbcf9e77679cad7b1aacae8bb679e61e660f864c80c651e161291dd"
+      },
+      {
+        "path": "fixtures/authority-incidents/916/review/gate_outcome.json",
+        "sha256": "2ebec058a0948d82c5ce86968a79791680f9c23659f8a9932a89ce2efebf597c"
+      },
+      {
+        "path": "fixtures/authority-incidents/916/review/proof_portfolio.json",
+        "sha256": "5b9e175e64d979adc595743004ef8307da19922af8b30069874d7baee17d2726"
+      },
+      {
+        "path": "fixtures/authority-incidents/916/review/proof_receipts.json",
+        "sha256": "2636059591475eeae8504286d61210a3ce5c9e42a97d99d1d593532bc6f78126"
+      },
+      {
+        "path": "fixtures/authority-incidents/921/review/gate_outcome.json",
+        "sha256": "2302238def9cf91ff81671ee46970bfeb6ef1d9845ffde3d506b63900a132e06"
+      },
+      {
+        "path": "fixtures/authority-incidents/921/review/proof_portfolio.json",
+        "sha256": "d44a642e719b73b883cf054e941e92d39bec3a3434e0aecbb7856a282e104db8"
+      },
+      {
+        "path": "fixtures/authority-incidents/921/review/proof_receipts.json",
+        "sha256": "b3808c408c6f0eb742a0cabc09faa0b1b41154f576844e5c0d6e3d5159b5e571"
+      },
+      {
+        "path": "fixtures/authority-incidents/921/review/scheduler.json",
+        "sha256": "f4c67221606098db2af690791c0a59d1532c0e3a560841e43e4bfd8a42fe01ca"
+      },
+      {
+        "path": "fixtures/authority-incidents/921/sensors/cargo-allow/ub-review-sensor-status.json",
+        "sha256": "a8b4e7631da3f0eeab5134601c66ecca0596d3307cb0590e16b1d0c94246fd09"
+      },
+      {
+        "path": "fixtures/authority-incidents/921/work_queue.json",
+        "sha256": "204a0aaef3c95d3578f43f7b63b0685d232b44d48e9c703817c3e6374b4349ad"
+      },
+      {
+        "path": "fixtures/authority-incidents/manifest.json",
+        "sha256": "82e8238150c3618fe49f23f730a659025af7b63cc2c048e6b0cd24a338537052"
+      },
+      {
+        "path": "fixtures/bun-rab-mini/Cargo.toml",
+        "sha256": "36e88b7115c581962d2fb933fe1bad0849b4d7e8170b64809eb4c17782a6414f"
+      },
+      {
+        "path": "fixtures/bun-rab-mini/src/lib.rs",
+        "sha256": "9306d681a310b88ec2accc966f93d4db80a745400dbc68fe883bf4e9cfd96d20"
+      },
+      {
+        "path": "fixtures/bun-rab-mini/tests/rab.rs",
+        "sha256": "ffa6adacad89260ffefc1dbd471220aba1f7f287b813ae1b58a39550fa29b0e4"
+      },
+      {
+        "path": "fixtures/providers/malformed-no-content.json",
+        "sha256": "9f320f6eb141e7847148c3f82dce94e25a435dfc0f224a848ff40398834cf6f9"
+      },
+      {
+        "path": "fixtures/providers/minimax-chat-completion-anthropic.json",
+        "sha256": "ec7de4650645002826abdae2e2313f5a90c7d8320bce8fb7d797fb574d467f04"
+      },
+      {
+        "path": "fixtures/providers/minimax-m3-thinking-then-text.json",
+        "sha256": "b7a890ed2946ef9a518816f82803014d0766192a4e4a8a466cfecae9410cdd44"
+      },
+      {
+        "path": "fixtures/providers/non-json-content.json",
+        "sha256": "60ab2b00fa3133b95b42ab81dfe32225585fa8bb9c3df3981e591f41aae48066"
+      },
+      {
+        "path": "fixtures/providers/openai-chat-completion.json",
+        "sha256": "7eaac4f5e999789e8e3ab70e116a560de472c2ab0c9269416c1584ee06317ee0"
+      },
+      {
+        "path": "fixtures/providers/opencode-go-m3-messages.json",
+        "sha256": "aa08f267747ef52d2c5f7fb71e9e106e3b796ae802b0bcf42b73e115c7e880b6"
+      },
+      {
+        "path": "fixtures/providers/opencode-go-openai-chat-completion.json",
+        "sha256": "3624f006728790a37842ddbb2a83a7c71dac03a8253a02681954491e6cc0ac0f"
+      },
+      {
+        "path": "fixtures/review-experience/perl-lsp-3627.json",
+        "sha256": "edcc6818308f6877bf24b00713be21798b4c4b80547b9e04984ff5b8830a3caa"
+      },
+      {
+        "path": "fixtures/review-golden/clean-no-findings.txt",
+        "sha256": "e005d17637b1cdacdb95d5258c82f9cb9a3551c4726a721e1c5400b0afa1df10"
+      },
+      {
+        "path": "fixtures/review-golden/evidence-gap.txt",
+        "sha256": "79044abe2dd2f6589605f64aae6b046bcf844374a37b24fc187f26c8225db13a"
+      },
+      {
+        "path": "fixtures/review-golden/inline-and-summary-finding.txt",
+        "sha256": "8de486a4a3050710901bfc7212eeb711dcb0647646d5e4be2c991e6b0f28653a"
+      },
+      {
+        "path": "fixtures/review-golden/inline-suggestion.txt",
+        "sha256": "7553fd6b9fc1ff581da0590f71db28e4a3f88b965819b8a4ac84ef897fb01db3"
+      },
+      {
+        "path": "fixtures/review-golden/one-inline-finding.txt",
+        "sha256": "5daf47a95327e004cec007f32367ecf5531fb5d63c672a4e98245ca7a01678fd"
+      },
+      {
+        "path": "fixtures/review-golden/test-proof-and-verification.txt",
+        "sha256": "d4c2fbd6e5a2cd53465530d787c48bc88d75c8e8f650f1ed27e144326fa75c93"
+      }
+    ],
+    "integration_gap": "No authoritative released-bundle selection/admission validator exists at this base. Runtime tool receipts lack immutable public artifact, compatibility and rollback binding. Packet audits cannot prove runtime rejection.",
+    "issue": 1066,
+    "mirrors": [
+      {
+        "disposition": "inventory_only_no_change",
+        "path": ".github/workflows/ub-review-gate.yml",
+        "sha256": "90de9847b4ffc8364770f31306aa6297278b820feed65d7c79746ed9cbf82ded"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": ".ripr/suppressions.toml",
+        "sha256": "707a4764d449d7f8201a17ec2ec835fc959be36eec83de9264997e1430cba58e"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": ".ub-review.toml",
+        "sha256": "00ea80e9ac5ebfb0fb0d43778a423e0447b2cc5a2c2f70e6ca541e876f9698aa"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "Cargo.lock",
+        "sha256": "ebc1880b0c3e6ccc3bd77df41179acd66ec8c4c6407d8dff4cfdf7867ba38351"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "Cargo.toml",
+        "sha256": "41dc91cbf7172ba862c4591b6e8f4ba2a7ff0d4fd05e795c9058057badf2ba40"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "action.yml",
+        "sha256": "4e4067c6215bbc3317c5a55c69b2222a03fe98efd20f1ad8c20b1ea5a4c7b2d6"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "configs/ub-review.example.toml",
+        "sha256": "cc78bc603d56583ab0f90f929b8e5cc6c20587c5f798e719a3d8e559d15d431a"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "configs/unsafe-review-swarm.ub-review.toml",
+        "sha256": "f2ff548efd4eb7155cafce5ed6d7383c95aca079109f0496869b456b45188938"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "docs/GH_RUNNER_BUN.md",
+        "sha256": "5b0306ce8c748d55b1b231d50537f9924d884f6208e2e8bccab43c64fb25464d"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "docs/RUNNER_IMAGE.md",
+        "sha256": "6c63826c1b8370e1fa7fe4980fcd4dc826e4f0870d0217936284bd0d57e81784"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "docs/ci/ripr.md",
+        "sha256": "d18b061ed039cbe2f2338c7f4e57becd71410b879f150bae233b8b43ae8a0ceb"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "docs/specs/UB-REVIEW-SPEC-0005-sensor-tool-integration.md",
+        "sha256": "ef1c9d092de8b79c607619f41887b166cb106f4a0b38f628229ecec33d7051d1"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "docs/specs/UB-REVIEW-SPEC-0010-release-install.md",
+        "sha256": "dce7250bae9e762384977b810ba5343a10b5b7018ad3b0ce2457870a74d9637b"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "policy/allow.toml",
+        "sha256": "3f0c40a6f6578a0decdf8258e1f41c33d9edc304ab01a295049b496ecc407526"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "policy/cargo-allow.toml",
+        "sha256": "4e97d0d4edd80b49099953cf04bc9505bc6c8c228cbf4ad68cc203058a84a5dd"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "profiles/bun-ub-v0.toml",
+        "sha256": "4d3a9de3ad9434bd61041612417acfe4b46d6a8af9d092f774803f9c5ea01850"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "runtime/gh-runner-full.toml",
+        "sha256": "7993b980f3c92d30b7452ca5578d27668d67b21b72b6f4f762eda33beb2647b1"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "runtime/gh-runner-standard.toml",
+        "sha256": "4795f8fbda02b61fe63903ec6d57641e72b72b705f8d76c76c963231feec2229"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "runtime/gh-runner.toml",
+        "sha256": "00f914d1c4dd7fd15e0dfe46f7bf38098a7d779cdcc5816b4cd56a9abbd1b135"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "rust-toolchain.toml",
+        "sha256": "06f7f3f869a94fa003b055f68348ada1632adf70e180233b63b8a29335874a7a"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "scripts/install-gh-runner-tools.sh",
+        "sha256": "8091d12b89bb3f7dc55dce7804e06e5951f161ddc1007786d9d3518e0ea947c6"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "scripts/install-review-image-tools.sh",
+        "sha256": "ef138efdd05ceb6f05424661c84ce8c4041a2e770fcdba0f6031b284bc125152"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "scripts/verify-bun-review-artifacts.py",
+        "sha256": "5d5472eac19d33de57b995dc44aa5be6b65d9a331f748def9ad8272daf468051"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "src/artifacts.rs",
+        "sha256": "ec5ef99473bc27eb2f7b19ae52a34a55f4fc484518e445aae4958a3f5ab83666"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "src/builtin.rs",
+        "sha256": "fa88b5ea44fe1dbd2f7e6b803eb39a2709e316e2b8d909efc82c17cf5063aee4"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "src/config.rs",
+        "sha256": "b93aa5dd858eb4eb419fea2ca56d422d89b3686066fc9eca66046842cdc05c8e"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "src/main.rs",
+        "sha256": "20cd54fd9ab8279445427c2cb82686dad77958d17b91e3b36c95e243259c0990"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "src/post_run_utils.rs",
+        "sha256": "a79785e8e5ae4bfe983dd9d4bf6668762ce874f2d717ab7ac2bc943426a087eb"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "src/sensors/command_build.rs",
+        "sha256": "93e069b8ee071ad9903bcb3c43c791b074c9ba1b45d486ba33f8633e09ea5bbb"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "src/sensors/mod.rs",
+        "sha256": "0b145f6b0e506108e90cd545ac08b68c82a20521991075e38a8c295a285a5bdd"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "src/sensors/ripr.rs",
+        "sha256": "45daa443d07dd8ddd1ad08b97cc67345bb206360cef03a3ceb3fdb38317656dd"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "src/tools.rs",
+        "sha256": "89badd42d5ac0b27a6ff596362415397767911799f79cdbb685563d1e24de972"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "src/validate.rs",
+        "sha256": "376fe0ddb8606fda87c18f84aee209c02f9689ca6b4a88686d9ef43fbe85346f"
+      },
+      {
+        "disposition": "inventory_only_no_change",
+        "path": "xtask/src/main.rs",
+        "sha256": "a1f90889b2922d0f929251693d949537ed9f4c6530f9b656b7d596b3c737a77d"
+      }
+    ],
+    "owners": {
+      "compatibility": "ub-review#813",
+      "independent_lanes": [
+        "ripr-swarm#7355",
+        "ub-review#1340",
+        "ub-review#1357"
+      ],
+      "installed_proof": "ub-review#1068",
+      "migration": "ub-review#1067",
+      "publication": [
+        "ripr#1469",
+        "ripr#1468",
+        "ripr#1477",
+        "ripr#1479"
+      ],
+      "schema_admission": "ub-review#1347 (badge 0.5/0.6 only; draft)"
+    },
+    "platforms": {
+      "accepted_matrix": null,
+      "local_host": "x86_64-unknown-linux-gnu",
+      "observed_workflow": "ubuntu-latest",
+      "state": "unverified"
+    },
+    "policy": {
+      "config_sha256": "00ea80e9ac5ebfb0fb0d43778a423e0447b2cc5a2c2f70e6ca541e876f9698aa",
+      "max_new_unsuppressed": 0,
+      "suppression_sha256": "707a4764d449d7f8201a17ec2ec835fc959be36eec83de9264997e1430cba58e"
+    },
+    "public_observations": {
+      "candidate_0_11_0_present": false,
+      "clean_install": "not_run",
+      "crate_sha256": "d49900ea4daeffc2cef5649b6c7cd4a5a82eaad306fc6f598c79628662f0b786",
+      "crate_url": "https://static.crates.io/crates/ripr/ripr-0.10.0.crate",
+      "crate_vcs_sha": "c08d474a92d0edf97ad1e3d444ecb73fc5d439de",
+      "github_release_api": "HTTP 403; release-channel inventory unverified",
+      "latest_version": "0.10.0",
+      "observed_date": "2026-10-11",
+      "public_v0_10_0_tag_sha": "c08d474a92d0edf97ad1e3d444ecb73fc5d439de",
+      "public_v0_11_0_tag_present": false,
+      "registry_sha256": "c8afb13e8df86fbfa44d443b6dc3c8ed40eadbede2d03b4a869cc83a24e40cb7",
+      "registry_url": "https://index.crates.io/ri/pr/ripr"
+    },
+    "required_readiness": false,
+    "runtime_seams": [
+      "ub-review.resolved_tools.v1",
+      "ub-review.tool_status.v1",
+      "ub-review.tool_gate_outcomes.v1"
+    ],
+    "selection_status": "not_selected",
+    "source_candidate": {
+      "claim": "partial/test-source only; not public package identity",
+      "receipt_owner": "EffortlessMetrics/ripr-swarm#7355",
+      "revision_hint": "d646155",
+      "selected": false
+    },
+    "tools": [
+      {
+        "1067_mirror_changes": [],
+        "1068_proof": "after selected packet: exact installed triggering/clean/invalid-tool controls; not authorized by this packet",
+        "candidate": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "output_contract": null,
+          "source": null,
+          "source_sha": null,
+          "version": null
+        },
+        "current": {
+          "checksum": null,
+          "output_contract": null,
+          "source": "Go module proxy",
+          "source_sha": null,
+          "version": "1.7.12"
+        },
+        "disposition": "blocked_missing_public_identity",
+        "id": "actionlint",
+        "missing_evidence": [
+          "capability_schema_platform_receipts_missing",
+          "clean_install_receipt_missing",
+          "immutable_public_identity_unverified"
+        ],
+        "reason": "Preparatory inventory only; no released bundle selected. Current behavior remains active without qualification.",
+        "role": "required",
+        "rollback": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "qualified": false,
+          "source": "Go module proxy",
+          "version": "1.7.12"
+        },
+        "trigger": "workflow-changed"
+      },
+      {
+        "1067_mirror_changes": [],
+        "1068_proof": "after selected packet: exact installed triggering/clean/invalid-tool controls; not authorized by this packet",
+        "candidate": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "output_contract": null,
+          "source": null,
+          "source_sha": null,
+          "version": null
+        },
+        "current": {
+          "checksum": null,
+          "output_contract": null,
+          "source": "repository verifier",
+          "source_sha": null,
+          "version": null
+        },
+        "disposition": "blocked_missing_public_identity",
+        "id": "artifact-verifier",
+        "missing_evidence": [
+          "capability_schema_platform_receipts_missing",
+          "clean_install_receipt_missing",
+          "immutable_public_identity_unverified"
+        ],
+        "reason": "Preparatory inventory only; no released bundle selected. Current behavior remains active without qualification.",
+        "role": "required",
+        "rollback": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "qualified": false,
+          "source": "repository verifier",
+          "version": null
+        },
+        "trigger": "always"
+      },
+      {
+        "1067_mirror_changes": [],
+        "1068_proof": "after selected packet: exact installed triggering/clean/invalid-tool controls; not authorized by this packet",
+        "candidate": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "output_contract": null,
+          "source": null,
+          "source_sha": null,
+          "version": null
+        },
+        "current": {
+          "checksum": null,
+          "output_contract": null,
+          "source": "npm @ast-grep/cli (runner); crates.io ast-grep (image)",
+          "source_sha": null,
+          "version": null
+        },
+        "disposition": "blocked_missing_public_identity",
+        "id": "ast-grep",
+        "missing_evidence": [
+          "capability_schema_platform_receipts_missing",
+          "clean_install_receipt_missing",
+          "immutable_public_identity_unverified"
+        ],
+        "reason": "Preparatory inventory only; no released bundle selected. Current behavior remains active without qualification.",
+        "role": "required",
+        "rollback": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "qualified": false,
+          "source": "npm @ast-grep/cli (runner); crates.io ast-grep (image)",
+          "version": null
+        },
+        "trigger": "source-changed"
+      },
+      {
+        "1067_mirror_changes": [],
+        "1068_proof": "after selected packet: exact installed triggering/clean/invalid-tool controls; not authorized by this packet",
+        "candidate": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "output_contract": null,
+          "source": null,
+          "source_sha": null,
+          "version": null
+        },
+        "current": {
+          "checksum": null,
+          "output_contract": null,
+          "source": "crates.io",
+          "source_sha": null,
+          "version": "0.1.8"
+        },
+        "disposition": "blocked_missing_public_identity",
+        "id": "cargo-allow",
+        "missing_evidence": [
+          "capability_schema_platform_receipts_missing",
+          "clean_install_receipt_missing",
+          "immutable_public_identity_unverified"
+        ],
+        "reason": "Preparatory inventory only; no released bundle selected. Current behavior remains active without qualification.",
+        "role": "required",
+        "rollback": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "qualified": false,
+          "source": "crates.io",
+          "version": "0.1.8"
+        },
+        "trigger": "source-exception-changed"
+      },
+      {
+        "1067_mirror_changes": [],
+        "1068_proof": "after selected packet: exact installed triggering/clean/invalid-tool controls; not authorized by this packet",
+        "candidate": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "output_contract": null,
+          "source": null,
+          "source_sha": null,
+          "version": null
+        },
+        "current": {
+          "checksum": null,
+          "output_contract": null,
+          "source": "rustup",
+          "source_sha": null,
+          "version": "1.95.0"
+        },
+        "disposition": "blocked_missing_public_identity",
+        "id": "cargo-check",
+        "missing_evidence": [
+          "capability_schema_platform_receipts_missing",
+          "clean_install_receipt_missing",
+          "immutable_public_identity_unverified"
+        ],
+        "reason": "Preparatory inventory only; no released bundle selected. Current behavior remains active without qualification.",
+        "role": "required",
+        "rollback": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "qualified": false,
+          "source": "rustup",
+          "version": "1.95.0"
+        },
+        "trigger": "always"
+      },
+      {
+        "1067_mirror_changes": [],
+        "1068_proof": "after selected packet: exact installed triggering/clean/invalid-tool controls; not authorized by this packet",
+        "candidate": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "output_contract": null,
+          "source": null,
+          "source_sha": null,
+          "version": null
+        },
+        "current": {
+          "checksum": null,
+          "output_contract": null,
+          "source": "rustup",
+          "source_sha": null,
+          "version": "1.95.0"
+        },
+        "disposition": "blocked_missing_public_identity",
+        "id": "cargo-clippy",
+        "missing_evidence": [
+          "capability_schema_platform_receipts_missing",
+          "clean_install_receipt_missing",
+          "immutable_public_identity_unverified"
+        ],
+        "reason": "Preparatory inventory only; no released bundle selected. Current behavior remains active without qualification.",
+        "role": "required",
+        "rollback": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "qualified": false,
+          "source": "rustup",
+          "version": "1.95.0"
+        },
+        "trigger": "always"
+      },
+      {
+        "1067_mirror_changes": [],
+        "1068_proof": "after selected packet: exact installed triggering/clean/invalid-tool controls; not authorized by this packet",
+        "candidate": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "output_contract": null,
+          "source": null,
+          "source_sha": null,
+          "version": null
+        },
+        "current": {
+          "checksum": null,
+          "output_contract": null,
+          "source": "rustup",
+          "source_sha": null,
+          "version": "1.95.0"
+        },
+        "disposition": "blocked_missing_public_identity",
+        "id": "cargo-doc",
+        "missing_evidence": [
+          "capability_schema_platform_receipts_missing",
+          "clean_install_receipt_missing",
+          "immutable_public_identity_unverified"
+        ],
+        "reason": "Preparatory inventory only; no released bundle selected. Current behavior remains active without qualification.",
+        "role": "required",
+        "rollback": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "qualified": false,
+          "source": "rustup",
+          "version": "1.95.0"
+        },
+        "trigger": "always"
+      },
+      {
+        "1067_mirror_changes": [],
+        "1068_proof": "after selected packet: exact installed triggering/clean/invalid-tool controls; not authorized by this packet",
+        "candidate": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "output_contract": null,
+          "source": null,
+          "source_sha": null,
+          "version": null
+        },
+        "current": {
+          "checksum": null,
+          "output_contract": null,
+          "source": "rustup",
+          "source_sha": null,
+          "version": "1.95.0"
+        },
+        "disposition": "blocked_missing_public_identity",
+        "id": "cargo-fmt",
+        "missing_evidence": [
+          "capability_schema_platform_receipts_missing",
+          "clean_install_receipt_missing",
+          "immutable_public_identity_unverified"
+        ],
+        "reason": "Preparatory inventory only; no released bundle selected. Current behavior remains active without qualification.",
+        "role": "required",
+        "rollback": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "qualified": false,
+          "source": "rustup",
+          "version": "1.95.0"
+        },
+        "trigger": "always"
+      },
+      {
+        "1067_mirror_changes": [],
+        "1068_proof": "after selected packet: exact installed triggering/clean/invalid-tool controls; not authorized by this packet",
+        "candidate": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "output_contract": null,
+          "source": null,
+          "source_sha": null,
+          "version": null
+        },
+        "current": {
+          "checksum": null,
+          "output_contract": null,
+          "source": "rustup",
+          "source_sha": null,
+          "version": "1.95.0"
+        },
+        "disposition": "blocked_missing_public_identity",
+        "id": "cargo-test",
+        "missing_evidence": [
+          "capability_schema_platform_receipts_missing",
+          "clean_install_receipt_missing",
+          "immutable_public_identity_unverified"
+        ],
+        "reason": "Preparatory inventory only; no released bundle selected. Current behavior remains active without qualification.",
+        "role": "required",
+        "rollback": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "qualified": false,
+          "source": "rustup",
+          "version": "1.95.0"
+        },
+        "trigger": "always"
+      },
+      {
+        "1067_mirror_changes": [],
+        "1068_proof": "after selected packet: exact installed triggering/clean/invalid-tool controls; not authorized by this packet",
+        "candidate": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "output_contract": null,
+          "source": null,
+          "source_sha": null,
+          "version": null
+        },
+        "current": {
+          "checksum": null,
+          "output_contract": null,
+          "source": "taiki-e/install-action@cargo-llvm-cov (floating)",
+          "source_sha": null,
+          "version": null
+        },
+        "disposition": "blocked_missing_public_identity",
+        "id": "coverage",
+        "missing_evidence": [
+          "capability_schema_platform_receipts_missing",
+          "clean_install_receipt_missing",
+          "immutable_public_identity_unverified"
+        ],
+        "reason": "Preparatory inventory only; no released bundle selected. Current behavior remains active without qualification.",
+        "role": "advisory",
+        "rollback": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "qualified": false,
+          "source": "taiki-e/install-action@cargo-llvm-cov (floating)",
+          "version": null
+        },
+        "trigger": "always"
+      },
+      {
+        "1067_mirror_changes": [],
+        "1068_proof": "after selected packet: exact installed triggering/clean/invalid-tool controls; not authorized by this packet",
+        "candidate": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "output_contract": null,
+          "source": null,
+          "source_sha": null,
+          "version": "0.11.0"
+        },
+        "current": {
+          "checksum": "d49900ea4daeffc2cef5649b6c7cd4a5a82eaad306fc6f598c79628662f0b786",
+          "output_contract": "public badge 0.6 observed by #1347; current main parser is unversioned counts fallback",
+          "source": "crates.io",
+          "source_sha": "c08d474a92d0edf97ad1e3d444ecb73fc5d439de",
+          "version": "0.10.0"
+        },
+        "disposition": "blocked_missing_public_identity",
+        "id": "ripr",
+        "missing_evidence": [
+          "1067_badge0_8_typed0_1_raw0_2_completeness_currentness_migration_pending",
+          "1468_1477_exact_corpus_verdict_missing",
+          "1469_ship_packet_missing",
+          "1479_publication_receipt_missing",
+          "accepted_813_compatibility_missing",
+          "capability_schema_platform_receipts_missing",
+          "clean_install_receipt_missing",
+          "platform_identity_suppression_acceptance_incomplete",
+          "provider12_config20unknown_exact_helper_positive_incomplete",
+          "public_0_11_0_identity_missing",
+          "rollback_compatibility_install_proof_missing"
+        ],
+        "reason": "Preparatory inventory only; no released bundle selected. Current behavior remains active without qualification.",
+        "role": "required",
+        "rollback": {
+          "checksum": "d49900ea4daeffc2cef5649b6c7cd4a5a82eaad306fc6f598c79628662f0b786",
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "qualified": false,
+          "source": "crates.io",
+          "version": "0.10.0"
+        },
+        "trigger": "rust-behavior-or-tests-changed"
+      },
+      {
+        "1067_mirror_changes": [],
+        "1068_proof": "after selected packet: exact installed triggering/clean/invalid-tool controls; not authorized by this packet",
+        "candidate": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "output_contract": null,
+          "source": null,
+          "source_sha": null,
+          "version": null
+        },
+        "current": {
+          "checksum": null,
+          "output_contract": null,
+          "source": "crates.io",
+          "source_sha": null,
+          "version": "1.12.0"
+        },
+        "disposition": "blocked_missing_public_identity",
+        "id": "tokmd",
+        "missing_evidence": [
+          "capability_schema_platform_receipts_missing",
+          "clean_install_receipt_missing",
+          "immutable_public_identity_unverified"
+        ],
+        "reason": "Preparatory inventory only; no released bundle selected. Current behavior remains active without qualification.",
+        "role": "advisory",
+        "rollback": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "qualified": false,
+          "source": "crates.io",
+          "version": "1.12.0"
+        },
+        "trigger": "always"
+      },
+      {
+        "1067_mirror_changes": [],
+        "1068_proof": "after selected packet: exact installed triggering/clean/invalid-tool controls; not authorized by this packet",
+        "candidate": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "output_contract": null,
+          "source": null,
+          "source_sha": null,
+          "version": null
+        },
+        "current": {
+          "checksum": null,
+          "output_contract": null,
+          "source": "crates.io",
+          "source_sha": null,
+          "version": "0.3.4"
+        },
+        "disposition": "blocked_missing_public_identity",
+        "id": "unsafe-review",
+        "missing_evidence": [
+          "capability_schema_platform_receipts_missing",
+          "clean_install_receipt_missing",
+          "immutable_public_identity_unverified"
+        ],
+        "reason": "Preparatory inventory only; no released bundle selected. Current behavior remains active without qualification.",
+        "role": "required",
+        "rollback": {
+          "checksum": null,
+          "compatibility_receipt": null,
+          "install_receipt": null,
+          "qualified": false,
+          "source": "crates.io",
+          "version": "0.3.4"
+        },
+        "trigger": "unsafe-or-native-risk-changed"
+      }
+    ]
+  },
+  "payload_sha256": "fe728e0dfd909b903f4736593a8593653f4f9371d3a7584bf3c6e467f1a3bcc0"
+}
