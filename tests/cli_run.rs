@@ -545,3 +545,201 @@ max_new_unsuppressed = 0
     assert!(out_enforced.join("review/gate_outcome.json").exists());
     Ok(())
 }
+
+#[test]
+fn ripr_module_limit_evidence_is_additive_through_real_cli() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    fs::create_dir_all(&repo)?;
+    init_minimal_repo(&repo)?;
+    let source = temp.path().join("ripr_fixture.rs");
+    write_file(
+        &source,
+        r###"use std::{env,fs};
+fn main() {
+ let args=env::args().collect::<Vec<_>>();
+ let detail=args.windows(2).any(|a|a[0]=="--format" && a[1]=="json");
+ let case=fs::read_to_string("limitation-case").unwrap_or_default();
+ let note="ripr: 1 Rust module composition limitation(s): tests/common/cli_lock.rs:rust_module_ambiguous_parent; affected module contexts remain fail-closed.\n";
+ if case=="both" || case=="duplicate" || case=="unavailable-detail" || (case=="badge-only" && !detail) || (case=="detail-only" && detail) { eprint!("{note}"); }
+ if case=="duplicate" { eprint!("{note}"); }
+ if case=="benign" { eprintln!("ripr: diagnostic control"); }
+ if case=="mismatch" { eprint!("{}",note.replace("ripr: 1","ripr: 2")); }
+ if detail {
+  if case=="unavailable-detail" { print!("{{"); }
+  else { println!(r#"{{"schema_version":"0.2","tool":"ripr","mode":"ready","summary":{{"findings":0}},"findings":[]}}"#); }
+ } else { println!(r#"{{"schema_version":"0.6","kind":"ripr","counts":{{"unsuppressed_exposure_gaps":0}},"warnings":[],"preview_skipped":[]}}"#); }
+}
+"###,
+    )?;
+    let stub = temp.path().join(if cfg!(windows) {
+        "ripr_fixture.exe"
+    } else {
+        "ripr_fixture"
+    });
+    run(
+        temp.path(),
+        "rustc",
+        &["--edition=2024", path_str(&source)?, "-o", path_str(&stub)?],
+    )?;
+    let mut config = format!(
+        "profile = \"gh-runner\"\n[tools.ripr]\nenabled = true\nrequired = true\ndefault = \"always\"\nphase = \"fast\"\ncommand = {:?}\n[tools.ripr.gate]\nscope = \"on-diff\"\nmax_new_unsuppressed = 0\n",
+        path_str(&stub)?
+    );
+    for id in [
+        "tokmd",
+        "cargo-allow",
+        "ast-grep",
+        "unsafe-review",
+        "semgrep",
+        "actionlint",
+        "zizmor",
+        "gitleaks",
+        "cargo-fmt",
+        "cargo-check",
+        "cargo-test",
+        "cargo-clippy",
+        "cargo-doc",
+        "artifact-verifier",
+        "coverage",
+        "osv-scanner",
+        "cargo-audit",
+        "cargo-deny",
+        "shellcheck",
+        "cppcheck",
+        "test",
+        "build",
+        "miri",
+        "cargo-mutants",
+    ] {
+        config.push_str(&format!("[tools.{id}]\nenabled = false\n"));
+    }
+    let config_path = temp.path().join("config.toml");
+    write_file(&config_path, &config)?;
+    for (case, entry_count) in [
+        ("none", 0),
+        ("both", 1),
+        ("badge-only", 1),
+        ("detail-only", 1),
+        ("duplicate", 1),
+        ("benign", 0),
+        ("mismatch", 0),
+        ("unavailable-detail", 1),
+    ] {
+        write_file(&repo.join("limitation-case"), case)?;
+        let out = temp.path().join(case);
+        run(
+            temp.path(),
+            env!("CARGO_BIN_EXE_ub-review"),
+            &[
+                "run",
+                "--root",
+                path_str(&repo)?,
+                "--base",
+                "HEAD~1",
+                "--head",
+                "HEAD",
+                "--config",
+                path_str(&config_path)?,
+                "--out",
+                path_str(&out)?,
+                "--mode",
+                "intelligent-ci",
+                "--model-mode",
+                "off",
+                "--sensor-phases",
+                "serial",
+                "--posting",
+                "artifact-only",
+                "--no-github-summary",
+                "--except-lanes",
+                "correctness,tests-red-green,source-route,architecture,opposition",
+            ],
+        )?;
+        let read = |path: &str| -> Result<serde_json::Value> {
+            Ok(serde_json::from_slice(&fs::read(out.join(path))?)?)
+        };
+        let detail = read("sensors/ripr/exposure-gaps.json")?;
+        assert_eq!(
+            detail["analysis_limit_evidence"]["entries"]
+                .as_array()
+                .map(Vec::len),
+            Some(entry_count),
+            "{case}: {detail}"
+        );
+        assert_eq!(
+            detail["analysis_limit_evidence"]["completeness"],
+            "not_established"
+        );
+        let gate = read("review/gate_outcome.json")?;
+        assert_eq!(gate["conclusion"], "pass", "{case}: {gate}");
+        assert_eq!(
+            gate["analysis_result"], "clean",
+            "diagnostic-only slice must not activate result authority: {gate}"
+        );
+        let tool = read("tool-gate-outcomes.json")?;
+        assert_eq!(tool["outcomes"][0]["outcome"], "passed");
+        assert_eq!(tool["outcomes"][0]["metrics"]["new_unsuppressed"], 0);
+        if case == "unavailable-detail" {
+            assert_eq!(detail["status"], "detail_unavailable");
+            assert_eq!(
+                detail["analysis_limit_evidence"]["detail_status"],
+                "detail_unavailable"
+            );
+        } else {
+            assert_eq!(detail["entries"], serde_json::json!([]));
+        }
+        assert_eq!(
+            read("sensors/ripr/ub-review-sensor-status.json")?["status"],
+            "ok"
+        );
+        assert_eq!(
+            fs::read(out.join("sensors/ripr/stdout.txt"))?,
+            fs::read(out.join("sensors/ripr/gate-decision.json"))?
+        );
+        if entry_count == 1 {
+            assert_eq!(
+                detail["analysis_limit_evidence"]["entries"][0]["context_display"],
+                "tests/common/cli_lock.rs"
+            );
+            assert_eq!(
+                detail["analysis_limit_evidence"]["entries"][0]["reason"],
+                "rust_module_ambiguous_parent"
+            );
+        }
+        if case == "both" || case == "duplicate" {
+            assert_eq!(
+                detail["analysis_limit_evidence"]["entries"][0]["source_artifacts"]
+                    .as_array()
+                    .map(Vec::len),
+                Some(2)
+            );
+            let primary = fs::read(out.join("sensors/ripr/stderr.txt"))?;
+            assert_eq!(
+                primary,
+                fs::read(out.join("sensors/ripr/exposure-gaps.ripr.stderr"))?
+            );
+            let expected = "ripr: 1 Rust module composition limitation(s): tests/common/cli_lock.rs:rust_module_ambiguous_parent; affected module contexts remain fail-closed.\n".repeat(if case == "duplicate" { 2 } else { 1 });
+            assert_eq!(primary, expected.as_bytes());
+            if case == "both" {
+                assert_eq!(
+                    detail["analysis_limit_evidence"]["sources"][0]["prefix_sha256"],
+                    "3ac999649a6b37919730a67393b3dc24b603e419b937bd408a8ef53fb723ea2f"
+                );
+            }
+
+            assert_eq!(
+                detail["analysis_limit_evidence"]["sources"][0]["captured_bytes"],
+                primary.len()
+            );
+        }
+        if case == "mismatch" {
+            assert_eq!(
+                detail["analysis_limit_evidence"]["sources"][0]["state"],
+                "invalid_disclosure"
+            );
+        }
+    }
+    Ok(())
+}

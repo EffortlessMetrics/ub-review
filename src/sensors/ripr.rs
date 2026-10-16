@@ -280,7 +280,7 @@ fn write_ripr_exposure_gap_details_with_runner(
             .unwrap_or_else(|| anyhow::anyhow!("ripr detail completion remains unconfirmed")))
         .context("ripr detail subprocess completion remains unconfirmed");
     }
-    let detail = detail_result.unwrap_or_else(|err| {
+    let mut detail = detail_result.unwrap_or_else(|err| {
         serde_json::json!({
             "schema": RIPR_EXPOSURE_GAPS_V3_SCHEMA,
             "status": "detail_unavailable",
@@ -293,6 +293,12 @@ fn write_ripr_exposure_gap_details_with_runner(
             },
         })
     });
+    let detail_status = detail["status"]
+        .as_str()
+        .unwrap_or("unavailable")
+        .to_owned();
+    detail["analysis_limit_evidence"] =
+        super::ripr_limits::module_limit_evidence(dir, &detail_status);
     let _ = fs::remove_file(&stdout_path);
     let _ = fs::remove_file(&stderr_path);
     match serde_json::to_vec_pretty(&detail) {

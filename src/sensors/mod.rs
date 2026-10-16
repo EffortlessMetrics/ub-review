@@ -6,6 +6,7 @@ pub(crate) mod command_build;
 pub(crate) use command_build::*;
 pub(crate) mod coverage;
 pub(crate) mod ripr;
+mod ripr_limits;
 pub(crate) mod unsafe_review;
 
 pub(crate) use coverage::*;
