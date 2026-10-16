@@ -589,14 +589,13 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
             .join("ub-review-sensor-status.json");
         let Some(receipt) = read_sensor_receipt(&status_path) else {
             if sensor.run {
-                // #325: a late-phase sensor without a receipt is scheduled
-                // work, not missing evidence — its receipt lands before the
-                // reporter/compile/gate. Fast sensors without receipts stay
-                // missing evidence.
+                // #325: keep late-phase scheduling distinct from absent fast
+                // evidence. The phase alone cannot establish completion, so
+                // describe the absent receipt without promising its arrival.
                 if matches!(sensor.phase, SensorPhase::Late) {
                     scheduled_late.push(format!(
-                        "{} scheduled in the late evidence phase; its receipt lands before the gate (late is not missing).",
-                        sensor.id
+                        "{} scheduled in the late evidence phase; receipt absent. Check sensors/{}/ for completion; scheduling alone is not evidence.",
+                        sensor.id, sensor.id
                     ));
                 } else {
                     missing.push(format!(
@@ -687,7 +686,9 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
     }
 
     text.push_str("\n## Missing evidence\n\n");
-    if missing.is_empty() {
+    if missing.is_empty() && !scheduled_late.is_empty() {
+        text.push_str("- Late-phase sensor receipts are still absent; scheduling does not establish completed evidence.\n");
+    } else if missing.is_empty() {
         text.push_str("- No planned sensor evidence is currently missing.\n");
     } else {
         for item in missing {

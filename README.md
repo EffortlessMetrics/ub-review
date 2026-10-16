@@ -278,6 +278,14 @@ Default core sensors are best-effort:
 Missing sensors are recorded as missing evidence. Missing evidence is never
 reported as clean evidence.
 
+In `running-summary.md`, **Scheduled late evidence** means a late-phase sensor
+has no receipt yet. It records scheduling intent, not completed evidence or a
+promise of completion before the gate. Check the sensor artifact directory for
+its receipt; an absent receipt remains unverified even in a finished packet or
+a later `summary` rerender. Successful receipts appear under **Available evidence**;
+failed or timed-out receipts appear under **Failed evidence**. This wording does
+not change gate thresholds or receipt eligibility.
+
 Heavy witnesses such as builds, tests, Miri, ASAN, and mutation testing are off
 by default. Enable them only behind explicit workflow policy.
 
