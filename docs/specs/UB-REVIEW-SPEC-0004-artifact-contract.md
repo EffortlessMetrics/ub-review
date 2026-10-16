@@ -111,6 +111,69 @@ constructs these same stable input artifacts from four fail-closed explicit
 objects while the root remains on the verified base tree; it does not resolve
 or check out the candidate head.
 
+New admission receipts add optional `worktree_evidence` with schema
+`ub-review.worktree_evidence.v1`; older receipts omit it. The unchanged
+`worktree_dirty` flag and revision identity remain the existing consumers'
+inputs. This evidence has no cleanliness enforcement or gate authority.
+
+The observation links `identity_digest` and `reviewed_commit_oid`, records the
+checkout's actual HEAD separately, and timestamps observation start. Porcelain
+v1 NUL records supply separate `index_status` (X) and `worktree_status` (Y),
+including `??` untracked entries. Renames are disabled so each row has one path.
+`tracked_diff_paths_hex` is the worktree-versus-index name-only diff;
+`staged_diff_paths_hex` is the index-versus-reviewed-commit name-only diff.
+Both are successful Git observations when `outcome=complete`. In trusted-diff
+mode the checkout remains the base, so the staged comparison can describe the
+base versus the reviewed candidate rather than local staging; consult the
+separate checkout HEAD. Ignored outputs are omitted; unignored bytecode is
+listed. Submodule dirt can be listed, but nested submodule inventories are not
+collected.
+
+Both name-only diffs also disable rename detection, so renamed-away and
+destination paths remain visible under `diff.renames=true`, `false` or `copies`.
+The bounded helper removes all inherited `GIT_*` settings, disables system and
+global Git config, and explicitly anchors the worktree to the supplied checkout
+root (including linked worktrees). Repository-local config otherwise remains
+active, with the documented command overrides; local `core.worktree` cannot
+redirect these observations. A nested directory or bare repository is
+`unavailable/checkout_root_required`.
+
+Existing identity and dirty-flag helpers retain their source selection. To avoid
+silently mixing their source with the isolated inventory, any inherited `GIT_*`
+setting makes
+the supplementary record `unavailable/inherited_git_source` before collection.
+The record retains the admitted identity linkage but contains no inventory in
+that case. No variable names or values are serialized. This preserves existing
+admission behavior rather than enforcing new cleanliness or source policy.
+The refusal guard and helper use one shared prefix rule, covering replacement
+object selectors (`GIT_NO_REPLACE_OBJECTS`, `GIT_REPLACE_REF_BASE`) and future
+Git settings. Presence alone is sufficient, including empty values that Git
+can interpret as flags. Even diagnostic-only Git settings conservatively make
+the supplementary record unavailable; no environment setting is silently
+discarded while claiming equivalence with the earlier helpers.
+
+Paths are lowercase hex of exact repository-relative Git path bytes, preserving
+spaces, tabs, newlines and non-UTF-8 names. Absolute paths, traversal components,
+backslashes and colon forms are rejected as unavailable rather than normalized.
+No file contents, diff hunks, stderr, environment or paths outside the repository
+are serialized. Each of six fixed read-only Git calls is capped at 64 KiB stdout,
+two seconds and a 100 ms owned-child cleanup wait; each inventory is capped at
+256 entries. This also bounds serialized path bytes (at most three 128 KiB hex
+inventories plus fixed fields and entry metadata). Optional locks, fsmonitor and
+untracked cache are disabled; diffs disable external diff and textconv.
+
+`outcome` is `complete`, `unavailable`, `truncated` or `racy`, with a fixed-label
+`reason` on non-complete outcomes. Byte/entry limits are truncated; Git failure,
+timeout, malformed records and unsafe paths are unavailable. Fields already
+collected can remain on failure and must not be treated as a complete inventory.
+Different before/after porcelain bytes or HEAD are racy. Matching observations
+establish only metadata agreement: contents may change without changing status,
+or change and revert between observations. Index/content hashes, atomic
+snapshots, hostile descendant containment and later execution equivalence are
+not established. An unexpected descendant retaining stdout cannot block the
+caller, but a capped detached reader can remain until that pipe closes.
+Historical dirty admissions without this evidence remain unproven.
+
 Root-level NDJSON streams (each is line-for-line parity with a `review/`
 JSON array; see parity rules):
 
