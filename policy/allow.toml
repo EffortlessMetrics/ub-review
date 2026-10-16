@@ -160,3 +160,15 @@ reason = "Runs the actual composite Action Bash resolver with recording Cargo an
 created = "2026-09-05"
 review_after = "2026-12-05"
 expires = "2027-03-05"
+
+[[exception]]
+id = "non-rust-ci-required-starvation-fixture"
+kind = "non-rust-file"
+glob = "fixtures/ci-efficiency-baseline/{manifest.json,source-projections.json,README.md}"
+category = "bounded-source-projection-fixture"
+language = "json/markdown"
+owner = "ub-review/tests"
+reason = "Preparatory #1270 single-run-pair before-state: public exact source references and bounded projections remain under 64 KiB. Native Rust tests bind inventory, privacy, projection bytes and source joins; semantic negative controls preserve Required starvation, shadow contradiction, unknowns and unproven overlap. No full raw logs/archives, runtime verifier, scheduler, reuse, savings or complete issue acceptance authority."
+created = "2026-10-14"
+review_after = "2027-01-14"
+expires = "2027-04-14"
