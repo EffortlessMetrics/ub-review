@@ -853,3 +853,89 @@ pub(crate) fn follow_up_dropped_evidence(output: &FollowUpOutputRecord) -> Optio
         .find(|finding| candidate_disposition_for_summary_finding(finding) == "dropped")
         .map(|finding| vec![format!("Follow-up summary: {}", finding.reason)])
 }
+
+#[cfg(test)]
+mod prior_resolution_tests {
+    use super::*;
+
+    #[test]
+    fn mixed_prior_history_selects_only_the_exact_revision() -> Result<()> {
+        let candidate = CandidateRecord {
+            schema: "ub-review.candidate.v1".to_owned(),
+            id: "candidate-current-deadbeef1234".to_owned(),
+            lane: "tests-oracle".to_owned(),
+            source: "summary-only-finding".to_owned(),
+            status: "summary-only".to_owned(),
+            disposition: "summary-only".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "high".to_owned(),
+            claim: "The changed parser drops a trailing subscript".to_owned(),
+            evidence: "parser output".to_owned(),
+            path: None,
+            line: None,
+            side: None,
+            suggestion: None,
+        };
+        let current = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        };
+        let exact = ResolvedCandidateRecord {
+            schema: "ub-review.resolved_candidate.v1".to_owned(),
+            candidate_id: "candidate-exact-deadbeef1234".to_owned(),
+            lane: candidate.lane.clone(),
+            source: candidate.source.clone(),
+            original_status: candidate.status.clone(),
+            original_disposition: candidate.disposition.clone(),
+            resolved_status: "resolved".to_owned(),
+            resolved_disposition: "refuted".to_owned(),
+            resolution_source: "orchestrator-follow-up".to_owned(),
+            revision: Some(current.clone()),
+            source_artifacts: Vec::new(),
+            reason: "current evidence refuted this claim".to_owned(),
+            follow_up_task_ids: Vec::new(),
+            follow_up_stages: Vec::new(),
+            follow_up_statuses: Vec::new(),
+            evidence: vec!["exact current record".to_owned()],
+        };
+        let mut wrong_semantics = exact.clone();
+        wrong_semantics.candidate_id = "candidate-wrong-semantics-deadbeef1234".to_owned();
+        wrong_semantics.revision = Some(RevisionRef {
+            semantics: "merge_result".to_owned(),
+            ..current.clone()
+        });
+        wrong_semantics.evidence = vec!["different review semantics".to_owned()];
+        let mut wrong_commit = exact.clone();
+        wrong_commit.candidate_id = "candidate-wrong-commit-deadbeef1234".to_owned();
+        wrong_commit.revision = Some(RevisionRef {
+            reviewed_commit: "e".repeat(40),
+            ..current.clone()
+        });
+        wrong_commit.evidence = vec!["different reviewed commit".to_owned()];
+
+        // Import order cannot let stale evidence mask a later exact record.
+        // Every prior has the same disposition, so check which one was selected.
+        for history in [
+            [wrong_semantics.clone(), wrong_commit.clone(), exact.clone()],
+            [exact.clone(), wrong_commit.clone(), wrong_semantics.clone()],
+        ] {
+            let PriorResolution::Authoritative(selected) =
+                prior_resolution_for_candidate(&candidate, &history, Some(&current))
+            else {
+                bail!("mixed history must retain its exact current resolution");
+            };
+            assert_eq!(selected.candidate_id, exact.candidate_id);
+            assert_eq!(selected.evidence, exact.evidence);
+        }
+        assert!(matches!(
+            prior_resolution_for_candidate(
+                &candidate,
+                &[wrong_semantics, wrong_commit],
+                Some(&current)
+            ),
+            PriorResolution::StaleRejected { .. }
+        ));
+        Ok(())
+    }
+}
