@@ -88,23 +88,78 @@ See:
 
 ## Inspect before adopting
 
-The setup commands inspect and generate proposals; they do not silently mutate
-branch protection:
+Run these commands from a GitHub repository checkout with the UB Review CLI
+installed and `origin` set to that repository. `ub-review audit-ci` inventories
+CI without changing workflows or protection; it writes local audit receipts.
+Without GitHub authentication its history and required-check observations remain
+explicitly unavailable. The generators below write local proposals; none changes
+branch protection or removes existing CI.
+
+### Generate a new advisory setup
+
+Use this path only when the repository has no existing `.ub-review.toml` or
+UB Review workflow. **`enable --inspect` is not a dry run:** it inspects the
+repository, then writes `.github/workflows/ub-review.yml` and `.ub-review.toml`.
+The generated review posture below is nonblocking:
+
+```bash
+ub-review enable --inspect --mode advisory --model minimax
+ub-review audit-ci
+```
+
+Do not run `init` first. `init` and `enable` are alternative setup paths;
+`enable` deliberately refuses a configuration that `init` already created.
+Keep that refusal when reviewing an existing installation rather than adding
+`--force` to a copied command. Review the generated diff before committing it.
+Release discovery requires access to GitHub's public release metadata. If no
+installable release is resolvable, generation stops unless an explicit reviewed
+`--action-sha` permits source-build fallback; do not invent a pin to continue.
+
+The current generator prepares MiniMax review and optional OpenCode fallback;
+`--model minimax` selects that template, not permission to spend provider
+budget. For the first **model-off, artifact-only** evaluation, edit the generated
+UB Review Action step's `with:` mapping before running the workflow:
+
+```yaml
+review-mode: advisory
+model-mode: off
+posting: artifact-only
+```
+
+Remove its `minimax-api-key`, `opencode-api-key`, and `github-token` inputs for
+that evaluation, and reduce the workflow's `permissions:` to `contents: read`.
+Do not add provider secrets yet. Keep existing required CI unchanged. Enabling
+model review or GitHub posting later requires a separately reviewed credential
+and execution boundary; advisory mode alone does not isolate untrusted code.
+There is no `enable --model off` option. Model-off reports deterministic evidence
+without claiming that a semantic model review took place.
+
+### Manual configuration instead
+
+To create starter configuration and repository guidance without generating an
+Actions workflow, use this alternative in a repository without an existing
+configuration:
 
 ```bash
 ub-review init --profile gh-runner
-ub-review enable --inspect --mode gate --model minimax
-ub-review audit-ci
+```
+
+Review those files and configure the workflow manually; do not follow this
+command with `enable`. For an existing installation, review and preserve the
+current configuration and workflow rather than regenerating over them.
+
+### Preview an explicit CI migration
+
+This is a separate path, not a required final step of onboarding:
+
+```bash
 ub-review setup-ci --print-pr
 ```
 
-`init` writes starter configuration and repository guidance. `enable --inspect`
-proposes a workflow/configuration for the detected repository. `audit-ci` is
-read-only. `setup-ci --print-pr` without accepted jobs is plan-only: it writes
-`migration-plan.md` and does not claim that preview files exist.
-
-To render the four new files in the preview, pass at least one exact audited job
-with its maintainer-supplied command and a reviewed 40-hex UB Review commit:
+Without accepted jobs it writes `migration-plan.md` only; it does not claim that
+preview files exist. To render the four new files in the preview, pass at least
+one exact audited job with its maintainer-supplied command and a reviewed
+40-hex UB Review commit:
 
 ```bash
 ub-review setup-ci --print-pr \
