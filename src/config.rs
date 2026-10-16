@@ -1578,6 +1578,45 @@ mod tests {
     use super::*;
 
     #[test]
+    fn requested_config_read_errors_retain_io_cause() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let missing = temp.path().join("missing config.toml");
+        let invalid_text = temp.path().join("invalid text.toml");
+        fs::write(&invalid_text, [0xff])?;
+        for (path, kind) in [
+            (&missing, std::io::ErrorKind::NotFound),
+            (&invalid_text, std::io::ErrorKind::InvalidData),
+        ] {
+            let Err(error) = Config::load_requested(Some(path), Some("gh-runner")) else {
+                anyhow::bail!(
+                    "unreadable requested config {} was accepted",
+                    path.display()
+                );
+            };
+            // The recovery context must supplement the actual read failure:
+            // replacing it with a generic error loses why this path failed.
+            let cause = error
+                .downcast_ref::<std::io::Error>()
+                .ok_or_else(|| anyhow::anyhow!("config error lost its I/O cause: {error:#}"))?;
+            assert_eq!(cause.kind(), kind, "{}: {error:#}", path.display());
+            let context = error.to_string();
+            assert!(
+                context.contains(&format!("read {}", path.display())),
+                "{context}"
+            );
+            assert!(
+                context.contains("provide a readable config file"),
+                "{context}"
+            );
+            assert!(
+                context.contains("omit --config/UB_REVIEW_CONFIG"),
+                "{context}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn default_sensor_phase_classifies_by_class_and_lease() {
         // Compile/test-requiring classes and leased witnesses are late.
         assert_eq!(
