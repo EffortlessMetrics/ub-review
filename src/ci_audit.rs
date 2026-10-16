@@ -3421,7 +3421,7 @@ pub(crate) fn cmd_setup_ci(args: SetupCiArgs) -> Result<()> {
             ),
         }
     }
-    let required_check = Config::load_or_default(&args.config, None)?
+    let required_check = Config::load_requested(args.config.as_deref(), None)?
         .gate
         .required_check;
     let plan =

@@ -469,9 +469,9 @@ pub(crate) struct ReviewArgs {
     /// Trusted-base admission: patch object generated outside this process.
     #[arg(long, env = "UB_REVIEW_TRUSTED_DIFF_PATCH")]
     pub(crate) trusted_diff_patch: Option<PathBuf>,
-    /// Config path.
-    #[arg(long, default_value = ".ub-review.toml", env = "UB_REVIEW_CONFIG")]
-    pub(crate) config: PathBuf,
+    /// Config path. If omitted, optionally discover .ub-review.toml.
+    #[arg(long, env = "UB_REVIEW_CONFIG")]
+    pub(crate) config: Option<PathBuf>,
     /// Output run directory.
     #[arg(long, default_value = "target/ub-review", env = "UB_REVIEW_OUT")]
     pub(crate) out: PathBuf,
@@ -536,8 +536,8 @@ pub(crate) struct EnableArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct DoctorArgs {
-    #[arg(long, default_value = ".ub-review.toml", env = "UB_REVIEW_CONFIG")]
-    pub(crate) config: PathBuf,
+    #[arg(long, env = "UB_REVIEW_CONFIG")]
+    pub(crate) config: Option<PathBuf>,
     #[arg(long, value_enum, env = "UB_REVIEW_PROFILE")]
     pub(crate) profile: Option<ProfileArg>,
     #[arg(
@@ -570,8 +570,8 @@ pub(crate) enum CacheCommand {
 
 #[derive(Debug, Args)]
 pub(crate) struct CacheWarmArgs {
-    #[arg(long, default_value = ".ub-review.toml", env = "UB_REVIEW_CONFIG")]
-    pub(crate) config: PathBuf,
+    #[arg(long, env = "UB_REVIEW_CONFIG")]
+    pub(crate) config: Option<PathBuf>,
     #[arg(long, value_enum, env = "UB_REVIEW_PROFILE")]
     pub(crate) profile: Option<ProfileArg>,
     #[arg(
@@ -942,8 +942,8 @@ pub(crate) struct SetupCiArgs {
     #[arg(long = "accept")]
     pub(crate) accept: Vec<String>,
     /// Existing repo config, consulted only for \[gate].required_check.
-    #[arg(long, default_value = ".ub-review.toml", env = "UB_REVIEW_CONFIG")]
-    pub(crate) config: PathBuf,
+    #[arg(long, env = "UB_REVIEW_CONFIG")]
+    pub(crate) config: Option<PathBuf>,
     /// Open the migration PR on GitHub: create a branch, add the generated
     /// files (.ub-review.toml, the gate workflow, docs/ci/ub-review-migration.md,
     /// docs/ci/branch-protection-change.md), and open one PR whose body is

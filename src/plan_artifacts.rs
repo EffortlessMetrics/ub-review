@@ -15,8 +15,8 @@ pub(crate) fn prepare_plan(
     let trusted_admission = trusted_diff_inputs(args)?
         .map(|inputs| admit_trusted_diff(&args.root, &inputs))
         .transpose()?;
-    let config = Config::load_or_default(
-        &args.config,
+    let config = Config::load_requested(
+        args.config.as_deref(),
         runtime_profile_override(args.profile.as_ref(), args.runtime_profile.as_ref()),
     )?;
     let profile = config.selected_profile()?;

@@ -427,18 +427,18 @@ fn setup_ci_print_pr_rejects_malformed_existing_config_before_outputs() -> Resul
 }
 
 #[test]
-fn setup_ci_print_pr_rejects_unreadable_existing_config_before_outputs() -> Result<()> {
+fn setup_ci_print_pr_rejects_missing_or_unreadable_config_before_outputs() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
-    for directory in [true, false] {
+    for kind in ["directory", "non-text", "missing"] {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("target/ub-review");
         let audit = out.join("ci-audit");
         write_setup_ci_cli_audit_fixture(&audit)?;
         let config = temp.path().join("review config.toml");
-        if directory {
-            fs::create_dir(&config)?;
-        } else {
-            fs::write(&config, b"invalid-utf8-\xff")?;
+        match kind {
+            "directory" => fs::create_dir(&config)?,
+            "non-text" => fs::write(&config, b"invalid-utf8-\xff")?,
+            _ => {}
         }
         let before_paths = collect_relative_file_paths(temp.path())?;
         let before_bytes = before_paths
@@ -459,7 +459,7 @@ fn setup_ci_print_pr_rejects_unreadable_existing_config_before_outputs() -> Resu
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
             !output.status.success(),
-            "setup-ci accepted unreadable config (directory={directory})\n{stderr}"
+            "setup-ci accepted unreadable config (kind={kind})\n{stderr}"
         );
         assert!(stderr.contains(&format!("read {}", config.display())));
         assert!(
@@ -505,11 +505,12 @@ fn setup_ci_print_pr_preserves_missing_and_valid_config_semantics() -> Result<()
             .env_clear()
             .args(["setup-ci", "--print-pr", "--out"])
             .arg(&out)
-            .arg("--config")
-            .arg(&config)
             .args(["--accept", "unit=cargo test --lib --locked"])
             .arg("--action-sha")
             .arg("d".repeat(40));
+        if contents.is_some() {
+            command.arg("--config").arg(&config);
+        }
         let first = command.output()?;
         assert!(
             first.status.success(),

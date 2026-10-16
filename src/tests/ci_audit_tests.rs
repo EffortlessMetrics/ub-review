@@ -1091,7 +1091,7 @@ fn setup_ci_args(out: &Path, accept: Vec<String>) -> crate::SetupCiArgs {
         out: out.to_path_buf(),
         print_pr: true,
         accept,
-        config: out.join("no-such-config.toml"),
+        config: None,
         open_pr: false,
         repo: None,
         github_token: None,
