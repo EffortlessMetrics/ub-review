@@ -4524,7 +4524,11 @@ fn model_auto_run_retries_transient_primary_failure_on_provider_fallback() -> Re
 fn model_retry_starvation_retains_attempt_reporting() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let case = model_attempt_reporting_case(
-        vec![200, 429], vec![200], "1", "correctness", "primary-with-fallback",
+        vec![200, 429],
+        vec![200],
+        "1",
+        "correctness",
+        "primary-with-fallback",
     )?;
     assert_eq!(case["primary_requests"], 2);
     assert_eq!(case["fallback_requests"], 1);
@@ -4535,10 +4539,16 @@ fn model_retry_starvation_retains_attempt_reporting() -> Result<()> {
     assert_eq!(lane["http_status"], 429);
     assert_eq!(lane["attempt_count"], 1);
     let reason = lane["reason"].as_str().context("lane reason")?;
-    assert!(reason.contains("budget reached before fallback retry"), "{reason}");
+    assert!(
+        reason.contains("budget reached before fallback retry"),
+        "{reason}"
+    );
     assert!(reason.contains("primary rate_limited"), "{reason}");
     assert!(!reason.contains("before lane execution"), "{reason}");
-    assert_eq!(case["review"]["missing_or_failed_model_evidence"][0]["reason"], reason);
+    assert_eq!(
+        case["review"]["missing_or_failed_model_evidence"][0]["reason"],
+        reason
+    );
     assert_eq!(case["gate"]["model_coverage"]["lanes_usable"], 0);
     assert_eq!(case["gate"]["model_coverage"]["budget_exhausted_lanes"], 1);
     assert_eq!(case["gate"]["analysis_result"], "not_proven");
@@ -4550,21 +4560,36 @@ fn model_retry_starvation_retains_attempt_reporting() -> Result<()> {
 fn model_partial_retry_starvation_counts_both_attempted_lanes() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let case = model_attempt_reporting_case(
-        vec![200, 200, 429], vec![200], "2", "correctness,architecture", "primary-with-fallback",
+        vec![200, 200, 429],
+        vec![200],
+        "2",
+        "correctness,architecture",
+        "primary-with-fallback",
     )?;
     assert_eq!(case["primary_requests"], 3);
     assert_eq!(case["fallback_requests"], 1);
     assert_eq!(case["metrics"]["models"]["model_lane_calls_attempted"], 2);
-    let lanes = case["review"]["model_lanes"].as_array().context("lane receipts")?;
-    let first = lanes.iter().find(|lane| lane["lane"] == "correctness").context("correctness receipt")?;
-    let second = lanes.iter().find(|lane| lane["lane"] == "architecture").context("architecture receipt")?;
+    let lanes = case["review"]["model_lanes"]
+        .as_array()
+        .context("lane receipts")?;
+    let first = lanes
+        .iter()
+        .find(|lane| lane["lane"] == "correctness")
+        .context("correctness receipt")?;
+    let second = lanes
+        .iter()
+        .find(|lane| lane["lane"] == "architecture")
+        .context("architecture receipt")?;
     assert_eq!(first["status"], "ok");
     assert_eq!(first["attempt_count"], 1);
     assert_eq!(second["status"], "skipped");
     assert_eq!(second["http_status"], 429);
     assert_eq!(second["attempt_count"], 1);
     let reason = second["reason"].as_str().context("starved reason")?;
-    assert!(reason.contains("budget reached before fallback retry"), "{reason}");
+    assert!(
+        reason.contains("budget reached before fallback retry"),
+        "{reason}"
+    );
     assert!(reason.contains("primary rate_limited"), "{reason}");
     assert!(!reason.contains("before lane execution"), "{reason}");
     assert_eq!(case["gate"]["model_coverage"]["lanes_usable"], 1);
@@ -4576,25 +4601,102 @@ fn model_partial_retry_starvation_counts_both_attempted_lanes() -> Result<()> {
 #[test]
 fn model_attempt_reporting_controls() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
-    for (name, primary, fallback, budget, policy, expected_status, expected_requests, expected_attempted) in [
-        ("healthy", vec![200, 200], vec![200], "1", "primary-with-fallback", "ok", (2, 1), 1),
-        ("never attempted", vec![200], vec![200], "0", "primary-with-fallback", "skipped", (1, 1), 0),
-        ("no fallback", vec![200, 429], vec![], "1", "minimax-only", "rate_limited", (2, 0), 1),
-        ("fallback succeeds", vec![200, 429], vec![200, 200], "2", "primary-with-fallback", "ok", (2, 2), 1),
-        ("fallback fails", vec![200, 429], vec![200, 503], "2", "primary-with-fallback", "failed", (2, 2), 1),
+    for (
+        name,
+        primary,
+        fallback,
+        budget,
+        policy,
+        expected_status,
+        expected_requests,
+        expected_attempted,
+        expected_calls,
+    ) in [
+        (
+            "healthy",
+            vec![200, 200],
+            vec![200],
+            "1",
+            "primary-with-fallback",
+            "ok",
+            (2, 1),
+            1,
+            1,
+        ),
+        (
+            "never attempted",
+            vec![200],
+            vec![200],
+            "0",
+            "primary-with-fallback",
+            "skipped",
+            (1, 1),
+            0,
+            0,
+        ),
+        (
+            "no fallback",
+            vec![200, 429],
+            vec![],
+            "1",
+            "minimax-only",
+            "rate_limited",
+            (2, 0),
+            1,
+            1,
+        ),
+        (
+            "fallback succeeds",
+            vec![200, 429],
+            vec![200, 200],
+            "2",
+            "primary-with-fallback",
+            "ok",
+            (2, 2),
+            1,
+            2,
+        ),
+        (
+            "fallback fails",
+            vec![200, 429],
+            vec![200, 503],
+            "2",
+            "primary-with-fallback",
+            "failed",
+            (2, 2),
+            1,
+            2,
+        ),
     ] {
         let case = model_attempt_reporting_case(primary, fallback, budget, "correctness", policy)?;
         assert_eq!(case["primary_requests"], expected_requests.0, "{name}");
         assert_eq!(case["fallback_requests"], expected_requests.1, "{name}");
-        assert_eq!(case["metrics"]["models"]["model_lane_calls_attempted"], expected_attempted, "{name}");
+        assert_eq!(
+            case["metrics"]["models"]["model_lane_calls_attempted"], expected_attempted,
+            "{name}"
+        );
         let lane = &case["review"]["model_lanes"][0];
         assert_eq!(lane["status"], expected_status, "{name}");
+        assert_eq!(lane["attempt_count"], expected_calls, "{name}");
+        let refuter = case["review"]["model_lanes"]
+            .as_array()
+            .context("model lanes")?
+            .iter()
+            .find(|lane| lane["lane"] == "refuter")
+            .context("refuter")?;
+        assert_eq!(refuter["attempt_count"], 0, "{name}");
         if name == "never attempted" {
-            assert_eq!(lane["reason"], "model call budget reached before lane execution");
+            assert_eq!(
+                lane["reason"],
+                "model call budget reached before lane execution"
+            );
             assert!(lane["http_status"].is_null());
         }
         if name.starts_with("fallback ") {
-            assert_eq!(lane["fallback_from"], "minimax:MiniMax-M3:openai-chat", "{name}");
+            assert_eq!(
+                lane["fallback_from"], "minimax:MiniMax-M3:openai-chat",
+                "{name}"
+            );
         }
         assert_eq!(case["gate"]["conclusion"], "pass", "{name}");
         assert_eq!(case["gate"]["analysis_result"], "not_proven", "{name}");
@@ -4616,32 +4718,71 @@ fn model_attempt_reporting_case(
     let content = serde_json::json!({
         "summary": "", "inline_comments": [], "summary_only_findings": [],
         "internal_audit": {"surfaces_checked": ["src/lib.rs:answer"]}
-    }).to_string();
+    })
+    .to_string();
     let (primary_url, primary) = spawn_fake_openai_provider_with_responses(
-        primary_statuses.into_iter().map(|status| (status, content.clone())).collect(),
+        primary_statuses
+            .into_iter()
+            .map(|status| (status, content.clone()))
+            .collect(),
     )?;
     let (fallback_url, fallback) = spawn_fake_openai_provider_with_responses(
-        fallback_statuses.into_iter().map(|status| (status, content.clone())).collect(),
+        fallback_statuses
+            .into_iter()
+            .map(|status| (status, content.clone()))
+            .collect(),
     )?;
     let out = temp.path().join("packet");
     let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
-    run_with_env(temp.path(), env!("CARGO_BIN_EXE_ub-review"), &[
-        "run", "--dry-run", "--config", path_str(&config)?, "--root", path_str(&repo)?,
-        "--base", "HEAD~1", "--head", "HEAD", "--out", path_str(&out)?,
-        "--no-github-summary", "--posting", "artifact-only", "--model-mode", "auto",
-        "--provider-policy", policy, "--minimax-provider-kind", "openai",
-        "--opencode-endpoint-kind", "openai-chat", "--lanes", lanes,
-        "--model-concurrency", "1", "--max-model-calls", budget, "--model-timeout-sec", "3",
-    ], &[
-        ("UB_REVIEW_MINIMAX_API_KEY", "dummy-local-primary"),
-        ("UB_REVIEW_MINIMAX_API_URL", primary_url.as_str()),
-        ("UB_REVIEW_OPENCODE_API_KEY", "dummy-local-fallback"),
-        ("UB_REVIEW_OPENCODE_API_URL", fallback_url.as_str()),
-    ])?;
+    run_with_env(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--no-github-summary",
+            "--posting",
+            "artifact-only",
+            "--model-mode",
+            "auto",
+            "--provider-policy",
+            policy,
+            "--minimax-provider-kind",
+            "openai",
+            "--opencode-endpoint-kind",
+            "openai-chat",
+            "--lanes",
+            lanes,
+            "--model-concurrency",
+            "1",
+            "--max-model-calls",
+            budget,
+            "--model-timeout-sec",
+            "3",
+        ],
+        &[
+            ("UB_REVIEW_MINIMAX_API_KEY", "dummy-local-primary"),
+            ("UB_REVIEW_MINIMAX_API_URL", primary_url.as_str()),
+            ("UB_REVIEW_OPENCODE_API_KEY", "dummy-local-fallback"),
+            ("UB_REVIEW_OPENCODE_API_URL", fallback_url.as_str()),
+        ],
+    )?;
     let primary_requests = join_fake_provider(primary)?.len();
     let fallback_requests = join_fake_provider(fallback)?.len();
     let read = |name: &str| -> Result<serde_json::Value> {
-        Ok(serde_json::from_slice(&fs::read(out.join("review").join(name))?)?)
+        Ok(serde_json::from_slice(&fs::read(
+            out.join("review").join(name),
+        )?)?)
     };
     Ok(serde_json::json!({
         "primary_requests": primary_requests, "fallback_requests": fallback_requests,

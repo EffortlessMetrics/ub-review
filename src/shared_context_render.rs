@@ -625,7 +625,7 @@ pub(crate) fn write_shared_context_cache_artifacts(
     }
     for receipt in model_lanes
         .iter()
-        .filter(|receipt| model_call_attempted_status(&receipt.status))
+        .filter(|receipt| model_lane_call_attempted(receipt))
     {
         events.push(SharedContextCacheEvent {
             schema: CACHE_EVENT_SCHEMA,
