@@ -34460,3 +34460,35 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_broker.rs:field_construction:b7c7aae0"
 owner = "ub-review/core"
 reason = "RIPR discriminate false-negative on #4271 round-4 the fresh parameter binding in merge_proof_portfolio_candidate_tasks (twin of the round-2b decisions-merge parameter probe 859c91d4): the extended follow_up_write_preserves_required_flag_on_shared_task_id drives both merge arms and asserts the merged candidate record's required flag and request_ids equal the merged decision record exactly, so the construction outcome is pinned; ripr's assertion linker misses parameter bindings. Re-verify after any edit to proof/broker.rs."
+
+# Exact summary-only delivery loader dispositions, reviewed 2026-10-16.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:3c5f5771"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 static discriminator-link limitation; retain the raw weakly_exposed finding as suppressed, not exposed. The load_claim_graph optional inspection match header must use symlink_metadata so a present dangling graph is read and rejected rather than treated as absent. summary_only_delivery_requires_present_graph_binding pins dangling rejection before sends and readable-link/manual-absence positives; replacing symlink_metadata with metadata compiles and fails the dangling case. Evidence and compiled-control crosswalk: https://github.com/EffortlessMetrics/ub-review/issues/923#issuecomment-6211074485; upstream subject/evidence ownership: https://github.com/EffortlessMetrics/ripr/issues/1453. Reviewed 2026-10-16; re-verify this exact subject after semantic edits or analyzer upgrades. Unix filesystem witnesses do not establish Windows executable parity."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:0f316fa1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 static discriminator-link limitation; retain the raw weakly_exposed finding as suppressed, not exposed. The load_claim_graph NotFound arm may return optional None only for actual absence. load_claim_graph_preserves_value_and_errors pins absent None, exact present Some, and non-NotFound inspect failure; compiled broad-Err and absent-Some mutations fail distinct typed-error/None oracles. Evidence and compiled-control crosswalk: https://github.com/EffortlessMetrics/ub-review/issues/923#issuecomment-6211074485; upstream subject/evidence ownership: https://github.com/EffortlessMetrics/ripr/issues/1453. Reviewed 2026-10-16; re-verify this exact subject after semantic edits or analyzer upgrades. Unix filesystem witnesses do not establish Windows executable parity."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:a7997277"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 static discriminator-link limitation; retain the raw weakly_exposed finding as suppressed, not exposed. The load_claim_graph metadata arm must propagate inspection errors with inspect context before reading. load_claim_graph_preserves_value_and_errors distinguishes optional inspect/NotADirectory from required read/NotADirectory. Discarding metadata Result survived the old d646818 suite, then compiled and failed this added exact-context discriminator; production remains correct. Evidence and compiled-control crosswalk: https://github.com/EffortlessMetrics/ub-review/issues/923#issuecomment-6211074485; upstream subject/evidence ownership: https://github.com/EffortlessMetrics/ripr/issues/1453. Reviewed 2026-10-16; re-verify this exact subject after semantic edits or analyzer upgrades. Unix filesystem witnesses do not establish Windows executable parity."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:8fd95a9a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 static discriminator-link limitation; retain the raw weakly_exposed finding as suppressed, not exposed. The load_claim_graph serde_json::from_slice return must preserve the entire nested graph and reject malformed JSON with parse context and a serde_json error. load_claim_graph_preserves_value_and_errors pins both required/optional results; separate compiled parse-error-swallow and parsed-value-drop mutations each fail. Evidence and compiled-control crosswalk: https://github.com/EffortlessMetrics/ub-review/issues/923#issuecomment-6211074485; upstream subject/evidence ownership: https://github.com/EffortlessMetrics/ripr/issues/1453. Reviewed 2026-10-16; re-verify this exact subject after semantic edits or analyzer upgrades. Unix filesystem witnesses do not establish Windows executable parity."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:14c0e375"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 static discriminator-link limitation; retain the raw weakly_exposed finding as suppressed, not exposed. The load_claim_graph map(Some) lift must preserve the complete parsed graph as Some, distinct from absent optional None. load_claim_graph_preserves_value_and_errors compares the complete revision/topics/metadata JSON for both required flags; a typed map-to-None mutation compiles and fails. The pinned token confirmer filters Some and rejects short map, so this semantic oracle cannot confirm that fragment. Evidence and compiled-control crosswalk: https://github.com/EffortlessMetrics/ub-review/issues/923#issuecomment-6211074485; upstream subject/evidence ownership: https://github.com/EffortlessMetrics/ripr/issues/1453. Reviewed 2026-10-16; re-verify this exact subject after semantic edits or analyzer upgrades. Unix filesystem witnesses do not establish Windows executable parity."
