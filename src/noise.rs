@@ -49,6 +49,15 @@ pub(crate) fn is_pr_body_artifact_only_observation(observation: &ObservationGrou
         format!("{} {}", observation.claim, observation.evidence.join(" ")).to_ascii_lowercase();
     observation.status == "covered"
         || observation.kind == "resolved-check"
+        // A specialist's rejected hypotheses are private audit, not earned
+        // public refutations. Use producer provenance rather than trying to
+        // infer source truth from prose or the model-selected kind. Preserve
+        // the existing policy for groups with an independent evidence source.
+        || (!observation.sources.is_empty()
+            && observation
+                .sources
+                .iter()
+                .all(|source| source == "model-failed-objection"))
         || matches!(
             observation.kind.as_str(),
             "empty-internal-audit" | "malformed-internal-audit"
@@ -905,7 +914,111 @@ pub(crate) fn normalized_review_text(value: &str) -> String {
 #[cfg(test)]
 mod human_output_admission_tests {
     use super::*;
+
+    // Exact-head source adjudication and the independent counterexample are
+    // retained in docs/calibration/ripr-8262.md. This is a contract replay of
+    // recorded public claims, not a replay of unavailable raw model packets.
+    #[test]
+    fn ripr_8262_failed_objection_audit_stays_private_in_mixed_review() -> Result<()> {
+        let lane = model_lane("opposition", "Review", &[], "Trace callers.");
+        for (claim, reason) in [
+            (
+                "Deferred retention may absorb a scoped site",
+                "Deferred completion calls the same scan_macro_sites + absorb_macro_sites path, so scoped sites are excluded from retained by construction.",
+            ),
+            (
+                "The owner fallback silently substitutes an arbitrary function",
+                "assert!(owner.is_some()) immediately precedes owner.unwrap_or, so a missing owner fails the test first.",
+            ),
+            (
+                "Unrelated audit hypothesis",
+                "A checked caller rejects this input.",
+            ),
+        ] {
+            // Both a mistaken and a source-supported rejection are private
+            // audit. Prose, model confidence and arbitrary kind cannot earn a
+            // public disposition; this test does not classify semantic truth.
+            for kind in [None, Some("false-premise"), Some("bug")] {
+                let wire = serde_json::json!({
+                    "claim": claim, "reason": reason,
+                    "evidence": ["exact-head source inspected"],
+                    "confidence": "high", "kind": kind
+                });
+                let observation =
+                    validate_failed_objection(&lane, serde_json::from_value(wire)?, 0);
+                let groups = observation_summary_artifacts(std::slice::from_ref(&observation));
+                assert_eq!(groups.unique.len(), 1);
+                assert_eq!(groups.unique[0].status, "refuted");
+                assert_eq!(groups.unique[0].sources, ["model-failed-objection"]);
+                let retained = serde_json::to_string(&groups.unique)?;
+                assert!(retained.contains(reason));
+
+                let finding = SummaryOnlyFinding {
+                    lane: "correctness".to_owned(), severity: "medium".to_owned(),
+                    confidence: "high".to_owned(),
+                    reason: "Deferred retention admits a scoped binding into the workspace index.".to_owned(),
+                    evidence: "owner_pin.rs:887 directly calls MacroSiteRank.absorb; independent successor counterexample 6220614121".to_owned(),
+                };
+                let args = crate::tests::test_run_args(PathBuf::from("target/ripr-8262"));
+                let plan = crate::tests::test_plan(Vec::new());
+                let mut diff = crate::tests::test_diff();
+                diff.head = "99ddc596b81787a30c0ed438fe40e3f1cd3ef328".to_owned();
+                let policy = ReviewBodyPolicy::default();
+                let surface = compile_review_surface(ReviewCompilerInput {
+                    shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                    review_body_policy: &policy,
+                    run_pass: RunPass::Manual,
+                    post_review_on: &[],
+                    args: &args,
+                    plan: &plan,
+                    diff: &diff,
+                    model_lanes: &[],
+                    missing_or_failed_sensor_evidence: &[],
+                    missing_or_failed_model_evidence: &[],
+                    inline_comments: &[],
+                    summary_only_findings: std::slice::from_ref(&finding),
+                    observations: std::slice::from_ref(&observation),
+                    proof_receipts: &[],
+                    suggested_issues: &[],
+                    final_follow_up_tasks: 0,
+                    reporter_distillation: None,
+                })?;
+                let payload = serde_json::to_string(&surface.github_review)?;
+                assert!(
+                    !payload.contains(reason),
+                    "private failed objection leaked: {kind:?}"
+                );
+                assert!(!surface.github_review.body.contains("## Refuted"));
+                assert!(surface.github_review.body.contains(&finding.reason));
+                assert!(surface.should_prepare_github_review);
+            }
+        }
+        Ok(())
+    }
     use anyhow::ensure;
+
+    #[test]
+    fn ripr_8262_public_boundary_preserves_other_evidence_sources() {
+        for (kind, status, sources) in [
+            ("bug", "open", vec!["model-observation"]),
+            ("missing-evidence", "open", vec!["model-observation"]),
+            ("false-premise", "refuted", vec!["proof-receipt"]),
+            (
+                "false-premise",
+                "refuted",
+                vec!["model-failed-objection", "proof-receipt"],
+            ),
+        ] {
+            let mut group = internal_audit_observation(kind, status);
+            group.claim = "The deferred path needs a scoped-binding witness.".to_owned();
+            group.sources = sources.into_iter().map(str::to_owned).collect();
+            assert!(
+                !is_pr_body_artifact_only_observation(&group),
+                "{kind}: {:?}",
+                group.sources
+            );
+        }
+    }
 
     fn internal_audit_observation(kind: &str, status: &str) -> ObservationGroup {
         ObservationGroup {
