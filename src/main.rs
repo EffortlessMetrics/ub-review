@@ -4222,8 +4222,8 @@ fn overlap_ms(left: &[LoopInterval], right: &[LoopInterval]) -> u128 {
 }
 
 fn cmd_doctor(args: DoctorArgs) -> Result<()> {
-    let config = Config::load_or_default(
-        &args.config,
+    let config = Config::load_requested(
+        args.config.as_deref(),
         runtime_profile_override(args.profile.as_ref(), args.runtime_profile.as_ref()),
     )?;
     let profile = config.selected_profile()?;
@@ -4378,8 +4378,8 @@ fn cmd_cache(args: CacheArgs) -> Result<()> {
 }
 
 fn cmd_cache_warm(args: CacheWarmArgs) -> Result<()> {
-    let config = Config::load_or_default(
-        &args.config,
+    let config = Config::load_requested(
+        args.config.as_deref(),
         runtime_profile_override(args.profile.as_ref(), args.runtime_profile.as_ref()),
     )?;
     let profile = config.selected_profile()?;
@@ -25052,7 +25052,7 @@ index 1111111..2222222 100644
                 trusted_head_sha: None,
                 trusted_changed_files: None,
                 trusted_diff_patch: None,
-                config: Path::new(".ub-review.toml").to_path_buf(),
+                config: None,
                 out,
                 profile: None,
                 runtime_profile: None,

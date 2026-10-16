@@ -639,3 +639,195 @@ max_new_unsuppressed = 0
     assert!(out_enforced.join("review/gate_outcome.json").exists());
     Ok(())
 }
+
+// Keep executable lookup and coverage output routing, but inherit no credentials
+// or ub-review configuration in these config-admission controls.
+fn config_admission_command(cwd: &Path) -> std::process::Command {
+    let mut command = isolated_command(env!("CARGO_BIN_EXE_ub-review"), cwd);
+    command.env_clear();
+    for name in ["PATH", "LLVM_PROFILE_FILE"] {
+        if let Some(value) = std::env::var_os(name) {
+            command.env(name, value);
+        }
+    }
+    command
+}
+
+#[test]
+fn explicit_config_paths_fail_before_packet_output() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+    let directory = repo.join("directory.toml");
+    fs::create_dir(&directory)?;
+    let malformed = repo.join("malformed.toml");
+    write_file(&malformed, "[broken")?;
+    let non_text = repo.join("non-text.toml");
+    fs::write(&non_text, [0xff])?;
+    // Include explicitly spelling the default filename: path equality cannot
+    // distinguish required input from optional discovery.
+    for config in [
+        "missing.toml",
+        ".ub-review.toml",
+        "directory.toml",
+        "malformed.toml",
+        "non-text.toml",
+    ] {
+        for from_env in [false, true] {
+            let out = repo.join("packet");
+            let mut command = config_admission_command(&repo);
+            command.args([
+                "run",
+                "--root",
+                ".",
+                "--base",
+                "HEAD~1",
+                "--head",
+                "HEAD",
+                "--dry-run",
+                "--model-mode",
+                "off",
+                "--posting",
+                "artifact-only",
+                "--no-github-summary",
+                "--out",
+                path_str(&out)?,
+            ]);
+            if from_env {
+                command.env("UB_REVIEW_CONFIG", config);
+            } else {
+                command.args(["--config", config]);
+            }
+            let output = command.output()?;
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                !output.status.success(),
+                "{config} env={from_env}: {output:?}"
+            );
+            assert!(stderr.contains(config), "{stderr}");
+            if config != "malformed.toml" {
+                assert!(stderr.contains("read "), "{stderr}");
+                assert!(
+                    stderr.contains("omit --config/UB_REVIEW_CONFIG"),
+                    "{stderr}"
+                );
+            } else {
+                assert!(stderr.contains("parse"), "{stderr}");
+            }
+            assert!(!out.exists(), "rejected config created packet: {config}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn config_discovery_and_explicit_sources_preserve_effective_values() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+    let default_config = repo.join(".ub-review.toml");
+    let custom_config = repo.join("custom.toml");
+    write_file(&custom_config, "[gate]\ntarget_minutes = 47\n")?;
+    for (index, source, expected) in [
+        (0, "absent", 30),
+        (1, "discovered", 43),
+        (2, "flag", 47),
+        (3, "env", 47),
+        (4, "override", 47),
+    ] {
+        if source == "discovered" {
+            write_file(&default_config, "[gate]\ntarget_minutes = 43\n")?;
+        }
+        let out = repo.join(format!("packet-{index}"));
+        let mut command = config_admission_command(&repo);
+        command.args([
+            "run",
+            "--root",
+            ".",
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--dry-run",
+            "--model-mode",
+            "off",
+            "--posting",
+            "artifact-only",
+            "--no-github-summary",
+            "--profile",
+            "gh-runner",
+            "--out",
+            path_str(&out)?,
+        ]);
+        match source {
+            "flag" | "override" => {
+                command.args(["--config", "custom.toml"]);
+            }
+            "env" => {
+                command.env("UB_REVIEW_CONFIG", "custom.toml");
+            }
+            _ => {}
+        }
+        if source == "override" {
+            command.env("UB_REVIEW_CONFIG", "must-not-load.toml");
+        }
+        let output = command.output()?;
+        assert!(output.status.success(), "{source}: {output:?}");
+        let effective: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("effective-config.json"))?)?;
+        assert_eq!(effective["gate"]["target_minutes"], expected, "{source}");
+        assert_eq!(effective["profile"], "gh-runner", "{source}");
+        assert!(out.join("review/gate_outcome.json").is_file());
+    }
+    Ok(())
+}
+
+#[test]
+fn config_reading_subcommands_reject_explicit_missing_paths() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    for args in [
+        vec![
+            "plan",
+            "--config",
+            "missing.toml",
+            "--write",
+            "--out",
+            "packet",
+        ],
+        vec!["doctor", "--config", "missing.toml"],
+        vec![
+            "cache",
+            "warm",
+            "--config",
+            "missing.toml",
+            "--out",
+            "cache",
+        ],
+    ] {
+        let mut command = config_admission_command(temp.path());
+        command.args(&args);
+        let output = command.output()?;
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "{args:?}: {output:?}");
+        assert!(stderr.contains("read missing.toml"), "{args:?}: {stderr}");
+        assert!(
+            stderr.contains("omit --config/UB_REVIEW_CONFIG"),
+            "{stderr}"
+        );
+        assert!(output.stdout.is_empty(), "{args:?}: {output:?}");
+        assert!(!temp.path().join("packet").exists());
+        assert!(!temp.path().join("cache").exists());
+    }
+    // An existing but unreadable optional discovery path must still fail.
+    fs::create_dir(temp.path().join(".ub-review.toml"))?;
+    let output = config_admission_command(temp.path())
+        .args(["plan", "--write", "--out", "packet"])
+        .output()?;
+    assert!(!output.status.success(), "{output:?}");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("read .ub-review.toml"));
+    assert!(!temp.path().join("packet").exists());
+    Ok(())
+}
