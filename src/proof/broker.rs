@@ -187,6 +187,37 @@ pub(crate) fn run_seeded_proof_stream_v0(
     Ok((proof_result, phases))
 }
 
+/// Own the later model-request broker interval at its execution boundary.
+/// The broker result carries proof-command outcomes separately from errors
+/// that prevent the broker itself from completing (#1483).
+pub(crate) fn run_model_request_proof_phase(
+    event_log: &EventLog,
+    run_started: &Instant,
+    tracker: &mut RunLoopTracker,
+    broker: impl FnOnce() -> Result<ProofBrokerResult>,
+) -> Result<ProofBrokerResult> {
+    let active = start_run_loop(
+        event_log,
+        run_started,
+        "proof",
+        "proof",
+        "model-request-broker",
+    )?;
+    let result = broker();
+    finish_run_loop(
+        event_log,
+        run_started,
+        tracker,
+        active,
+        if result.is_ok() {
+            "completed"
+        } else {
+            "failed"
+        },
+    )?;
+    result
+}
+
 /// Normalize a v1 `ProofRequest` to a typed `ProofRequestV2` (Order 4b of
 /// #678). This is the single v1→v2 normalization point for the broker: it
 /// infers the `ProofKind` from the v1 `cost`/`command` via the existing
@@ -2156,6 +2187,193 @@ mod tests {
         );
         let portfolio = fs::read_to_string(out.join("review/proof_portfolio.json"))?;
         assert!(portfolio.contains("seeded"));
+        Ok(())
+    }
+
+    #[test]
+    fn model_request_phase_closes_real_output_failure_before_returning() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("blocked-output");
+        fs::write(&out, b"preserve model-request blocker")?;
+        let diff = test_diff();
+        let mut profile = Profile::default();
+        profile.budgets.proof_max_focused_test_files = 0;
+        profile.budgets.proof_max_focused_tests = 0;
+        profile.budgets.proof_total_timeout_sec = 0;
+        let args = test_run_args(out.clone());
+        let events_path = temp.path().join("events.ndjson");
+        let event_log = EventLog::open(&events_path)?;
+        let started = Instant::now();
+        let mut tracker = RunLoopTracker::new();
+        let mut continued = false;
+        let result = (|| -> Result<()> {
+            run_model_request_proof_phase(&event_log, &started, &mut tracker, || {
+                run_request_proof_broker_v0(
+                    temp.path(),
+                    &out,
+                    &diff,
+                    &profile,
+                    &[proof_request("model-output-error", false)],
+                    &[],
+                    &[],
+                    &args,
+                    &BoxState {
+                        cpus: 4,
+                        free_mem_mb: Some(8192),
+                        free_disk_mb: Some(20000),
+                        load_1m: Some(0.25),
+                        github_actions: false,
+                    },
+                    &started,
+                    None,
+                )
+            })?;
+            continued = true;
+            Ok(())
+        })();
+        let error = result
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("blocked output succeeded"))?;
+        ensure!(error.downcast_ref::<std::io::Error>().is_some());
+        ensure!(!continued);
+        ensure!(fs::read(&out)? == b"preserve model-request blocker");
+        ensure!(!out.join("review/proof_receipts.json").exists());
+        let events = fs::read_to_string(events_path)?;
+        let proof_events = events
+            .lines()
+            .map(serde_json::from_str::<serde_json::Value>)
+            .collect::<std::result::Result<Vec<_>, _>>()?
+            .into_iter()
+            .filter(|event| {
+                event["kind"] == "proof_loop_started" || event["kind"] == "proof_loop_finished"
+            })
+            .collect::<Vec<_>>();
+        ensure!(proof_events.len() == 2);
+        ensure!(proof_events[0]["kind"] == "proof_loop_started");
+        ensure!(proof_events[1]["kind"] == "proof_loop_finished");
+        ensure!(
+            proof_events
+                .iter()
+                .all(|event| event["payload"]["stage"] == "model-request-broker")
+        );
+        ensure!(proof_events[1]["payload"]["status"] == "failed");
+        ensure!(tracker.phases.len() == 1);
+        ensure!(tracker.phases[0].stage == "model-request-broker");
+        ensure!(tracker.phases[0].status == "failed");
+        Ok(())
+    }
+
+    #[test]
+    fn model_request_phase_preserves_original_injected_broker_error() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let log = EventLog::open(&temp.path().join("events.ndjson"))?;
+        let started = Instant::now();
+        let mut tracker = RunLoopTracker::new();
+        let result = run_model_request_proof_phase(&log, &started, &mut tracker, || {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "injected broker infrastructure error",
+            )
+            .into())
+        });
+        let error = result
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("injected broker failure succeeded"))?;
+        let io = error
+            .downcast_ref::<std::io::Error>()
+            .ok_or_else(|| anyhow::anyhow!("lost original I/O error: {error:#}"))?;
+        ensure!(io.kind() == std::io::ErrorKind::BrokenPipe);
+        ensure!(io.to_string() == "injected broker infrastructure error");
+        ensure!(tracker.phases.len() == 1);
+        ensure!(tracker.phases[0].stage == "model-request-broker");
+        ensure!(tracker.phases[0].status == "failed");
+        Ok(())
+    }
+
+    #[test]
+    fn model_request_phase_preserves_command_outcomes_and_unavailable_receipt() -> Result<()> {
+        for success in [Some(true), Some(false), None] {
+            let temp = tempfile::tempdir()?;
+            let out = temp.path().join("out");
+            let diff = test_diff();
+            let mut profile = Profile::default();
+            profile.limits.builds = 1;
+            let args = test_run_args(out.clone());
+            let events_path = temp.path().join("events.ndjson");
+            let log = EventLog::open(&events_path)?;
+            let started = Instant::now();
+            let mut tracker = RunLoopTracker::new();
+            let result = run_model_request_proof_phase(&log, &started, &mut tracker, || {
+                run_focused_build_proof_tasks_with_runner(
+                    temp.path(),
+                    &out,
+                    &diff,
+                    &profile,
+                    &args,
+                    proof_budget_for_test(1, 60),
+                    vec![focused_build_task(
+                        "phase-build",
+                        vec!["model-request".to_owned()],
+                        30,
+                    )],
+                    None,
+                    ProofExecutionPhase::ModelRequest,
+                    |_root, _argv, _env, _timeout, stdout, stderr, _observer| {
+                        fs::write(stdout, b"fixture build output")?;
+                        fs::write(stderr, b"")?;
+                        let Some(success) = success else {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::BrokenPipe,
+                                "injected model broker failure",
+                            )
+                            .into());
+                        };
+                        Ok(CommandStatus {
+                            exit_code: Some(if success { 0 } else { 1 }),
+                            timed_out: false,
+                            success,
+                            reason: "injected command result".to_owned(),
+                            duration_ms: 1,
+                        })
+                    },
+                )
+            });
+            ensure!(tracker.phases.len() == 1);
+            ensure!(tracker.phases[0].stage == "model-request-broker");
+            let result = result?;
+            ensure!(tracker.phases[0].status == "completed");
+            ensure!(
+                result.resource_leases.len() == 1 && result.resource_leases[0].status == "granted"
+            );
+            ensure!(result.proof_receipts.len() == 1);
+            let receipt = &result.proof_receipts[0];
+            ensure!(receipt.id == "phase-build" && receipt.request_ids == vec!["model-request"]);
+            let (expected_result, expected_class) = match success {
+                Some(true) => ("head_passed", RequiredProofClass::Passed),
+                Some(false) => ("head_failed", RequiredProofClass::Failed),
+                None => ("skipped_profile", RequiredProofClass::Skipped),
+            };
+            ensure!(receipt.result == expected_result);
+            ensure!(required_proof_receipt_class(receipt) == expected_class);
+            if success.is_none() {
+                ensure!(
+                    receipt.commands[0]
+                        .reason
+                        .contains("injected model broker failure")
+                );
+            }
+            let events = fs::read_to_string(events_path)?;
+            let finished = events
+                .lines()
+                .map(serde_json::from_str::<serde_json::Value>)
+                .collect::<std::result::Result<Vec<_>, _>>()?
+                .into_iter()
+                .filter(|event| event["kind"] == "proof_loop_finished")
+                .collect::<Vec<_>>();
+            ensure!(finished.len() == 1);
+            ensure!(finished[0]["payload"]["stage"] == "model-request-broker");
+            ensure!(finished[0]["payload"]["status"] == tracker.phases[0].status);
+        }
         Ok(())
     }
 

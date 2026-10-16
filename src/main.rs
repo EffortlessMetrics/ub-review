@@ -5613,39 +5613,28 @@ fn write_review_artifacts(
         &proof_result.proof_receipts,
         &diff.head,
     ) {
-        let request_proof_loop = start_run_loop(
-            event_log,
-            run_started,
-            "proof",
-            "proof",
-            "model-request-broker",
-        )?;
-        let request_proof_result = run_request_proof_broker_v0(
-            root,
-            out,
-            diff,
-            profile,
-            &proof_requests,
-            &proof_result.proof_receipts,
-            &proof_result.resource_leases,
-            args,
-            box_state,
-            run_started,
-            proof_task_ledger,
-        )?;
+        let request_proof_result =
+            run_model_request_proof_phase(event_log, run_started, run_loop_tracker, || {
+                run_request_proof_broker_v0(
+                    root,
+                    out,
+                    diff,
+                    profile,
+                    &proof_requests,
+                    &proof_result.proof_receipts,
+                    &proof_result.resource_leases,
+                    args,
+                    box_state,
+                    run_started,
+                    proof_task_ledger,
+                )
+            })?;
         proof_result
             .proof_receipts
             .extend(request_proof_result.proof_receipts);
         proof_result
             .resource_leases
             .extend(request_proof_result.resource_leases);
-        finish_run_loop(
-            event_log,
-            run_started,
-            run_loop_tracker,
-            request_proof_loop,
-            "completed",
-        )?;
     }
     // Order 9 (#678): the live reporter — the same-model coordinator. Runs
     // after the primary wave + proof broker, reads lane digests, makes one
