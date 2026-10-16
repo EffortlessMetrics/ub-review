@@ -430,25 +430,35 @@ pub fn spawn_fake_openai_provider_with_contents_and_delay(
 pub fn spawn_fake_openai_provider_with_statuses(
     statuses: Vec<u16>,
 ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+    spawn_fake_openai_provider_with_responses(
+        statuses
+            .into_iter()
+            .map(|status| (status, "fake provider status response".to_owned()))
+            .collect(),
+    )
+}
+
+pub fn spawn_fake_openai_provider_with_responses(
+    responses: Vec<(u16, String)>,
+) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     listener.set_nonblocking(true)?;
     let url = format!("http://{}/v1/chat/completions", listener.local_addr()?);
     let handle = thread::spawn(move || -> Result<Vec<String>> {
-        let expected_requests = statuses.len();
+        let expected_requests = responses.len();
         let mut deadline = Instant::now() + Duration::from_secs(120);
         let mut requests = Vec::new();
         while requests.len() < expected_requests {
             match listener.accept() {
                 Ok((stream, _addr)) => {
-                    let status = statuses
+                    let (status, content) = responses
                         .get(requests.len())
-                        .copied()
                         .ok_or_else(|| anyhow::anyhow!("fake provider status missing"))?;
                     requests.push(handle_fake_openai_request_with_status(
                         stream,
-                        "fake provider status response",
+                        content,
                         Duration::ZERO,
-                        status,
+                        *status,
                     )?);
                     deadline = Instant::now() + Duration::from_secs(120);
                 }
