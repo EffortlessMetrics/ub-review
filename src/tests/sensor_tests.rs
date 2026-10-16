@@ -295,6 +295,71 @@ timeout_sec = 0
 }
 
 #[test]
+fn running_summary_does_not_promise_absent_late_sensor_receipts() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let mut late = sensor_plan("tokmd", "tokmd", true);
+    late.phase = SensorPhase::Late;
+    let plan = test_plan(vec![late.clone()]);
+    let expected = concat!(
+        "\n## Available evidence\n\n",
+        "- No sensor evidence completed successfully.\n",
+        "\n## Missing evidence\n\n",
+        "- Late-phase sensor receipts are still absent; scheduling does not establish completed evidence.\n",
+        "\n## Scheduled late evidence\n\n",
+        "- tokmd scheduled in the late evidence phase; receipt absent. Check sensors/tokmd/ for completion; scheduling alone is not evidence.\n",
+    );
+    for gate_written in [false, true] {
+        if gate_written {
+            fs::create_dir_all(temp.path().join("review"))?;
+            fs::write(temp.path().join("review/gate_outcome.json"), "{}")?;
+        }
+        let mut text = String::new();
+        render_evidence_sections(&mut text, temp.path(), &plan);
+        assert_eq!(text, expected, "gate artifact present: {gate_written}");
+    }
+
+    for (status, expected) in [
+        (
+            "ok",
+            concat!(
+                "\n## Available evidence\n\n",
+                "- tokmd ran; deterministic repository/diff packet available.\n",
+                "\n## Missing evidence\n\n",
+                "- No planned sensor evidence is currently missing.\n",
+            ),
+        ),
+        (
+            "failed",
+            concat!(
+                "\n## Available evidence\n\n",
+                "- No sensor evidence completed successfully.\n",
+                "\n## Missing evidence\n\n",
+                "- No planned sensor evidence is currently missing.\n",
+                "\n## Failed evidence\n\n",
+                "- tokmd failed; reason: test failure.\n",
+            ),
+        ),
+    ] {
+        write_sensor_status(
+            temp.path(),
+            &late,
+            SensorStatusWrite {
+                status,
+                argv: &[],
+                duration_ms: 0,
+                reason: "test failure",
+                exit_code: None,
+                timed_out: false,
+            },
+        )?;
+        let mut text = String::new();
+        render_evidence_sections(&mut text, temp.path(), &plan);
+        assert_eq!(text, expected);
+    }
+    Ok(())
+}
+
+#[test]
 fn running_summary_reports_planned_skipped_sensor_evidence() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let out = temp.path().join("out");
