@@ -282,7 +282,7 @@ outputs:
     description: 'What the investigation established (#839): clean, findings, limited, or not_proven. Insufficient evidence never reports clean.'
     value: ${{ steps.results.outputs.analysis-result }}
   publication-result:
-    description: 'Whether reviewer-facing value reached the PR surface (#839): posted, not_needed, failed, or not_proven. `posted` means a grouped review payload was prepared for submission; the separate post step fails the job if submission fails.'
+    description: 'Whether reviewer-facing value reached the PR surface: posted, not_needed, failed, or not_proven. Prepared output is not_proven; posted requires a current-revision GitHub confirmation from the separate post transaction. Tolerated posting failure remains failed.'
     value: ${{ steps.results.outputs.publication-result }}
   gate-result:
     description: 'The truthful check verdict (#839): pass, finding, or not_proven. May be not_proven while gate-conclusion is pass — enforcement still follows gate-conclusion, so an advisory workflow stays non-blocking while the reported result stops claiming a review happened.'
