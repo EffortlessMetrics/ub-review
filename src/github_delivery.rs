@@ -476,13 +476,15 @@ fn load_claim_graph(args: &PostArgs, required: bool) -> Result<Option<serde_json
         .parent()
         .unwrap_or_else(|| Path::new("."))
         .join("claim_graph.json");
-    let bytes = match fs::read(&graph_path) {
-        Ok(bytes) => bytes,
-        Err(error) if !required && error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => {
-            return Err(error).with_context(|| format!("read {}", graph_path.display()));
+    if !required {
+        match fs::symlink_metadata(&graph_path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            metadata => {
+                metadata.with_context(|| format!("inspect {}", graph_path.display()))?;
+            }
         }
-    };
+    }
+    let bytes = fs::read(&graph_path).with_context(|| format!("read {}", graph_path.display()))?;
     serde_json::from_slice(&bytes)
         .with_context(|| format!("parse {}", graph_path.display()))
         .map(Some)
@@ -1585,6 +1587,14 @@ mod tests {
             ),
             ("malformed graph", Some(b"{".to_vec()), Some("parse")),
             ("unreadable graph", None, Some("read")),
+            #[cfg(unix)]
+            ("dangling graph", None, Some("read")),
+            #[cfg(unix)]
+            (
+                "linked current graph",
+                Some(serde_json::to_vec(&bound_graph(HEAD))?),
+                None,
+            ),
         ] {
             let temp = tempfile::tempdir()?;
             let args = delivery_args(temp.path(), "http://scripted");
@@ -1599,6 +1609,14 @@ mod tests {
                 fs::write(&graph_path, graph)?;
             } else if case == "unreadable graph" {
                 fs::create_dir(&graph_path)?;
+            }
+            #[cfg(unix)]
+            if case == "dangling graph" {
+                std::os::unix::fs::symlink(temp.path().join("missing-graph.json"), &graph_path)?;
+            } else if case == "linked current graph" {
+                let target = temp.path().join("linked-graph.json");
+                fs::rename(&graph_path, &target)?;
+                std::os::unix::fs::symlink(target, &graph_path)?;
             }
             let payload = github_review_post_payload(&review)?;
             let mut transport = CountingTransport {
