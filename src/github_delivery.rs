@@ -1563,6 +1563,29 @@ mod tests {
             ensure!(unreadable.to_string() == format!("read {}", graph_path.display()));
             ensure!(unreadable.downcast_ref::<std::io::Error>().is_some());
         }
+        #[cfg(unix)]
+        {
+            let blocked_parent = temp.path().join("not-a-directory");
+            fs::write(&blocked_parent, b"regular file")?;
+            let mut blocked_args = delivery_args(temp.path(), "http://scripted");
+            blocked_args.review_json = blocked_parent.join("review.json");
+            let blocked_graph = blocked_parent.join("claim_graph.json");
+            for (required, operation) in [(false, "inspect"), (true, "read")] {
+                let error = load_claim_graph(&blocked_args, required)
+                    .err()
+                    .ok_or_else(|| anyhow::anyhow!("non-directory graph parent was accepted"))?;
+                ensure!(
+                    error.to_string() == format!("{operation} {}", blocked_graph.display()),
+                    "wrong graph lookup error for required={required}: {error:#}"
+                );
+                ensure!(
+                    error
+                        .downcast_ref::<std::io::Error>()
+                        .map(std::io::Error::kind)
+                        == Some(std::io::ErrorKind::NotADirectory)
+                );
+            }
+        }
         Ok(())
     }
 
