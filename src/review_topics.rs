@@ -105,7 +105,10 @@ pub(crate) fn build_active_claim_graph(
             status: "confirmed".to_owned(),
             severity: comment.severity.clone(),
             evidence: vec![EvidenceRef {
-                class: EvidenceClass::ValidatedFact,
+                // Inline admission validates shape and placement, not the
+                // causal mechanism asserted by the model. Repeating a prior
+                // bot finding must not promote interpretation into fact.
+                class: EvidenceClass::ModelInterpretation,
                 reference: format!("inline:{}:{}", comment.path, comment.line),
                 detail: comment.evidence.clone(),
             }],
@@ -192,6 +195,13 @@ pub(crate) fn build_active_claim_graph(
             });
             if receipt_matches {
                 push_unique(&mut topic.proof_receipts, receipt.id.clone());
+                // Keep audit linkage for every receipt, but unavailable or
+                // unknown results cannot refute a competing model finding.
+                // This admits the existing integrated decisive vocabulary;
+                // worker aliases need their own causal admission contract.
+                if !proof_receipt_is_test_proof_result(receipt) {
+                    continue;
+                }
                 topic.evidence.push(EvidenceRef {
                     class: EvidenceClass::ProofReceipt,
                     reference: format!("review/proof_receipts.json#{}", receipt.id),
@@ -675,7 +685,11 @@ fn thread_disposition(topic: &ReviewTopic, matching_threads: &[&ReviewThreadReco
     }) {
         return "accepted_tradeoff".to_owned();
     }
-    if !topic.proof_receipts.is_empty() {
+    if topic
+        .evidence
+        .iter()
+        .any(|evidence| evidence.class == EvidenceClass::ProofReceipt)
+    {
         "corroborated_with_new_evidence".to_owned()
     } else {
         "already_covered".to_owned()
@@ -879,6 +893,155 @@ mod tests {
     }
 
     #[test]
+    fn repeated_bot_finding_keeps_model_provenance_after_inline_validation() -> Result<()> {
+        let head = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        let line_map = std::collections::BTreeSet::from([("src/parser.rs".to_owned(), 12)]);
+        let mut comments = Vec::new();
+        for lane_id in ["tests", "opposition"] {
+            let lane = model_lane(lane_id, "Review", &[], "Inspect parser");
+            let candidate = ModelCandidateComment {
+                severity: "high".to_owned(),
+                confidence: "high".to_owned(),
+                path: "src/parser.rs".to_owned(),
+                line: 12,
+                body: "Parser subscript finding".to_owned(),
+                evidence: "Repeats factory-droid[bot] current-thread: subscript finding".to_owned(),
+                suggestion: None,
+            };
+            comments.push(
+                validate_inline_candidate(&lane, candidate, &line_map)
+                    .map_err(|finding| anyhow::anyhow!("fixture rejected: {}", finding.reason))?,
+            );
+        }
+        for count in [1, 2] {
+            let graph = build_active_claim_graph(
+                head,
+                &[],
+                &comments[..count],
+                &[],
+                &[],
+                &[],
+                &context(head),
+            );
+            for topic in &graph.topics {
+                ensure!(topic.existing_threads == ["current-thread"]);
+                ensure!(topic.thread_disposition == "already_covered");
+                ensure!(
+                    topic
+                        .evidence
+                        .iter()
+                        .all(|evidence| evidence.class == EvidenceClass::ModelInterpretation)
+                );
+                ensure!(topic.evidence.iter().any(|evidence| {
+                    evidence
+                        .detail
+                        .contains("factory-droid[bot] current-thread")
+                }));
+            }
+            ensure!(reconcile_inline_comments(&graph, &comments[..count]).is_empty());
+            let repeated = &graph.claims[0];
+            let mut contrary = repeated.clone();
+            contrary.id = "contrary-model-claim".to_owned();
+            contrary.source_lane = "source-route".to_owned();
+            contrary.supporting_evidence = vec![EvidenceRef {
+                class: EvidenceClass::ModelInterpretation,
+                reference: "observation:contrary".to_owned(),
+                detail: "Source interpretation disagrees with the repeated report".to_owned(),
+            }];
+            let adjudication = adjudicate_conflict(repeated, &contrary);
+            ensure!(adjudication.resolution == ConflictResolution::Unresolved);
+            ensure!(adjudication.winner.is_none());
+        }
+        let graph =
+            build_active_claim_graph(head, &[], &comments[..1], &[], &[], &[], &context(head));
+        let receipt = ProofReceipt {
+            revision: None,
+            schema: "proof".to_owned(),
+            id: "independent-proof".to_owned(),
+            kind: "focused-test".to_owned(),
+            base: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+            head: head.to_owned(),
+            test_patch_mode: "base-plus-tests".to_owned(),
+            requested_by: vec!["tests".to_owned()],
+            request_ids: vec![graph.topics[0].claim_id.clone()],
+            commands: Vec::new(),
+            result: "discriminating".to_owned(),
+            reason: "Separate current-head proof supports the parser mechanism".to_owned(),
+        };
+        let proven = build_active_claim_graph(
+            head,
+            &[],
+            &comments[..1],
+            &[],
+            &[],
+            &[receipt],
+            &context(head),
+        );
+        ensure!(proven.topics[0].thread_disposition == "corroborated_with_new_evidence");
+        ensure!(
+            proven.claims[0].supporting_evidence[0].class == EvidenceClass::ModelInterpretation
+        );
+        ensure!(proven.claims[0].supporting_evidence[1].class == EvidenceClass::ProofReceipt);
+        for result in [
+            "timed_out",
+            "skipped_budget",
+            "skipped_profile",
+            "skipped_unresolved",
+            "skipped_nightly",
+            "base_patch_failed",
+            "non_discriminating",
+            "unknown-result",
+            "failed",
+            "sanitizer_ub_detected",
+        ] {
+            let mut unavailable = crate::tests::test_proof_receipt(result, "failed");
+            unavailable.head = head.to_owned();
+            unavailable.request_ids = vec![graph.topics[0].claim_id.clone()];
+            let unproven = build_active_claim_graph(
+                head,
+                &[],
+                &comments[..1],
+                &[],
+                &[],
+                std::slice::from_ref(&unavailable),
+                &context(head),
+            );
+            assert_eq!(unproven.topics[0].proof_receipts, vec![unavailable.id]);
+            assert_eq!(
+                unproven.topics[0].thread_disposition, "already_covered",
+                "{result}"
+            );
+            assert_eq!(unproven.topics[0].planned_action, "none", "{result}");
+            assert_eq!(unproven.claims[0].supporting_evidence.len(), 1, "{result}");
+            assert_eq!(
+                unproven.claims[0].supporting_evidence[0].class,
+                EvidenceClass::ModelInterpretation
+            );
+        }
+        let serialized = serde_json::to_value(&proven)?;
+        ensure!(
+            serialized["claims"][0]["supporting_evidence"][0]["class"] == "ModelInterpretation"
+        );
+        // With no imported thread, an admissible model report still has the
+        // same provenance. Placement validation cannot verify its mechanism.
+        let graph = build_active_claim_graph(
+            head,
+            &[],
+            &comments[..1],
+            &[],
+            &[],
+            &[],
+            &PrThreadContext {
+                threads: Vec::new(),
+                ..context(head)
+            },
+        );
+        ensure!(graph.topics[0].thread_disposition == "novel");
+        ensure!(graph.claims[0].supporting_evidence[0].class == EvidenceClass::ModelInterpretation);
+        Ok(())
+    }
+
+    #[test]
     fn unrelated_same_lane_receipt_does_not_attach_or_suppress() -> Result<()> {
         let head = "1212121212121212121212121212121212121212";
         let observation = Observation {
@@ -1024,6 +1187,124 @@ mod tests {
         assert_eq!(graph.topics[0].planned_action, "none");
         assert_eq!(graph.topics[0].planned_thread_id, None);
         ensure!(graph.claims[0].state == ClaimState::Confirmed);
+        Ok(())
+    }
+
+    #[test]
+    fn review_probe_unavailable_receipt_cannot_refute_model_finding() -> Result<()> {
+        let head = "dddddddddddddddddddddddddddddddddddddddd";
+        let candidate = ReviewInlineComment {
+            lane: "lane-a".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/buffer.rs".to_owned(),
+            line: 10,
+            side: "RIGHT".to_owned(),
+            body: "Buffer resize preserves active view length".to_owned(),
+            evidence: "validated active view length on the changed line".to_owned(),
+            suggestion: None,
+        };
+        let refutation = Observation {
+            schema: "observation".to_owned(),
+            id: "refutation-1".to_owned(),
+            lane: "lane-b".to_owned(),
+            question: "does the resize preserve the view?".to_owned(),
+            claim: "Buffer resize loses active view length".to_owned(),
+            kind: "resolved-check".to_owned(),
+            status: "refuted".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium".to_owned(),
+            path: Some("src/buffer.rs".to_owned()),
+            line: Some(10),
+            fingerprint: "refutation-fingerprint".to_owned(),
+            evidence: vec!["focused proof refutes active view length".to_owned()],
+            dedupe_key: "buffer-resize-view-length".to_owned(),
+            source: "tests".to_owned(),
+        };
+        let receipt = ProofReceipt {
+            revision: None,
+            schema: "proof".to_owned(),
+            id: "proof-refutation-1".to_owned(),
+            kind: "focused-test".to_owned(),
+            base: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".to_owned(),
+            head: head.to_owned(),
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: vec!["lane-b".to_owned()],
+            request_ids: vec![refutation.id.clone()],
+            commands: Vec::new(),
+            result: "timed_out".to_owned(),
+            reason: "focused proof refutes the preservation claim".to_owned(),
+        };
+
+        let no_receipt = build_active_claim_graph(
+            head,
+            std::slice::from_ref(&refutation),
+            std::slice::from_ref(&candidate),
+            &[],
+            &[],
+            &[],
+            &context(head),
+        );
+        ensure!(no_receipt.conflicts[0].resolution == ConflictResolution::Unresolved);
+        ensure!(
+            reconcile_inline_comments(&no_receipt, std::slice::from_ref(&candidate)).len() == 1
+        );
+        for control in ["unlinked", "stale-head"] {
+            let mut control_receipt = receipt.clone();
+            if control == "unlinked" {
+                control_receipt.request_ids.clear();
+            } else {
+                control_receipt.head = "f".repeat(40);
+            }
+            let graph = build_active_claim_graph(
+                head,
+                std::slice::from_ref(&refutation),
+                std::slice::from_ref(&candidate),
+                &[],
+                &[],
+                &[control_receipt],
+                &context(head),
+            );
+            ensure!(graph.conflicts[0].resolution == ConflictResolution::Unresolved);
+            ensure!(reconcile_inline_comments(&graph, std::slice::from_ref(&candidate)).len() == 1);
+        }
+        eprintln!("controls no-receipt/unlinked/stale-head: unresolved; inline retained");
+        let mut incorrect = Vec::new();
+        for result in [
+            "timed_out",
+            "skipped_budget",
+            "skipped_profile",
+            "skipped_unresolved",
+            "base_patch_failed",
+            "non_discriminating",
+        ] {
+            let mut receipt = receipt.clone();
+            receipt.result = result.to_owned();
+            let graph = build_active_claim_graph(
+                head,
+                std::slice::from_ref(&refutation),
+                std::slice::from_ref(&candidate),
+                &[],
+                &[],
+                std::slice::from_ref(&receipt),
+                &context(head),
+            );
+            let remaining = reconcile_inline_comments(&graph, std::slice::from_ref(&candidate));
+            eprintln!(
+                "result={result}; resolution={:?}; remaining_inline={}",
+                graph.conflicts[0].resolution,
+                remaining.len()
+            );
+            if graph.conflicts[0].resolution != ConflictResolution::Unresolved
+                || remaining.len() != 1
+            {
+                incorrect.push(result);
+            }
+        }
+        ensure!(
+            incorrect.is_empty(),
+            "Unavailable receipts resolved conflict/suppressed finding: {incorrect:?}"
+        );
         Ok(())
     }
 

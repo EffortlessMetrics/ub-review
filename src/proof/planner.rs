@@ -869,6 +869,68 @@ mod tests {
     use crate::*;
 
     #[test]
+    fn configured_proof_selection_preserves_gate_authority() {
+        let mandatory = RequiredProofPolicy {
+            id: "mandatory-check".to_owned(),
+            languages: vec!["rust".to_owned()],
+            diff_classes: vec!["source-ub".to_owned()],
+            command: "cargo check --workspace --locked".to_owned(),
+            reason: "Repository-required Rust proof".to_owned(),
+            cost: Some("focused-build".to_owned()),
+            timeout_sec: 300,
+            required: true,
+            enabled: true,
+        };
+        let mut optional = mandatory.clone();
+        optional.id = "recommended-check".to_owned();
+        optional.required = false;
+        let mut disabled = mandatory.clone();
+        disabled.enabled = false;
+        let mut other_language = mandatory.clone();
+        other_language.languages = vec!["yaml".to_owned()];
+        let mut other_class = mandatory.clone();
+        other_class.diff_classes = vec!["workflow/tooling".to_owned()];
+        let mut config = Config::default();
+        config.proof.required = vec![mandatory, optional, disabled, other_language, other_class];
+        let diff = test_diff();
+        let mut args = crate::tests::test_run_args(std::path::PathBuf::from("out"));
+
+        for mode in [
+            RunMode::ReviewByok,
+            RunMode::AgentInvestigate,
+            RunMode::AgentPatch,
+        ] {
+            args.mode = mode;
+            assert!(super::configured_required_proof_requests(&config, &diff, &args, 7).is_empty());
+        }
+
+        args.mode = RunMode::IntelligentCi;
+        let requests = super::configured_required_proof_requests(&config, &diff, &args, 7);
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0].lane, REQUIRED_PROOF_POLICY_LANE);
+        assert_eq!(requests[1].lane, REQUIRED_PROOF_POLICY_LANE);
+        assert!(
+            requests[0]
+                .requested_by
+                .iter()
+                .any(|id| id == "proof-policy:mandatory-check")
+        );
+        assert!(
+            requests[1]
+                .requested_by
+                .iter()
+                .any(|id| id == "proof-policy:recommended-check")
+        );
+        assert!(proof_request_is_gate_required(&requests[0]));
+        assert!(!proof_request_is_gate_required(&requests[1]));
+
+        // A model lane cannot acquire policy authority by setting required.
+        let mut model_request = requests[0].clone();
+        model_request.lane = "tests-oracle".to_owned();
+        assert!(!proof_request_is_gate_required(&model_request));
+    }
+
+    #[test]
     fn proof_intent_preserves_answer_shape_and_stable_claim_identity() -> Result<()> {
         let request = ProofRequest {
             schema: "ub-review.proof_request.v1".to_owned(),

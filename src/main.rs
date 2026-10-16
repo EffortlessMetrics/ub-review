@@ -16010,7 +16010,7 @@ required_proof_unprooven = true
         let summary = render_summary(&out, &plan, &diff)?;
         assert!(
             summary
-                .contains("- Gate: `pass` with `0` blocking reasons (`review/gate_outcome.json`)")
+                .contains("- Gate enforcement conclusion: `pass` with `0` blocking reasons (`review/gate_outcome.json`)")
         );
         Ok(())
     }
@@ -18403,6 +18403,284 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn artifact_review_preserves_missing_or_failed_proof_receipts() {
+        let render = |receipts: &[ProofReceipt]| {
+            render_review_body(
+                "shared-context",
+                &test_plan(Vec::new()),
+                &test_diff(),
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                receipts,
+                60_000,
+                ReviewBodyAudience::Artifact,
+            )
+        };
+        assert!(render(&[]).contains("## Missing or failed evidence\n\n- None recorded."));
+        let passing = test_proof_receipt("head_passed", "passed");
+        assert!(render(&[passing]).contains("## Missing or failed evidence\n\n- None recorded."));
+        for result in [
+            "head_failed",
+            "timed_out",
+            "skipped_budget",
+            "non_discriminating",
+        ] {
+            for stamped in [false, true] {
+                let mut receipt = test_proof_receipt(result, "failed");
+                receipt.id = "proof-artifact-gap".to_owned();
+                receipt.commands[0].exit_code = Some(1);
+                if result == "timed_out" {
+                    receipt.commands[0].status = "timed_out".to_owned();
+                    receipt.commands[0].exit_code = None;
+                }
+                if stamped {
+                    receipt.revision = Some(super::RevisionRef {
+                        digest: "a".repeat(64),
+                        semantics: "merge_result".to_owned(),
+                        reviewed_commit: "b".repeat(40),
+                    });
+                }
+                let public_body = render_review_body(
+                    "shared-context",
+                    &test_plan(Vec::new()),
+                    &test_diff(),
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    std::slice::from_ref(&receipt),
+                    60_000,
+                    ReviewBodyAudience::PullRequest,
+                );
+                if result == "head_failed" {
+                    assert!(
+                        public_body
+                            .contains("Needs focused proof failure resolved before upstream.")
+                    );
+                    assert!(public_body.contains("Focused HEAD proof failed (exit 1)"));
+                    assert!(!public_body.contains(&receipt.id));
+                    assert!(!public_body.contains("revision"));
+                } else {
+                    // An optional, unlinked unavailable proof stays artifact-only.
+                    assert!(public_body.is_empty());
+                }
+                let body = render(std::slice::from_ref(&receipt));
+                assert!(
+                    !body.contains("## Missing or failed evidence\n\n- None recorded."),
+                    "{result}: {body}"
+                );
+                assert!(body.contains("review/proof_receipts.json#proof-artifact-gap"));
+                assert!(body.contains(&format!("`{result}`")));
+                if let Some(revision) = &receipt.revision {
+                    assert!(body.contains(&revision.digest));
+                    assert!(body.contains(&revision.reviewed_commit));
+                    assert!(body.contains(&revision.semantics));
+                } else {
+                    assert!(body.contains("revision unrecorded"));
+                    assert!(body.contains("legacy base `origin/main`, head `HEAD`"));
+                }
+                assert_eq!(
+                    body.matches("review/proof_receipts.json#proof-artifact-gap")
+                        .count(),
+                    1
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn artifact_decision_accounts_for_proof_only_failure_and_missing_evidence() {
+        for result in [
+            "head_failed",
+            "timed_out",
+            "base_patch_failed",
+            "skipped_unresolved",
+            "skipped_budget",
+            "skipped_profile",
+            "non_discriminating",
+        ] {
+            let receipt = test_proof_receipt(result, "failed");
+            let body = render_review_body(
+                "context",
+                &test_plan(Vec::new()),
+                &test_diff(),
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[receipt],
+                60_000,
+                ReviewBodyAudience::Artifact,
+            );
+            let decision = body
+                .split("## Decision\n\n")
+                .nth(1)
+                .and_then(|section| section.lines().next())
+                .unwrap_or("");
+            assert!(
+                decision.contains(if result == "head_failed" {
+                    "Needs focused proof failure resolved before upstream."
+                } else {
+                    "evidence is incomplete"
+                }),
+                "{result}: {decision}"
+            );
+        }
+    }
+
+    #[test]
+    fn artifact_public_failure_matrix_preserves_json_truth_and_model_provenance() -> Result<()> {
+        let plan = test_plan(Vec::new());
+        let diff = test_diff();
+        let observations = vec![test_observation(
+            "tests-oracle",
+            "Changed parser route remains unevaluated.",
+            "missing-evidence",
+            "open",
+            "medium",
+            "high",
+            "matrix-linked-gap",
+        )];
+        let outcomes = [
+            "head_failed",
+            "timed_out",
+            "non_discriminating",
+            "base_patch_failed",
+            "skipped_budget",
+            "skipped_profile",
+            "skipped_unresolved",
+        ];
+        for result in outcomes {
+            for linked in [false, true] {
+                for stamped in [false, true] {
+                    let mut failed = test_proof_receipt("head_failed", "failed");
+                    failed.id = "matrix-failed-proof".to_owned();
+                    failed.commands[0].exit_code = Some(101);
+                    let mut gap = test_proof_receipt(result, result);
+                    gap.id = "matrix-gap-proof".to_owned();
+                    if result == "head_failed" {
+                        gap.commands[0].status = "failed".to_owned();
+                        gap.commands[0].exit_code = Some(101);
+                    } else {
+                        gap.commands.clear();
+                    }
+                    if linked {
+                        gap.request_ids = vec!["matrix-linked-gap".to_owned()];
+                    }
+                    if stamped {
+                        gap.revision = Some(super::RevisionRef {
+                            digest: "a".repeat(64),
+                            semantics: "merge_result".to_owned(),
+                            reviewed_commit: "b".repeat(40),
+                        });
+                    }
+                    // Round-trip the actual receipt schema before rendering either audience.
+                    let json = serde_json::to_value([failed, gap])?;
+                    let receipts: Vec<ProofReceipt> = serde_json::from_value(json.clone())?;
+                    assert_eq!(json[1]["result"], result);
+                    let render = |audience| {
+                        render_review_body(
+                            "matrix-private-context",
+                            &plan,
+                            &diff,
+                            &[],
+                            &[],
+                            &[],
+                            &[],
+                            &[],
+                            if linked { &observations } else { &[] },
+                            &receipts,
+                            60_000,
+                            audience,
+                        )
+                    };
+                    let artifact = render(ReviewBodyAudience::Artifact);
+                    let public = render(ReviewBodyAudience::PullRequest);
+                    assert!(
+                        !artifact.contains("## Missing or failed evidence\n\n- None recorded.")
+                    );
+                    for receipt in &receipts {
+                        assert_eq!(
+                            artifact
+                                .matches(&format!("review/proof_receipts.json#{}", receipt.id))
+                                .count(),
+                            1
+                        );
+                        assert!(!public.contains(&receipt.id));
+                    }
+                    assert!(artifact.contains(&format!("Recorded proof result `{result}`")));
+                    assert!(artifact.contains(if stamped {
+                        "merge_result"
+                    } else {
+                        "revision unrecorded"
+                    }));
+                    assert!(
+                        public.contains("Needs focused proof failure resolved before upstream.")
+                    );
+                    assert!(public.contains("Focused HEAD proof failed (exit 101)"));
+                    assert!(artifact.contains(
+                        "## Decision\n\n- Needs focused proof failure resolved before upstream."
+                    ));
+                    assert_eq!(public.contains("## Evidence gaps"), linked);
+                    for private in [
+                        "matrix-private-context",
+                        "review/proof_receipts.json",
+                        "merge_result",
+                        "revision",
+                        "tests-oracle",
+                    ] {
+                        assert!(!public.contains(private), "{result}: {public}");
+                    }
+                    // A failed/unavailable proof is separate evidence; it cannot upgrade
+                    // the model's source interpretation into a deterministic fact.
+                    let graph = super::build_active_claim_graph(
+                        "HEAD",
+                        &observations,
+                        &[],
+                        &[],
+                        &[],
+                        &receipts,
+                        &test_pr_thread_context(),
+                    );
+                    let graph_json = serde_json::to_value(graph)?;
+                    let evidence = graph_json["claims"][0]["supporting_evidence"]
+                        .as_array()
+                        .context("model claim evidence")?;
+                    assert_eq!(evidence[0]["class"], "ModelInterpretation");
+                    assert_eq!(
+                        evidence.len(),
+                        if linked && result == "head_failed" {
+                            2
+                        } else {
+                            1
+                        }
+                    );
+                    if linked && result == "head_failed" {
+                        assert_eq!(evidence[1]["class"], "ProofReceipt");
+                    }
+                    assert_eq!(
+                        graph_json["topics"][0]["proof_receipts"],
+                        if linked {
+                            serde_json::json!(["matrix-gap-proof"])
+                        } else {
+                            serde_json::json!([])
+                        }
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn pr_review_body_keeps_red_green_question_after_head_only_proof_receipt() {
         let receipt = test_proof_receipt("head_passed", "passed");
         let observations = vec![test_observation(
@@ -18893,7 +19171,7 @@ index 1111111..2222222 100644
             "running summary must carry the gate-failure status"
         );
         assert!(
-            summary.contains("Gate:")
+            summary.contains("Gate enforcement conclusion:")
                 && (summary.contains("inconclusive") || summary.contains("fail")),
             "running summary must carry the gate status"
         );
