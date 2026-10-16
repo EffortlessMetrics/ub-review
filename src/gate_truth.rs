@@ -39,7 +39,7 @@ pub(crate) struct GateSensorCoverage {
     pub(crate) required_completed: usize,
     pub(crate) optional_total: usize,
     pub(crate) optional_completed: usize,
-    /// Sensors that ran and demonstrated a failure (`failed`).
+    /// Failed process receipts, including failures that produced no verdict.
     pub(crate) failed: usize,
     /// Sensors whose lease expired (`timed_out`).
     pub(crate) timed_out: usize,
@@ -176,7 +176,7 @@ pub(crate) fn required_failed_sensor_count(plan: &Plan, issues: &[SensorEvidence
     issues
         .iter()
         .filter(|issue| {
-            issue.status == "failed"
+            crate::gate::sensor_issue_is_demonstrated_finding(issue)
                 && plan
                     .sensors
                     .iter()
@@ -195,7 +195,7 @@ pub(crate) fn required_unreported_sensor_count(
     issues
         .iter()
         .filter(|issue| {
-            issue.status != "failed"
+            !crate::gate::sensor_issue_is_demonstrated_finding(issue)
                 && plan
                     .sensors
                     .iter()
@@ -436,6 +436,9 @@ mod tests {
             sensor: sensor.to_owned(),
             status: status.to_owned(),
             reason: format!("{sensor} {status}"),
+            // These existing failure controls model a completed native check.
+            exit_code: (status == "failed").then_some(1),
+            timed_out: false,
         }
     }
 
