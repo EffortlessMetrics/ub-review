@@ -312,9 +312,19 @@ pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
         ));
         render_planner_required_proofs(text, &gate);
     }
-    text.push_str(&format!(
-        "- Model lanes: `{usable_lanes}/{total_lanes}` usable (`{ok_lanes}` ok, `{degraded_lanes}` degraded)\n"
-    ));
+    if metrics
+        .get("model_mode")
+        .and_then(serde_json::Value::as_str)
+        == Some("off")
+    {
+        text.push_str(&format!(
+            "- Model review: `off` (not performed); `{total_lanes}` configured lanes retained as skipped diagnostics\n"
+        ));
+    } else {
+        text.push_str(&format!(
+            "- Model lanes: `{usable_lanes}/{total_lanes}` usable (`{ok_lanes}` ok, `{degraded_lanes}` degraded)\n"
+        ));
+    }
     text.push_str(&format!(
         "- Inline comments: `{inline_comments}/{max_inline_comments}`\n"
     ));
