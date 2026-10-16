@@ -132,9 +132,7 @@ fn execute_pending_review_delivery_with_transport(
     let api = args.github_api_url.trim_end_matches('/');
     let review_url = format!("{api}/repos/{repo}/pulls/{pull_number}/reviews");
 
-    let claim_graph = (!review.comments.is_empty())
-        .then(|| load_claim_graph(args))
-        .transpose()?;
+    let claim_graph = load_claim_graph(args, !review.comments.is_empty())?;
     let expected_head = read_expected_delivery_head(review, claim_graph.as_ref())?;
     let current_head = fetch_pull_head(transport, api, repo, pull_number, token)?;
     let expected_head = expected_head.unwrap_or(current_head.clone());
@@ -424,23 +422,31 @@ fn execute_pending_review_delivery_with_transport(
     }
 }
 
-fn load_claim_graph(args: &PostArgs) -> Result<serde_json::Value> {
+fn load_claim_graph(args: &PostArgs, required: bool) -> Result<Option<serde_json::Value>> {
     let graph_path = args
         .review_json
         .parent()
         .unwrap_or_else(|| Path::new("."))
         .join("claim_graph.json");
-    serde_json::from_slice(
-        &fs::read(&graph_path).with_context(|| format!("read {}", graph_path.display()))?,
-    )
-    .with_context(|| format!("parse {}", graph_path.display()))
+    if !required {
+        match fs::symlink_metadata(&graph_path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            metadata => {
+                metadata.with_context(|| format!("inspect {}", graph_path.display()))?;
+            }
+        }
+    }
+    let bytes = fs::read(&graph_path).with_context(|| format!("read {}", graph_path.display()))?;
+    serde_json::from_slice(&bytes)
+        .with_context(|| format!("parse {}", graph_path.display()))
+        .map(Some)
 }
 
 fn read_expected_delivery_head(
     review: &GitHubReview,
     claim_graph: Option<&serde_json::Value>,
 ) -> Result<Option<String>> {
-    if !review.comments.is_empty() {
+    if !review.comments.is_empty() || claim_graph.is_some() {
         let graph = claim_graph.ok_or_else(|| anyhow::anyhow!("claim graph is required"))?;
         // A1.3 (#950): the immutable revision reference is authoritative.
         // Its reviewed_commit is the exact git object the run admitted, so
@@ -465,8 +471,8 @@ fn read_expected_delivery_head(
             .ok_or_else(|| anyhow::anyhow!("claim graph has no exact head SHA"))?;
         return Ok(Some(head.to_owned()));
     }
-    // Empty reviews have no compiler claim graph to bind. The pre-create GET
-    // is still the exact subject binding for the transaction.
+    // Graphless manual/legacy body-only reviews retain their live-head binding.
+    // A present prepared graph binds summary-only and inline reviews alike.
     Ok(None)
 }
 
@@ -1439,6 +1445,263 @@ mod tests {
             },
             http_status: Some(if success { 200 } else { 500 }),
         })
+    }
+
+    #[test]
+    fn load_claim_graph_preserves_value_and_errors() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let args = delivery_args(temp.path(), "http://scripted");
+        let graph_path = temp.path().join("claim_graph.json");
+        ensure!(load_claim_graph(&args, false)?.is_none());
+        let missing = load_claim_graph(&args, true)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("required absent graph was accepted"))?;
+        ensure!(missing.to_string() == format!("read {}", graph_path.display()));
+        ensure!(
+            missing
+                .downcast_ref::<std::io::Error>()
+                .map(std::io::Error::kind)
+                == Some(std::io::ErrorKind::NotFound)
+        );
+
+        let expected = serde_json::json!({
+            "schema": "ub-review.claim_graph.v1",
+            "head_sha": "HEAD",
+            "revision": {"reviewed_commit": HEAD, "digest": "e".repeat(64), "semantics": "candidate_head"},
+            "topics": [{"claim_id": "keep-complete-topic", "path": "src/lib.rs", "anchor": 12}],
+            "metadata": {"preserve": [1, "two", null]}
+        });
+        fs::write(&graph_path, serde_json::to_vec(&expected)?)?;
+        for required in [false, true] {
+            ensure!(
+                load_claim_graph(&args, required)? == Some(expected.clone()),
+                "loader changed the full graph for required={required}"
+            );
+        }
+
+        fs::write(&graph_path, b"{")?;
+        for required in [false, true] {
+            let malformed = load_claim_graph(&args, required).err().ok_or_else(|| {
+                anyhow::anyhow!("malformed graph was accepted for required={required}")
+            })?;
+            ensure!(malformed.to_string() == format!("parse {}", graph_path.display()));
+            ensure!(malformed.downcast_ref::<serde_json::Error>().is_some());
+        }
+
+        fs::remove_file(&graph_path)?;
+        fs::create_dir(&graph_path)?;
+        for required in [false, true] {
+            let unreadable = load_claim_graph(&args, required).err().ok_or_else(|| {
+                anyhow::anyhow!("unreadable graph was accepted for required={required}")
+            })?;
+            ensure!(unreadable.to_string() == format!("read {}", graph_path.display()));
+            ensure!(unreadable.downcast_ref::<std::io::Error>().is_some());
+        }
+        #[cfg(unix)]
+        {
+            let blocked_parent = temp.path().join("not-a-directory");
+            fs::write(&blocked_parent, b"regular file")?;
+            let mut blocked_args = delivery_args(temp.path(), "http://scripted");
+            blocked_args.review_json = blocked_parent.join("review.json");
+            let blocked_graph = blocked_parent.join("claim_graph.json");
+            for (required, operation) in [(false, "inspect"), (true, "read")] {
+                let error = load_claim_graph(&blocked_args, required)
+                    .err()
+                    .ok_or_else(|| anyhow::anyhow!("non-directory graph parent was accepted"))?;
+                ensure!(
+                    error.to_string() == format!("{operation} {}", blocked_graph.display()),
+                    "wrong graph lookup error for required={required}: {error:#}"
+                );
+                ensure!(
+                    error
+                        .downcast_ref::<std::io::Error>()
+                        .map(std::io::Error::kind)
+                        == Some(std::io::ErrorKind::NotADirectory)
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn summary_only_delivery_requires_present_graph_binding() -> Result<()> {
+        const OLD_HEAD: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let bound_graph = |commit: &str| {
+            serde_json::json!({
+                "schema": "ub-review.claim_graph.v1", "head_sha": "HEAD",
+                "revision": {"digest": "e".repeat(64), "semantics": "candidate_head", "reviewed_commit": commit},
+                "topics": []
+            })
+        };
+        for (case, graph, rejection) in [
+            (
+                "current immutable",
+                Some(serde_json::to_vec(&bound_graph(HEAD))?),
+                None,
+            ),
+            (
+                "current legacy",
+                Some(serde_json::to_vec(
+                    &serde_json::json!({"head_sha": HEAD, "topics": []}),
+                )?),
+                None,
+            ),
+            ("manual without graph", None, None),
+            (
+                "stale immutable",
+                Some(serde_json::to_vec(&bound_graph(OLD_HEAD))?),
+                Some("head changed before pending-review creation"),
+            ),
+            (
+                "stale legacy",
+                Some(serde_json::to_vec(
+                    &serde_json::json!({"head_sha": OLD_HEAD, "topics": []}),
+                )?),
+                Some("head changed before pending-review creation"),
+            ),
+            (
+                "missing binding",
+                Some(b"{}".to_vec()),
+                Some("claim graph has no exact head SHA"),
+            ),
+            (
+                "missing reviewed commit",
+                Some(serde_json::to_vec(
+                    &serde_json::json!({"head_sha": HEAD, "revision": {"digest": "e".repeat(64), "semantics": "candidate_head"}}),
+                )?),
+                Some("revision reference is missing reviewed_commit"),
+            ),
+            ("malformed graph", Some(b"{".to_vec()), Some("parse")),
+            ("unreadable graph", None, Some("read")),
+            #[cfg(unix)]
+            ("dangling graph", None, Some("read")),
+            #[cfg(unix)]
+            (
+                "linked current graph",
+                Some(serde_json::to_vec(&bound_graph(HEAD))?),
+                None,
+            ),
+        ] {
+            let temp = tempfile::tempdir()?;
+            let args = delivery_args(temp.path(), "http://scripted");
+            let review = GitHubReview {
+                event: "COMMENT".to_owned(),
+                body: "## Findings\n\n- `src/lib.rs:12`: The allocation can be reused before its last reader finishes.".to_owned(),
+                comments: Vec::new(),
+            };
+            validate_github_review_payload_for_post(&args, &review)?;
+            let graph_path = temp.path().join("claim_graph.json");
+            if let Some(graph) = graph {
+                fs::write(&graph_path, graph)?;
+            } else if case == "unreadable graph" {
+                fs::create_dir(&graph_path)?;
+            }
+            #[cfg(unix)]
+            if case == "dangling graph" {
+                std::os::unix::fs::symlink(temp.path().join("missing-graph.json"), &graph_path)?;
+            } else if case == "linked current graph" {
+                let target = temp.path().join("linked-graph.json");
+                fs::rename(&graph_path, &target)?;
+                std::os::unix::fs::symlink(target, &graph_path)?;
+            }
+            let payload = github_review_post_payload(&review)?;
+            let mut transport = ScriptedTransport {
+                gets: VecDeque::from([
+                    serde_json::json!({"head": {"sha": HEAD}}),
+                    serde_json::json!([]),
+                    serde_json::json!({"head": {"sha": HEAD}}),
+                ]),
+                sends: VecDeque::from([
+                    scripted_output(r#"{"id":987}"#, true)?,
+                    scripted_output(r#"{"id":987,"state":"commented"}"#, true)?,
+                ]),
+            };
+            let outcome = execute_pending_review_delivery_with_transport(
+                &args,
+                &review,
+                &payload,
+                &mut transport,
+            );
+            if let Some(rejection) = rejection {
+                let error = outcome.err().ok_or_else(|| {
+                    anyhow::anyhow!("{case}: invalid summary-only review was submitted")
+                })?;
+                let expected_rejection = match rejection {
+                    "head changed before pending-review creation" => format!(
+                        "GitHub pull head changed before pending-review creation: expected {OLD_HEAD}, got {HEAD}"
+                    ),
+                    "revision reference is missing reviewed_commit" => {
+                        "claim graph revision reference is missing reviewed_commit".to_owned()
+                    }
+                    "read" | "parse" => format!("{rejection} {}", graph_path.display()),
+                    message => message.to_owned(),
+                };
+                ensure!(
+                    error.to_string() == expected_rejection,
+                    "{case}: wrong rejection: {error:#}"
+                );
+                ensure!(
+                    transport.sends.len() == 2,
+                    "{case}: attempted a remote write"
+                );
+                ensure!(
+                    !args
+                        .out
+                        .join("delivery-pending-review-payload.json")
+                        .exists(),
+                    "{case}: prepared a remote write"
+                );
+            } else {
+                outcome?;
+                ensure!(transport.gets.is_empty() && transport.sends.is_empty());
+                let pending: serde_json::Value = serde_json::from_slice(&fs::read(
+                    args.out.join("delivery-pending-review-payload.json"),
+                )?)?;
+                ensure!(
+                    pending
+                        == serde_json::json!({"commit_id": HEAD, "body": review.body, "comments": []})
+                );
+                let submit: serde_json::Value = serde_json::from_slice(&fs::read(
+                    args.out.join("delivery-submit-review-payload.json"),
+                )?)?;
+                ensure!(submit == serde_json::json!({"event": "COMMENT", "body": review.body}));
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn inline_stale_revision_still_rejects_before_writes() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let args = delivery_args(temp.path(), "http://scripted");
+        let review = review_with_comment("src/lib.rs", 12, "[tests] exact body");
+        let mut graph = graph_for("src/lib.rs", 12, "inline", HEAD);
+        graph["revision"] = serde_json::json!({
+            "digest": "e".repeat(64), "semantics": "candidate_head",
+            "reviewed_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        });
+        write_json(&temp.path().join("claim_graph.json"), &graph)?;
+        let mut transport = ScriptedTransport {
+            gets: VecDeque::from([serde_json::json!({"head": {"sha": HEAD}})]),
+            sends: VecDeque::from([scripted_output(r#"{"id":987}"#, true)?]),
+        };
+        let error = execute_pending_review_delivery_with_transport(
+            &args,
+            &review,
+            &github_review_post_payload(&review)?,
+            &mut transport,
+        )
+        .err()
+        .ok_or_else(|| anyhow::anyhow!("stale inline review was accepted"))?;
+        ensure!(format!("{error:#}").contains("head changed"));
+        ensure!(transport.gets.is_empty() && transport.sends.len() == 1);
+        ensure!(
+            !args
+                .out
+                .join("delivery-pending-review-payload.json")
+                .exists()
+        );
+        Ok(())
     }
 
     #[test]
