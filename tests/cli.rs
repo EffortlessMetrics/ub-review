@@ -5673,7 +5673,7 @@ required = true
         .ok_or_else(|| anyhow::anyhow!("scheduler phases missing"))?;
     let seeded_phase = phases
         .iter()
-        .find(|phase| phase["loop_id"] == "proof" && phase["stage"] == "seeded-request-broker")
+        .find(|phase| phase["loop_id"] == "proof" && phase["stage"] == "seeded-required-broker")
         .ok_or_else(|| anyhow::anyhow!("seeded proof phase missing"))?;
     let model_phase = phases
         .iter()
