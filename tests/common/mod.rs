@@ -338,7 +338,7 @@ fn handle_fake_github_request_at(
     } else if request_line.starts_with("POST ") && request_line.contains("/reviews/987/events ") {
         (
             "HTTP/1.1 200 OK",
-            serde_json::json!({"id": 988, "state": "COMMENTED", "body": "fake review posted"}),
+            serde_json::json!({"id": 987, "state": "COMMENTED", "body": "fake review posted"}),
         )
     } else if request_line.starts_with("DELETE ") && request_line.contains("/reviews/987 ") {
         if cleanup_success {
