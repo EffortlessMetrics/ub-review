@@ -236,6 +236,16 @@ so a workflow branches on tokens rather than prose. `action.yml` exposes
 `not-proven-reasons` (JSON array) and `sensor-coverage` (JSON object) as step
 outputs.
 
+### Proof request deferral diagnostics
+
+When terminalizing a requested proof, receipts must share the request ID and
+match the supplied head label (case-insensitively). If only receipts for other
+heads share that ID, the request remains `deferred` and its reason distinguishes
+that mismatch from a missing receipt. Receipts for unrelated request IDs do not
+change the missing-receipt diagnostic. A matching current-head receipt retains
+its normal terminal disposition. This compatibility head-label check does not
+establish immutable revision qualification or authorize reuse of old receipts.
+
 ### Retained planner-required proofs (#4271)
 
 `required_proof` counts only policy-configured `[[proof.required]]` requests,

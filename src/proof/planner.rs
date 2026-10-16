@@ -672,8 +672,18 @@ pub(crate) fn terminalize_proof_requests(
             let mut terminal = request.clone();
             if matching.is_empty() {
                 terminal.status = "deferred".to_owned();
+                let receipt_gap = if receipts
+                    .iter()
+                    .any(|receipt| receipt.request_ids.contains(&request.id))
+                {
+                    format!(
+                        "receipts for this request exist only on other heads; no proof receipt matches head `{head}`"
+                    )
+                } else {
+                    "no proof receipt was produced".to_owned()
+                };
                 terminal.reason = format!(
-                    "{} Terminal disposition: deferred; no proof receipt was produced.",
+                    "{} Terminal disposition: deferred; {receipt_gap}.",
                     request.reason
                 );
                 return terminal;
@@ -1864,6 +1874,39 @@ index 1111111..2222222 100644
                 .collect::<Vec<_>>(),
             vec![("deferred", true)]
         );
+        assert!(stale_only[0].reason.contains(
+            "receipts for this request exist only on other heads; no proof receipt matches head `current-head`"
+        ));
+        assert!(
+            !stale_only[0]
+                .reason
+                .contains("no proof receipt was produced")
+        );
+
+        // An unrelated request's receipt cannot explain this request's deferral,
+        // even when it came from the previous head with the same command.
+        let mut unrelated_receipt = receipt.clone();
+        unrelated_receipt.request_ids = vec!["request-unrelated".to_owned()];
+        let mut unrelated_current_receipt = unrelated_receipt.clone();
+        unrelated_current_receipt.head = "current-head".to_owned();
+        for receipts in [
+            Vec::new(),
+            vec![unrelated_receipt],
+            vec![unrelated_current_receipt],
+        ] {
+            let missing = terminalize_proof_requests(
+                "current-head",
+                std::slice::from_ref(&request),
+                &receipts,
+            );
+            assert_eq!(missing[0].status, "deferred");
+            assert!(
+                missing[0]
+                    .reason
+                    .ends_with("no proof receipt was produced.")
+            );
+            assert!(!missing[0].reason.contains("other heads"));
+        }
         let terminal =
             terminalize_proof_requests("current-head", &[request], &[receipt, current_receipt]);
         assert_eq!(terminal[0].status, "satisfied");
