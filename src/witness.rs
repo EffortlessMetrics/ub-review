@@ -180,6 +180,9 @@ pub(crate) fn witness_status_for_observation(observation: &Observation) -> &'sta
 }
 
 pub(crate) fn witness_status_for_proof_receipt(receipt: &ProofReceipt) -> &'static str {
+    if proof_receipt_has_contradictory_completion(receipt) {
+        return "needs-witness";
+    }
     match receipt.result.as_str() {
         "discriminating" | "head_passed" | "head_failed" => "tool-confirmed",
         _ => "needs-witness",

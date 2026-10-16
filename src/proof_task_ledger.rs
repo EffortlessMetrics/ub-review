@@ -456,6 +456,12 @@ impl ProofTaskLedger {
         let mut references = BTreeMap::new();
         for (receipt_index, receipt) in receipts.iter().enumerate() {
             ensure!(
+                !crate::proof_receipt_has_contradictory_completion(receipt),
+                "published proof receipt {} has contradictory completion metadata",
+                receipt.id
+            );
+
+            ensure!(
                 receipt.revision.as_ref() == Some(self.recorder.revision()),
                 "published proof receipt {} does not bind the admitted revision",
                 receipt.id

@@ -495,6 +495,22 @@ pub(crate) struct ProofCommandReceipt {
     pub(crate) reason: String,
 }
 
+/// A decisive aggregate cannot override an interrupted proof command. Setup
+/// preflight is not proof execution, and retains its separate role semantics.
+pub(crate) fn proof_receipt_has_incomplete_proof_command(receipt: &ProofReceipt) -> bool {
+    receipt.commands.iter().any(|command| {
+        matches!(command.side.as_str(), "head" | "base-plus-tests")
+            && (command.timed_out || !matches!(command.status.as_str(), "passed" | "failed"))
+    })
+}
+
+pub(crate) fn proof_receipt_has_contradictory_completion(receipt: &ProofReceipt) -> bool {
+    matches!(
+        receipt.result.as_str(),
+        "head_passed" | "head_failed" | "discriminating" | "non_discriminating"
+    ) && proof_receipt_has_incomplete_proof_command(receipt)
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct ResourceLease {
     pub(crate) schema: String,
