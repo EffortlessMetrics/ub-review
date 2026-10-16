@@ -160,3 +160,12 @@ reason = "Runs the actual composite Action Bash resolver with recording Cargo an
 created = "2026-09-05"
 review_after = "2026-12-05"
 expires = "2027-03-05"
+
+[[exception]]
+id = "release-notes-offline-cli-contract-tests"
+kind = "process-spawn"
+path = "xtask/tests/release_notes.rs"
+owner = "ub-review/tests"
+reason = "Issue #1342 exercises only Cargo's built xtask binary in private temporary fixtures to pin literal release-note output and fail-closed argument/template handling. The harness never invokes GitHub, tag creation, release creation, upload, or network tools."
+created = "2026-10-11"
+review_after = "2027-01-11"
