@@ -3275,8 +3275,6 @@ command = "ub-review-test-missing-tokmd"
 #[cfg(unix)]
 #[test]
 fn doctor_rejects_failed_version_probe_even_when_it_prints_the_pin() -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
     let temp = tempfile::tempdir()?;
     let config = temp.path().join(".ub-review.toml");
     let mut config_text = "profile = \"gh-runner\"\n".to_owned();
@@ -3289,11 +3287,10 @@ fn doctor_rejects_failed_version_probe_even_when_it_prints_the_pin() -> Result<(
         ("actionlint", "1.7.12"),
     ] {
         let executable = temp.path().join(tool);
-        write_file(
+        write_executable_fixture(
             &executable,
             &format!("#!/bin/sh\nprintf '{tool} {version}\\n'\n"),
         )?;
-        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755))?;
         config_text.push_str(&format!(
             "\n[tools.{tool}]\ncommand = {:?}\n",
             path_str(&executable)?
@@ -3311,11 +3308,10 @@ fn doctor_rejects_failed_version_probe_even_when_it_prints_the_pin() -> Result<(
 
     for (label, redirect) in [("stdout", ""), ("stderr", " >&2")] {
         let executable = temp.path().join(format!("failed-probe-{label}"));
-        write_file(
+        write_executable_fixture(
             &executable,
             &format!("#!/bin/sh\nprintf 'tokmd 1.12.0\\n'{redirect}\nexit 2\n"),
         )?;
-        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755))?;
         let failed_config = temp.path().join(format!("failed-{label}.toml"));
         let failed_text = config_text.replace(
             &format!("command = {:?}", path_str(&temp.path().join("tokmd"))?),
