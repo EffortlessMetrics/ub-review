@@ -9434,7 +9434,101 @@ def require_tool_registry_artifacts(root: pathlib.Path) -> None:
     require_tool_gate_outcome_artifacts(root, resolved_by_id, status_by_id, runtime_profile)
 
 
-def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
+def load_ripr_source_json(path: pathlib.Path) -> Any:
+    """Reject ambiguous authority keys in the new source-comparison contract."""
+    def unique_fields(pairs: list[tuple[str, Any]]) -> dict:
+        result: dict = {}
+        for key, value in pairs:
+            if key in result:
+                fail(f"RIPR source-comparison duplicate JSON key {key!r} in {path}")
+            result[key] = value
+        return result
+
+    try:
+        return json.loads(require_file(path).read_text(encoding="utf-8"),
+                          object_pairs_hook=unique_fields)
+    except json.JSONDecodeError as error:
+        fail(f"RIPR source-comparison invalid JSON in {path}: {error}")
+
+
+def require_ripr_source_current_gaps(
+    root: pathlib.Path, decision: dict, raw: dict, detail: dict
+) -> int:
+    """#813 bounded source contract; never selects or qualifies an installed tool."""
+    prefix = "RIPR source-comparison"
+    policy = decision.get("policy")
+    if not isinstance(policy, dict) or policy.get("include_unknowns") is not False:
+        fail(f"{prefix} requires the known include_unknowns=false policy")
+    patch = root / "input/diff.patch"
+    if not patch.is_file():
+        fail(f"{prefix} requires frozen input/diff.patch")
+    expected_input = "sha256:" + hashlib.sha256(patch.read_bytes()).hexdigest()
+    wrapper = raw.get("analysis_outcome")
+    if not isinstance(wrapper, dict) or wrapper.get("analysis_complete") is not True:
+        fail(f"{prefix} requires complete raw analysis")
+    findings = raw["findings"]
+    expected_kind = "complete_with_findings" if findings else "complete_no_findings"
+    outcomes = [decision.get("analysis_outcome"), wrapper.get("outcome")]
+    if decision.get("analysis_complete") is not True:
+        fail(f"{prefix} requires complete badge analysis")
+    for outcome in outcomes:
+        if not isinstance(outcome, dict):
+            fail(f"{prefix} requires a complete typed outcome")
+        identity = outcome.get("identity")
+        if not isinstance(identity, dict) or identity.get("input_identity") != expected_input:
+            fail(f"{prefix} input identity does not match frozen diff bytes")
+        if (outcome.get("schema_version") != "0.1"
+                or outcome.get("kind") != expected_kind or outcome.get("limitations") != []):
+            fail(f"{prefix} requires a supported complete limitation-free outcome")
+        counts = outcome.get("counts")
+        if not isinstance(counts, dict):
+            fail(f"{prefix} outcome counts are missing")
+        for field in ["finding_count", "candidate_line_count", "probe_count"]:
+            value = counts.get(field)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                fail(f"{prefix} outcome count {field} is invalid")
+        if counts["finding_count"] != len(findings):
+            fail(f"{prefix} outcome finding count differs from raw findings")
+        if not findings and not (counts["candidate_line_count"] or counts["probe_count"]):
+            fail(f"{prefix} complete empty outcome has no behavioral subject")
+    if outcomes[0] != outcomes[1]:
+        fail(f"{prefix} badge/raw typed outcomes differ")
+    by_id: dict[str, dict] = {}
+    current = 0
+    classes = {"exposed", "weakly_exposed", "reachable_unrevealed", "no_static_path",
+               "infection_unknown", "propagation_unknown", "static_unknown"}
+    for finding in findings:
+        finding_id = finding["id"]  # Common v3 validation has checked object/id/class.
+        if finding_id in by_id:
+            fail(f"{prefix} duplicate raw finding identity")
+        by_id[finding_id] = finding
+        if finding.get("language") != "rust":
+            fail(f"{prefix} supports Rust findings only")
+        if finding.get("classification") not in classes:
+            fail(f"{prefix} has an unknown finding classification")
+        currentness = finding.get("source_currentness")
+        if currentness not in {"candidate_current", "base_deleted"}:
+            fail(f"{prefix} has missing or unsupported source currentness")
+        if currentness == "candidate_current" and finding["classification"] in {
+            "weakly_exposed", "reachable_unrevealed", "no_static_path"
+        }:
+            current += 1
+    for entry in detail.get("entries", []):
+        finding = by_id.get(entry.get("id")) if isinstance(entry, dict) else None
+        probe = finding.get("probe") if isinstance(finding, dict) else None
+        location = entry.get("range") if isinstance(entry, dict) else None
+        if (not isinstance(probe, dict) or not isinstance(location, dict)
+                or entry.get("classification") != finding.get("classification")
+                or entry.get("path") != probe.get("file")
+                or location.get("start_line") != probe.get("line")
+                or location.get("end_line") != probe.get("line")):
+            fail(f"{prefix} projected entry differs from preserved raw finding")
+    return current
+
+
+def require_ripr_exposure_gap_details(
+    root: pathlib.Path, *, source_comparison: bool = False
+) -> None:
     """#873/#885: reconcile complete raw detail with the authoritative badge.
 
     RIPR 0.10.0 does not expose per-finding suppression state. The v3 detail
@@ -9444,21 +9538,26 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
     decision_path = root / "sensors/ripr/gate-decision.json"
     detail_path = root / "sensors/ripr/exposure-gaps.json"
     if not decision_path.is_file():
+        if source_comparison:
+            fail("RIPR source-comparison requires gate-decision.json")
         if detail_path.is_file():
             fail("sensors/ripr/exposure-gaps.json present without gate-decision.json")
         return
     if not detail_path.is_file():
         fail("sensors/ripr/gate-decision.json present without exposure-gaps.json (#347)")
-    decision = load_json(decision_path)
+    read_json = load_ripr_source_json if source_comparison else load_json
+    decision = read_json(decision_path)
     if not isinstance(decision, dict) or any(
         decision.get(field) != expected
         for field, expected in {
-            "schema_version": "0.6",
+            "schema_version": "0.8" if source_comparison else "0.6",
             "kind": "ripr",
             "scope": "diff",
             "basis": "finding_exposure",
         }.items()
     ):
+        if source_comparison:
+            fail("gate-decision.json has an incompatible RIPR source-comparison 0.8 envelope")
         fail("gate-decision.json has an incompatible pinned RIPR 0.10.0 envelope")
     badge_status = decision.get("status")
     if badge_status not in {"pass", "warn", "fail"}:
@@ -9489,7 +9588,7 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
     suppressed = badge_count("suppressed_exposure_gaps")
     analyzed = badge_count("analyzed_findings")
 
-    detail = load_json(detail_path)
+    detail = read_json(detail_path)
     if not isinstance(detail, dict):
         fail("exposure-gaps.json is not an object")
     if detail.get("schema") != "ub-review.ripr_exposure_gaps.v3":
@@ -9524,7 +9623,9 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
         "mode": "ready",
     }:
         fail("exposure-gaps.json has incompatible pinned RIPR detail source")
-    raw_stdout = load_json(root / raw_outputs["stdout"])
+    raw_stdout = read_json(root / raw_outputs["stdout"])
+    if not isinstance(raw_stdout, dict):
+        fail("preserved RIPR stdout must be an object")
     if raw_stdout.get("schema_version") != "0.2" or raw_stdout.get("tool") != "ripr" or raw_stdout.get("mode") != "ready":
         fail("preserved RIPR stdout has an incompatible detail envelope")
     raw_findings = raw_stdout.get("findings")
@@ -9564,6 +9665,10 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
         fail("exposure-gaps.json total_raw_findings does not match preserved RIPR stdout")
     if len(raw_gap_ids) != total:
         fail("exposure-gaps.json total_raw_gap_findings does not match preserved RIPR stdout")
+    current_gap_total = (
+        require_ripr_source_current_gaps(root, decision, raw_stdout, detail)
+        if source_comparison else total
+    )
     entry_ids: set[str] = set()
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict) or not entry.get("id") or not entry.get("classification"):
@@ -9619,7 +9724,9 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
             f"{raw_total} does not reconcile with gate-decision analyzed_findings {analyzed}"
         )
     expected = unsuppressed + suppressed
-    if total != expected:
+    if current_gap_total != expected:
+        if source_comparison:
+            fail("RIPR source-comparison current gap total does not reconcile with badge counts")
         fail(
             "exposure-gaps.json total_raw_gap_findings "
             f"{total} does not reconcile with gate-decision counts "
@@ -11639,6 +11746,133 @@ def self_test_issue_broker_contract() -> None:
             [dict(plan_entry, decision="skip")], [result]
         ): require_issue_broker_artifacts(root, candidates, actions),
     )
+
+
+def self_test_ripr_source_comparison() -> None:
+    """#813: source0.8 admission is explicit, current and not promotion."""
+    import copy
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        sensor = root / "sensors/ripr"
+        sensor.mkdir(parents=True)
+        (root / "input").mkdir()
+        patch = b"--- a/src/a.rs\n+++ b/src/a.rs\n@@ -1 +1 @@\n-old\n+new\n"
+        (root / "input/diff.patch").write_bytes(patch)
+        outcome = {
+            "schema_version": "0.1", "kind": "complete_with_findings",
+            "identity": {"input_identity": "sha256:" + hashlib.sha256(patch).hexdigest()},
+            "counts": {"finding_count": 3, "candidate_line_count": 2, "probe_count": 3},
+            "limitations": [],
+        }
+        findings = [
+            {"id": name, "classification": "weakly_exposed", "language": "rust",
+             "source_currentness": currentness,
+             "probe": {"file": "src/a.rs", "line": index + 1}}
+            for index, (name, currentness) in enumerate([
+                ("current", "candidate_current"), ("moved", "candidate_current"),
+                ("deleted", "base_deleted"),
+            ])
+        ]
+        badge = {
+            "schema_version": "0.8", "kind": "ripr", "scope": "diff",
+            "basis": "finding_exposure", "status": "warn", "warnings": [],
+            "preview_skipped": [], "analysis_complete": True, "analysis_outcome": outcome,
+            "policy": {"include_unknowns": False},
+            "counts": {"unsuppressed_exposure_gaps": 2,
+                       "suppressed_exposure_gaps": 0, "analyzed_findings": 3},
+        }
+        raw = {"schema_version": "0.2", "tool": "ripr", "mode": "ready",
+               "summary": {"findings": 3}, "findings": findings,
+               "analysis_outcome": {"analysis_complete": True, "outcome": outcome}}
+        detail = {
+            "schema": "ub-review.ripr_exposure_gaps.v3", "status": "ok",
+            "semantics": "raw_pre_policy", "policy_authority": "sensors/ripr/gate-decision.json",
+            "raw_outputs": {"stdout": "sensors/ripr/exposure-gaps.ripr.stdout",
+                            "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"},
+            "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"},
+            "total_raw_findings": 3, "total_raw_gap_findings": 3,
+            "entries": [
+                {"id": row["id"], "classification": row["classification"],
+                 "exposure_gap_class": row["classification"], "path": "src/a.rs",
+                 "range": {"start_line": i + 1, "end_line": i + 1},
+                 "artifact_pointer": f"sensors/ripr/exposure-gaps.json#/entries/{i}"}
+                for i, row in enumerate(findings)
+            ],
+        }
+
+        def write(b: dict, r: dict, d: dict) -> None:
+            for name, value in [("gate-decision.json", b), ("exposure-gaps.json", d),
+                                ("exposure-gaps.ripr.stdout", r)]:
+                (sensor / name).write_text(json.dumps(value), encoding="utf-8")
+            (sensor / "exposure-gaps.ripr.stderr").write_text("", encoding="utf-8")
+
+        def require() -> None:
+            require_ripr_exposure_gap_details(root, source_comparison=True)
+
+        write(badge, raw, detail)
+        require()  # Three audit gaps; exactly two current policy gaps, still nonzero.
+        expect_self_test_failure("source0.8 is not pinned admission", "incompatible pinned",
+                                 lambda: require_ripr_exposure_gap_details(root))
+        for version in ["0.5", "0.6", "0.7", "0.9", "9.9", None, 0.8]:
+            changed = copy.deepcopy(badge); changed["schema_version"] = version
+            write(changed, raw, detail)
+            expect_self_test_failure(f"source version {version!r}", "source-comparison", require)
+        for name, change, reason in [
+            ("stale badge", lambda b, r, d: b["analysis_outcome"]["identity"].update(input_identity="sha256:" + "0" * 64), "input"),
+            ("stale raw", lambda b, r, d: r["analysis_outcome"]["outcome"]["identity"].update(input_identity="sha256:" + "0" * 64), "input"),
+            ("unknown currentness", lambda b, r, d: r["findings"][0].update(source_currentness="moved"), "currentness"),
+            ("missing currentness", lambda b, r, d: r["findings"][0].pop("source_currentness"), "currentness"),
+            ("different base", lambda b, r, d: b["analysis_outcome"]["identity"].update(base_revision="another-base"), "outcomes differ"),
+            ("wrong current partition", lambda b, r, d: b["counts"].update(unsuppressed_exposure_gaps=3), "current gap"),
+            ("partial badge", lambda b, r, d: b.update(analysis_complete=False), "complete"),
+            ("partial raw", lambda b, r, d: r["analysis_outcome"].update(analysis_complete=False), "complete"),
+            ("partial kind", lambda b, r, d: b["analysis_outcome"].update(kind="limited_partial_scope"), "complete"),
+            ("limitations", lambda b, r, d: b["analysis_outcome"].update(limitations=["budget"]), "complete"),
+            ("unknown policy", lambda b, r, d: b["policy"].update(include_unknowns=True), "policy"),
+            ("nonRust", lambda b, r, d: r["findings"][0].update(language="python"), "Rust"),
+            ("wrong row geometry", lambda b, r, d: d["entries"][0]["range"].update(start_line=9, end_line=9), "raw finding"),
+            ("duplicated raw identity", lambda b, r, d: r["findings"][1].update(id="current"), "duplicate"),
+            ("lying finding count", lambda b, r, d: b["analysis_outcome"]["counts"].update(finding_count=0), "count"),
+        ]:
+            b, r, d = copy.deepcopy(badge), copy.deepcopy(raw), copy.deepcopy(detail)
+            change(b, r, d); write(b, r, d)
+            expect_self_test_failure(name, reason, require)
+        for filename, key in [("gate-decision.json", "schema_version"),
+                              ("exposure-gaps.ripr.stdout", "source_currentness"),
+                              ("exposure-gaps.json", "total_raw_findings")]:
+            write(badge, raw, detail)
+            path = sensor / filename
+            text = path.read_text(encoding="utf-8")
+            # Duplicate the first matching key without changing its effective value.
+            text = text.replace('"' + key + '":', '"' + key + '": null, "' + key + '":', 1)
+            path.write_text(text, encoding="utf-8")
+            expect_self_test_failure(f"duplicate {filename}", "duplicate JSON key", require)
+        for option in ["--min-ok-model-lanes=0", "--max-inline-comments=0",
+                       "--require-no-model-evidence-failures", "--expected-review-profile=bun-ub-v0",
+                       "--expected-repo-kind=bun", "--self-test", "--ci-audit-only",
+                       "--require-no-model-evidence-fail", "--expected-review-prof=bun-ub-v0"]:
+            with contextlib.redirect_stderr(io.StringIO()):
+                try:
+                    parse_args(["verify", "--ripr-source-comparison", option])
+                except SystemExit as error:
+                    assert error.code == 2
+                else:
+                    raise AssertionError(f"source mode accepted conflicting {option}")
+        clean_badge, clean_raw, clean_detail = copy.deepcopy(badge), copy.deepcopy(raw), copy.deepcopy(detail)
+        for row in clean_raw["findings"]:
+            row["classification"] = "exposed"
+        clean_badge["counts"]["unsuppressed_exposure_gaps"] = 0
+        clean_detail["entries"] = []
+        clean_detail["total_raw_gap_findings"] = 0
+        write(clean_badge, clean_raw, clean_detail)
+        require()  # Legitimate zero current gaps; no limitation metadata needed.
+        write(badge, raw, detail)
+        (root / "input/diff.patch").write_bytes(patch + b"stale")
+        expect_self_test_failure("changed input", "input", require)
+        (root / "input/diff.patch").write_bytes(patch)
+        require()
 
 
 def self_test_ripr_exposure_gap_contract() -> None:
@@ -16249,6 +16483,7 @@ def run_self_tests() -> None:
     self_test_issue_capture_contract()
     self_test_issue_broker_contract()
     self_test_ripr_exposure_gap_contract()
+    self_test_ripr_source_comparison()
     self_test_cost_receipt_contract()
     self_test_floor_trend_contract()
     self_test_fill_ledger_contract()
@@ -16852,9 +17087,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--require-no-model-evidence-failures", action="store_true")
     parser.add_argument("--expected-review-profile", default="bun-ub-v0")
     parser.add_argument("--expected-repo-kind", default="bun")
-    parser.add_argument("--ci-audit-only", action="store_true")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--ci-audit-only", action="store_true")
+    modes.add_argument("--ripr-source-comparison", action="store_true",
+                       help="check source badge0.8/raw0.2 compatibility only; not installed-tool qualification")
     parser.add_argument("--self-test", action="store_true")
-    return parser.parse_args(argv[1:])
+    args = parser.parse_args(argv[1:])
+    if args.ripr_source_comparison:
+        if any(arg.startswith("-") and arg not in {"--ripr-source-comparison", "--"}
+               for arg in argv[1:]):
+            parser.error("--ripr-source-comparison cannot assert full packet/self-test requirements")
+    return args
 
 
 def main(argv: list[str]) -> int:
@@ -16866,6 +17109,11 @@ def main(argv: list[str]) -> int:
     root = pathlib.Path(args.root)
     if not root.is_dir():
         fail(f"artifact root is not a directory: {root}")
+
+    if args.ripr_source_comparison:
+        require_ripr_exposure_gap_details(root, source_comparison=True)
+        print("RIPR source-comparison contract verified; installed/Required qualification not established")
+        return 0
 
     if args.ci_audit_only:
         require_ci_audit_core_artifacts(root, required=True)
