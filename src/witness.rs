@@ -379,12 +379,11 @@ mod routed_packet_tests {
         fs::write(out.join("stdout.txt"), "old-proof")?;
         fs::write(out.join("stderr.txt"), "")?;
         write_follow_up_question_packets(out, &tasks, &[receipt.clone()])?;
-        ensure!(
-            packet(out, 0)?["prompt"]
-                .as_str()
-                .context("prompt")?
-                .contains("old-proof")
-        );
+        let original = packet(out, 0)?;
+        let prompt = original["prompt"].as_str().context("prompt")?;
+        ensure!(prompt.contains("old-proof"));
+        ensure!(prompt.contains("    stderr: (empty)\n"));
+        ensure!(!prompt.contains("stderr: (unavailable at"));
 
         // Same path and length, new source bytes: no cross-write cache may
         // relabel the previous invocation's excerpt as current evidence.
@@ -413,11 +412,20 @@ mod routed_packet_tests {
         );
 
         fs::remove_file(out.join("stdout.txt"))?;
-        write_follow_up_question_packets(out, &tasks, &[receipt])?;
+        write_follow_up_question_packets(out, &tasks, std::slice::from_ref(&receipt))?;
         let unavailable = packet(out, 0)?;
         let prompt = unavailable["prompt"].as_str().context("prompt")?;
         ensure!(prompt.contains("stdout: (unavailable at `stdout.txt`)"));
         ensure!(!prompt.contains("new-proof"));
+
+        // A recovered empty stream must replace the previous batch's
+        // unavailable result, while retaining its distinct empty marker.
+        fs::write(out.join("stdout.txt"), "")?;
+        write_follow_up_question_packets(out, &tasks, &[receipt])?;
+        let recovered = packet(out, 0)?;
+        let prompt = recovered["prompt"].as_str().context("prompt")?;
+        ensure!(prompt.contains("    stdout: (empty)\n"));
+        ensure!(!prompt.contains("stdout: (unavailable at"));
         Ok(())
     }
 
