@@ -69,6 +69,17 @@ Ready, merge and release are distinct transitions: obey live authorization and
 repository protections for each; do not infer one from another. A green
 aggregate or local baseline does not waive a failing required check.
 
+Before opening a draft, pushing to an existing PR or marking Ready for review,
+use [the transition guide](../../../docs/development/TOWER_CI_TRANSITIONS.md).
+Ready is review state, not independent CI admission. Inspect live triggers:
+these actions can already launch broad CI, including on drafts. If that would
+violate the current qualification hold, retain the branch and evidence and
+hand the blocked transition to its owner; do not use Ready as a launch command.
+Keep the legacy enforced conclusion, truthful evidence result and observed
+delivery separate. Record `gate_result` and `not_proven_reasons` from the
+identity-bound receipt even when the wrapper is green; absent/unreadable
+evidence remains unknown. Never promote `not_proven` into qualification.
+
 Finish with exact candidate evidence, what is established, each remaining
 integration condition and who owns the next step. Keep live task status and
 permissions in the conversation/native PR, never in this reusable skill.
