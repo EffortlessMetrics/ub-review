@@ -34631,13 +34631,13 @@ reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe.
 kind = "exposure_gap"
 finding_id = "probe:src_proof_build.rs:call_deletion:90a08fae"
 owner = "ub-review/core"
-reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Expression belongs to base build.rs:157; current155 closes the loop. The old estimated_seconds ceiling charge was intentionally removed, not a surviving production call. Exact base/current source comparison; actual new spent accumulator at149-151; multi-build test will discriminate restored old behavior. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Expression belongs to base build.rs:157; current155 closes the loop. The old estimated_seconds ceiling charge was intentionally removed, not a surviving production call. Exact base/current source comparison; elapsed_budget_admits_second_build_only_when_actual_time_fits runs the actual broker loop and rejects both compiled restored-ceiling and free-credit mutants with literal two-versus-one execution counts. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
 
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_proof_build.rs:field_construction:f7b05a10"
 owner = "ub-review/core"
-reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Renamed helper parameter spent_seconds is declaration syntax; the meaningful effect is its use in admission arithmetic. focused_build_budget_allows_next checks spent+next against allocation; rows26/27 identify the needed actual caller test. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Renamed helper parameter spent_seconds is declaration syntax; the meaningful effect is its use in admission arithmetic. focused_build_budget_allows_next checks spent+next against allocation; elapsed_budget_admits_second_build_only_when_actual_time_fits exercises the actual caller with total6/cap4 and first-duration200ms versus3001ms, with compiled overcharge/free-credit controls rejected. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
 
 [[suppressions]]
 kind = "exposure_gap"

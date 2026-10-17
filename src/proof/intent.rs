@@ -308,9 +308,7 @@ fn resolve_build_target(
     match candidates.len() {
         1 => {
             let candidate = candidates.remove(0);
-            if let Some(target) = &candidate.target
-                && matches!(target.kind.as_str(), "bin" | "test" | "example" | "bench")
-            {
+            if let Some(target) = &candidate.target {
                 return Err(format!(
                     "named focused build target `{label}` of kind `{}` is unsupported by the proof broker; choose `cargo-package:{}` only if package-level checking answers the proof question; otherwise leave the proof unresolved",
                     target.kind, candidate.package
@@ -1088,7 +1086,11 @@ mod tests {
 name = "proof-fixture"
 version = "0.0.0"
 edition = "2024"
+build = "build.rs"
 [workspace]
+[lib]
+name = "library"
+path = "library.rs"
 [[bin]]
 name = "app"
 path = "app.rs"
@@ -1104,7 +1106,14 @@ name = "speed"
 path = "speed.rs"
 "#,
         )?;
-        for path in ["app.rs", "integration.rs", "demo.rs", "speed.rs"] {
+        for path in [
+            "library.rs",
+            "build.rs",
+            "app.rs",
+            "integration.rs",
+            "demo.rs",
+            "speed.rs",
+        ] {
             std::fs::write(temp.path().join(path), "fn main() {}\n")?;
         }
         Ok(temp)
@@ -1170,6 +1179,64 @@ path = "speed.rs"
                     })
                 );
             }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn remaining_named_build_kinds_are_declined_before_scheduling() -> Result<()> {
+        let temp = named_target_fixture()?;
+        for (kind, target) in [("lib", "library"), ("custom-build", "build-script-build")] {
+            for separator in ["::", "/"] {
+                let label = format!("cargo-target:proof-fixture{separator}{target}");
+                let mut input = intent(ProofKind::FocusedBuild, &label);
+                input.resolved_request_ids.push("stale-request".to_owned());
+                let result =
+                    resolve_model_proof_intents(temp.path(), &diff(&[]), &[input], &[], budget())?;
+                assert_eq!(result.intents[0].status, "unsupported_target", "{label}");
+                assert_eq!(
+                    result.intents[0].resolution_reason,
+                    format!(
+                        "named focused build target `{label}` of kind `{kind}` is unsupported by the proof broker; choose `cargo-package:proof-fixture` only if package-level checking answers the proof question; otherwise leave the proof unresolved"
+                    )
+                );
+                assert!(result.intents[0].resolved_request_ids.is_empty());
+                assert!(result.proof_requests.is_empty());
+                assert!(focused_build_candidates_from_requests(&result.proof_requests).is_empty());
+                assert!(focused_test_candidates_from_requests(&result.proof_requests).is_empty());
+                assert!(
+                    build_proof_planner_output(
+                        &diff(&[]),
+                        &Profile::default(),
+                        &result.proof_requests,
+                    )?
+                    .proof_tasks
+                    .is_empty()
+                );
+            }
+        }
+        assert!(
+            focused_build_command_spec(
+                "cargo check --locked --package proof-fixture --lib library"
+            )
+            .is_none()
+        );
+        assert!(
+            focused_build_command_spec("cargo check --locked --package proof-fixture").is_some()
+        );
+        let Some(mut graph) = parse_cargo_workspace(temp.path()) else {
+            anyhow::bail!("named-target fixture metadata is unavailable");
+        };
+        graph.packages[0].targets[0].kind = "future-target-kind".to_owned();
+        let target_name = &graph.packages[0].targets[0].name;
+        for separator in ["::", "/"] {
+            let label = format!("cargo-target:proof-fixture{separator}{target_name}");
+            assert_eq!(
+                resolve_build_target(&graph, &diff(&[]), &label).err(),
+                Some(format!(
+                    "named focused build target `{label}` of kind `future-target-kind` is unsupported by the proof broker; choose `cargo-package:proof-fixture` only if package-level checking answers the proof question; otherwise leave the proof unresolved"
+                ))
+            );
         }
         Ok(())
     }
