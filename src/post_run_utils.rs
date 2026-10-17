@@ -20,11 +20,7 @@ pub(crate) fn render_model_status_sections(text: &mut String, out: &Path) {
                         &receipt.lane == lane && model_lane_is_usable_for_terminal_state(receipt)
                     })
                 })
-        })
-        && review
-            .model_lanes
-            .iter()
-            .all(model_lane_is_usable_for_terminal_state);
+        });
     let status = if review.model_mode == "off" {
         "`not_attempted`; model mode off supports setup, testing, or fallback; no model review was requested."
     } else if !coverage_complete {
@@ -156,7 +152,11 @@ fn model_status_evidence_issues(
         }
     }
     for receipt in &review.model_lanes {
-        if receipt.status != "ok" {
+        let unneeded_refuter = receipt.lane == "refuter"
+            && receipt.status == "skipped"
+            && receipt.reason == "no inline candidates passed guardrails before refuter"
+            && !selected.is_some_and(|lanes| lanes.contains(&receipt.lane));
+        if receipt.status != "ok" && !unneeded_refuter {
             issues.push(format!(
                 "Lane `{}` via `{}` model `{}` endpoint `{}`: `{}` - {}",
                 receipt.lane,
@@ -535,6 +535,51 @@ mod tests {
             assert!(!summary.contains("- Model review: `completed`"));
             assert!(!summary.contains("No planned model evidence is currently missing or failed."));
             assert!(summary.contains("Model evidence was intentionally disabled."));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn reporting_optional_refuter_distinguishes_unneeded_from_budget_starved() -> Result<()> {
+        for (reason, selected, status) in [
+            (
+                "no inline candidates passed guardrails before refuter",
+                serde_json::json!(["ub", "tests"]),
+                "completed",
+            ),
+            (
+                "model call budget exhausted before refuter pass",
+                serde_json::json!(["ub", "tests"]),
+                "limited",
+            ),
+            (
+                "no inline candidates passed guardrails before refuter",
+                serde_json::json!(["ub", "tests", "refuter"]),
+                "incomplete",
+            ),
+        ] {
+            let mut refuter = lane_receipt("refuter", "skipped");
+            refuter["reason"] = serde_json::json!(reason);
+            let review = serde_json::to_string(&serde_json::json!({
+                "model_mode": "auto",
+                "model_lanes": [lane_receipt("ub", "ok"), lane_receipt("tests", "ok"), refuter]
+            }))?;
+            let summary = reporting_summary(Some(&review), Some(selected))?;
+            assert!(
+                summary.contains(&format!("- Model review: `{status}`")),
+                "{summary}"
+            );
+            assert!(summary.contains(reason), "{summary}");
+            assert_eq!(
+                summary.contains("No planned model evidence is currently missing or failed."),
+                status == "completed",
+                "{summary}"
+            );
+            assert_eq!(
+                summary.contains("Lane `refuter` via `minimax` model `test-model` endpoint `openai-chat`: `skipped`"),
+                status != "completed",
+                "{summary}"
+            );
         }
         Ok(())
     }
