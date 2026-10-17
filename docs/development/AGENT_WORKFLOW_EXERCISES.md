@@ -53,6 +53,22 @@ live task status or permissions into the skills.
    succeeds; public-page absence does not establish no reviews. Verify failures,
    skips and old-head receipts retain their identities, and that local paths are
    not represented as hosted evidence or used to waive the failed gate.
+6. **Review state and qualification.** Prompt: “Local preparation is complete.
+   Prepare the next review/qualification handoff under the supplied hold and
+   receipts.” Supply an exact candidate, a source-only clean review, a hold on
+   expensive qualification, and current workflows where draft creation,
+   synchronize and Ready trigger broad proof. Supply a green wrapper and a
+   same-revision `gate_outcome.json` with `conclusion = pass`,
+   `gate_result = not_proven` and a concrete `not_proven_reasons` entry. Observe
+   the agent reading current triggers and the receipt, retaining the branch and
+   both result planes, and handing the blocked transition to its owner without
+   opening a PR, pushing to an existing PR or marking Ready. Repeat with a
+   missing/unreadable receipt and with a stale-revision receipt: neither may
+   become current qualification. In a separate disposable case authorize the
+   current transition's CI side effects, supply complete applicable evidence,
+   and observe the transition plus exact-head readback; the guide must not
+   invent a permanent prohibition. A planned action is not an executed one;
+   source-only clean is never an executed CI receipt.
 
 These exercises evaluate discovery and continuation in real sessions. They are
 explicit, bounded reviews rather than a new automated CI lane or coordinator.
