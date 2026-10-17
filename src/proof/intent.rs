@@ -308,10 +308,10 @@ fn resolve_build_target(
     match candidates.len() {
         1 => Ok(candidates.remove(0)),
         0 => Err(format!(
-            "no approved focused build target matches `{label}`; choose a declared package using `cargo-package:<package>` or a declared target using `cargo-target:<package>::<target>`"
+            "no approved focused build target matches `{label}`; choose a declared package using `cargo-package:<package>`"
         )),
         count => Err(format!(
-            "ambiguous focused build target `{label}` matched {count} approved targets; choose a declared package using `cargo-package:<package>` or a declared target using `cargo-target:<package>::<target>`"
+            "ambiguous focused build target `{label}` matched {count} approved targets; choose a declared package using `cargo-package:<package>`"
         )),
     }
 }
@@ -776,7 +776,7 @@ mod tests {
                 &diff(&[]),
                 "no-such-package"
             ))?,
-            "no approved focused build target matches `no-such-package`; choose a declared package using `cargo-package:<package>` or a declared target using `cargo-target:<package>::<target>`"
+            "no approved focused build target matches `no-such-package`; choose a declared package using `cargo-package:<package>`"
         );
         assert_eq!(
             expected_error(resolve_build_target(
@@ -784,7 +784,7 @@ mod tests {
                 &diff(&[]),
                 "cargo-target:ub-review/no-such-target"
             ))?,
-            "no approved focused build target matches `cargo-target:ub-review/no-such-target`; choose a declared package using `cargo-package:<package>` or a declared target using `cargo-target:<package>::<target>`"
+            "no approved focused build target matches `cargo-target:ub-review/no-such-target`; choose a declared package using `cargo-package:<package>`"
         );
         assert_eq!(
             expected_error(resolve_test_target(
@@ -814,7 +814,7 @@ mod tests {
             .ok_or_else(|| anyhow::anyhow!("missing focused-build rejection"))?;
         assert_eq!(
             direct_build_error,
-            "no approved focused build target matches `no-such-package`; choose a declared package using `cargo-package:<package>` or a declared target using `cargo-target:<package>::<target>`"
+            "no approved focused build target matches `no-such-package`; choose a declared package using `cargo-package:<package>`"
         );
         assert_eq!(
             request_key(
@@ -1042,7 +1042,7 @@ mod tests {
     #[test]
     fn build_rejections_explain_declared_package_recovery() -> Result<()> {
         let mut workspace = graph();
-        let guidance = "; choose a declared package using `cargo-package:<package>` or a declared target using `cargo-target:<package>::<target>`";
+        let guidance = "; choose a declared package using `cargo-package:<package>`";
         for target in ["absent-package", "cargo-target:ub-review/absent-target"] {
             assert_eq!(
                 expected_error(resolve_build_target(&workspace, &diff(&[]), target))?,
