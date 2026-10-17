@@ -15,6 +15,9 @@ pub(crate) struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
+    /// Validate independently pinned recorded analyzer selection evidence.
+    /// Read-only; never installs, executes or activates an analyzer.
+    VerifyAnalyzerBundle(VerifyAnalyzerBundleArgs),
     /// Write a starter .ub-review.toml.
     Init(InitArgs),
     /// One-command adoption: write a safe GitHub Actions workflow + minimal
@@ -72,6 +75,19 @@ pub(crate) enum Command {
     /// branch-protection step. Reads calibration data only; never changes
     /// branch protection.
     Promote(PromoteArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct VerifyAnalyzerBundleArgs {
+    /// Root containing transferred, independently pinned evidence objects.
+    #[arg(long)]
+    pub(crate) evidence_root: PathBuf,
+    /// Repository-relative intake file inside evidence-root.
+    #[arg(long)]
+    pub(crate) intake: String,
+    /// Independently retained intake SHA-256; never derive it from the bundle.
+    #[arg(long)]
+    pub(crate) intake_sha256: String,
 }
 
 #[derive(Debug, Args)]
