@@ -324,7 +324,10 @@ fn build_command(package: &CargoPackageInfo, target: Option<&CargoTargetInfo>) -
             "bench" => "--bench",
             _ => return command,
         };
-        command.push_str(&format!(" {flag} {}", target.name));
+        command.push_str(&format!(" {flag}"));
+        if target.kind != "lib" {
+            command.push_str(&format!(" {}", target.name));
+        }
     }
     command
 }
@@ -715,6 +718,41 @@ mod tests {
     }
 
     #[test]
+    fn library_build_resolution_produces_a_broker_approved_command() -> Result<()> {
+        let mut workspace = graph();
+        workspace.packages[0].targets.push(CargoTargetInfo {
+            name: "library".to_owned(),
+            kind: "lib".to_owned(),
+            src_path: "src/lib.rs".to_owned(),
+        });
+        let target = resolve_build_target(&workspace, &diff(&[]), "cargo-target:ub-review/library")
+            .map_err(anyhow::Error::msg)?;
+        assert_eq!(target.target_name(), "library");
+        assert_eq!(
+            target.command,
+            "cargo check --locked --package ub-review --lib"
+        );
+        let spec = focused_build_command_spec(&target.command)
+            .ok_or_else(|| anyhow::anyhow!("resolved library command refused by broker"))?;
+        assert_eq!(
+            spec.argv,
+            [
+                "cargo",
+                "check",
+                "--locked",
+                "--package",
+                "ub-review",
+                "--lib"
+            ]
+        );
+        assert!(
+            focused_build_command_spec("cargo check --locked --package ub-review --lib library")
+                .is_none()
+        );
+        Ok(())
+    }
+
+    #[test]
     fn build_resolution_and_command_templates_are_exact() -> Result<()> {
         let workspace = graph();
         let workspace_target = resolve_build_target(&workspace, &diff(&[]), "workspace")
@@ -747,7 +785,7 @@ mod tests {
         };
         assert_eq!(
             build_command(package, Some(&lib)),
-            "cargo check --locked --package ub-review --lib library"
+            "cargo check --locked --package ub-review --lib"
         );
         let example = CargoTargetInfo {
             name: "demo".to_owned(),
