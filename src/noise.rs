@@ -44,6 +44,14 @@ pub(crate) fn is_refutation_confirmation_observation(observation: &ObservationGr
     is_refuted_observation(observation) && !is_global_calibration_refutation(observation)
 }
 
+pub(crate) fn is_model_only_failed_objection(observation: &ObservationGroup) -> bool {
+    !observation.sources.is_empty()
+        && observation
+            .sources
+            .iter()
+            .all(|source| source == "model-failed-objection")
+}
+
 pub(crate) fn is_pr_body_artifact_only_observation(observation: &ObservationGroup) -> bool {
     let text =
         format!("{} {}", observation.claim, observation.evidence.join(" ")).to_ascii_lowercase();
@@ -53,11 +61,7 @@ pub(crate) fn is_pr_body_artifact_only_observation(observation: &ObservationGrou
         // public refutations. Use producer provenance rather than trying to
         // infer source truth from prose or the model-selected kind. Preserve
         // the existing policy for groups with an independent evidence source.
-        || (!observation.sources.is_empty()
-            && observation
-                .sources
-                .iter()
-                .all(|source| source == "model-failed-objection"))
+        || is_model_only_failed_objection(observation)
         || matches!(
             observation.kind.as_str(),
             "empty-internal-audit" | "malformed-internal-audit"
@@ -996,6 +1000,155 @@ mod human_output_admission_tests {
         Ok(())
     }
     use anyhow::ensure;
+
+    fn collision_review(
+        summaries: &[SummaryOnlyFinding],
+        observations: &[Observation],
+    ) -> Result<CompiledReviewSurface> {
+        let args = crate::tests::test_run_args(PathBuf::from("target/ripr-8262-collision"));
+        let plan = crate::tests::test_plan(Vec::new());
+        let diff = crate::tests::test_diff();
+        let policy = ReviewBodyPolicy::default();
+        compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &policy,
+            run_pass: RunPass::Manual,
+            post_review_on: &[],
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &[],
+            summary_only_findings: summaries,
+            observations,
+            proof_receipts: &[],
+            suggested_issues: &[],
+            final_follow_up_tasks: 0,
+            reporter_distillation: None,
+        })
+    }
+
+    fn collision_finding(claim: &str) -> SummaryOnlyFinding {
+        SummaryOnlyFinding {
+            lane: "correctness".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "high".to_owned(),
+            reason: claim.to_owned(),
+            evidence: "source inspected".to_owned(),
+        }
+    }
+
+    fn collision_audit(kind: &str, claim: &str, evidence: &str) -> Result<Observation> {
+        let lane = model_lane("opposition", "Review", &[], "Trace callers.");
+        let mut observation = validate_failed_objection(
+            &lane,
+            serde_json::from_value(serde_json::json!({
+                "claim": claim, "reason": "Private rejected hypothesis.",
+                "kind": kind, "confidence": "high", "evidence": [evidence]
+            }))?,
+            0,
+        );
+        observation.dedupe_key = "private-audit".to_owned();
+        Ok(observation)
+    }
+
+    #[test]
+    fn ripr_8262_private_audit_cannot_suppress_matching_summary() -> Result<()> {
+        let claim = "Deferred retention admits a scoped binding into the workspace index.";
+        let finding = collision_finding(claim);
+        let audit = collision_audit("bug", claim, "source inspected")?;
+        let baseline = collision_review(std::slice::from_ref(&finding), &[])?;
+        assert!(baseline.should_prepare_github_review);
+        assert!(baseline.github_review.body.contains(claim));
+        let mixed = collision_review(std::slice::from_ref(&finding), std::slice::from_ref(&audit))?;
+        assert!(
+            mixed.github_review.body.contains(claim),
+            "matching public summary was suppressed"
+        );
+        assert_eq!(mixed.github_review.body, baseline.github_review.body);
+        assert!(mixed.should_prepare_github_review);
+        assert!(
+            !mixed
+                .github_review
+                .body
+                .contains("Private rejected hypothesis")
+        );
+        let retained = serde_json::to_string(&observation_summary_artifacts(&[audit]).unique)?;
+        assert!(retained.contains("Private rejected hypothesis"));
+        Ok(())
+    }
+
+    #[test]
+    fn ripr_8262_private_audit_cannot_win_public_claim_selection() -> Result<()> {
+        let claim = "Deferred retention admits a scoped binding into the workspace index.";
+        let unrelated =
+            collision_finding("The parser discards the final token after a trailing separator.");
+        for (kind, status, source, evidence) in [
+            ("bug", "open", "model-observation", "source inspected"),
+            (
+                "missing-evidence",
+                "open",
+                "model-observation",
+                "source inspected",
+            ),
+            (
+                "false-premise",
+                "refuted",
+                "proof-receipt",
+                "executed receipt inspected",
+            ),
+        ] {
+            let audit = collision_audit(kind, claim, evidence)?;
+            let independent = make_observation(ObservationInput {
+                index: 1,
+                lane: "correctness",
+                question: "caller-path",
+                claim,
+                kind,
+                status,
+                severity: "low",
+                confidence: "medium",
+                path: None,
+                line: None,
+                evidence: vec![evidence.to_owned()],
+                dedupe_key: Some("independent-evidence"),
+                source,
+            });
+            let groups = unique_review_observations(&[independent.clone(), audit.clone()]);
+            assert_eq!(groups.len(), 2, "distinct group keys must survive grouping");
+            assert!(
+                observation_group_rank(&groups[1]) > observation_group_rank(&groups[0]),
+                "the private group must win the old complete rank comparison: {kind}"
+            );
+            let baseline = collision_review(
+                std::slice::from_ref(&unrelated),
+                std::slice::from_ref(&independent),
+            )?;
+            assert!(
+                baseline.github_review.body.contains(claim),
+                "control must publish: {kind}"
+            );
+            for observations in [
+                [independent.clone(), audit.clone()],
+                [audit.clone(), independent.clone()],
+            ] {
+                let mixed = collision_review(std::slice::from_ref(&unrelated), &observations)?;
+                assert!(
+                    mixed.github_review.body.contains(claim),
+                    "private audit displaced {kind}"
+                );
+                assert_eq!(mixed.github_review.body, baseline.github_review.body);
+                assert!(mixed.should_prepare_github_review);
+                let retained =
+                    serde_json::to_string(&observation_summary_artifacts(&observations).unique)?;
+                assert!(retained.contains("Private rejected hypothesis"));
+                assert!(retained.contains("independent-evidence"));
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn ripr_8262_public_boundary_preserves_other_evidence_sources() {
