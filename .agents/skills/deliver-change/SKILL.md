@@ -48,7 +48,9 @@ against the final candidate. Scope relevant base drift before integration.
 
 ## Select before qualification
 
-Multiple alternative Drafts may receive focused development proof and review.
+Compare alternative candidates with focused development proof and review before
+PR publication while opening even a Draft still triggers hosted qualification.
+After the explicit-request cutover, alternative Draft PRs may remain cheap.
 Select the candidate intended to land before expensive pre-merge qualification;
 unselected alternatives do not each get a full CI run. Selection is per objective,
 not a repository-wide max-one queue. Independent objectives may proceed in parallel.
