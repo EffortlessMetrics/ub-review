@@ -1370,6 +1370,13 @@ The deterministic planner remains the source of proof_tasks.ndjson. Add only pro
 If impact_candidates are present in the planner input, prioritize proof that targets the highest-ranked candidates the deterministic planner skipped.
 Prefer typed `proof_intents` for new proof requests: describe the question and expected answer shape, and let the deterministic broker resolve an approved command.
 
+Current typed-intent resolver contract:
+- Request only focused-test, focused-build, or base-plus-tests. Other proof kinds have no executable resolver route; record an observation instead.
+- For focused-test or base-plus-tests, use `cargo-test:<package>/<integration-test>` naming a declared Cargo integration-test target. Function names, Rust module paths, and arbitrary route labels do not select executable tests.
+- For focused-build, use `cargo-package:<package>` naming a declared Cargo package, or `workspace` for a workspace check.
+- Use only package and integration-test names established by repository metadata or the supplied impact candidates. If no exact target is established, leave proof_intents empty and record the missing evidence; do not invent a name.
+- Omit typed-intent timeout_sec to use the approved per-command ceiling of {proof_timeout_sec}s, or supply a value in 1..={proof_timeout_sec}. runtime_budget.total_proof_timeout_sec is an aggregate budget, never a per-command timeout. The same ceiling applies to legacy proof_requests. If the ceiling or aggregate budget is zero, leave both proof arrays empty.
+
 IMPORTANT: proof commands must use the EXACT syntax the proof broker's allowlist accepts.
 - Use `--package <name>` not `-p <name>`.
 - Always include `--locked`.
@@ -1421,7 +1428,7 @@ Return only one strict JSON object:
       "command": "focused command requested from central proof broker",
       "reason": "why this proof would change the review decision",
       "cost": "focused-test|focused-build|manual",
-      "timeout_sec": 300,
+      "timeout_sec": {proof_timeout_sec},
       "required": false
     }}
   ],
@@ -1430,10 +1437,10 @@ Return only one strict JSON object:
       "claim_id": "stable-claim-id",
       "question": "the material question this proof should answer",
       "expected_answer_shape": "the observable result that confirms or refutes it",
-      "proof_kind": "focused-test|focused-build|base-plus-tests|sanitizer-witness|mutation-witness|miri-witness|source-route-probe|external-check",
-      "target": "safe repository test, package, symbol, or route target",
+      "proof_kind": "focused-test|focused-build|base-plus-tests",
+      "target": "exact Cargo target label as specified above",
       "estimated_value": "high|medium-high|medium|low",
-      "timeout_sec": 300
+      "timeout_sec": {proof_timeout_sec}
     }}
   ]
 }}
@@ -1449,6 +1456,7 @@ Do not post, mutate files, or run shell commands. Lanes request proof; only the 
         endpoint_kind = spec.endpoint_kind.key(),
         role = lane.role,
         focus = lane.focus,
+        proof_timeout_sec = input.runtime_budget.per_command_timeout_sec,
         input_json = input_json,
         output_json = output_json,
     ))
@@ -1479,6 +1487,256 @@ pub(crate) fn apply_proof_planner_model_output(
             issue_candidates: &mut ignored_issue_candidates,
         },
     );
+}
+
+#[cfg(test)]
+mod proof_planner_request_contract_tests {
+    use super::*;
+
+    fn lane() -> LanePlan {
+        LanePlan {
+            id: "proof-planner".to_owned(),
+            role: "Advisory proof planner".to_owned(),
+            model: "test-model".to_owned(),
+            model_display: "test-model".to_owned(),
+            receives: Vec::new(),
+            focus: "bounded proof".to_owned(),
+        }
+    }
+
+    fn prompt(ceiling: u64) -> Result<String> {
+        let config = Config::default();
+        let mut profile = config.selected_profile()?.clone();
+        profile.budgets.proof_command_timeout_sec = ceiling;
+        profile.budgets.proof_total_timeout_sec = 600;
+        let diff = crate::tests::test_diff();
+        let box_state = BoxState {
+            cpus: 2,
+            free_mem_mb: Some(7_000),
+            free_disk_mb: Some(10_000),
+            load_1m: Some(0.0),
+            github_actions: false,
+        };
+        let threads = absent_pr_thread_context(0);
+        let input =
+            build_proof_planner_input(&diff, &profile, &box_state, &threads, &[], Vec::new())?;
+        let output = build_proof_planner_output(&diff, &profile, &[])?;
+        let args = crate::tests::test_run_args(PathBuf::from("unused-prompt-output"));
+        render_proof_planner_model_task_prompt(
+            &lane(),
+            &direct_minimax_spec(&args),
+            &input,
+            &output,
+        )
+    }
+
+    fn response_template(prompt: &str) -> Result<serde_json::Value> {
+        let (_, response) = prompt
+            .split_once("Return only one strict JSON object:\n")
+            .context("planner response template marker")?;
+        let (response, _) = response
+            .split_once("\n\nHard caps:")
+            .context("template end")?;
+        Ok(serde_json::from_str(response)?)
+    }
+
+    #[test]
+    fn planner_response_examples_follow_the_operator_command_ceiling() -> Result<()> {
+        for ceiling in [1, 120, 300] {
+            let prompt = prompt(ceiling)?;
+            let (_, input) = prompt
+                .split_once("Planner input:\n```json\n")
+                .context("planner input marker")?;
+            let (input, _) = input.split_once("\n```").context("planner input end")?;
+            let input: serde_json::Value = serde_json::from_str(input)?;
+            assert_eq!(input["runtime_budget"]["per_command_timeout_sec"], ceiling);
+            assert_eq!(input["runtime_budget"]["total_proof_timeout_sec"], 600);
+            let response = response_template(&prompt)?;
+            assert_eq!(response["proof_requests"][0]["timeout_sec"], ceiling);
+            assert_eq!(response["proof_intents"][0]["timeout_sec"], ceiling);
+            assert!(prompt.contains(&format!("1..={ceiling}")));
+            assert!(
+                prompt.contains("runtime_budget.total_proof_timeout_sec is an aggregate budget")
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn planner_offers_only_resolvable_kinds_and_exact_cargo_target_labels() -> Result<()> {
+        let prompt = prompt(300)?;
+        let response = response_template(&prompt)?;
+        assert_eq!(
+            response["proof_intents"][0]["proof_kind"],
+            "focused-test|focused-build|base-plus-tests"
+        );
+        assert!(prompt.contains("cargo-test:<package>/<integration-test>"));
+        assert!(prompt.contains("cargo-package:<package>"));
+        assert!(prompt.contains("Function names, Rust module paths, and arbitrary route labels"));
+        assert!(prompt.contains("leave proof_intents empty"));
+        Ok(())
+    }
+
+    #[test]
+    fn literal_planner_requests_preserve_exact_resolution_and_rejection() -> Result<()> {
+        let fixture = tempfile::tempdir()?;
+        fs::create_dir_all(fixture.path().join("src"))?;
+        fs::create_dir_all(fixture.path().join("tests"))?;
+        fs::write(
+            fixture.path().join("Cargo.toml"),
+            "[package]\nname = \"planner-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )?;
+        fs::write(fixture.path().join("src/lib.rs"), "")?;
+        fs::write(fixture.path().join("tests/protocol.rs"), "")?;
+        let budget = ProofBudget {
+            max_focused_test_files: 3,
+            max_focused_tests: 3,
+            per_command_timeout_sec: 300,
+            max_total_seconds: 600,
+        };
+        let cases = [
+            (
+                "focused-test",
+                "cargo-test:planner-fixture/protocol",
+                Some(300),
+                "resolved",
+                Some("cargo test --locked --package planner-fixture --test protocol"),
+            ),
+            (
+                "base-plus-tests",
+                "cargo-test:planner-fixture/protocol",
+                None,
+                "resolved",
+                Some("cargo test --locked --package planner-fixture --test protocol"),
+            ),
+            (
+                "focused-build",
+                "cargo-package:planner-fixture",
+                Some(120),
+                "resolved",
+                Some("cargo check --locked --package planner-fixture"),
+            ),
+            (
+                "focused-test",
+                "cargo-test:planner-fixture/protocol",
+                Some(600),
+                "invalid_timeout",
+                None,
+            ),
+            (
+                "focused-test",
+                "cargo-test:planner-fixture/protocol",
+                Some(0),
+                "invalid_timeout",
+                None,
+            ),
+            (
+                "focused-test",
+                "cargo-test:planner-fixture/missing",
+                Some(300),
+                "unsupported_target",
+                None,
+            ),
+            (
+                "focused-test",
+                "planner_fixture::check_protocol",
+                Some(300),
+                "unsupported_target",
+                None,
+            ),
+            (
+                "source-route-probe",
+                "cargo-test:planner-fixture/protocol",
+                Some(300),
+                "unsupported_kind",
+                None,
+            ),
+            (
+                "mutation-witness",
+                "cargo-test:planner-fixture/protocol",
+                Some(300),
+                "unsupported_kind",
+                None,
+            ),
+            (
+                "focused-test",
+                "../protocol",
+                Some(300),
+                "rejected_admission",
+                None,
+            ),
+        ];
+        for (kind, target, timeout, expected_status, command) in cases {
+            let raw = serde_json::json!({"proof_intents": [{
+                "claim_id": "claim-protocol",
+                "question": "Does the declared protocol target answer this claim?",
+                "expected_answer_shape": "An execution receipt with the target result",
+                "proof_kind": kind,
+                "target": target,
+                "estimated_value": "medium",
+                "timeout_sec": timeout
+            }]});
+            let output: LaneModelOutput = serde_json::from_value(raw)?;
+            let mut intents = Vec::new();
+            let mut legacy_requests = Vec::new();
+            let mut observations = Vec::new();
+            apply_proof_planner_model_output(
+                &lane(),
+                output,
+                &BTreeSet::new(),
+                &mut observations,
+                &mut legacy_requests,
+                &mut intents,
+            );
+            if expected_status == "rejected_admission" {
+                assert!(intents.is_empty());
+                assert!(legacy_requests.is_empty());
+                assert_eq!(observations.len(), 1);
+                assert_eq!(observations[0].source, "proof-intent-validation");
+                assert_eq!(observations[0].kind, "missing-evidence");
+                continue;
+            }
+            assert!(observations.is_empty());
+            assert_eq!(intents.len(), 1, "{kind} {target} {timeout:?}");
+            assert!(legacy_requests.is_empty());
+            let resolved = resolve_model_proof_intents(
+                fixture.path(),
+                &crate::tests::test_diff(),
+                &intents,
+                &[],
+                budget,
+            )?;
+            assert_eq!(
+                resolved.intents[0].status, expected_status,
+                "{kind} {target} {timeout:?}"
+            );
+            if let Some(command) = command {
+                assert_eq!(resolved.proof_requests.len(), 1);
+                assert_eq!(resolved.proof_requests[0].command, command);
+                assert_eq!(
+                    resolved.proof_requests[0].timeout_sec,
+                    timeout.unwrap_or(300)
+                );
+                assert_eq!(
+                    resolved.intents[0].resolved_request_ids,
+                    vec![resolved.proof_requests[0].id.clone()]
+                );
+            } else {
+                assert!(resolved.proof_requests.is_empty());
+                assert!(resolved.intents[0].resolved_request_ids.is_empty());
+                if expected_status == "invalid_timeout" {
+                    assert_eq!(
+                        resolved.intents[0].resolution_reason,
+                        format!(
+                            "requested timeout {}s is outside the approved per-command budget of 300s",
+                            timeout.context("invalid timeout case must supply a value")?
+                        )
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 fn proof_planner_advisory_output(output: LaneModelOutput) -> LaneModelOutput {
