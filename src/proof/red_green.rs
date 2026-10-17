@@ -42,7 +42,7 @@ where
     let mut leases = Vec::new();
     let mut executed_tasks = 0_usize;
     let mut executed_files = BTreeSet::new();
-    let mut estimated_seconds = 0_u64;
+    let mut consumed_seconds = 0_u64;
     let lease_budget = proof_lease_budget(profile)?;
     for task in tasks {
         let task_timeout_sec = focused_test_task_command_timeout(&task, budget);
@@ -108,7 +108,7 @@ where
             executed_tasks,
             &executed_files,
             &task.file,
-            estimated_seconds,
+            consumed_seconds,
             task_timeout_sec,
             task.mode.command_count(),
             budget,
@@ -142,7 +142,8 @@ where
             continue;
         }
         executed_files.insert(task.file.clone());
-        let lease = focused_test_resource_lease(
+        let task_started = std::time::Instant::now();
+        let mut lease = focused_test_resource_lease(
             &task,
             budget,
             lease_budget,
@@ -186,11 +187,12 @@ where
                 &mut prepare_base_plus_tests,
             )?,
         };
+        settle_focused_proof_lease(&mut lease, &receipt, task_started.elapsed().as_millis());
+        consumed_seconds =
+            consumed_seconds.saturating_add(focused_proof_lease_charged_seconds(&lease));
         leases.push(lease);
         receipts.push(receipt);
         executed_tasks += 1;
-        estimated_seconds = estimated_seconds
-            .saturating_add(task_timeout_sec.saturating_mul(task.mode.command_count()));
     }
     Ok(ProofBrokerResult {
         proof_receipts: receipts,
@@ -526,6 +528,11 @@ mod tests {
             .ok_or_else(|| anyhow::anyhow!("expected one proof receipt"))?;
         assert_eq!(receipt.result, "discriminating", "{receipt:?}");
         assert_eq!(receipt.test_patch_mode, "base-plus-tests");
+        assert!(
+            result.resource_leases[0]
+                .settled_elapsed_ms
+                .is_some_and(|elapsed| elapsed >= 14)
+        );
         let patch = fs::read_to_string(out.join("proof/base-plus-tests.patch"))?;
         assert!(patch.contains("fn classifies_boundary"), "{patch}");
         assert!(!patch.contains("value >= 10"), "{patch}");
@@ -575,6 +582,11 @@ mod tests {
             .first()
             .ok_or_else(|| anyhow::anyhow!("expected one proof receipt"))?;
         assert_eq!(receipt.result, "base_patch_failed", "{receipt:?}");
+        assert_eq!(result.resource_leases[0].settled_elapsed_ms, None);
+        assert_eq!(
+            focused_proof_lease_charged_seconds(&result.resource_leases[0]),
+            120
+        );
         assert!(
             receipt.reason.contains("classification refused"),
             "{receipt:?}"
@@ -596,6 +608,7 @@ mod tests {
         let recorder = TaskLedgerRecorder::new(&revision, &Instant::now())?;
         let ledger = ProofTaskLedger::new(recorder.clone());
         let lease = ResourceLease {
+            settled_elapsed_ms: None,
             revision: Some(revision),
             schema: RESOURCE_LEASE_SCHEMA.to_owned(),
             id: format!("lease-{}", task.id),
@@ -702,6 +715,7 @@ mod tests {
         let recorder = TaskLedgerRecorder::new(&revision, &Instant::now())?;
         let ledger = ProofTaskLedger::new(recorder.clone());
         let lease = ResourceLease {
+            settled_elapsed_ms: None,
             revision: None,
             schema: RESOURCE_LEASE_SCHEMA.to_owned(),
             id: format!("lease-{}", task.id),

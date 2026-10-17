@@ -741,6 +741,7 @@ mod tests {
 
     fn granted_lease(id: &str) -> ResourceLease {
         ResourceLease {
+            settled_elapsed_ms: None,
             revision: None,
             schema: RESOURCE_LEASE_SCHEMA.to_owned(),
             id: id.to_owned(),

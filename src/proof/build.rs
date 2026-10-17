@@ -38,7 +38,7 @@ where
     let mut receipts = Vec::new();
     let mut leases = Vec::new();
     let mut executed_tasks = 0_usize;
-    let mut estimated_seconds = 0_u64;
+    let mut consumed_seconds = 0_u64;
     let lease_budget = proof_lease_budget(profile)?;
     for task in tasks {
         let task_timeout_sec = focused_build_task_command_timeout(&task, budget);
@@ -92,7 +92,7 @@ where
         }
         if !focused_build_budget_allows_next(
             executed_tasks,
-            estimated_seconds,
+            consumed_seconds,
             task_timeout_sec,
             budget,
         ) {
@@ -119,7 +119,8 @@ where
             )?);
             continue;
         }
-        let lease = focused_build_resource_lease(
+        let task_started = std::time::Instant::now();
+        let mut lease = focused_build_resource_lease(
             &task,
             budget,
             lease_budget,
@@ -145,16 +146,13 @@ where
             _ => "skipped_profile",
         };
         let reason = format!("HEAD build proof {}: {}", head.status, head.reason);
-        receipts.push(focused_build_receipt(
-            diff,
-            &task,
-            vec![head],
-            result.to_owned(),
-            reason,
-        ));
+        let receipt = focused_build_receipt(diff, &task, vec![head], result.to_owned(), reason);
+        settle_focused_proof_lease(&mut lease, &receipt, task_started.elapsed().as_millis());
+        consumed_seconds =
+            consumed_seconds.saturating_add(focused_proof_lease_charged_seconds(&lease));
+        receipts.push(receipt);
         leases.push(lease);
         executed_tasks += 1;
-        estimated_seconds = estimated_seconds.saturating_add(task_timeout_sec);
     }
     Ok(ProofBrokerResult {
         proof_receipts: receipts,
@@ -265,6 +263,11 @@ mod tests {
         assert_eq!(lease.kind, "focused-build");
         assert_eq!(lease.status, "granted");
         assert_eq!(lease.timeout_sec, 90);
+        assert!(
+            lease
+                .settled_elapsed_ms
+                .is_some_and(|elapsed| elapsed >= 34)
+        );
         assert_eq!(lease.worktree, None);
         assert_eq!(
             lease.command.as_deref(),

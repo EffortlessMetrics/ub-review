@@ -1476,6 +1476,7 @@ pub(crate) fn focused_test_resource_lease(
     reason: &str,
 ) -> ResourceLease {
     ResourceLease {
+        settled_elapsed_ms: None,
         revision: None,
         schema: RESOURCE_LEASE_SCHEMA.to_owned(),
         id: format!("lease-{}", task.id),
@@ -1517,6 +1518,7 @@ pub(crate) fn focused_build_resource_lease(
     reason: &str,
 ) -> ResourceLease {
     ResourceLease {
+        settled_elapsed_ms: None,
         revision: None,
         schema: RESOURCE_LEASE_SCHEMA.to_owned(),
         id: format!("lease-{}", task.id),
@@ -1555,6 +1557,7 @@ where
 {
     let lease_budget = proof_lease_budget(profile)?;
     let resource_lease = ResourceLease {
+        settled_elapsed_ms: None,
         revision: None,
         schema: RESOURCE_LEASE_SCHEMA.to_owned(),
         id: format!("sanitizer-lease-{}", target.len()),
@@ -2439,6 +2442,10 @@ mod tests {
             };
             ensure!(receipt.result == expected_result);
             ensure!(required_proof_receipt_class(receipt) == expected_class);
+            ensure!(
+                result.resource_leases[0].settled_elapsed_ms.is_some() == success.is_some(),
+                "unavailable command must retain reservation; confirmed failure may settle"
+            );
             if success.is_none() {
                 ensure!(
                     receipt.commands[0]
@@ -3817,13 +3824,13 @@ mod tests {
     #[test]
     fn seeded_required_admission_preserves_time_slots_and_failure_truth() -> Result<()> {
         for (seconds, slots, timeouts, fail_doc, required_runs, optional_runs, mixed_bun) in [
-            (1800, 4, [600, 600, 600], false, 3, 0, false),
-            (1800, 4, [600, 600, 300], false, 3, 0, false),
+            (1800, 4, [600, 600, 600], false, 3, 1, false),
+            (1800, 4, [600, 600, 300], false, 3, 1, false),
             (1800, 4, [300, 300, 300], false, 3, 1, false),
             (1800, 2, [600, 600, 300], false, 2, 0, false),
             (300, 4, [600, 600, 600], false, 0, 0, false),
             (1800, 0, [600, 600, 300], false, 0, 0, false),
-            (1800, 4, [600, 600, 600], true, 3, 0, false),
+            (1800, 4, [600, 600, 600], true, 3, 1, false),
             (1800, 4, [100, 100, 100], false, 3, 2, true),
         ] {
             let temp = tempfile::tempdir()?;
@@ -3984,19 +3991,26 @@ mod tests {
                 .iter()
                 .filter(|lease| lease.status == "granted")
                 .collect::<Vec<_>>();
+            ensure!(granted.len() <= slots);
+            let mut elapsed_seconds = 0_u64;
+            for lease in &granted {
+                let value = serde_json::to_value(lease)?;
+                let millis = value["settled_elapsed_ms"]
+                    .as_u64()
+                    .ok_or_else(|| anyhow::anyhow!("terminal fixture lease lacks settlement"))?;
+                elapsed_seconds += millis.div_ceil(1000).max(1);
+            }
             ensure!(
-                granted.len() <= slots
-                    && granted.iter().map(|lease| lease.timeout_sec).sum::<u64>() <= seconds
+                elapsed_seconds <= seconds,
+                "terminal elapsed must fit allocation"
             );
             ensure!(
                 result
                     .proof_receipts
                     .iter()
                     .flat_map(|receipt| &receipt.commands)
-                    .map(|command| command.timeout_sec)
-                    .sum::<u64>()
-                    <= seconds,
-                "all admitted command ceilings must fit the unchanged allocation"
+                    .all(|command| command.timeout_sec <= 600),
+                "command safety ceilings remain bounded"
             );
             let required_receipts = result
                 .proof_receipts

@@ -915,6 +915,7 @@ mod tests {
 
     fn granted_lease(receipt_id: &str) -> ResourceLease {
         ResourceLease {
+            settled_elapsed_ms: None,
             revision: None,
             schema: crate::RESOURCE_LEASE_SCHEMA.to_owned(),
             id: format!("lease-{receipt_id}"),

@@ -82,12 +82,67 @@ pub(crate) fn remaining_focused_proof_budget(
     let granted_seconds = focused_leases
         .iter()
         .filter(|lease| lease.status == "granted")
-        .map(|lease| lease.timeout_sec)
-        .sum::<u64>();
+        .map(|lease| focused_proof_lease_charged_seconds(lease))
+        .fold(0_u64, u64::saturating_add);
     budget.max_focused_tests = budget.max_focused_tests.saturating_sub(granted);
     budget.max_focused_test_files = budget.max_focused_test_files.saturating_sub(granted);
     budget.max_total_seconds = budget.max_total_seconds.saturating_sub(granted_seconds);
     budget
+}
+
+/// Charge terminal elapsed, or keep the admission reservation when completion
+/// is unknown. Do not refund task slots, cap overruns, or invent zero-cost work.
+pub(crate) fn focused_proof_lease_charged_seconds(lease: &ResourceLease) -> u64 {
+    match lease.settled_elapsed_ms {
+        Some(millis) => u64::try_from(millis.div_ceil(1000))
+            .unwrap_or(u64::MAX)
+            .max(1),
+        None => lease.timeout_sec,
+    }
+}
+
+/// The native sequential runners call this only after their receipt constructor
+/// returns. Failed setup/unavailable commands are not confirmed completion and
+/// cannot refund their reservation. Command/cleanup errors abort before this call.
+pub(crate) fn settle_focused_proof_lease(
+    lease: &mut ResourceLease,
+    receipt: &ProofReceipt,
+    task_elapsed_ms: u128,
+) {
+    if lease.status != "granted"
+        || lease.consumer != receipt.id
+        || lease.revision != receipt.revision
+        || !matches!(
+            receipt.result.as_str(),
+            "head_passed" | "head_failed" | "timed_out" | "discriminating" | "non_discriminating"
+        )
+        || !matches!(
+            (lease.kind.as_str(), receipt.kind.as_str()),
+            ("focused-build", "focused-build")
+                | ("focused-test", "focused-head" | "focused-red-green")
+        )
+        || !focused_proof_lease_counts_budget(&lease.kind)
+        || receipt.commands.is_empty()
+        || receipt
+            .commands
+            .iter()
+            .any(|command| !match command.status.as_str() {
+                "passed" => !command.timed_out && command.exit_code == Some(0),
+                "failed" => !command.timed_out && command.exit_code.is_some_and(|code| code != 0),
+                "timed_out" => command.timed_out,
+                _ => false,
+            })
+    {
+        return;
+    }
+    // The task clock includes setup/cleanup. The command sum is a conservative
+    // floor, including when tests inject a runner's measured duration.
+    let command_ms = receipt
+        .commands
+        .iter()
+        .map(|command| command.duration_ms)
+        .fold(0_u128, u128::saturating_add);
+    lease.settled_elapsed_ms = Some(task_elapsed_ms.max(command_ms));
 }
 
 fn focused_proof_lease_counts_budget(kind: &str) -> bool {
@@ -113,6 +168,7 @@ mod tests {
 
     fn test_lease(kind: &str, status: &str, timeout_sec: u64) -> ResourceLease {
         ResourceLease {
+            settled_elapsed_ms: None,
             revision: None,
             schema: "ub-review.resource_lease.v1".to_owned(),
             id: format!("lease-{kind}-{status}-{timeout_sec}"),
@@ -362,6 +418,154 @@ mod tests {
         assert!(focused_proof_lease_blocks_budget("absent"));
         assert!(!focused_proof_lease_blocks_budget("granted"));
         assert!(!focused_proof_lease_blocks_budget("skipped_profile"));
+    }
+
+    // JSON keeps the legacy/missing-field case executable on the old type too.
+    fn elapsed_lease(timeout: u64, elapsed_ms: u64) -> Result<ResourceLease> {
+        let mut value = serde_json::to_value(test_lease("focused-build", "granted", timeout))?;
+        value["settled_elapsed_ms"] = serde_json::json!(elapsed_ms);
+        Ok(serde_json::from_value(value)?)
+    }
+
+    #[test]
+    fn terminal_elapsed_reclaims_time_but_not_task_slots() -> Result<()> {
+        let budget = ProofBudget {
+            max_total_seconds: 1800,
+            ..test_budget()
+        };
+        let leases = [
+            elapsed_lease(600, 21_000)?,
+            elapsed_lease(600, 21_000)?,
+            elapsed_lease(300, 21_000)?,
+        ];
+        let remaining = remaining_focused_proof_budget(budget, &leases);
+        assert_eq!(remaining.max_total_seconds, 1737);
+        assert_eq!(remaining.max_focused_tests, 1);
+        assert_eq!(remaining.max_focused_test_files, 0);
+        assert_eq!(
+            leases.iter().map(|lease| lease.timeout_sec).sum::<u64>(),
+            1500
+        );
+        let legacy =
+            remaining_focused_proof_budget(budget, &[test_lease("focused-build", "granted", 600)]);
+        assert_eq!(legacy.max_total_seconds, 1200);
+        Ok(())
+    }
+
+    #[test]
+    fn recorded_optional_durations_refund_time_without_refunding_slots() -> Result<()> {
+        let mut leases = [
+            elapsed_lease(600, 17_056)?,
+            elapsed_lease(600, 925)?,
+            elapsed_lease(600, 11_455)?,
+        ];
+        for lease in &mut leases {
+            lease.kind = "focused-test".to_owned();
+        }
+        let remaining = remaining_focused_proof_budget(
+            ProofBudget {
+                max_total_seconds: 1800,
+                ..test_budget()
+            },
+            &leases,
+        );
+        // Recorded PR1502 command durations total29.436s; rounding per task
+        // charges31s. Required-first is still needed: slots are not returned.
+        assert_eq!(remaining.max_total_seconds, 1769);
+        assert_eq!(remaining.max_focused_tests, 1);
+        assert_eq!(
+            leases.iter().map(|lease| lease.timeout_sec).sum::<u64>(),
+            1800
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn elapsed_charge_rounds_up_and_never_caps_overruns() -> Result<()> {
+        for (millis, expected_seconds) in [(0, 1), (999, 1), (1000, 1), (1001, 2), (600_001, 601)] {
+            let budget = ProofBudget {
+                max_total_seconds: 1800,
+                ..test_budget()
+            };
+            let remaining = remaining_focused_proof_budget(budget, &[elapsed_lease(600, millis)?]);
+            assert_eq!(
+                remaining.max_total_seconds,
+                1800 - expected_seconds,
+                "{millis}ms"
+            );
+        }
+        let remaining =
+            remaining_focused_proof_budget(test_budget(), &[elapsed_lease(1, u64::MAX)?]);
+        assert_eq!(remaining.max_total_seconds, 0);
+        Ok(())
+    }
+
+    fn settlement_receipt(
+        status: &str,
+        exit_code: Option<i32>,
+        timed_out: bool,
+    ) -> Result<ProofReceipt> {
+        Ok(serde_json::from_value(serde_json::json!({
+            "schema": PROOF_RECEIPT_SCHEMA, "id": "proof-test", "kind": "focused-build",
+            "base": "base", "head": "head", "test_patch_mode": "head-only",
+            "requested_by": [], "request_ids": [], "result": "head_passed", "reason": "fixture",
+            "commands": [{"side":"head", "command":"cargo check --locked", "env":{},
+                "status":status, "exit_code":exit_code, "timed_out":timed_out,
+                "timeout_sec":600, "duration_ms":21_000, "stdout":"out", "stderr":"err", "reason":"fixture"}]
+        }))?)
+    }
+
+    #[test]
+    fn settlement_requires_confirmed_terminal_receipts() -> Result<()> {
+        for (status, exit_code, timed_out, settles) in [
+            ("passed", Some(0), false, true),
+            ("failed", Some(1), false, true),
+            ("timed_out", None, true, true),
+            ("skipped", None, false, false),
+            ("passed", None, false, false),
+            ("failed", Some(0), false, false),
+            ("passed", Some(0), true, false),
+        ] {
+            let mut lease = test_lease("focused-build", "granted", 600);
+            let receipt = settlement_receipt(status, exit_code, timed_out)?;
+            settle_focused_proof_lease(&mut lease, &receipt, 25_001);
+            assert_eq!(
+                lease.settled_elapsed_ms,
+                settles.then_some(25_001),
+                "{status}/{exit_code:?}/{timed_out}"
+            );
+            assert_eq!(lease.timeout_sec, 600);
+            assert_eq!(lease.status, "granted");
+        }
+        for bad in ["empty", "wrong-consumer", "setup-failed", "wrong-kind"] {
+            let mut lease = test_lease("focused-build", "granted", 600);
+            let mut receipt = settlement_receipt("passed", Some(0), false)?;
+            match bad {
+                "empty" => receipt.commands.clear(),
+                "wrong-consumer" => receipt.id = "other".to_owned(),
+                "setup-failed" => receipt.result = "base_patch_failed".to_owned(),
+                _ => receipt.kind = "other".to_owned(),
+            }
+            settle_focused_proof_lease(&mut lease, &receipt, 1);
+            assert_eq!(lease.settled_elapsed_ms, None, "{bad}");
+            assert_eq!(focused_proof_lease_charged_seconds(&lease), 600);
+        }
+        let mut lease = test_lease("focused-build", "granted", 600);
+        let mut receipt = settlement_receipt("passed", Some(0), false)?;
+        receipt.commands[0].duration_ms = 600_001;
+        settle_focused_proof_lease(&mut lease, &receipt, 1);
+        assert_eq!(lease.settled_elapsed_ms, Some(600_001));
+        assert_eq!(focused_proof_lease_charged_seconds(&lease), 601);
+        Ok(())
+    }
+
+    #[test]
+    fn elapsed_totals_saturate_instead_of_overflowing() {
+        let mut lease = test_lease("focused-test", "granted", 1);
+        lease.settled_elapsed_ms = Some(u128::MAX);
+        assert_eq!(focused_proof_lease_charged_seconds(&lease), u64::MAX);
+        let remaining = remaining_focused_proof_budget(test_budget(), &[lease.clone(), lease]);
+        assert_eq!(remaining.max_total_seconds, 0);
     }
 
     #[test]

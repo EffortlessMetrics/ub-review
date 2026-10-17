@@ -583,6 +583,7 @@ fn worker_lease(
         WorkerLeaseAdmission::Refused(reason) => ("refused", reason, false),
     };
     ResourceLease {
+        settled_elapsed_ms: None,
         revision: Some(revision.clone()),
         schema: crate::artifacts::RESOURCE_LEASE_SCHEMA.to_owned(),
         id: format!("worker-lease-{}-{side}", request.id),
@@ -10671,6 +10672,7 @@ index 1111111..2222222 100644
             status: "requested".to_owned(),
         }];
         let existing_leases = vec![ResourceLease {
+            settled_elapsed_ms: None,
             revision: None,
             schema: "ub-review.resource_lease.v1".to_owned(),
             id: "lease-proof-red-green-existing".to_owned(),
@@ -19616,6 +19618,7 @@ index 1111111..2222222 100644
         receipt.commands[0].command = request.command.clone();
         receipt.commands[0].duration_ms = 1_234;
         let lease = ResourceLease {
+            settled_elapsed_ms: None,
             revision: None,
             schema: super::RESOURCE_LEASE_SCHEMA.to_owned(),
             id: format!("lease-{}", receipt.id),
@@ -21112,6 +21115,7 @@ index 1111111..2222222 100644
         let proof_receipts = vec![confirmed_receipt, missing_receipt];
         let resource_leases = vec![
             ResourceLease {
+                settled_elapsed_ms: None,
                 revision: None,
                 schema: "ub-review.resource_lease.v1".to_owned(),
                 id: "lease-proof-confirmed".to_owned(),
@@ -21129,6 +21133,7 @@ index 1111111..2222222 100644
                 command: Some("bun test test/js/bun/md/md-edge-cases.test.ts".to_owned()),
             },
             ResourceLease {
+                settled_elapsed_ms: None,
                 revision: None,
                 schema: "ub-review.resource_lease.v1".to_owned(),
                 id: "lease-proof-timeout".to_owned(),
@@ -21674,6 +21679,7 @@ index 1111111..2222222 100644
         late_receipt.request_ids = vec!["proof-follow-up-1".to_owned()];
         late_receipt.reason = "HEAD passed; base+tests failed after follow-up proof.".to_owned();
         let late_lease = ResourceLease {
+            settled_elapsed_ms: None,
             revision: None,
             schema: "ub-review.resource_lease.v1".to_owned(),
             id: "lease-proof-follow-up-late".to_owned(),
