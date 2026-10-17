@@ -13,6 +13,7 @@ use anyhow::Result;
 use crate::*;
 
 const DEFAULT_TARGET_PREFIX: &str = "cargo-test:";
+const UNSUPPORTED_KIND_REASON: &str = "unsupported proof kind; supported kinds: focused-test, focused-build, base-plus-tests. Choose one only if it answers the proof question; otherwise leave the proof unresolved.";
 
 #[derive(Clone, Debug)]
 struct ApprovedTarget {
@@ -89,13 +90,13 @@ pub(crate) fn resolve_model_proof_intents(
                 resolve_test_target(graph, diff, &intent.target)
             }
             ProofKind::FocusedBuild => resolve_build_target(graph, diff, &intent.target),
-            _ => Err("unsupported proof kind".to_owned()),
+            _ => Err(UNSUPPORTED_KIND_REASON.to_owned()),
         };
 
         let target = match target_result {
             Ok(target) => target,
             Err(reason) => {
-                resolved.status = if reason == "unsupported proof kind" {
+                resolved.status = if reason == UNSUPPORTED_KIND_REASON {
                     "unsupported_kind".to_owned()
                 } else if reason.starts_with("ambiguous") {
                     "ambiguous_target".to_owned()
@@ -113,7 +114,7 @@ pub(crate) fn resolve_model_proof_intents(
             ProofKind::FocusedBuild => "focused-build",
             _ => {
                 resolved.status = "unsupported_kind".to_owned();
-                resolved.resolution_reason = "unsupported proof kind".to_owned();
+                resolved.resolution_reason = UNSUPPORTED_KIND_REASON.to_owned();
                 resolved_intents.push(resolved);
                 continue;
             }
@@ -244,9 +245,11 @@ fn resolve_test_target(
     });
     match candidates.len() {
         1 => Ok(candidates.remove(0)),
-        0 => Err(format!("no approved focused test target matches `{label}`")),
+        0 => Err(format!(
+            "no approved focused test target matches `{label}`; choose a declared integration test using `cargo-test:<package>::<test>`"
+        )),
         count => Err(format!(
-            "ambiguous focused test target `{label}` matched {count} approved targets"
+            "ambiguous focused test target `{label}` matched {count} approved targets; choose one declared integration test using `cargo-test:<package>::<test>`"
         )),
     }
 }
@@ -305,10 +308,10 @@ fn resolve_build_target(
     match candidates.len() {
         1 => Ok(candidates.remove(0)),
         0 => Err(format!(
-            "no approved focused build target matches `{label}`"
+            "no approved focused build target matches `{label}`; choose a declared package using `cargo-package:<package>` or a declared target using `cargo-target:<package>::<target>`"
         )),
         count => Err(format!(
-            "ambiguous focused build target `{label}` matched {count} approved targets"
+            "ambiguous focused build target `{label}` matched {count} approved targets; choose a declared package using `cargo-package:<package>` or a declared target using `cargo-target:<package>::<target>`"
         )),
     }
 }
@@ -555,7 +558,7 @@ mod tests {
         assert_eq!(result.intents[1].status, "unsupported_kind");
         assert_eq!(
             result.intents[1].resolution_reason,
-            "unsupported proof kind"
+            "unsupported proof kind; supported kinds: focused-test, focused-build, base-plus-tests. Choose one only if it answers the proof question; otherwise leave the proof unresolved."
         );
         assert_eq!(result.intents[2].status, "rejected_target");
         assert_eq!(result.intents[3].status, "invalid_timeout");
@@ -701,7 +704,7 @@ mod tests {
                 &diff(&[]),
                 "no-such-target"
             ))?,
-            "no approved focused test target matches `no-such-target`"
+            "no approved focused test target matches `no-such-target`; choose a declared integration test using `cargo-test:<package>::<test>`"
         );
         assert_eq!(
             expected_error(resolve_test_target(
@@ -709,7 +712,7 @@ mod tests {
                 &diff(&[]),
                 "cargo-package:ub-review"
             ))?,
-            "ambiguous focused test target `cargo-package:ub-review` matched 2 approved targets"
+            "ambiguous focused test target `cargo-package:ub-review` matched 2 approved targets; choose one declared integration test using `cargo-test:<package>::<test>`"
         );
         Ok(())
     }
@@ -773,7 +776,7 @@ mod tests {
                 &diff(&[]),
                 "no-such-package"
             ))?,
-            "no approved focused build target matches `no-such-package`"
+            "no approved focused build target matches `no-such-package`; choose a declared package using `cargo-package:<package>` or a declared target using `cargo-target:<package>::<target>`"
         );
         assert_eq!(
             expected_error(resolve_build_target(
@@ -781,7 +784,7 @@ mod tests {
                 &diff(&[]),
                 "cargo-target:ub-review/no-such-target"
             ))?,
-            "no approved focused build target matches `cargo-target:ub-review/no-such-target`"
+            "no approved focused build target matches `cargo-target:ub-review/no-such-target`; choose a declared package using `cargo-package:<package>` or a declared target using `cargo-target:<package>::<target>`"
         );
         assert_eq!(
             expected_error(resolve_test_target(
@@ -789,7 +792,7 @@ mod tests {
                 &diff(&[]),
                 "no-such-test-target"
             ))?,
-            "no approved focused test target matches `no-such-test-target`"
+            "no approved focused test target matches `no-such-test-target`; choose a declared integration test using `cargo-test:<package>::<test>`"
         );
         assert!(
             expected_error(resolve_test_target(
@@ -804,14 +807,14 @@ mod tests {
             .ok_or_else(|| anyhow::anyhow!("missing focused-test rejection"))?;
         assert_eq!(
             direct_test_error,
-            "no approved focused test target matches `no-such-test-target`"
+            "no approved focused test target matches `no-such-test-target`; choose a declared integration test using `cargo-test:<package>::<test>`"
         );
         let direct_build_error = resolve_build_target(&workspace, &diff(&[]), "no-such-package")
             .err()
             .ok_or_else(|| anyhow::anyhow!("missing focused-build rejection"))?;
         assert_eq!(
             direct_build_error,
-            "no approved focused build target matches `no-such-package`"
+            "no approved focused build target matches `no-such-package`; choose a declared package using `cargo-package:<package>` or a declared target using `cargo-target:<package>::<target>`"
         );
         assert_eq!(
             request_key(
@@ -928,6 +931,141 @@ mod tests {
         assert_eq!(defaulted_result.proof_requests[0].lane, "proof-planner");
         assert_eq!(defaulted_result.proof_requests[0].timeout_sec, 300);
         assert_eq!(defaulted_result.intents[0].status, "resolved");
+        Ok(())
+    }
+
+    #[test]
+    fn recovery_guidance_preserves_literal_rejection_and_resolution_controls() -> Result<()> {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        for kind in [
+            ProofKind::SanitizerWitness,
+            ProofKind::MutationWitness,
+            ProofKind::MiriWitness,
+            ProofKind::SourceRouteProbe,
+            ProofKind::ExternalCheck,
+        ] {
+            let mut request = intent(kind, "cli");
+            request
+                .resolved_request_ids
+                .push("stale-request".to_owned());
+            let result = resolve_model_proof_intents(root, &diff(&[]), &[request], &[], budget())?;
+            assert!(result.proof_requests.is_empty());
+            assert_eq!(result.intents[0].status, "unsupported_kind");
+            assert!(result.intents[0].resolved_request_ids.is_empty());
+            assert_eq!(
+                result.intents[0].resolution_reason,
+                "unsupported proof kind; supported kinds: focused-test, focused-build, base-plus-tests. Choose one only if it answers the proof question; otherwise leave the proof unresolved."
+            );
+        }
+        for (target, status) in [
+            ("absent-package::absent-test", "unsupported_target"),
+            ("module::unit_test_function", "unsupported_target"),
+            ("cargo-package:ub-review", "ambiguous_target"),
+            ("--test", "rejected_target"),
+            ("../../tests/cli.rs", "rejected_target"),
+            ("cli;cargo", "rejected_target"),
+            ("$(cargo)", "rejected_target"),
+        ] {
+            let result = resolve_model_proof_intents(
+                root,
+                &diff(&[]),
+                &[intent(ProofKind::FocusedTest, target)],
+                &[],
+                budget(),
+            )?;
+            assert!(result.proof_requests.is_empty(), "{target}");
+            assert_eq!(result.intents[0].status, status, "{target}");
+            assert!(
+                result.intents[0].resolved_request_ids.is_empty(),
+                "{target}"
+            );
+            if status != "rejected_target" {
+                assert!(
+                    result.intents[0]
+                        .resolution_reason
+                        .contains("declared integration test using `cargo-test:<package>::<test>`")
+                );
+            }
+        }
+        for timeout in [0, 301, 600] {
+            let mut request = intent(ProofKind::FocusedTest, "cargo-test:ub-review::cli");
+            request.timeout_sec = Some(timeout);
+            let result = resolve_model_proof_intents(root, &diff(&[]), &[request], &[], budget())?;
+            assert!(result.proof_requests.is_empty());
+            assert_eq!(result.intents[0].status, "invalid_timeout");
+            assert!(result.intents[0].resolved_request_ids.is_empty());
+        }
+        for (kind, target, command) in [
+            (
+                ProofKind::FocusedTest,
+                "cargo-test:ub-review::cli",
+                "cargo test --locked --package ub-review --test cli",
+            ),
+            (
+                ProofKind::BasePlusTests,
+                "cargo-test:ub-review::cli",
+                "cargo test --locked --package ub-review --test cli",
+            ),
+            (
+                ProofKind::FocusedBuild,
+                "cargo-package:ub-review",
+                "cargo check --locked --package ub-review",
+            ),
+            (
+                ProofKind::FocusedBuild,
+                "workspace",
+                "cargo check --locked --workspace",
+            ),
+        ] {
+            let result = resolve_model_proof_intents(
+                root,
+                &diff(&[]),
+                &[intent(kind, target)],
+                &[],
+                budget(),
+            )?;
+            assert_eq!(result.intents[0].status, "resolved");
+            assert_eq!(result.proof_requests.len(), 1);
+            assert_eq!(result.proof_requests[0].command, command);
+            assert_eq!(
+                result.intents[0].resolved_request_ids,
+                [result.proof_requests[0].id.clone()]
+            );
+            assert!(
+                focused_cargo_test_command_spec(command).is_some()
+                    || focused_build_command_spec(command).is_some()
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn build_rejections_explain_declared_package_recovery() -> Result<()> {
+        let mut workspace = graph();
+        let guidance = "; choose a declared package using `cargo-package:<package>` or a declared target using `cargo-target:<package>::<target>`";
+        for target in ["absent-package", "cargo-target:ub-review/absent-target"] {
+            assert_eq!(
+                expected_error(resolve_build_target(&workspace, &diff(&[]), target))?,
+                format!("no approved focused build target matches `{target}`{guidance}")
+            );
+        }
+        let mut nested = workspace.packages[0].clone();
+        nested.name = "nested".to_owned();
+        nested.directory = "nested".to_owned();
+        workspace.packages.push(nested);
+        assert_eq!(
+            expected_error(resolve_build_target(
+                &workspace,
+                &diff(&["nested/src/lib.rs"]),
+                "nested/src/lib.rs"
+            ))?,
+            format!(
+                "ambiguous focused build target `nested/src/lib.rs` matched 2 approved targets{guidance}"
+            )
+        );
+        let selected = resolve_build_target(&workspace, &diff(&[]), "cargo-package:nested")
+            .map_err(anyhow::Error::msg)?;
+        assert_eq!(selected.command, "cargo check --locked --package nested");
         Ok(())
     }
 }
