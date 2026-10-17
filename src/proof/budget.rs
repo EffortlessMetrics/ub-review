@@ -525,6 +525,9 @@ mod tests {
             ("passed", None, false, false),
             ("failed", Some(0), false, false),
             ("passed", Some(0), true, false),
+            ("timed_out", None, false, false),
+            ("failed", None, false, false),
+            ("failed", Some(1), true, false),
         ] {
             let mut lease = test_lease("focused-build", "granted", 600);
             let receipt = settlement_receipt(status, exit_code, timed_out)?;

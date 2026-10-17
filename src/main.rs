@@ -1102,6 +1102,7 @@ mod worker_proof_tests {
             serde_json::from_slice(&fs::read(out.join("resource_lease.json"))?)?;
         ensure!(receipt.revision.is_some());
         ensure!(receipt.revision == lease.revision);
+        assert_eq!(lease.settled_elapsed_ms, None);
         ensure!(receipt.commands.len() == 2);
         ensure!(receipt.commands[0].side == "nightly-preflight");
         ensure!(receipt.commands[1].side == "head");
