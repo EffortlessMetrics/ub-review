@@ -1375,7 +1375,7 @@ Current typed-intent resolver contract:
 - For focused-test or base-plus-tests, use `cargo-test:<package>/<integration-test>` naming a declared Cargo integration-test target. Function names, Rust module paths, and arbitrary route labels do not select executable tests.
 - For focused-build, use `cargo-package:<package>` naming a declared Cargo package, or `workspace` for a workspace check.
 - Use only package and integration-test names established by repository metadata or the supplied impact candidates. If no exact target is established, leave proof_intents empty and record the missing evidence; do not invent a name.
-- Omit typed-intent timeout_sec to use the approved per-command ceiling of {proof_timeout_sec}s, or supply a value in 1..={proof_timeout_sec}. runtime_budget.max_total_seconds is an aggregate budget, never a per-command timeout. The same ceiling applies to legacy proof_requests. If the ceiling or aggregate budget is zero, leave both proof arrays empty.
+- Omit typed-intent timeout_sec to use the approved per-command ceiling of {proof_timeout_sec}s, or supply a value in 1..={proof_timeout_sec}. runtime_budget.total_proof_timeout_sec is an aggregate budget, never a per-command timeout. The same ceiling applies to legacy proof_requests. If the ceiling or aggregate budget is zero, leave both proof arrays empty.
 
 IMPORTANT: proof commands must use the EXACT syntax the proof broker's allowlist accepts.
 - Use `--package <name>` not `-p <name>`.
@@ -1544,11 +1544,20 @@ mod proof_planner_request_contract_tests {
     fn planner_response_examples_follow_the_operator_command_ceiling() -> Result<()> {
         for ceiling in [1, 120, 300] {
             let prompt = prompt(ceiling)?;
+            let (_, input) = prompt
+                .split_once("Planner input:\n```json\n")
+                .context("planner input marker")?;
+            let (input, _) = input.split_once("\n```").context("planner input end")?;
+            let input: serde_json::Value = serde_json::from_str(input)?;
+            assert_eq!(input["runtime_budget"]["per_command_timeout_sec"], ceiling);
+            assert_eq!(input["runtime_budget"]["total_proof_timeout_sec"], 600);
             let response = response_template(&prompt)?;
             assert_eq!(response["proof_requests"][0]["timeout_sec"], ceiling);
             assert_eq!(response["proof_intents"][0]["timeout_sec"], ceiling);
             assert!(prompt.contains(&format!("1..={ceiling}")));
-            assert!(prompt.contains("max_total_seconds is an aggregate budget"));
+            assert!(
+                prompt.contains("runtime_budget.total_proof_timeout_sec is an aggregate budget")
+            );
         }
         Ok(())
     }
