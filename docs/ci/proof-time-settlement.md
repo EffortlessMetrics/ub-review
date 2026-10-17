@@ -15,7 +15,11 @@ runner results in tests. A settled failure or timeout remains failure or timeout
 Terminal command status must agree with its result: `passed` requires exit 0
 without a timeout, `failed` requires any nonzero exit (including 101) without a
 timeout, and `timed_out` requires the timeout flag. Contradictory receipts retain
-the full reservation. A red/green task counts both command durations, including
+the full reservation. Settlement also requires a granted lease and an exactly
+matching revision reference: digest, reviewed commit and candidate/merge semantics.
+A missing reference on either side cannot match a present one. Stale or
+non-granted receipts keep their reservation and cannot refund another candidate.
+A red/green task counts both command durations, including
 an expected failing base: 21 seconds plus 22 seconds gives a 43-second floor,
 even when an injected task clock reports less.
 
@@ -51,3 +55,10 @@ cargo test --locked --bin ub-review unbuildable_base_plus_tests_patch_reports_ba
 Retain measured durations and admission ceilings separately in exact-candidate
 handoffs. Passing an independent baseline or refunding a completed task does not
 satisfy another Required request without its own applicable receipt.
+
+The red/green loop also pins next-task admission independently of task-count
+limits. With two60-second commands per task and180seconds total, a first
+60,000ms task permits the next120-second reservation. A60,002ms task rounds
+to61seconds and refuses that next reservation; skipped work remains unsettled.
+These are injected duration controls over the real runner and worktree path,
+not a wall-time benchmark.

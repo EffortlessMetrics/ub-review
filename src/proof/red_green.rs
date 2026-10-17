@@ -539,6 +539,75 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn red_green_loop_charges_elapsed_before_reserving_next_task() -> Result<()> {
+        for (command_ms, expected_executed) in [(30_000, 2), (30_001, 1)] {
+            let repo = tempfile::tempdir()?;
+            let diff = same_file_fix_and_test_repo(repo.path())?;
+            let out = repo.path().join("out");
+            let args = test_run_args(out.clone());
+            let first = cargo_test_task();
+            let mut second = cargo_test_task();
+            second.id = "proof-rust-002".to_owned();
+            second.request_ids = vec![second.id.clone()];
+            let mut commands = 0;
+            let result = run_focused_red_green_proof_tasks_with_runner(
+                repo.path(),
+                &out,
+                &diff,
+                &Profile::default(),
+                &args,
+                ProofBudget {
+                    max_focused_test_files: 2,
+                    max_focused_tests: 2,
+                    per_command_timeout_sec: 60,
+                    max_total_seconds: 180,
+                },
+                vec![first, second],
+                None,
+                ProofExecutionPhase::ModelRequest,
+                |root, _argv, _env, timeout, stdout, stderr, _observe_process| {
+                    commands += 1;
+                    assert_eq!(timeout, 60);
+                    let source = fs::read_to_string(root.join("src/lib.rs"))?;
+                    let success = source.contains("value >= 10");
+                    fs::write(stdout, b"bounded runner fixture\n")?;
+                    fs::write(stderr, b"")?;
+                    Ok(CommandStatus {
+                        exit_code: Some(i32::from(!success)),
+                        timed_out: false,
+                        success,
+                        reason: "completed".to_owned(),
+                        duration_ms: command_ms,
+                    })
+                },
+                prepare_base_plus_tests_worktree,
+            )?;
+            assert_eq!(
+                commands,
+                expected_executed * 2,
+                "{command_ms}ms per command"
+            );
+            assert_eq!(result.proof_receipts.len(), 2);
+            assert_eq!(result.resource_leases.len(), 2);
+            assert_eq!(result.proof_receipts[0].result, "discriminating");
+            assert_eq!(result.resource_leases[0].timeout_sec, 120);
+            assert_eq!(
+                result.resource_leases[0].settled_elapsed_ms,
+                Some(command_ms * 2)
+            );
+            if expected_executed == 1 {
+                assert_eq!(result.proof_receipts[1].result, "skipped_budget");
+                assert_eq!(result.resource_leases[1].status, "exhausted");
+                assert_eq!(result.resource_leases[1].settled_elapsed_ms, None);
+            } else {
+                assert_eq!(result.proof_receipts[1].result, "discriminating");
+                assert_eq!(result.resource_leases[1].timeout_sec, 120);
+            }
+        }
+        Ok(())
+    }
+
     /// The refusal path: an unbuildable base+tests patch must be reported as
     /// `base_patch_failed`, never as a verdict about the tests.
     #[test]

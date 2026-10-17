@@ -565,6 +565,106 @@ mod tests {
     }
 
     #[test]
+    fn settlement_requires_matching_revision_and_granted_admission() -> Result<()> {
+        let current: RevisionRef = serde_json::from_value(serde_json::json!({
+            "digest": "a".repeat(64), "semantics": "candidate_head",
+            "reviewed_commit": "1".repeat(40)
+        }))?;
+        let mut changed_digest = current.clone();
+        changed_digest.digest = "b".repeat(64);
+        let mut changed_subject = current.clone();
+        changed_subject.reviewed_commit = "2".repeat(40);
+        let mut changed_semantics = current.clone();
+        changed_semantics.semantics = "merge_result".to_owned();
+        for (name, status, lease_revision, receipt_revision, settles) in [
+            (
+                "matching",
+                "granted",
+                Some(current.clone()),
+                Some(current.clone()),
+                true,
+            ),
+            (
+                "changed digest",
+                "granted",
+                Some(current.clone()),
+                Some(changed_digest),
+                false,
+            ),
+            (
+                "changed subject",
+                "granted",
+                Some(current.clone()),
+                Some(changed_subject),
+                false,
+            ),
+            (
+                "changed semantics",
+                "granted",
+                Some(current.clone()),
+                Some(changed_semantics),
+                false,
+            ),
+            (
+                "missing receipt revision",
+                "granted",
+                Some(current.clone()),
+                None,
+                false,
+            ),
+            (
+                "missing lease revision",
+                "granted",
+                None,
+                Some(current.clone()),
+                false,
+            ),
+            (
+                "refused",
+                "refused",
+                Some(current.clone()),
+                Some(current.clone()),
+                false,
+            ),
+            (
+                "absent",
+                "absent",
+                Some(current.clone()),
+                Some(current.clone()),
+                false,
+            ),
+            (
+                "exhausted",
+                "exhausted",
+                Some(current.clone()),
+                Some(current.clone()),
+                false,
+            ),
+        ] {
+            let mut lease = test_lease("focused-build", status, 600);
+            lease.revision = lease_revision;
+            let mut receipt = settlement_receipt("passed", Some(0), false)?;
+            receipt.revision = receipt_revision;
+
+            settle_focused_proof_lease(&mut lease, &receipt, 25_001);
+
+            assert_eq!(
+                lease.settled_elapsed_ms,
+                settles.then_some(25_001),
+                "{name}"
+            );
+            assert_eq!(
+                focused_proof_lease_charged_seconds(&lease),
+                if settles { 26 } else { 600 },
+                "{name}"
+            );
+            assert_eq!(lease.status, status, "{name}");
+            assert_eq!(lease.timeout_sec, 600, "{name}");
+        }
+        Ok(())
+    }
+
+    #[test]
     fn red_green_settlement_sums_commands_before_applying_task_clock() -> Result<()> {
         let mut lease = test_lease("focused-test", "granted", 600);
         let mut receipt = settlement_receipt("passed", Some(0), false)?;
