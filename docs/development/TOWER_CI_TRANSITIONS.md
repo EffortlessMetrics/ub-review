@@ -80,6 +80,38 @@ cannot suppress its findings.
    next owner, remaining evidence and resume condition. Read back every
    authorized publication against the expected SHA.
 
+## Decide the next transition from current evidence
+
+Ready-for-review is a native review state, not an independent CI admission
+decision or proof that qualification ran. In the current workflows it is also
+a trigger, so marking Ready can launch broad CI. Check the actual event and
+side effects before acting; do not infer permission to run CI from permission
+to request review. Apply the same check to draft creation and repair pushes.
+
+| Observation or request | Supported next action | Claim that remains unestablished |
+| --- | --- | --- |
+| Local checks and source review complete; expensive qualification held | Retain the reviewed branch and receipts; name the owner/resume condition for any publication that would trigger held work | Draft or Ready does not make the event cheap or authorize qualification |
+| Ready requested and its current CI side effects authorized | Refresh head/base, reviews and live workflows; perform the authorized transition once, then read back state and check identities | Ready itself does not establish an executed or passing check |
+| Wrapper/check green, `conclusion = pass`, `gate_result = not_proven` | Retain both results and the raw `not_proven_reasons`; investigate the missing evidence under existing admission policy | Compatibility success does not establish evidence sufficiency |
+| Wrapper green but current receipt missing, unreadable or for another revision | Record unavailable or historical evidence with its original identity; obtain the current receipt | Green alone cannot establish current evidence or clean review |
+| Prepared review or run-stage `publication_result = posted` | Read the separate post receipt and remote PR surface against the selected payload/head | Preparation does not confirm delivery |
+
+For current evidence, read `review/gate_outcome.json`: `revision`, `conclusion`,
+`analysis_result`, `publication_result`, `gate_result` and
+`not_proven_reasons`. The Action exposes the corresponding hyphenated result
+outputs and `gate-outcome-path`. [The output reader](../../action.yml) reports
+`not_proven` for missing/unreadable evidence; its successful execution is not
+proof of a pass. [Gate enforcement](../../src/gate.rs) still consumes the
+legacy `conclusion`. Neither `gate_result = pass` alone nor an empty reasons
+list replaces applicable Required receipts, current native checks or reviews.
+Do not mechanically rename these compatibility fields to the proposed
+FinalizedOutcome contract; see [product state](../PRODUCT_STATE.md).
+
+These are consumer and handoff rules over existing surfaces. They do not add a
+Ready interceptor, late-CI command or operated Tower service. #1465 owns dormant
+native admission; #987 owns Required scheduler migration; #1015 owns enforcement
+migration. Keep those implementations and their qualification with their owners.
+
 ## Proposed SDLC: keep preparation separate from qualification
 
 The proposed sequence is focused local development and review, followed by
