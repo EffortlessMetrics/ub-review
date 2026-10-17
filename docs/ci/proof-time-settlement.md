@@ -12,6 +12,13 @@ monotonic task interval (including task setup and cleanup) and the sum of comman
 process durations. The latter is a conservative floor, including for injected
 runner results in tests. A settled failure or timeout remains failure or timeout.
 
+Terminal command status must agree with its result: `passed` requires exit 0
+without a timeout, `failed` requires any nonzero exit (including 101) without a
+timeout, and `timed_out` requires the timeout flag. Contradictory receipts retain
+the full reservation. A red/green task counts both command durations, including
+an expected failing base: 21 seconds plus 22 seconds gives a 43-second floor,
+even when an injected task clock reports less.
+
 Later admission charges the rounded-up elapsed seconds, at least one second per
 completed task. Actual overruns are never capped at the earlier reservation.
 Arithmetic saturates rather than overflowing. Historical maximum reservations

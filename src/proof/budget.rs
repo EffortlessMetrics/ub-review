@@ -519,7 +519,9 @@ mod tests {
     fn settlement_requires_confirmed_terminal_receipts() -> Result<()> {
         for (status, exit_code, timed_out, settles) in [
             ("passed", Some(0), false, true),
+            ("passed", Some(1), false, false),
             ("failed", Some(1), false, true),
+            ("failed", Some(101), false, true),
             ("timed_out", None, true, true),
             ("skipped", None, false, false),
             ("passed", None, false, false),
@@ -559,6 +561,25 @@ mod tests {
         settle_focused_proof_lease(&mut lease, &receipt, 1);
         assert_eq!(lease.settled_elapsed_ms, Some(600_001));
         assert_eq!(focused_proof_lease_charged_seconds(&lease), 601);
+        Ok(())
+    }
+
+    #[test]
+    fn red_green_settlement_sums_commands_before_applying_task_clock() -> Result<()> {
+        let mut lease = test_lease("focused-test", "granted", 600);
+        let mut receipt = settlement_receipt("passed", Some(0), false)?;
+        receipt.kind = "focused-red-green".to_owned();
+        receipt.result = "discriminating".to_owned();
+        let mut base = receipt.commands[0].clone();
+        base.side = "base".to_owned();
+        base.status = "failed".to_owned();
+        base.exit_code = Some(101);
+        base.duration_ms = 22_000;
+        receipt.commands.insert(0, base);
+
+        settle_focused_proof_lease(&mut lease, &receipt, 1);
+
+        assert_eq!(lease.settled_elapsed_ms, Some(43_000));
         Ok(())
     }
 
