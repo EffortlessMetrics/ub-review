@@ -277,6 +277,89 @@ mod tests {
     }
 
     #[test]
+    fn focused_build_loop_reuses_elapsed_but_reserves_next_full_timeout() -> Result<()> {
+        for (duration_ms, expected_executed) in [(21_000, 2), (31_001, 1), (120_001, 1)] {
+            let temp = tempfile::tempdir()?;
+            let out = temp.path().join("out");
+            let args = test_run_args(out.clone());
+            let profile = Profile {
+                limits: Limits {
+                    builds: 2,
+                    ..Limits::default()
+                },
+                ..Profile::default()
+            };
+            let tasks = ["first", "next"]
+                .into_iter()
+                .map(|id| FocusedBuildTask {
+                    id: format!("build-{id}"),
+                    command: "cargo check --workspace --locked".to_owned(),
+                    argv: vec![
+                        "cargo".to_owned(),
+                        "check".to_owned(),
+                        "--locked".to_owned(),
+                    ],
+                    timeout_sec: 90,
+                    required: false,
+                    requested_by: vec!["architecture".to_owned()],
+                    request_ids: Vec::new(),
+                })
+                .collect();
+            let mut executed = 0;
+            let result = super::run_focused_build_proof_tasks_with_runner(
+                temp.path(),
+                &out,
+                &test_diff(),
+                &profile,
+                &args,
+                ProofBudget {
+                    max_focused_test_files: 2,
+                    max_focused_tests: 2,
+                    per_command_timeout_sec: 90,
+                    max_total_seconds: 120,
+                },
+                tasks,
+                None,
+                ProofExecutionPhase::ModelRequest,
+                |_root, _argv, _env, timeout, stdout, stderr, _observe_process| {
+                    executed += 1;
+                    assert_eq!(timeout, 90);
+                    fs::write(stdout, b"build ok\n")?;
+                    fs::write(stderr, b"")?;
+                    Ok(CommandStatus {
+                        exit_code: Some(0),
+                        timed_out: false,
+                        success: true,
+                        reason: "completed".to_owned(),
+                        duration_ms,
+                    })
+                },
+            )?;
+            assert_eq!(
+                executed, expected_executed,
+                "first duration {duration_ms}ms"
+            );
+            assert_eq!(result.resource_leases.len(), 2);
+            assert_eq!(result.proof_receipts[0].result, "head_passed");
+            assert_eq!(result.resource_leases[0].timeout_sec, 90);
+            assert!(
+                result.resource_leases[0]
+                    .settled_elapsed_ms
+                    .is_some_and(|elapsed| elapsed >= duration_ms)
+            );
+            if expected_executed == 1 {
+                assert_eq!(result.resource_leases[1].status, "exhausted");
+                assert_eq!(result.resource_leases[1].settled_elapsed_ms, None);
+                assert_eq!(result.proof_receipts[1].result, "skipped_budget");
+            } else {
+                assert_eq!(result.resource_leases[1].timeout_sec, 90);
+                assert_eq!(result.proof_receipts[1].result, "head_passed");
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn focused_build_stream_failure_reconciles_receipt_and_releases_resources() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
