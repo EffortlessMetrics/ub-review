@@ -427,6 +427,201 @@ path = "src/lib.rs"
 }
 
 #[test]
+fn run_preserves_actual_pr_thread_context_truncation() -> Result<()> {
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpListener;
+    use std::time::{Duration, Instant};
+
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+    let cases = [
+        ("exact-boundary", 0, "x".repeat(1200), 8192, false),
+        (
+            "oversize-issue",
+            0,
+            "x".repeat(1200) + "OMITTED_REPLY",
+            8192,
+            true,
+        ),
+        (
+            "oversize-summary",
+            1,
+            "x".repeat(1200) + "OMITTED_REPLY",
+            8192,
+            true,
+        ),
+        (
+            "oversize-inline",
+            2,
+            "x".repeat(1200) + "OMITTED_REPLY",
+            8192,
+            true,
+        ),
+        (
+            "oversize-utf8",
+            2,
+            "🔥".repeat(299) + "é🔥OMITTED_REPLY",
+            8192,
+            true,
+        ),
+        (
+            "literal-marker",
+            0,
+            "original text says [truncated]".to_owned(),
+            8192,
+            false,
+        ),
+        // The body fits its individual budget; only the whole snapshot clips.
+        ("global-only-limit", 2, "g".repeat(300), 512, true),
+    ];
+    let payloads = cases
+        .iter()
+        .map(|(_, kind, body, _, _)| {
+            let mut responses = [b"[]".to_vec(), b"[]".to_vec(), b"[]".to_vec()];
+            responses[*kind] = serde_json::to_vec(&serde_json::json!([{
+                "id": 1, "user": {"login": "fixture-owner"}, "body": body,
+                "path": "src/lib.rs", "line": 2
+            }]))?;
+            Ok(responses)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    // Test-only loopback fixture: exactly three requests per CLI invocation,
+    // bounded idle/stream timeouts, and no real GitHub credential or access.
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    listener.set_nonblocking(true)?;
+    let api_url = format!("http://{}", listener.local_addr()?);
+    let server = std::thread::spawn(move || -> Result<()> {
+        let mut served = 0;
+        let mut deadline = Instant::now() + Duration::from_secs(60);
+        while served < payloads.len() * 3 {
+            let (mut stream, _) = match listener.accept() {
+                Ok(connection) => connection,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    anyhow::ensure!(Instant::now() < deadline, "thread fixture timed out");
+                    std::thread::sleep(Duration::from_millis(10));
+                    continue;
+                }
+                Err(error) => return Err(error.into()),
+            };
+            stream.set_nonblocking(false)?;
+            stream.set_read_timeout(Some(Duration::from_secs(30)))?;
+            stream.set_write_timeout(Some(Duration::from_secs(30)))?;
+            let mut reader = BufReader::new(stream.try_clone()?);
+            let mut request = String::new();
+            loop {
+                let mut line = String::new();
+                anyhow::ensure!(reader.read_line(&mut line)? > 0, "incomplete HTTP request");
+                if line == "\r\n" {
+                    break;
+                }
+                request.push_str(&line);
+            }
+            let kind = if request.starts_with("GET /repos/example/fixture/issues/1/comments?") {
+                0
+            } else if request.starts_with("GET /repos/example/fixture/pulls/1/reviews?") {
+                1
+            } else {
+                anyhow::ensure!(
+                    request.starts_with("GET /repos/example/fixture/pulls/1/comments?"),
+                    "unexpected request: {request}"
+                );
+                2
+            };
+            let body = &payloads[served / 3][kind];
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )?;
+            stream.write_all(body)?;
+            served += 1;
+            deadline = Instant::now() + Duration::from_secs(60);
+        }
+        Ok(())
+    });
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let mut mismatches = Vec::new();
+    for (name, _, body, max_bytes, expected) in cases {
+        let out = temp.path().join(name);
+        let output = isolated_command(env!("CARGO_BIN_EXE_ub-review"), temp.path())
+            .env_remove("GITHUB_EVENT_PATH")
+            .args([
+                "run",
+                "--dry-run",
+                "--config",
+                path_str(&config)?,
+                "--root",
+                path_str(&repo)?,
+                "--base",
+                "HEAD~1",
+                "--out",
+                path_str(&out)?,
+                "--model-mode",
+                "off",
+                "--no-github-summary",
+                "--github-token",
+                "fixture-no-credential",
+                "--github-repo",
+                "example/fixture",
+                "--github-pull-number",
+                "1",
+                "--github-api-url",
+                &api_url,
+                "--pr-thread-context-max-bytes",
+                &max_bytes.to_string(),
+            ])
+            .output()?;
+        anyhow::ensure!(
+            output.status.success(),
+            "{name}: CLI failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let context: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/pr_thread_context.json"))?)?;
+        let review: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
+        assert_eq!(review["pr_thread_context"], context, "{name}");
+        assert_eq!(context["threads"][0]["body"], body, "{name}");
+        let rendered = context["thread_context"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("{name}: missing rendered context"))?;
+        assert_eq!(
+            rendered.contains("[truncated]"),
+            expected || name == "literal-marker",
+            "{name}"
+        );
+        assert!(!rendered.contains("OMITTED_REPLY"), "{name}");
+        if name == "oversize-utf8" {
+            assert!(rendered.contains(&("🔥".repeat(299) + "é\n[truncated]\n")));
+        } else if name == "exact-boundary" {
+            assert!(rendered.contains(&"x".repeat(1200)), "{name}");
+        } else if name.starts_with("oversize-") {
+            assert!(
+                rendered.contains(&("x".repeat(1200) + "\n[truncated]\n")),
+                "{name}"
+            );
+        }
+        let shared = fs::read_to_string(out.join("review/shared_context.md"))?;
+        assert!(shared.contains(rendered), "{name}");
+        let actual = context["thread_context_truncated"].as_bool();
+        eprintln!("{name}: CLI exit=0, truncation={actual:?}, expected={expected}");
+        if actual != Some(expected) {
+            mismatches.push(name);
+        }
+    }
+    server
+        .join()
+        .map_err(|_| anyhow::anyhow!("thread fixture panicked"))??;
+    anyhow::ensure!(
+        mismatches.is_empty(),
+        "truncation mismatches: {mismatches:?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn run_records_policy_parse_error_as_receipted_gate_failure() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;

@@ -87,6 +87,7 @@ pub(crate) fn collect_pr_thread_context(
                 Ok(api_context) => {
                     context.sources.extend(api_context.sources);
                     context.threads.extend(api_context.threads);
+                    context.thread_context_truncated |= api_context.thread_context_truncated;
                     append_thread_context(
                         &mut context,
                         &api_context.thread_context,
@@ -122,6 +123,7 @@ pub(crate) struct GitHubThreadApiRequest<'a> {
 pub(crate) struct GitHubThreadApiContext {
     pub(crate) sources: Vec<String>,
     pub(crate) thread_context: String,
+    pub(crate) thread_context_truncated: bool,
     pub(crate) threads: Vec<ReviewThreadRecord>,
 }
 
@@ -206,6 +208,7 @@ pub(crate) fn read_github_pr_thread_context(
     let mut sections = Vec::new();
     let mut sources = Vec::new();
     let mut threads = Vec::new();
+    let mut truncated = false;
     for (kind, url) in endpoints {
         let value = run_github_api_get(root, &url, request.auth)
             .with_context(|| format!("fetch GitHub PR thread {kind}"))?;
@@ -213,7 +216,9 @@ pub(crate) fn read_github_pr_thread_context(
             "github-api:{}/{}/{}",
             request.repo, request.pull_number, kind
         ));
-        sections.push(render_github_pr_thread_section(kind, &value, max_bytes));
+        let section = render_github_pr_thread_section(kind, &value, max_bytes);
+        truncated |= section.truncated;
+        sections.push(section.text);
         threads.extend(github_thread_records(kind, &value, current_head));
     }
 
@@ -229,6 +234,7 @@ pub(crate) fn read_github_pr_thread_context(
     Ok(GitHubThreadApiContext {
         sources,
         thread_context: bounded.text,
+        thread_context_truncated: truncated || bounded.truncated,
         threads,
     })
 }
@@ -350,33 +356,40 @@ pub(crate) fn render_github_pr_thread_section(
     kind: &str,
     value: &serde_json::Value,
     max_bytes: usize,
-) -> String {
+) -> BoundedText {
     let title = match kind {
         "issue-comments" => "Issue Comments",
         "review-summaries" => "Review Summaries",
         "review-comments" => "Review Comments",
         _ => "Thread Items",
     };
-    let mut text = format!("### {title}\n\n");
+    let mut section = BoundedText {
+        text: format!("### {title}\n\n"),
+        truncated: false,
+    };
     let Some(items) = value.as_array() else {
-        text.push_str("- GitHub response was not an array.\n");
-        return text;
+        section
+            .text
+            .push_str("- GitHub response was not an array.\n");
+        return section;
     };
     if items.is_empty() {
-        text.push_str("- None found.\n");
-        return text;
+        section.text.push_str("- None found.\n");
+        return section;
     }
     for item in items {
-        text.push_str(&render_github_pr_thread_item(kind, item, max_bytes));
+        let rendered = render_github_pr_thread_item(kind, item, max_bytes);
+        section.text.push_str(&rendered.text);
+        section.truncated |= rendered.truncated;
     }
-    text
+    section
 }
 
 pub(crate) fn render_github_pr_thread_item(
     kind: &str,
     item: &serde_json::Value,
     max_bytes: usize,
-) -> String {
+) -> BoundedText {
     let author = item
         .pointer("/user/login")
         .and_then(serde_json::Value::as_str)
@@ -440,7 +453,12 @@ pub(crate) fn render_github_pr_thread_item(
         }
         text.push_str("  ```\n");
     }
-    text
+    // Carry the producer's clipping decision independently of the rendered
+    // marker: original comment text may itself contain "[truncated]".
+    BoundedText {
+        text,
+        truncated: bounded_body.truncated,
+    }
 }
 
 pub(crate) fn append_thread_context(
