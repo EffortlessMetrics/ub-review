@@ -124,24 +124,25 @@ fn dormant_candidates_preserve_execution_and_native_finalizers() -> Result<()> {
         ensure!(!candidate.contains("checks: write"));
         ensure!(!candidate.contains("pull-requests: write"));
         ensure!(candidate.contains("persist-credentials: false"));
-        let start = if job == "gate" {
-            "      - name: Verify task projection regressions"
-        } else {
-            "      - name: Verify exact candidate identity"
-        };
+        // Preserve the whole evidence worker, including its matrix, permissions,
+        // checkout subject and credential isolation before the first check.
+        let worker = active
+            .split_once(&format!("  {job}:\n"))
+            .context("active evidence worker")?
+            .1;
         let end = if job == "gate" {
             "  # Coverage publication"
         } else {
             "  finalize:"
         };
-        let body = active
-            .split_once(start)
+        let body = worker
+            .split_once("    runs-on:")
             .context("active proof start")?
             .1
             .split_once(end)
             .context("active proof end")?
             .0;
-        ensure!(candidate.contains(body), "preserve proof population {name}");
+        ensure!(candidate.contains(body), "preserve evidence worker {name}");
         let native_name = if job == "gate" {
             "ub-review/gate"
         } else {

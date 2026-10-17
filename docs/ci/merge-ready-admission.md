@@ -1,5 +1,45 @@
 # Dormant native merge-ready admission candidate
 
+## Current integration and next operation
+
+The candidate is rebased by replay onto main
+`2fd7d42ae593ce33dfd8ee4ef1d6ad8f77815f9d`. The active workflows still launch
+both broad proof populations on Draft/open/synchronize/Ready. Branch push has
+no matching automatic workflow; opening a PR is a separate allocation decision.
+Do not open or push repair commits to a PR expecting Draft status to suppress CI.
+The native regression compares each complete evidence worker, including its
+matrix, permissions and checkout, with the current active counterpart.
+
+Before cutover, reconcile this older label-edge candidate with the selected
+lifecycle in [em-ci#243](https://github.com/EffortlessMetrics/em-ci/issues/243)
+and its native join [em-ci#244](https://github.com/EffortlessMetrics/em-ci/issues/244).
+This implementation checks live material readiness; it does **not** establish
+selected-candidate ownership, bind a review/evidence generation, or reconcile
+duplicate/lost-response requests to one run/attempt. Its spelling `merge-ready`
+is not a newly accepted request interface. Do not install it as an intermediate
+shortcut to those contracts or invoke a proposed command that does not exist.
+
+The next release/ci operation is to refresh the existing #1465 hosted rehearsal,
+inspect its actual scheduler result, and qualify native context/App/head/base
+association and cancellation before proposing a cutover. Its last retained runs
+never started steps because of the account scheduling condition; local shell
+fixtures cannot clear that gap. Keep source integration, permission acceptance,
+hosted acceptance and activation separate. No permission change is applied here.
+
+For a selected candidate, retain warm author tests and independent review with
+exact head/base/tree, environment/tool/configuration, commands and terminal
+results in the native PR/evidence packet. Keep mandatory obligations intact;
+justify additional risk-based selections and record missing or stale evidence.
+An explicit qualification request must identify the selected subject and return
+the actual matching run/attempt. Measure the complete active qualification,
+including setup, children and finalization, against the <=20-minute target;
+report queue wait and shifted local work separately. This candidate has no such
+measurement. The same authorized owner then refreshes findings, current main,
+product intent, protections and integration implications before a distinct
+normal protected merge decision. Green CI alone does not make that decision.
+
+## Original candidate record
+
 Owner: release/ci. Prepared against main `3dbcc2be9768b082c0896dc2360e950ffbd56a65`
 on 2026-10-15. Nothing in this candidate activates CI, changes required checks,
 retires proof, or closes the existing CI authority work.
