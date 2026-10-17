@@ -36,6 +36,11 @@ pub(crate) fn render_review_body(
         );
     }
 
+    let actionable = has_actionable_review_finding(inline_comments, summary_only_findings);
+    let usable_model_lanes = model_lanes
+        .iter()
+        .filter(|receipt| model_lane_is_usable_for_terminal_state(receipt))
+        .count();
     let mut text = String::new();
     text.push_str(&format!(
         "# {}\n\n",
@@ -53,17 +58,23 @@ pub(crate) fn render_review_body(
     text.push_str("\n## Decision\n\n");
     text.push_str(&format!(
         "- {}\n",
-        review_decision(
-            missing_or_failed_sensor_evidence,
-            missing_or_failed_model_evidence,
-            inline_comments,
-            summary_only_findings
-        )
+        if !actionable && usable_model_lanes == 0 {
+            "Model review was not established; no actionable finding is recorded in this artifact."
+        } else {
+            review_decision(
+                missing_or_failed_sensor_evidence,
+                missing_or_failed_model_evidence,
+                inline_comments,
+                summary_only_findings,
+            )
+        }
     ));
 
-    if !has_actionable_review_finding(inline_comments, summary_only_findings) {
+    if !actionable && usable_model_lanes > 0 {
         text.push_str("\n## No blocking finding after checking\n\n");
-        text.push_str("- Shared diff packet, changed-file list, diff flags, sensor receipts, model lane receipts, and Bun lane packet prompts.\n");
+        text.push_str(&format!(
+            "- Usable model lane receipts recorded: `{usable_model_lanes}`; incomplete evidence is listed below.\n"
+        ));
         text.push_str(
             "- Inline-comment guardrails found no validated candidate comments to post.\n",
         );
@@ -104,10 +115,21 @@ pub(crate) fn render_review_body(
     }
 
     text.push_str("\n## Failed objections\n\n");
-    if has_actionable_review_finding(inline_comments, summary_only_findings) {
-        text.push_str("- Refuter and diff-line guardrails kept uncertain, duplicate, low-confidence, and off-diff objections out of inline comments.\n");
-    } else {
-        text.push_str("- Strongest failed objection: a model or sensor may have found a real issue, but no blocker/high/medium candidate survived the bounded lane run, diff-line validation, and refuter path.\n");
+    let refuters = model_lanes
+        .iter()
+        .filter(|receipt| receipt.lane == "refuter")
+        .collect::<Vec<_>>();
+    if refuters.is_empty() {
+        text.push_str(
+            "- No refuter receipt was recorded; a completed refuter pass is not established.\n",
+        );
+    }
+    for receipt in refuters {
+        text.push_str(&format!(
+            "- Refuter receipt: `{}` - {}\n",
+            escape_md(&receipt.status),
+            escape_md(&receipt.reason)
+        ));
     }
     text.push_str("- Missing evidence is not a failed objection; it is listed separately below.\n");
 
@@ -470,4 +492,210 @@ fn proof_receipt_matches_observation(
                 .iter()
                 .any(|id| id == request_id)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn artifact_lane(lane: &str, status: &str, reason: &str) -> Result<ModelLaneReceipt> {
+        Ok(serde_json::from_value(serde_json::json!({
+            "lane": lane, "provider": "minimax", "model": "test-model",
+            "endpoint_kind": "openai-chat", "status": status, "reason": reason,
+            "duration_ms": null, "http_status": null, "response_shape": null,
+            "fallback_from": null
+        }))?)
+    }
+
+    fn artifact_surface(
+        mode: ModelMode,
+        lanes: &[ModelLaneReceipt],
+        findings: &[SummaryOnlyFinding],
+    ) -> Result<CompiledReviewSurface> {
+        let mut args = crate::tests::test_run_args(PathBuf::from("unused-artifact-test"));
+        args.model_mode = mode;
+        let config = Config::default();
+        let issues = lanes
+            .iter()
+            .filter(|lane| is_model_receipt_evidence_issue(lane))
+            .map(model_issue_from_receipt)
+            .collect::<Vec<_>>();
+        compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "artifact-reporting-test",
+            review_body_policy: &config.review_body,
+            run_pass: RunPass::Manual,
+            post_review_on: &config.gate.post_review_on,
+            args: &args,
+            plan: &crate::tests::test_plan(Vec::new()),
+            diff: &crate::tests::test_diff(),
+            model_lanes: lanes,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &issues,
+            inline_comments: &[],
+            summary_only_findings: findings,
+            observations: &[],
+            proof_receipts: &[],
+            final_follow_up_tasks: 0,
+            suggested_issues: &[],
+            reporter_distillation: None,
+        })
+    }
+
+    fn unavailable_artifact(mode: ModelMode) -> Result<String> {
+        let (status, reason) = match mode {
+            ModelMode::Off => ("skipped", "model-mode off"),
+            ModelMode::Auto => ("missing_key", "provider key not supplied"),
+        };
+        let mut lanes = vec![artifact_lane("tests", status, reason)?];
+        if matches!(mode, ModelMode::Auto) {
+            lanes.push(artifact_lane(
+                "refuter",
+                "skipped",
+                "no inline candidates passed guardrails before refuter",
+            )?);
+        }
+        let surface = artifact_surface(mode, &lanes, &[])?;
+        assert_eq!(surface.terminal_state.usable_model_lanes, 0);
+        Ok(surface.artifact_body)
+    }
+
+    #[test]
+    fn artifact_reporting_model_off_does_not_claim_checked_review() -> Result<()> {
+        let body = unavailable_artifact(ModelMode::Off)?;
+        assert!(
+            !body.contains("## No blocking finding after checking"),
+            "{body}"
+        );
+        assert!(
+            !body.contains("No blocking finding after bounded review"),
+            "{body}"
+        );
+        assert!(body.contains("Model review was not established"), "{body}");
+        Ok(())
+    }
+
+    #[test]
+    fn artifact_reporting_model_off_does_not_claim_completed_refuter() -> Result<()> {
+        let body = unavailable_artifact(ModelMode::Off)?;
+        assert!(!body.contains("no blocker/high/medium candidate survived the bounded lane run, diff-line validation, and refuter path."), "{body}");
+        assert!(body.contains("No refuter receipt was recorded"), "{body}");
+        Ok(())
+    }
+
+    #[test]
+    fn artifact_reporting_missing_key_does_not_claim_checked_review() -> Result<()> {
+        let body = unavailable_artifact(ModelMode::Auto)?;
+        assert!(
+            !body.contains("## No blocking finding after checking"),
+            "{body}"
+        );
+        assert!(
+            !body.contains("No blocking finding after bounded review"),
+            "{body}"
+        );
+        assert!(body.contains("Model review was not established"), "{body}");
+        Ok(())
+    }
+
+    #[test]
+    fn artifact_reporting_missing_key_does_not_claim_completed_refuter() -> Result<()> {
+        let body = unavailable_artifact(ModelMode::Auto)?;
+        assert!(!body.contains("no blocker/high/medium candidate survived the bounded lane run, diff-line validation, and refuter path."), "{body}");
+        assert!(
+            body.contains(
+                "Refuter receipt: `skipped` - no inline candidates passed guardrails before refuter"
+            ),
+            "{body}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn artifact_reporting_complete_review_keeps_bounded_result_and_receipts() -> Result<()> {
+        let lanes = [
+            artifact_lane("tests", "ok", "completed")?,
+            artifact_lane("refuter", "ok", "completed")?,
+        ];
+        let surface = artifact_surface(ModelMode::Auto, &lanes, &[])?;
+        assert!(
+            surface
+                .artifact_body
+                .contains("## No blocking finding after checking"),
+            "{}",
+            surface.artifact_body
+        );
+        assert!(surface.artifact_body.contains(
+            "No blocking finding after bounded review; residual risk remains for human review."
+        ));
+        assert!(
+            surface
+                .artifact_body
+                .contains("Refuter receipt: `ok` - completed")
+        );
+        assert!(surface.artifact_body.contains("Lane: `tests`"));
+        assert!(
+            !surface
+                .artifact_body
+                .contains("Model review was not established")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn artifact_reporting_intentional_refuter_skip_preserves_usable_review() -> Result<()> {
+        let lanes = [
+            artifact_lane("tests", "ok", "completed")?,
+            artifact_lane(
+                "refuter",
+                "skipped",
+                "no inline candidates passed guardrails before refuter",
+            )?,
+        ];
+        let surface = artifact_surface(ModelMode::Auto, &lanes, &[])?;
+        assert!(
+            surface
+                .artifact_body
+                .contains("## No blocking finding after checking")
+        );
+        assert!(surface.artifact_body.contains(
+            "Refuter receipt: `skipped` - no inline candidates passed guardrails before refuter"
+        ));
+        assert!(!surface.artifact_body.contains("refuter path."));
+        assert!(
+            !surface
+                .artifact_body
+                .contains("Model review was not established")
+        );
+        assert!(!surface.artifact_body.contains("Lane `refuter` via"));
+        Ok(())
+    }
+
+    #[test]
+    fn artifact_reporting_actionable_finding_survives_missing_model_review() -> Result<()> {
+        let finding = SummaryOnlyFinding {
+            lane: "tests".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "high".to_owned(),
+            reason: "Buffer boundary can overrun after length conversion.".to_owned(),
+            evidence: "src/lib.rs current route".to_owned(),
+        };
+        let surface = artifact_surface(ModelMode::Off, &[], &[finding])?;
+        assert!(
+            surface
+                .artifact_body
+                .contains("Needs reviewer attention before upstream")
+        );
+        assert!(
+            surface
+                .artifact_body
+                .contains("Buffer boundary can overrun after length conversion.")
+        );
+        assert!(
+            !surface
+                .artifact_body
+                .contains("## No blocking finding after checking")
+        );
+        assert!(surface.artifact_body.contains("`medium` `high`"));
+        Ok(())
+    }
 }
