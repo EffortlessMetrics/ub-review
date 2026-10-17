@@ -34460,3 +34460,235 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_broker.rs:field_construction:b7c7aae0"
 owner = "ub-review/core"
 reason = "RIPR discriminate false-negative on #4271 round-4 the fresh parameter binding in merge_proof_portfolio_candidate_tasks (twin of the round-2b decisions-merge parameter probe 859c91d4): the extended follow_up_write_preserves_required_flag_on_shared_task_id drives both merge arms and asserts the merged candidate record's required flag and request_ids equal the merged decision record exactly, so the construction outcome is pinned; ripr's assertion linker misses parameter bindings. Re-verify after any edit to proof/broker.rs."
+
+# #1507 local c21b312 -> 4f6aea8 RIPR0.10.0 exact dispositions, reviewed 2026-10-17.
+# Native gaps were closed before disposition; existing threshold and dating remain unchanged.
+# These are new local raw rows, not attribution or waiver of the inaccessible historical hosted three.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:error_path:6b6b74dc"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Same artifact-writer Result propagation existed before; the newly multiline call moves the closing ? to line109. The native matrix does not assert an IO error kind, but no new error variant/contract was introduced here. Existing initial broker call plus write_proof_portfolio_selection_artifact in both base/head; normal broker success path exercised. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:field_construction:8794185e"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Unchanged existing_leases parameter declaration; family field_construction does not itself identify an executable field mutation. remaining_focused_proof_budget_subtracts_granted_focused_leases asserts literal counts/time; callback reservation controls retained. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:field_construction:a128c54c"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Closing fixture command-vector syntax is not an independent product behavior. Native shape and aggregation tests consume the resulting commands. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:field_construction:bb79af31"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Generic charge callback parameter is a declaration, not a constructed runtime field. Its observable contract is reservation versus actual charge. Remaining-granted native literal tests and settled elapsed native tests; old full-ceiling charging mutant killed independently. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:field_construction:e403cb27"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. duration_ms is a test-helper input forwarded into fixture commands. Native literal duration assertions already observe forwarding. accounting_settles_actual_duration_with_conservative_rounding covers five distinct supplied durations per status. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:field_construction:ed0910cc"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. requested_by empty vector is accounting fixture metadata, outside production settlement semantics. Fixture feeds accounting tests; requested_by is not read by the budget functions. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:match_arm:15d1ea10"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Supported head-only shape is exercised by focused-head unit fixtures, focused-build receipts, and failed/timed-out red-green heads. accounting_settles_actual_duration_with_conservative_rounding; actual native matrix/build records. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:match_arm:2d844d11"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Passed red-green head requires ordered head+base sides. Direct two-command aggregate assertion would fail if this were collapsed to head-only. accounting_timeout_spends_allowance_and_aggregates_red_green_once expects Some(1) for two1ms commands. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:match_arm:5d422bae"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Status dispatch is observed through literal native passed/failed/skipped tables, timeout floors and unknown running status. accounting_settles_actual_duration_with_conservative_rounding; accounting_timeout_spends_allowance...; bad running status full reservation. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:match_arm:98b12975"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Valid passed/failed arm has exact native duration-table residuals; proc_macro/fixture stops explain missing source-text association. accounting_settles_actual_duration_with_conservative_rounding: status passed/failed and1/999/1000/1001/6001ms literal outcomes. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:match_arm:a3001cdc"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Valid timed-out receipt charges at least allowance and preserves overrun. Exact native Some(6)/Some(7) assertions discriminate it. accounting_timeout_spends_allowance_and_aggregates_red_green_once; real3s timeout matrix; erased-floor mutant killed. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:match_arm:dff6b8e0"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Skipped/error arm is exercised for measured durations, legacy positive allowance with zero unknown timing, and unstarted zero-allowance base. Native skipped duration table; bad skipped0 fixture; direct red-green base skipped/timeout0/duration0 assertion. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:match_arm:e2907a21"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. elapsed_budget_rejects_zero_allowance_and_unknown_receipt_kind directly requires unknown-kind None; compiled unknown-receipt-kind mutant returned Some(1) and failed. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:match_arm:e2907a21.2"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Unknown status fallback is reached by native running-status fixture with otherwise matching lease/receipt identity; exact full reservation is asserted. accounting_ambiguous_or_unbound_receipts_keep_reservation sets command.status running and expects594. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:match_arm:f3535353"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. New receipt-kind dispatch; direct native head and red-green receipt tests and actual build receipts exercise supported dispatch. accounting_timeout_spends_allowance_and_aggregates_red_green_once; native build/matrix records; independent41 cases. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:predicate:1b232065"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. RIPR reports no compound boundary, but native direct code explicitly sets base timeout_sec=0 and duration_ms=0 and asserts Some(1); legacy skipped0 retains reservation. accounting_timeout_spends_allowance_and_aggregates_red_green_once plus accounting_ambiguous_or_unbound_receipts_keep_reservation. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:predicate:6e3126be"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Same passed-head predicate; exact native ordered two-side accounting and one-side failed/timed-out native matrix distinguish the branch. Direct red-green aggregate assertion plus five-case actual native matrix. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:predicate:82770364"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. elapsed_budget_rejects_zero_allowance_and_unknown_receipt_kind directly requires passed/failed zero-allowance None; compiled zero-success-allowance mutant returned Some(1) and failed. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:predicate:84679b3c"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. elapsed_budget_rejects_zero_allowance_and_unknown_receipt_kind directly requires timed_out zero-allowance None; compiled zero-timeout-allowance mutant returned Some(1) and failed. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:return_value:041e08e9"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. New #[cfg(test)] accounting_receipt helper returns fixture data; not a production return path. Native duration/revision/shape tests consume the helper and assert residual budgets. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:return_value:257023b3"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Coordinate91 is the duplicate-CONSUMER cardinality guard. Native different_id=true duplicate case isolates it because lease IDs are distinct. Adjacent lease-ID uniqueness needs a distinct-consumer fixture, recorded separately. accounting_duplicate_reservations_and_overflow_never_create_credit: both same/different ID cases expect588. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:return_value:2d5a1782"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Same fixture metadata line misclassified additionally as return_value; it is not an independent production return. Same source/evidence as row22. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:return_value:4b1bc57d"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. New no-matching-receipt early return. Native bad-receipt table includes empty receipts and unrelated IDs and checks full594s remaining. accounting_ambiguous_or_unbound_receipts_keep_reservation; independent no-receipt/wrong-ID controls. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:return_value:99d2667a"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Opening brace marks the composite conservative fallback; it is not a standalone return expression. Native stale-head, kind, duplicate and revision cases observe its effect. accounting_ambiguous_or_unbound_receipts_keep_reservation; independent ignored-revision and duplicate mutants killed. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:return_value:9f776106"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Compatible lease/receipt kind guard is new but wrong-kind fixture reaches the fallback and checks full reservation. accounting_ambiguous_or_unbound_receipts_keep_reservation changes receipt.kind to focused-build while lease is focused-test. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:call_deletion:4d228ff2"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. elapsed_budget_admits_second_build_only_when_actual_time_fits executes two builds at200ms and one at3001ms under total6/cap4; compiled restored-ceiling and free-credit accumulator mutants fail exact execution counts. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:call_deletion:84d6f48c"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. elapsed_budget_admits_second_build_only_when_actual_time_fits observes actual same-runner accumulation with two cap4 builds/total6; compiled full-ceiling and ignored-charge mutants fail 2-versus1 execution oracles. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:call_deletion:90a08fae"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Expression belongs to base build.rs:157; current155 closes the loop. The old estimated_seconds ceiling charge was intentionally removed, not a surviving production call. Exact base/current source comparison; actual new spent accumulator at149-151; multi-build test will discriminate restored old behavior. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:field_construction:f7b05a10"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Renamed helper parameter spent_seconds is declaration syntax; the meaningful effect is its use in admission arithmetic. focused_build_budget_allows_next checks spent+next against allocation; rows26/27 identify the needed actual caller test. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:error_path:2c950ab9"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Unsupported-kind String Err behavior is observed at public resolver status/reason/no-request boundary. There is also a second unsupported-kind guard, so changing only one may be equivalent. Five unsupported kinds with literal reason/status and cleared IDs/no requests; native diagnostic-loss control. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:error_path:5de7f27b"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Named-build rejection Err is observed through literal reason, terminal status, empty request IDs/requests/candidate/planner tasks. Eight native named kind/separator cases; automatic package fallback and guard-removal mutants killed. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:error_path:c03040ee"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. New #[cfg(test)] named_target_fixture Cargo.toml write propagation; a test-fixture setup error is not a production proof-intent error path. The native fixture successfully enables actual metadata/resolver\u2192request\u2192planner controls. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:field_construction:e11cbfe7"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. New diagnostic constant declaration has visible literal behavior. no_changed_rust_line/field_construction indicates static owner/span failure, not absent runtime reach. terminalizes_ambiguous_unsupported_and_malicious_intents and recovery_guidance... compare full literal; compiled kind-guidance-loss control failed. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:cf5a1b91"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Absent integration-test target Err has direct exact-string native checks through expected_error; fixture/proc-macro dataflow is opaque to static text matching. semantic_target_grammar_and_target_selectors_are_exact; build_resolution_and_command_templates_are_exact; literal absent/symbol controls. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:ddcab20f"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. New guarded single named-build candidate arm is exercised by four kinds and both separators, plus package positives. named_build_intents_are_declined_before_scheduling; named_target_supported_intents_keep_exact_requests; nine compiled semantic defects killed. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:match_arm:ed2e64d6"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Same unsupported match arm classified separately; public rejection contract has direct native literal controls. Same native and extracted unsupported-kind evidence as row32. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:predicate:6f9aaca1"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. The constant string is not an executable predicate; same no_changed_rust_line owner limitation. Same full-literal native diagnostic assertions and kind-guidance-loss control as row30. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_intent.rs:return_value:b72a971f"
+owner = "ub-review/core"
+reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Same rejection statement classified additionally as return_value; native request/task non-creation is its behavioral oracle. Same native/extracted evidence as row38. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."

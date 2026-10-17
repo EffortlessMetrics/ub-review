@@ -306,7 +306,18 @@ fn resolve_build_target(
             .cmp(&(right.package.as_str(), right.target_name()))
     });
     match candidates.len() {
-        1 => Ok(candidates.remove(0)),
+        1 => {
+            let candidate = candidates.remove(0);
+            if let Some(target) = &candidate.target
+                && matches!(target.kind.as_str(), "bin" | "test" | "example" | "bench")
+            {
+                return Err(format!(
+                    "named focused build target `{label}` of kind `{}` is unsupported by the proof broker; choose `cargo-package:{}` only if package-level checking answers the proof question; otherwise leave the proof unresolved",
+                    target.kind, candidate.package
+                ));
+            }
+            Ok(candidate)
+        }
         0 => Err(format!(
             "no approved focused build target matches `{label}`; choose a declared package using `cargo-package:<package>`"
         )),
@@ -733,14 +744,14 @@ mod tests {
         );
         assert!(package_target.target.is_none());
 
-        let bin_target =
-            resolve_build_target(&workspace, &diff(&[]), "cargo-target:ub-review/ub-review")
-                .map_err(anyhow::Error::msg)?;
         assert_eq!(
-            bin_target.command,
-            "cargo check --locked --package ub-review --bin ub-review"
+            expected_error(resolve_build_target(
+                &workspace,
+                &diff(&[]),
+                "cargo-target:ub-review/ub-review"
+            ))?,
+            "named focused build target `cargo-target:ub-review/ub-review` of kind `bin` is unsupported by the proof broker; choose `cargo-package:ub-review` only if package-level checking answers the proof question; otherwise leave the proof unresolved"
         );
-        assert_eq!(bin_target.target_name(), "ub-review");
 
         let package = &workspace.packages[0];
         let lib = CargoTargetInfo {
@@ -1066,6 +1077,322 @@ mod tests {
         let selected = resolve_build_target(&workspace, &diff(&[]), "cargo-package:nested")
             .map_err(anyhow::Error::msg)?;
         assert_eq!(selected.command, "cargo check --locked --package nested");
+        Ok(())
+    }
+
+    fn named_target_fixture() -> Result<tempfile::TempDir> {
+        let temp = tempfile::tempdir()?;
+        std::fs::write(
+            temp.path().join("Cargo.toml"),
+            r#"[package]
+name = "proof-fixture"
+version = "0.0.0"
+edition = "2024"
+[workspace]
+[[bin]]
+name = "app"
+path = "app.rs"
+[[test]]
+name = "integration"
+path = "integration.rs"
+[[example]]
+name = "demo"
+path = "demo.rs"
+test = true
+[[bench]]
+name = "speed"
+path = "speed.rs"
+"#,
+        )?;
+        for path in ["app.rs", "integration.rs", "demo.rs", "speed.rs"] {
+            std::fs::write(temp.path().join(path), "fn main() {}\n")?;
+        }
+        Ok(temp)
+    }
+
+    #[test]
+    fn named_build_intents_are_declined_before_scheduling() -> Result<()> {
+        let temp = named_target_fixture()?;
+        for (kind, target, command) in [
+            (
+                "bin",
+                "app",
+                "cargo check --locked --package proof-fixture --bin app",
+            ),
+            (
+                "test",
+                "integration",
+                "cargo check --locked --package proof-fixture --test integration",
+            ),
+            (
+                "example",
+                "demo",
+                "cargo check --locked --package proof-fixture --example demo",
+            ),
+            (
+                "bench",
+                "speed",
+                "cargo check --locked --package proof-fixture --bench speed",
+            ),
+        ] {
+            for separator in ["::", "/"] {
+                let label = format!("cargo-target:proof-fixture{separator}{target}");
+                let mut input = intent(ProofKind::FocusedBuild, &label);
+                input.resolved_request_ids.push("stale-request".to_owned());
+                let result =
+                    resolve_model_proof_intents(temp.path(), &diff(&[]), &[input], &[], budget())?;
+                assert_eq!(result.intents[0].status, "unsupported_target", "{label}");
+                assert_eq!(
+                    result.intents[0].resolution_reason,
+                    format!(
+                        "named focused build target `{label}` of kind `{kind}` is unsupported by the proof broker; choose `cargo-package:proof-fixture` only if package-level checking answers the proof question; otherwise leave the proof unresolved"
+                    )
+                );
+                assert!(result.intents[0].resolved_request_ids.is_empty());
+                assert!(result.proof_requests.is_empty());
+                assert!(focused_build_candidates_from_requests(&result.proof_requests).is_empty());
+                assert!(focused_test_candidates_from_requests(&result.proof_requests).is_empty());
+                let tasks = build_proof_planner_output(
+                    &diff(&[]),
+                    &Profile::default(),
+                    &result.proof_requests,
+                )?
+                .proof_tasks;
+                assert!(tasks.is_empty());
+                assert!(focused_build_command_spec(command).is_none());
+                let broker_status = proof_request_status(command, "focused-build");
+                assert_eq!(broker_status, "unsupported");
+                println!(
+                    "named_target_receipt {}",
+                    serde_json::json!({
+                        "intent": result.intents[0], "generated_requests": result.proof_requests,
+                        "declined_command": command, "broker_status": broker_status, "planner_tasks": tasks,
+                    })
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn named_target_supported_intents_keep_exact_requests() -> Result<()> {
+        let temp = named_target_fixture()?;
+        for (kind, label, cost, command) in [
+            (
+                ProofKind::FocusedTest,
+                "cargo-test:proof-fixture::integration",
+                "focused-test",
+                "cargo test --locked --package proof-fixture --test integration",
+            ),
+            (
+                ProofKind::BasePlusTests,
+                "cargo-test:proof-fixture::integration",
+                "focused-test",
+                "cargo test --locked --package proof-fixture --test integration",
+            ),
+            (
+                ProofKind::FocusedBuild,
+                "cargo-package:proof-fixture",
+                "focused-build",
+                "cargo check --locked --package proof-fixture",
+            ),
+            (
+                ProofKind::FocusedBuild,
+                "workspace",
+                "focused-build",
+                "cargo check --locked --workspace",
+            ),
+        ] {
+            let result = resolve_model_proof_intents(
+                temp.path(),
+                &diff(&[]),
+                &[intent(kind, label)],
+                &[],
+                budget(),
+            )?;
+            assert_eq!(result.intents[0].status, "resolved");
+            assert_eq!(result.proof_requests.len(), 1);
+            let request = &result.proof_requests[0];
+            assert_eq!(request.command, command);
+            assert_eq!(request.cost, cost);
+            assert_eq!(request.timeout_sec, 300);
+            assert!(request.required);
+            assert_eq!(
+                result.intents[0].resolved_request_ids,
+                std::slice::from_ref(&request.id)
+            );
+            let test_tasks = focused_test_candidates_from_requests(&result.proof_requests);
+            let build_tasks = focused_build_candidates_from_requests(&result.proof_requests);
+            assert_eq!(
+                (test_tasks.len(), build_tasks.len()),
+                if cost == "focused-test" {
+                    (1, 0)
+                } else {
+                    (0, 1)
+                }
+            );
+            let spec = if cost == "focused-test" {
+                focused_cargo_test_command_spec(command)
+            } else {
+                focused_build_command_spec(command)
+            };
+            assert_eq!(
+                spec.map(|spec| spec.argv.join(" ")).as_deref(),
+                Some(command)
+            );
+            let broker_status = proof_request_status(command, cost);
+            assert_eq!(broker_status, "requested");
+            let tasks = build_proof_planner_output(
+                &diff(&[]),
+                &Profile::default(),
+                &result.proof_requests,
+            )?
+            .proof_tasks;
+            assert_eq!(tasks.len(), 1);
+            assert_eq!(tasks[0].request_ids, std::slice::from_ref(&request.id));
+            println!(
+                "named_target_receipt {}",
+                serde_json::json!({
+                    "intent": result.intents[0], "generated_requests": result.proof_requests,
+                        "test_tasks": test_tasks.len(), "build_tasks": build_tasks.len(), "broker_status": broker_status, "planner_tasks": tasks,
+                })
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn named_target_literal_admission_and_malicious_controls() -> Result<()> {
+        for (command, test, build) in [
+            (
+                "cargo test --locked --package proof-fixture --test integration",
+                true,
+                false,
+            ),
+            (
+                "cargo test --locked --package proof-fixture --bin app named_probe",
+                true,
+                false,
+            ),
+            (
+                "cargo test --locked --package proof-fixture --example demo named_probe",
+                true,
+                false,
+            ),
+            (
+                "cargo test --locked --package proof-fixture --bin app",
+                false,
+                false,
+            ),
+            (
+                "cargo test --locked --package proof-fixture --example demo",
+                false,
+                false,
+            ),
+            (
+                "cargo test --locked --package proof-fixture --bench speed named_probe",
+                false,
+                false,
+            ),
+            (
+                "cargo check --locked --package proof-fixture --bins",
+                false,
+                true,
+            ),
+            (
+                "cargo check --locked --package proof-fixture --tests",
+                false,
+                true,
+            ),
+            (
+                "cargo check --locked --package proof-fixture --examples",
+                false,
+                true,
+            ),
+            (
+                "cargo check --locked --package proof-fixture --benches",
+                false,
+                true,
+            ),
+            (
+                "cargo check --locked --package proof-fixture --bin app",
+                false,
+                false,
+            ),
+            (
+                "cargo check --locked --package proof-fixture --test integration",
+                false,
+                false,
+            ),
+            (
+                "cargo check --locked --package proof-fixture --example demo",
+                false,
+                false,
+            ),
+            (
+                "cargo check --locked --package proof-fixture --bench speed",
+                false,
+                false,
+            ),
+            (
+                "cargo check --locked --package proof-fixture --bins extra",
+                false,
+                false,
+            ),
+            (
+                "cargo test --locked --package proof-fixture --test integration -- --format json",
+                false,
+                false,
+            ),
+            (
+                "cargo test --locked --package proof-fixture --test integration && cargo build",
+                false,
+                false,
+            ),
+        ] {
+            assert_eq!(
+                focused_cargo_test_command_spec(command).is_some(),
+                test,
+                "{command}"
+            );
+            assert_eq!(
+                focused_build_command_spec(command).is_some(),
+                build,
+                "{command}"
+            );
+            assert_eq!(
+                proof_request_allowed_v0(command, "focused-test"),
+                test,
+                "{command}"
+            );
+            assert_eq!(
+                proof_request_allowed_v0(command, "focused-build"),
+                build,
+                "{command}"
+            );
+            println!(
+                "named_target_admission_receipt {}",
+                serde_json::json!({"command": command, "focused_test": proof_request_status(command, "focused-test"), "focused_build": proof_request_status(command, "focused-build")})
+            );
+        }
+        let temp = named_target_fixture()?;
+        for label in [
+            "cargo-target:proof-fixture::app --release",
+            "cargo-target:proof-fixture::app;cargo",
+            "cargo-target:proof-fixture::../app",
+            "cargo-target:proof-fixture::$(cargo)",
+        ] {
+            let result = resolve_model_proof_intents(
+                temp.path(),
+                &diff(&[]),
+                &[intent(ProofKind::FocusedBuild, label)],
+                &[],
+                budget(),
+            )?;
+            assert_eq!(result.intents[0].status, "rejected_target", "{label}");
+            assert!(result.proof_requests.is_empty());
+            assert!(result.intents[0].resolved_request_ids.is_empty());
+        }
         Ok(())
     }
 }
