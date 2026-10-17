@@ -9502,6 +9502,12 @@ def require_ripr_source_current_gaps(
         if finding_id in by_id:
             fail(f"{prefix} duplicate raw finding identity")
         by_id[finding_id] = finding
+        probe = finding.get("probe")
+        line = probe.get("line") if isinstance(probe, dict) else None
+        file = probe.get("file") if isinstance(probe, dict) else None
+        if (not finding_id.strip() or not isinstance(file, str) or not file.strip()
+                or isinstance(line, bool) or not isinstance(line, int) or line <= 0):
+            fail(f"{prefix} has an invalid raw finding probe/id")
         if finding.get("language") != "rust":
             fail(f"{prefix} supports Rust findings only")
         if finding.get("classification") not in classes:
@@ -11868,6 +11874,15 @@ def self_test_ripr_source_comparison() -> None:
         clean_detail["total_raw_gap_findings"] = 0
         write(clean_badge, clean_raw, clean_detail)
         require()  # Legitimate zero current gaps; no limitation metadata needed.
+        for name, change in [
+            ("missing non-gap probe", lambda r: r["findings"][0].pop("probe")),
+            ("blank non-gap file", lambda r: r["findings"][0]["probe"].update(file=" ")),
+            ("invalid non-gap line", lambda r: r["findings"][0]["probe"].update(line=True)),
+        ]:
+            changed = copy.deepcopy(clean_raw)
+            change(changed)
+            write(clean_badge, changed, clean_detail)
+            expect_self_test_failure(name, "raw finding probe", require)
         write(badge, raw, detail)
         (root / "input/diff.patch").write_bytes(patch + b"stale")
         expect_self_test_failure("changed input", "input", require)
