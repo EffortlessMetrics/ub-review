@@ -1942,6 +1942,7 @@ index 1111111..2222222 100644
             reason: "budget exhausted".to_owned(),
         };
         let lease = ResourceLease {
+            settled_elapsed_ms: None,
             revision: None,
             schema: "ub-review.resource_lease.v1".to_owned(),
             id: "lease-proof-initial".to_owned(),

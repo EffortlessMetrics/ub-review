@@ -497,6 +497,11 @@ pub(crate) struct ProofCommandReceipt {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct ResourceLease {
+    /// Sequential focused-task elapsed time after confirmed command completion,
+    /// cleanup and receipt construction. Admission timeout remains unchanged.
+    /// None (including legacy/live/refused work) retains the full reservation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) settled_elapsed_ms: Option<u128>,
     pub(crate) schema: String,
     pub(crate) id: String,
     pub(crate) kind: String,
