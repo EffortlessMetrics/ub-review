@@ -282,14 +282,11 @@ pub(crate) fn lane_continuation_prompt(
     reason = "continuation turn mirrors the reporter/proof context inputs; tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
 )]
 fn run_lane_continuation_turn(
-    root: &Path,
+    run_prompt: &mut impl FnMut(&Path, &str) -> Result<ModelPromptContent>,
     review_dir: &Path,
-    shared_context: &str,
-    spec: &ProviderSpec,
     lane_receipt: &ModelLaneReceipt,
     question: &str,
     reporter_distillation: &str,
-    args: &RunArgs,
     event_log: &EventLog,
     message_log: &MessageLog,
     proof_receipts: &[ProofReceipt],
@@ -341,25 +338,16 @@ fn run_lane_continuation_turn(
         .join(sanitize_artifact_name(&lane_receipt.lane));
     fs::create_dir_all(&lane_thread_dir)?;
     fs::write(lane_thread_dir.join("continuation-prompt-001.md"), &prompt)?;
-    let content = call_model_prompt_content(
-        root,
-        &lane_thread_dir,
-        spec,
-        Some(shared_context),
-        true,
-        &prompt,
-        args,
-    )?;
-    let revised =
-        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content.json_payload) {
-            parsed
-                .get("conclusion")
-                .and_then(|v| v.as_str())
-                .unwrap_or(&content.json_payload)
-                .to_owned()
-        } else {
-            content.json_payload
-        };
+    let content = run_prompt(&lane_thread_dir, &prompt)?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(&content.json_payload).context("parse lane continuation JSON")?;
+    let revised = parsed
+        .get("conclusion")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|conclusion| !conclusion.is_empty())
+        .context("lane continuation has no substantive string conclusion")?
+        .to_owned();
     // Write turn-001 for the lane (the lane continued its thread).
     let turn = LaneThreadTurn {
         schema: LANE_THREAD_SCHEMA.to_owned(),
@@ -459,7 +447,7 @@ pub(crate) fn run_reporter_coordination(
     root: &Path,
     review_dir: &Path,
     shared_context: &str,
-    model_lanes: &[ModelLaneReceipt],
+    model_lanes: &mut [ModelLaneReceipt],
     proof_receipts: &[ProofReceipt],
     late_sensor_evidence: &[LateSensorDigest],
     args: &RunArgs,
@@ -469,6 +457,64 @@ pub(crate) fn run_reporter_coordination(
     current_head: &str,
     calls_attempted: &mut usize,
 ) -> Result<()> {
+    let spec = direct_minimax_spec(args);
+    run_reporter_coordination_with_runner(
+        ReporterCoordinationContext {
+            review_dir,
+            shared_context,
+            proof_receipts,
+            late_sensor_evidence,
+            args,
+            model_calls_used,
+            event_log,
+            message_log,
+            current_head,
+        },
+        model_lanes,
+        calls_attempted,
+        &mut |lane_dir, prompt| {
+            call_model_prompt_content(
+                root,
+                lane_dir,
+                &spec,
+                Some(shared_context),
+                true,
+                prompt,
+                args,
+            )
+        },
+    )
+}
+
+struct ReporterCoordinationContext<'a> {
+    review_dir: &'a Path,
+    shared_context: &'a str,
+    proof_receipts: &'a [ProofReceipt],
+    late_sensor_evidence: &'a [LateSensorDigest],
+    args: &'a RunArgs,
+    model_calls_used: usize,
+    event_log: &'a EventLog,
+    message_log: &'a MessageLog,
+    current_head: &'a str,
+}
+
+fn run_reporter_coordination_with_runner(
+    context: ReporterCoordinationContext<'_>,
+    model_lanes: &mut [ModelLaneReceipt],
+    calls_attempted: &mut usize,
+    run_prompt: &mut impl FnMut(&Path, &str) -> Result<ModelPromptContent>,
+) -> Result<()> {
+    let ReporterCoordinationContext {
+        review_dir,
+        shared_context,
+        proof_receipts,
+        late_sensor_evidence,
+        args,
+        model_calls_used,
+        event_log,
+        message_log,
+        current_head,
+    } = context;
     // A reusable target directory may contain reporter turns from an earlier
     // invocation at the same head. Clear only the derived reporter authority
     // before deciding whether this invocation can run, so skipped or failed
@@ -500,15 +546,7 @@ pub(crate) fn run_reporter_coordination(
     fs::create_dir_all(&reporter_dir)?;
     fs::write(reporter_dir.join("prompt.md"), &prompt)?;
     *calls_attempted = calls_attempted.saturating_add(1);
-    let content = match call_model_prompt_content(
-        root,
-        &reporter_dir,
-        &spec,
-        Some(shared_context),
-        true,
-        &prompt,
-        args,
-    ) {
+    let content = match run_prompt(&reporter_dir, &prompt) {
         Ok(c) => c,
         Err(e) => {
             let _ = event_log.append(
@@ -578,11 +616,12 @@ pub(crate) fn run_reporter_coordination(
     // the reporter for a re-distillation (turn-001).
     let mut calls_used = model_calls_used.saturating_add(*calls_attempted);
     let mut lane_answers: Vec<(String, String)> = Vec::new();
-    let known_lane_ids: Vec<&str> = model_lanes
+    let known_lane_ids: Vec<String> = model_lanes
         .iter()
         .filter(|r| !r.thread_id.is_empty())
-        .map(|r| r.lane.as_str())
+        .map(|r| r.lane.clone())
         .collect();
+    let known_lane_refs: Vec<&str> = known_lane_ids.iter().map(String::as_str).collect();
     for question in &conclusion.proposed_follow_ups {
         let (target, q_text) = match question
             .split_once(':')
@@ -594,7 +633,7 @@ pub(crate) fn run_reporter_coordination(
         // Strip common prefixes the model adds ("Question for X", "X lane", etc.)
         // and match against known lane IDs. Also try fuzzy matching: if any
         // known lane ID is a substring of the target, use that lane.
-        let resolved_target = resolve_lane_target(&target, &known_lane_ids);
+        let resolved_target = resolve_lane_target(&target, &known_lane_refs);
         let lane_receipt = match resolved_target {
             Some(lane_id) => model_lanes
                 .iter()
@@ -609,14 +648,11 @@ pub(crate) fn run_reporter_coordination(
             break;
         }
         let answer = run_lane_continuation_turn(
-            root,
+            run_prompt,
             review_dir,
-            shared_context,
-            &spec,
             lane_receipt,
             &q_text,
             &conclusion.distillation,
-            args,
             event_log,
             message_log,
             proof_receipts,
@@ -625,33 +661,16 @@ pub(crate) fn run_reporter_coordination(
         *calls_attempted = calls_attempted.saturating_add(1);
         calls_used += 1;
         if let Ok(revised) = answer {
-            lane_answers.push((target.clone(), revised));
+            let lane_id = lane_receipt.lane.clone();
+            apply_lane_continuation_update(model_lanes, &lane_id, &q_text, &revised);
+            lane_answers.push((lane_id, revised));
         }
     }
 
     // If any lane answered, the reporter re-distills (turn-001) with the
     // updated conclusions.
     if !lane_answers.is_empty() && calls_used < args.max_model_calls {
-        let updated_digests: Vec<LaneDigest> = model_lanes
-            .iter()
-            .filter(|r| !r.thread_id.is_empty())
-            .map(|r| {
-                // If this lane answered, use the revised conclusion.
-                let revised = lane_answers
-                    .iter()
-                    .find(|(lane, _)| lane == &r.lane)
-                    .map(|(_, c)| c.as_str());
-                LaneDigest {
-                    lane: r.lane.clone(),
-                    status: r.status.clone(),
-                    conclusion: revised
-                        .map(str::to_owned)
-                        .unwrap_or_else(|| r.semantic_conclusion()),
-                    thread_id: r.thread_id.clone(),
-                    internal_audit: read_internal_audit(review_dir, &r.lane),
-                }
-            })
-            .collect();
+        let updated_digests = lane_digests_from_receipts(review_dir, model_lanes);
         let re_prompt = reporter_prompt(&updated_digests, late_sensor_evidence);
         let re_dir = review_dir.join("threads").join("reporter");
         *calls_attempted = calls_attempted.saturating_add(1);
@@ -667,17 +686,7 @@ pub(crate) fn run_reporter_coordination(
                 thread_id: &thread_id,
                 lane_answer_refs: &lane_answer_refs,
             },
-            || {
-                call_model_prompt_content(
-                    root,
-                    &re_dir,
-                    &spec,
-                    Some(shared_context),
-                    true,
-                    &re_prompt,
-                    args,
-                )
-            },
+            || run_prompt(&re_dir, &re_prompt),
         )?;
         let _ = message_log.append(
             CrossLaneMessageKind::LaneReport,
@@ -704,6 +713,31 @@ pub(crate) fn run_reporter_coordination(
     }
 
     Ok(())
+}
+
+/// Keep a continuation as an overlay, rather than replacing the primary
+/// evidence: an answer to a question about one claim cannot erase unrelated
+/// findings. Operational completion remains a separate receipt field.
+fn apply_lane_continuation_update(
+    model_lanes: &mut [ModelLaneReceipt],
+    lane_id: &str,
+    question: &str,
+    revised: &str,
+) {
+    if revised.trim().is_empty() {
+        return;
+    }
+    if let Some(lane) = model_lanes.iter_mut().find(|lane| lane.lane == lane_id) {
+        lane.semantic_state = Some(LaneSemanticState {
+            shared_prefix_hash: lane.shared_prefix_hash.clone(),
+            conclusion: serde_json::json!({
+                "prior_semantic_state": lane.semantic_conclusion(),
+                "question_scoped_continuation": {"question": question, "conclusion": revised},
+                "limits": "The continuation answers only the named question; preserve other specialist evidence."
+            }).to_string(),
+        });
+        lane.turn = 1;
+    }
 }
 
 pub(crate) struct ReporterRedistillationContext<'a> {
@@ -938,6 +972,53 @@ pub(crate) fn run_receipt_reconsiderations(
     event_log: &EventLog,
     message_log: &MessageLog,
 ) -> Result<ReceiptReconsiderationResult> {
+    let spec = direct_minimax_spec(args);
+    run_receipt_reconsiderations_with_runner(
+        ReceiptReconsiderationContext {
+            review_dir,
+            receipts,
+            args,
+            model_calls_used,
+            event_log,
+            message_log,
+        },
+        model_lanes,
+        &mut |lane_dir, prompt| {
+            call_model_prompt_content(
+                root,
+                lane_dir,
+                &spec,
+                Some(shared_context),
+                true,
+                prompt,
+                args,
+            )
+        },
+    )
+}
+
+struct ReceiptReconsiderationContext<'a> {
+    review_dir: &'a Path,
+    receipts: &'a [ProofReceipt],
+    args: &'a RunArgs,
+    model_calls_used: usize,
+    event_log: &'a EventLog,
+    message_log: &'a MessageLog,
+}
+
+fn run_receipt_reconsiderations_with_runner(
+    context: ReceiptReconsiderationContext<'_>,
+    model_lanes: &mut [ModelLaneReceipt],
+    run_prompt: &mut impl FnMut(&Path, &str) -> Result<ModelPromptContent>,
+) -> Result<ReceiptReconsiderationResult> {
+    let ReceiptReconsiderationContext {
+        review_dir,
+        receipts,
+        args,
+        model_calls_used,
+        event_log,
+        message_log,
+    } = context;
     let mut receipts_by_lane = BTreeMap::<String, Vec<&ProofReceipt>>::new();
     for receipt in receipts {
         for consumer in receipt_route_consumers(receipt) {
@@ -952,7 +1033,6 @@ pub(crate) fn run_receipt_reconsiderations(
     }
 
     let mut result = ReceiptReconsiderationResult::default();
-    let spec = direct_minimax_spec(args);
     for (lane_id, lane_receipts) in receipts_by_lane {
         if model_calls_used.saturating_add(result.calls_attempted) >= args.max_model_calls {
             let _ = event_log.append(
@@ -975,15 +1055,7 @@ pub(crate) fn run_receipt_reconsiderations(
         fs::write(&prompt_path, &prompt)?;
         result.calls_attempted = result.calls_attempted.saturating_add(1);
 
-        let content = match call_model_prompt_content(
-            root,
-            &lane_dir,
-            &spec,
-            Some(shared_context),
-            true,
-            &prompt,
-            args,
-        ) {
+        let content = match run_prompt(&lane_dir, &prompt) {
             Ok(content) => content,
             Err(error) => {
                 let _ = event_log.append(
@@ -2300,6 +2372,171 @@ mod receipt_reconsideration_tests {
             turn,
             cohort_broken: false,
         }
+    }
+
+    #[test]
+    fn reporter_continuation_then_receipt_uses_latest_scoped_semantics() -> Result<()> {
+        // The production coordination/reconsideration bodies run unchanged;
+        // only the provider boundary is controlled. This proves orchestration,
+        // rather than the quality of an unobserved live-model judgment.
+        for control in [
+            "current",
+            "missing",
+            "stale",
+            "unavailable",
+            "wrong-shape",
+            "invalid-json",
+            "empty",
+        ] {
+            let temp = tempfile::tempdir()?;
+            let review_dir = temp.path().join("review");
+            let cli = Cli::try_parse_from(["ub-review", "run", "--max-model-calls", "8"])?;
+            let Command::Run(args) = cli.command else {
+                anyhow::bail!("run arguments did not select run command")
+            };
+            let event_log = EventLog::open(&temp.path().join("events.ndjson"))?;
+            let message_log = MessageLog::open(&temp.path().join("messages.ndjson"))?;
+            let mut lanes = vec![lane_receipt("completed", 0)];
+            lanes[0].thread_id = "cohort:tests-oracle".to_owned();
+            lanes[0].cohort_id = "cohort".to_owned();
+            if control != "missing" {
+                lanes[0].semantic_state = Some(LaneSemanticState {
+                    shared_prefix_hash: if control == "stale" {
+                        "old-context".to_owned()
+                    } else {
+                        lanes[0].shared_prefix_hash.clone()
+                    },
+                    conclusion: "claim-A: equality enters unchecked indexing; claim-B: lifetime defect remains unverified".to_owned(),
+                });
+            }
+            let receipt: ProofReceipt = serde_json::from_value(serde_json::json!({
+                "schema": "proof", "id": "receipt-A", "kind": "focused-test",
+                "base": "base", "head": "head", "test_patch_mode": "head-only",
+                "requested_by": ["tests-oracle"], "request_ids": ["claim-A"],
+                "commands": [], "result": "head_passed", "reason": "boundary witness passes"
+            }))?;
+            let mut prompts = Vec::new();
+            let mut run_prompt = |dir: &Path, prompt: &str| -> Result<ModelPromptContent> {
+                prompts.push(prompt.to_owned());
+                let response = if prompt.starts_with("# Reporter Coordination Task") {
+                    if prompt.contains("claim-A revised:") {
+                        serde_json::json!({"distillation":"A was revised; B remains open", "verdict":"uncertain", "proposed_follow_ups":[]})
+                    } else {
+                        // Deliberately exercise normalization, rather than using
+                        // an exact lane ID that would hide tracking regressions.
+                        serde_json::json!({"distillation":"Reassess A only", "verdict":"uncertain", "proposed_follow_ups":["Question for tests-oracle lane: Reassess claim-A after the guard changes"]})
+                    }
+                } else if prompt.starts_with("# Lane continuation:") {
+                    if control == "unavailable" {
+                        anyhow::bail!("controlled continuation provider unavailable")
+                    }
+                    if control == "invalid-json" {
+                        return Ok(ModelPromptContent {
+                            json_payload: "not JSON PRIVATE_AUDIT_MARKER".to_owned(),
+                            parse_path: dir.join("controlled-provider.json"),
+                            duration_ms: 1,
+                            http_status: Some(200),
+                            response_shape: "controlled-test".to_owned(),
+                            cache_usage: ModelCacheUsage::default(),
+                        });
+                    }
+                    if control == "wrong-shape" {
+                        serde_json::json!({"internal_audit":"PRIVATE_AUDIT_MARKER", "conclusion":{"private":"PRIVATE_AUDIT_MARKER"}})
+                    } else if control == "empty" {
+                        serde_json::json!({"conclusion":"  ", "internal_audit":"PRIVATE_AUDIT_MARKER"})
+                    } else {
+                        serde_json::json!({"conclusion":"claim-A revised: strict guard now rejects equality; fresh boundary witness still required"})
+                    }
+                } else if prompt.starts_with("# Evidence reconsideration:") {
+                    serde_json::json!({"conclusion":"claim-A boundary witness confirms repaired guard", "changed":true, "disposition":"refute"})
+                } else {
+                    anyhow::bail!("unexpected role prompt: {prompt}")
+                };
+                Ok(ModelPromptContent {
+                    json_payload: response.to_string(),
+                    parse_path: dir.join("controlled-provider.json"),
+                    duration_ms: 1,
+                    http_status: Some(200),
+                    response_shape: "controlled-test".to_owned(),
+                    cache_usage: ModelCacheUsage::default(),
+                })
+            };
+            let mut calls = 0;
+            run_reporter_coordination_with_runner(
+                ReporterCoordinationContext {
+                    review_dir: &review_dir,
+                    shared_context: "shared context",
+                    proof_receipts: &[],
+                    late_sensor_evidence: &[],
+                    args: &args,
+                    model_calls_used: 1,
+                    event_log: &event_log,
+                    message_log: &message_log,
+                    current_head: "head",
+                },
+                &mut lanes,
+                &mut calls,
+                &mut run_prompt,
+            )?;
+            let outcome = run_receipt_reconsiderations_with_runner(
+                ReceiptReconsiderationContext {
+                    review_dir: &review_dir,
+                    receipts: &[receipt],
+                    args: &args,
+                    model_calls_used: 1 + calls,
+                    event_log: &event_log,
+                    message_log: &message_log,
+                },
+                &mut lanes,
+                &mut run_prompt,
+            )?;
+            assert_eq!(outcome.calls_attempted, 1, "{control}");
+            assert_eq!(outcome.reconsiderations.len(), 1, "{control}");
+            assert_eq!(outcome.reconsiderations[0].request_ids, ["claim-A"]);
+            let receipt_prompt = prompts.last().context("receipt prompt")?;
+            assert!(receipt_prompt.starts_with("# Evidence reconsideration:"));
+            assert!(receipt_prompt.contains("request_ids=`claim-A`"));
+            assert!(!receipt_prompt.contains("PRIVATE_AUDIT_MARKER"));
+            if matches!(
+                control,
+                "unavailable" | "wrong-shape" | "invalid-json" | "empty"
+            ) {
+                assert!(!receipt_prompt.contains("claim-A revised:"));
+                assert_eq!(calls, 2);
+            } else {
+                assert!(
+                    receipt_prompt.contains("claim-A revised: strict guard now rejects equality"),
+                    "{control}: {receipt_prompt}"
+                );
+                assert_eq!(calls, 3);
+                let redistillation = prompts.get(2).context("redistillation prompt")?;
+                assert!(redistillation.contains("claim-A revised:"));
+            }
+            if !matches!(control, "missing" | "stale") {
+                assert!(receipt_prompt.contains("claim-A: equality enters unchecked indexing"));
+                assert!(receipt_prompt.contains("claim-B: lifetime defect remains unverified"));
+                assert!(
+                    lanes[0]
+                        .semantic_conclusion()
+                        .contains("claim-B: lifetime defect remains unverified")
+                );
+                if control == "current" {
+                    assert!(
+                        prompts
+                            .get(2)
+                            .context("redistillation prompt")?
+                            .contains("claim-B: lifetime defect remains unverified")
+                    );
+                }
+            } else {
+                assert!(receipt_prompt.contains("Missing semantic evidence"));
+                assert!(!receipt_prompt.contains("claim-B: lifetime defect"));
+                assert!(!receipt_prompt.contains("claim-A: equality enters unchecked indexing"));
+            }
+            assert_eq!(lanes[0].reason, "completed");
+            assert_eq!(lanes[0].shared_prefix_hash, "review-head");
+        }
+        Ok(())
     }
 
     #[test]

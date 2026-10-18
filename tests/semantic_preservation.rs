@@ -270,6 +270,7 @@ fn review(
     head: &str,
     out: PathBuf,
     revision: Revision,
+    prior_context: Option<&Path>,
 ) -> Result<ReviewRun> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     listener.set_nonblocking(true)?;
@@ -288,44 +289,48 @@ fn review(
             move |_, stream| serve_request(stream, revision),
         )
     });
+    let mut args = vec![
+        "run",
+        "--dry-run",
+        "--config",
+        common::path_str(config)?,
+        "--root",
+        common::path_str(repo)?,
+        "--base",
+        base,
+        "--head",
+        head,
+        "--out",
+        common::path_str(&out)?,
+        "--no-github-summary",
+        "--model-mode",
+        "auto",
+        "--provider-policy",
+        "minimax-only",
+        "--minimax-provider-kind",
+        "openai",
+        "--lanes",
+        "bounds",
+        "--tools",
+        "cargo-allow",
+        "--model-concurrency",
+        "1",
+        "--max-model-calls",
+        if matches!(revision, Revision::Defect) {
+            "5"
+        } else {
+            "4"
+        },
+        "--model-timeout-sec",
+        "5",
+    ];
+    if let Some(path) = prior_context {
+        args.extend(["--pr-thread-context", common::path_str(path)?]);
+    }
     let result = common::run_with_env(
         repo,
         env!("CARGO_BIN_EXE_ub-review"),
-        &[
-            "run",
-            "--dry-run",
-            "--config",
-            common::path_str(config)?,
-            "--root",
-            common::path_str(repo)?,
-            "--base",
-            base,
-            "--head",
-            head,
-            "--out",
-            common::path_str(&out)?,
-            "--no-github-summary",
-            "--model-mode",
-            "auto",
-            "--provider-policy",
-            "minimax-only",
-            "--minimax-provider-kind",
-            "openai",
-            "--lanes",
-            "bounds",
-            "--tools",
-            "cargo-allow",
-            "--model-concurrency",
-            "1",
-            "--max-model-calls",
-            if matches!(revision, Revision::Defect) {
-                "5"
-            } else {
-                "4"
-            },
-            "--model-timeout-sec",
-            "5",
-        ],
+        &args,
         &[
             ("UB_REVIEW_MINIMAX_API_KEY", "semantic-test-only"),
             ("UB_REVIEW_MINIMAX_API_URL", &url),
@@ -350,6 +355,44 @@ fn review(
         primary_request.contains(base) && primary_request.contains(head),
         "primary request must identify exact reviewed base {base} and head {head}"
     );
+    let thread_context = common::read_json(&out.join("review/pr_thread_context.json"))?;
+    match prior_context {
+        Some(path) if path.exists() => {
+            let prior = fs::read_to_string(path)?;
+            ensure!(
+                thread_context["status"] == "seeded" && thread_context["thread_context"] == prior,
+                "repair must seed the persisted prior review without replacing it: {thread_context}"
+            );
+            ensure!(
+                primary_request.contains("Historical review at prior head")
+                    && primary_request.contains(DEFECT_FINDING)
+                    && primary_request.contains("byte_at(&[7], 1) panics")
+                    && primary_request.contains(Revision::Defect.summary())
+                    && primary_request.contains("Seeded Thread Reuse Rules"),
+                "repair prompt lost prior finding, mechanism or historical reuse instructions"
+            );
+        }
+        Some(_) => {
+            ensure!(
+                thread_context["status"] == "unavailable"
+                    && thread_context["thread_context"].is_null()
+                    && thread_context["warnings"]
+                        .as_array()
+                        .is_some_and(|warnings| warnings.iter().any(|warning| warning
+                            .as_str()
+                            .is_some_and(|text| text.contains("thread-context-file unavailable")))),
+                "missing prior context must be unavailable evidence: {thread_context}"
+            );
+            ensure!(
+                !primary_request.contains(DEFECT_FINDING),
+                "unavailable prior context synthesized the earlier defect"
+            );
+        }
+        None => ensure!(
+            thread_context["status"] == "absent",
+            "unseeded run must record absent context: {thread_context}"
+        ),
+    }
     let diff = common::run_capture_with_env(
         repo,
         "git",
@@ -375,11 +418,11 @@ fn review(
             "captured requests omitted exact diff line {line}"
         );
     }
-    let public = common::read_json(&out.join("review/review.json"))?;
-    let inline = public["inline_comments"]
+    let raw = common::read_json(&out.join("review/review.json"))?;
+    let inline = raw["inline_comments"]
         .as_array()
-        .context("public inline findings")?;
-    let lane = public["model_lanes"]
+        .context("raw inline findings")?;
+    let lane = raw["model_lanes"]
         .as_array()
         .context("model lane receipts")?
         .iter()
@@ -398,7 +441,7 @@ fn review(
             inline[0]["body"]
                 .as_str()
                 .is_some_and(|body| body.contains(DEFECT_FINDING)),
-            "defect meaning lost in public output"
+            "defect meaning lost in raw review artifact"
         );
         ensure!(
             requests
@@ -408,17 +451,46 @@ fn review(
         );
     } else {
         ensure!(
-            inline.is_empty() && public["terminal_state"]["substantive_summary_only_findings"] == 0,
-            "fresh repaired/control review retained substantive public findings: {public}"
+            inline.is_empty() && raw["terminal_state"]["substantive_summary_only_findings"] == 0,
+            "fresh repaired/control review retained substantive raw findings: {raw}"
         );
     }
     ensure!(
-        !public["body"]
-            .as_str()
-            .unwrap_or_default()
-            .contains(PRIVATE),
-        "public review exposed private audit"
+        !raw["body"].as_str().unwrap_or_default().contains(PRIVATE),
+        "raw review body exposed private audit"
     );
+    let public = common::read_json(&out.join("review/github-review.json"))?;
+    let comments = public["comments"]
+        .as_array()
+        .context("final GitHub review comments")?;
+    let body = public["body"]
+        .as_str()
+        .context("final GitHub review body")?;
+    ensure!(
+        public["event"] == "COMMENT",
+        "final GitHub review must retain the bounded COMMENT event: {public}"
+    );
+    ensure!(
+        !public.to_string().contains(PRIVATE),
+        "final GitHub review payload exposed private audit: {public}"
+    );
+    if matches!(revision, Revision::Defect) {
+        ensure!(
+            comments.len() == 1
+                && comments[0]["path"] == "src/lib.rs"
+                && comments[0]["line"] == 2
+                && comments[0]["side"] == "RIGHT"
+                && comments[0]["body"]
+                    .as_str()
+                    .is_some_and(|comment| comment.contains(DEFECT_FINDING)),
+            "final GitHub review must preserve the concrete defect at its changed line: {public}"
+        );
+    } else {
+        ensure!(
+            comments.is_empty() && !body.contains(DEFECT_FINDING),
+            "final repaired/control GitHub review retained the stale defect: {public}"
+        );
+    }
     Ok(ReviewRun {
         revision,
         out,
@@ -537,7 +609,7 @@ fn cli_defect_repair_and_independent_control_preserve_semantics() -> Result<()> 
         &config,
         "[review]\nenable_default_lanes = false\n[[lanes]]\nid = \"bounds\"\nrole = \"Bounds review\"\nfocus = \"Review byte_at equality behavior\"\n[tools.cargo-allow]\nenabled = false\n",
     )?;
-    // Each invocation is a fresh review transaction; no fixture artifact is fed back as evidence.
+    // The first transaction produces the historical evidence used for reconsideration.
     let defective = review(
         &repo,
         &config,
@@ -545,6 +617,28 @@ fn cli_defect_repair_and_independent_control_preserve_semantics() -> Result<()> 
         &defect,
         temp.path().join("defect"),
         Revision::Defect,
+        None,
+    )?;
+    let prior_turn = common::read_json(&defective.out.join("review/threads/bounds/turn-000.json"))?;
+    let prior_review = common::read_json(&defective.out.join("review/review.json"))?;
+    let prior_receipt = prior_review["model_lanes"]
+        .as_array()
+        .and_then(|lanes| lanes.iter().find(|lane| lane["lane"] == "bounds"))
+        .context("persisted prior bounds receipt")?;
+    ensure!(
+        prior_receipt["semantic_state"]["conclusion"]
+            .as_str()
+            .is_some_and(|conclusion| conclusion.contains(DEFECT_FINDING)),
+        "historical context must come from persisted substantive semantic state"
+    );
+    let prior_context = temp.path().join("prior-defect-review.txt");
+    fs::write(
+        &prior_context,
+        format!(
+            "Historical review at prior head {defect}; reconsider against the current diff, not as a current-head finding.\n{}\n{}\n",
+            serde_json::to_string_pretty(&prior_turn)?,
+            serde_json::to_string_pretty(&prior_receipt["semantic_state"])?
+        ),
     )?;
     let repair = commit(&repo, REPAIRED, "restore strict guard and cover boundary")?;
     common::run(
@@ -569,6 +663,7 @@ fn cli_defect_repair_and_independent_control_preserve_semantics() -> Result<()> 
         &repair,
         temp.path().join("repair"),
         Revision::Repair,
+        Some(&prior_context),
     )?;
     common::run(&repo, "git", &["checkout", "--detach", &baseline])?;
     let control = commit(&repo, CONTROL, "independent checked-access control")?;
@@ -591,6 +686,7 @@ fn cli_defect_repair_and_independent_control_preserve_semantics() -> Result<()> 
         &control,
         temp.path().join("control"),
         Revision::Control,
+        Some(&temp.path().join("unavailable-prior-review.txt")),
     )?;
     for run in [&defective, &repaired, &independent] {
         check_semantics(run)?;

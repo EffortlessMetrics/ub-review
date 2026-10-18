@@ -5668,7 +5668,7 @@ fn write_review_artifacts(
         root,
         &review_dir,
         &shared_context,
-        &model_lanes,
+        &mut model_lanes,
         &proof_result.proof_receipts,
         &late_sensor_evidence,
         args,
