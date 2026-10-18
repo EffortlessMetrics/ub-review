@@ -7460,9 +7460,7 @@ mod tests {
             "an admitted labeled request must run the complete explicit pass; native event metadata stays labeled"
         );
         assert!(
-            workflow.contains(
-                "base: ${{ github.event.pull_request.base.sha }}"
-            ),
+            workflow.contains("base: ${{ github.event.pull_request.base.sha }}"),
             "self gate must diff against the admitted immutable base, even if origin/main moves during checkout"
         );
         assert!(
