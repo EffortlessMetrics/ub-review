@@ -194,7 +194,27 @@ pub(crate) fn reporter_prompt(
 
 /// Build a lane digest from the executed receipts (only lanes with a
 /// non-empty thread_id — i.e., that actually investigated).
+/// Preserve the existing live coordinator input. Semantic evidence is inspected
+/// separately until an explicit authority migration is qualified.
 pub(crate) fn lane_digests_from_receipts(
+    review_dir: &Path,
+    receipts: &[crate::ModelLaneReceipt],
+) -> Vec<LaneDigest> {
+    receipts
+        .iter()
+        .filter(|r| !r.thread_id.is_empty())
+        .map(|r| LaneDigest {
+            lane: r.lane.clone(),
+            status: r.status.clone(),
+            conclusion: r.reason.clone(),
+            thread_id: r.thread_id.clone(),
+            internal_audit: read_internal_audit(review_dir, &r.lane),
+        })
+        .collect()
+}
+
+/// Non-authoritative semantic view; never selected as live reporter input.
+pub(crate) fn semantic_lane_digests_from_receipts(
     review_dir: &Path,
     receipts: &[crate::ModelLaneReceipt],
 ) -> Vec<LaneDigest> {

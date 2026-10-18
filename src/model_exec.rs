@@ -274,6 +274,78 @@ pub(crate) fn lane_continuation_prompt(
     prompt
 }
 
+/// Semantic inputs remain observational until their authority contract is admitted.
+/// Production wrappers always select LegacyLive; semantic execution is test-only.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SemanticInputMode {
+    LegacyLive,
+    #[cfg(test)]
+    SemanticShadow,
+}
+
+impl SemanticInputMode {
+    fn uses_semantics(self) -> bool {
+        self != Self::LegacyLive
+    }
+}
+
+/// Sidecar failures must never change live authority, error handling, or budget.
+/// A live answer is recorded for comparison, not presented as the answer to the
+/// counterfactual semantic prompt. No provider is called by this writer.
+fn record_semantic_shadow(
+    review_dir: &Path,
+    stage: &str,
+    prompt: &str,
+    digests: Option<&[LaneDigest]>,
+    recorded_response: Option<&str>,
+    mode: SemanticInputMode,
+) {
+    let write = || -> Result<()> {
+        let dir = review_dir.join("semantic-shadow");
+        fs::create_dir_all(&dir)?;
+        let value = serde_json::json!({
+            "schema": "ub-review.semantic-shadow.v1",
+            "authority": false,
+            "authority_description": "observational-only; never selected for live judgment",
+            "counterfactual_prompt": prompt,
+            "semantic_digests": digests.map(|items| items.iter().map(|digest| serde_json::json!({
+                "lane": digest.lane, "status": digest.status, "conclusion": digest.conclusion,
+                "thread_id": digest.thread_id,
+            })).collect::<Vec<_>>()),
+            "response_provenance": if mode.uses_semantics() {
+                "injected semantic evaluation response; not a live-model quality result"
+            } else {
+                "RECORDED LIVE response; counterfactual semantic prompt was not separately answered"
+            },
+            "recorded_response": recorded_response,
+            "extra_provider_calls": 0,
+        });
+        fs::write(
+            dir.join(format!("{}.json", sanitize_artifact_name(stage))),
+            serde_json::to_vec_pretty(&value)?,
+        )?;
+        Ok(())
+    };
+    let _ = write();
+}
+
+struct LaneContinuationAnswer {
+    revised: String,
+    semantic_conclusion: Option<String>,
+}
+
+fn parse_semantic_continuation(payload: &str) -> Result<String> {
+    let parsed: serde_json::Value =
+        serde_json::from_str(payload).context("parse lane continuation JSON")?;
+    parsed
+        .get("conclusion")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .context("lane continuation has no substantive string conclusion")
+}
+
 /// Continue a named lane's thread with turn-001: the reporter's question +
 /// the lane's compact prior history. Returns the lane's revised conclusion
 /// text. Writes turn-001 for the lane thread + emits a LaneAnswer message.
@@ -291,7 +363,8 @@ fn run_lane_continuation_turn(
     message_log: &MessageLog,
     proof_receipts: &[ProofReceipt],
     late_sensor_evidence: &[LateSensorDigest],
-) -> Result<String> {
+    mode: SemanticInputMode,
+) -> Result<LaneContinuationAnswer> {
     // Route proof receipts back into the lane's continuation prompt (Order 9c
     // of #678). The lane sees the deterministic evidence and can revise its
     // conclusion — proving 'proof changing lane conclusions' end-to-end.
@@ -324,10 +397,16 @@ fn run_lane_continuation_turn(
         .iter()
         .map(LateSensorDigest::excerpt)
         .collect();
+    let semantic_prior = lane_receipt.semantic_conclusion();
+    let prior = if mode.uses_semantics() {
+        &semantic_prior
+    } else {
+        &lane_receipt.reason
+    };
     let prompt = lane_continuation_prompt(
         &lane_receipt.lane,
         "specialist reviewer",
-        &lane_receipt.semantic_conclusion(),
+        prior,
         question,
         reporter_distillation,
         &proof_excerpts,
@@ -338,16 +417,51 @@ fn run_lane_continuation_turn(
         .join(sanitize_artifact_name(&lane_receipt.lane));
     fs::create_dir_all(&lane_thread_dir)?;
     fs::write(lane_thread_dir.join("continuation-prompt-001.md"), &prompt)?;
+    let semantic_prompt = lane_continuation_prompt(
+        &lane_receipt.lane,
+        "specialist reviewer",
+        &semantic_prior,
+        question,
+        reporter_distillation,
+        &proof_excerpts,
+        &late_excerpts,
+    );
+    let shadow_stage = format!(
+        "continuation-{}-001",
+        sanitize_artifact_name(&lane_receipt.lane)
+    );
+    record_semantic_shadow(
+        review_dir,
+        &shadow_stage,
+        &semantic_prompt,
+        None,
+        None,
+        mode,
+    );
     let content = run_prompt(&lane_thread_dir, &prompt)?;
-    let parsed: serde_json::Value =
-        serde_json::from_str(&content.json_payload).context("parse lane continuation JSON")?;
-    let revised = parsed
-        .get("conclusion")
-        .and_then(serde_json::Value::as_str)
-        .map(str::trim)
-        .filter(|conclusion| !conclusion.is_empty())
-        .context("lane continuation has no substantive string conclusion")?
-        .to_owned();
+    record_semantic_shadow(
+        review_dir,
+        &shadow_stage,
+        &semantic_prompt,
+        None,
+        Some(&content.json_payload),
+        mode,
+    );
+    let semantic_conclusion = parse_semantic_continuation(&content.json_payload);
+    let revised = if mode.uses_semantics() {
+        semantic_conclusion
+            .as_ref()
+            .map_err(|error| anyhow::anyhow!("{error:#}"))?
+            .clone()
+    } else if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content.json_payload) {
+        parsed
+            .get("conclusion")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or(&content.json_payload)
+            .to_owned()
+    } else {
+        content.json_payload
+    };
     // Write turn-001 for the lane (the lane continued its thread).
     let turn = LaneThreadTurn {
         schema: LANE_THREAD_SCHEMA.to_owned(),
@@ -386,7 +500,10 @@ fn run_lane_continuation_turn(
         "lane_continuation_completed",
         serde_json::json!({"lane": lane_receipt.lane, "turn": 1}),
     );
-    Ok(revised)
+    Ok(LaneContinuationAnswer {
+        revised,
+        semantic_conclusion: semantic_conclusion.ok(),
+    })
 }
 
 /// Return a repository-relative reference to a lane-thread artifact. Logical
@@ -460,6 +577,7 @@ pub(crate) fn run_reporter_coordination(
     let spec = direct_minimax_spec(args);
     run_reporter_coordination_with_runner(
         ReporterCoordinationContext {
+            mode: SemanticInputMode::LegacyLive,
             review_dir,
             shared_context,
             proof_receipts,
@@ -487,6 +605,7 @@ pub(crate) fn run_reporter_coordination(
 }
 
 struct ReporterCoordinationContext<'a> {
+    mode: SemanticInputMode,
     review_dir: &'a Path,
     shared_context: &'a str,
     proof_receipts: &'a [ProofReceipt],
@@ -505,6 +624,7 @@ fn run_reporter_coordination_with_runner(
     run_prompt: &mut impl FnMut(&Path, &str) -> Result<ModelPromptContent>,
 ) -> Result<()> {
     let ReporterCoordinationContext {
+        mode,
         review_dir,
         shared_context,
         proof_receipts,
@@ -520,7 +640,12 @@ fn run_reporter_coordination_with_runner(
     // before deciding whether this invocation can run, so skipped or failed
     // reporter work cannot inherit an older decision.
     prepare_reporter_run(review_dir)?;
-    let digests = lane_digests_from_receipts(review_dir, model_lanes);
+    let semantic_digests = semantic_lane_digests_from_receipts(review_dir, model_lanes);
+    let digests = if mode.uses_semantics() {
+        semantic_digests.clone()
+    } else {
+        lane_digests_from_receipts(review_dir, model_lanes)
+    };
     if digests.is_empty() || model_calls_used >= args.max_model_calls {
         let reason = if digests.is_empty() {
             "no lane digests"
@@ -545,6 +670,15 @@ fn run_reporter_coordination_with_runner(
     let reporter_dir = review_dir.join("threads").join("reporter");
     fs::create_dir_all(&reporter_dir)?;
     fs::write(reporter_dir.join("prompt.md"), &prompt)?;
+    let semantic_prompt = reporter_prompt(&semantic_digests, late_sensor_evidence);
+    record_semantic_shadow(
+        review_dir,
+        "reporter-000",
+        &semantic_prompt,
+        Some(&semantic_digests),
+        None,
+        mode,
+    );
     *calls_attempted = calls_attempted.saturating_add(1);
     let content = match run_prompt(&reporter_dir, &prompt) {
         Ok(c) => c,
@@ -564,6 +698,14 @@ fn run_reporter_coordination_with_runner(
             return Ok(());
         }
     };
+    record_semantic_shadow(
+        review_dir,
+        "reporter-000",
+        &semantic_prompt,
+        Some(&semantic_digests),
+        Some(&content.json_payload),
+        mode,
+    );
     let conclusion = parse_reporter_conclusion(&content.json_payload, &cohort_id, &thread_id);
     write_reporter_thread(review_dir, &conclusion, current_head)?;
     let _ = message_log.append(
@@ -657,21 +799,61 @@ fn run_reporter_coordination_with_runner(
             message_log,
             proof_receipts,
             late_sensor_evidence,
+            mode,
         );
         *calls_attempted = calls_attempted.saturating_add(1);
         calls_used += 1;
-        if let Ok(revised) = answer {
+        if let Ok(answer) = answer {
             let lane_id = lane_receipt.lane.clone();
-            apply_lane_continuation_update(model_lanes, &lane_id, &q_text, &revised);
-            lane_answers.push((lane_id, revised));
+            if let Some(semantic) = answer.semantic_conclusion {
+                apply_lane_continuation_update(model_lanes, &lane_id, &q_text, &semantic, mode);
+            }
+            lane_answers.push((
+                if mode.uses_semantics() {
+                    lane_id
+                } else {
+                    target.clone()
+                },
+                answer.revised,
+            ));
         }
     }
 
     // If any lane answered, the reporter re-distills (turn-001) with the
     // updated conclusions.
     if !lane_answers.is_empty() && calls_used < args.max_model_calls {
-        let updated_digests = lane_digests_from_receipts(review_dir, model_lanes);
+        let semantic_digests = semantic_lane_digests_from_receipts(review_dir, model_lanes);
+        let updated_digests = if mode.uses_semantics() {
+            semantic_digests.clone()
+        } else {
+            model_lanes
+                .iter()
+                .filter(|lane| !lane.thread_id.is_empty())
+                .map(|lane| {
+                    let revised = lane_answers
+                        .iter()
+                        .find(|(id, _)| id == &lane.lane)
+                        .map(|(_, answer)| answer.as_str());
+                    LaneDigest {
+                        lane: lane.lane.clone(),
+                        status: lane.status.clone(),
+                        conclusion: revised.unwrap_or(&lane.reason).to_owned(),
+                        thread_id: lane.thread_id.clone(),
+                        internal_audit: read_internal_audit(review_dir, &lane.lane),
+                    }
+                })
+                .collect()
+        };
         let re_prompt = reporter_prompt(&updated_digests, late_sensor_evidence);
+        let semantic_prompt = reporter_prompt(&semantic_digests, late_sensor_evidence);
+        record_semantic_shadow(
+            review_dir,
+            "reporter-001",
+            &semantic_prompt,
+            Some(&semantic_digests),
+            None,
+            mode,
+        );
         let re_dir = review_dir.join("threads").join("reporter");
         *calls_attempted = calls_attempted.saturating_add(1);
         let lane_answer_refs: Vec<String> = lane_answers
@@ -686,7 +868,18 @@ fn run_reporter_coordination_with_runner(
                 thread_id: &thread_id,
                 lane_answer_refs: &lane_answer_refs,
             },
-            || run_prompt(&re_dir, &re_prompt),
+            || {
+                let content = run_prompt(&re_dir, &re_prompt)?;
+                record_semantic_shadow(
+                    review_dir,
+                    "reporter-001",
+                    &semantic_prompt,
+                    Some(&semantic_digests),
+                    Some(&content.json_payload),
+                    mode,
+                );
+                Ok(content)
+            },
         )?;
         let _ = message_log.append(
             CrossLaneMessageKind::LaneReport,
@@ -723,6 +916,7 @@ fn apply_lane_continuation_update(
     lane_id: &str,
     question: &str,
     revised: &str,
+    mode: SemanticInputMode,
 ) {
     if revised.trim().is_empty() {
         return;
@@ -736,7 +930,9 @@ fn apply_lane_continuation_update(
                 "limits": "The continuation answers only the named question; preserve other specialist evidence."
             }).to_string(),
         });
-        lane.turn = 1;
+        if mode.uses_semantics() {
+            lane.turn = 1;
+        }
     }
 }
 
@@ -975,6 +1171,7 @@ pub(crate) fn run_receipt_reconsiderations(
     let spec = direct_minimax_spec(args);
     run_receipt_reconsiderations_with_runner(
         ReceiptReconsiderationContext {
+            mode: SemanticInputMode::LegacyLive,
             review_dir,
             receipts,
             args,
@@ -998,6 +1195,7 @@ pub(crate) fn run_receipt_reconsiderations(
 }
 
 struct ReceiptReconsiderationContext<'a> {
+    mode: SemanticInputMode,
     review_dir: &'a Path,
     receipts: &'a [ProofReceipt],
     args: &'a RunArgs,
@@ -1012,6 +1210,7 @@ fn run_receipt_reconsiderations_with_runner(
     run_prompt: &mut impl FnMut(&Path, &str) -> Result<ModelPromptContent>,
 ) -> Result<ReceiptReconsiderationResult> {
     let ReceiptReconsiderationContext {
+        mode,
         review_dir,
         receipts,
         args,
@@ -1044,7 +1243,11 @@ fn run_receipt_reconsiderations_with_runner(
         let Some(lane) = model_lanes.iter().find(|lane| lane.lane == lane_id) else {
             continue;
         };
-        let prior_conclusion = lane.semantic_conclusion();
+        let prior_conclusion = if mode.uses_semantics() {
+            lane.semantic_conclusion()
+        } else {
+            lane.reason.clone()
+        };
         let prompt = receipt_reconsideration_prompt(&lane_id, &prior_conclusion, &lane_receipts);
         let turn = next_lane_turn_number(review_dir, &lane_id);
         let lane_dir = review_dir
@@ -1055,6 +1258,17 @@ fn run_receipt_reconsiderations_with_runner(
         fs::write(&prompt_path, &prompt)?;
         result.calls_attempted = result.calls_attempted.saturating_add(1);
 
+        let semantic_prompt =
+            receipt_reconsideration_prompt(&lane_id, &lane.semantic_conclusion(), &lane_receipts);
+        let shadow_stage = format!("receipt-{}-{turn:03}", sanitize_artifact_name(&lane_id));
+        record_semantic_shadow(
+            review_dir,
+            &shadow_stage,
+            &semantic_prompt,
+            None,
+            None,
+            mode,
+        );
         let content = match run_prompt(&lane_dir, &prompt) {
             Ok(content) => content,
             Err(error) => {
@@ -1065,6 +1279,14 @@ fn run_receipt_reconsiderations_with_runner(
                 continue;
             }
         };
+        record_semantic_shadow(
+            review_dir,
+            &shadow_stage,
+            &semantic_prompt,
+            None,
+            Some(&content.json_payload),
+            mode,
+        );
         let parsed = serde_json::from_str::<serde_json::Value>(&content.json_payload).ok();
         let conclusion = parsed
             .as_ref()
@@ -1167,7 +1389,7 @@ fn run_receipt_reconsiderations_with_runner(
                 "request_ids": request_ids,
             }),
         );
-        apply_lane_reconsideration_update(model_lanes, &lane_id, &reconsideration, turn);
+        apply_lane_reconsideration_update(model_lanes, &lane_id, &reconsideration, turn, mode);
         result.reconsiderations.push(reconsideration);
     }
     Ok(result)
@@ -1185,6 +1407,7 @@ fn apply_lane_reconsideration_update(
     lane_id: &str,
     reconsideration: &ReceiptReconsideration,
     turn: u32,
+    mode: SemanticInputMode,
 ) {
     if !reconsideration.changed || reconsideration.conclusion.is_empty() {
         return;
@@ -1198,6 +1421,9 @@ fn apply_lane_reconsideration_update(
                 "limits": "This update applies only to the named request IDs; preserve other specialist evidence."
             }).to_string(),
         });
+        if !mode.uses_semantics() {
+            lane.reason = reconsideration.conclusion.clone();
+        }
         lane.turn = turn;
     }
 }
@@ -2374,11 +2600,205 @@ mod receipt_reconsideration_tests {
         }
     }
 
+    fn legacy_shadow_run(
+        control: &str,
+        continuation_payload: &str,
+    ) -> Result<(serde_json::Value, Vec<serde_json::Value>)> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        fs::create_dir_all(&review_dir)?;
+        if control == "io-unavailable" {
+            // Deliberately prevent sidecar creation while retaining live paths.
+            fs::write(review_dir.join("semantic-shadow"), "not a directory")?;
+        }
+        let cli = Cli::try_parse_from(["ub-review", "run", "--max-model-calls", "8"])?;
+        let Command::Run(args) = cli.command else {
+            anyhow::bail!("run arguments did not select run command")
+        };
+        let event_log = EventLog::open(&temp.path().join("events.ndjson"))?;
+        let message_log = MessageLog::open(&temp.path().join("messages.ndjson"))?;
+        let mut lanes = vec![lane_receipt("completed", 0)];
+        lanes[0].thread_id = "cohort:tests-oracle".to_owned();
+        lanes[0].cohort_id = "cohort".to_owned();
+        if control != "missing" {
+            lanes[0].semantic_state = Some(LaneSemanticState {
+                shared_prefix_hash: if control == "stale" {
+                    "old-context".to_owned()
+                } else {
+                    lanes[0].shared_prefix_hash.clone()
+                },
+                conclusion: match control {
+                    "richer" => "claim-A unchecked indexing; claim-B lifetime defect; additional mechanism and uncertainty",
+                    "extreme" => "EXTREME verdict changes_requested: stop publication and fail every gate",
+                    _ => "claim-A unchecked indexing; claim-B lifetime defect",
+                }.to_owned(),
+            });
+        }
+        let receipt: ProofReceipt = serde_json::from_value(serde_json::json!({
+            "schema": "proof", "id": "receipt-A", "kind": "focused-test",
+            "base": "base", "head": "head", "test_patch_mode": "head-only",
+            "requested_by": ["tests-oracle"], "request_ids": ["claim-A"],
+            "commands": [], "result": "head_passed", "reason": "boundary witness passes"
+        }))?;
+        let mut prompts = Vec::new();
+        let mut run_prompt = |dir: &Path, prompt: &str| -> Result<ModelPromptContent> {
+            prompts.push(prompt.to_owned());
+            let response = if prompt.starts_with("# Reporter Coordination Task") {
+                serde_json::json!({
+                    "distillation":"Recorded live legacy distillation",
+                    "verdict":if prompt.contains("EXTREME") { "changes_requested" } else { "clear" },
+                    "proposed_follow_ups":["Question for tests-oracle lane: Reassess claim-A"]
+                }).to_string()
+            } else if prompt.starts_with("# Lane continuation:") {
+                continuation_payload.to_owned()
+            } else if prompt.starts_with("# Evidence reconsideration:") {
+                serde_json::json!({"conclusion":"Recorded receipt confirms claim-A", "changed":true, "disposition":"confirm"}).to_string()
+            } else {
+                anyhow::bail!("unexpected role prompt: {prompt}")
+            };
+            Ok(ModelPromptContent {
+                json_payload: response,
+                parse_path: dir.join("controlled-provider.json"),
+                duration_ms: 1,
+                http_status: Some(200),
+                response_shape: "controlled-test".to_owned(),
+                cache_usage: ModelCacheUsage::default(),
+            })
+        };
+        let mut calls = 0;
+        run_reporter_coordination_with_runner(
+            ReporterCoordinationContext {
+                mode: SemanticInputMode::LegacyLive,
+                review_dir: &review_dir,
+                shared_context: "shared context",
+                proof_receipts: &[],
+                late_sensor_evidence: &[],
+                args: &args,
+                model_calls_used: 1,
+                event_log: &event_log,
+                message_log: &message_log,
+                current_head: "head",
+            },
+            &mut lanes,
+            &mut calls,
+            &mut run_prompt,
+        )?;
+        assert_eq!(
+            lanes[0].turn, 0,
+            "live continuation must retain the original operational turn"
+        );
+        let outcome = run_receipt_reconsiderations_with_runner(
+            ReceiptReconsiderationContext {
+                mode: SemanticInputMode::LegacyLive,
+                review_dir: &review_dir,
+                receipts: &[receipt],
+                args: &args,
+                model_calls_used: 1 + calls,
+                event_log: &event_log,
+                message_log: &message_log,
+            },
+            &mut lanes,
+            &mut run_prompt,
+        )?;
+        let read = |path: &Path| -> Result<serde_json::Value> {
+            Ok(serde_json::from_slice(&fs::read(path)?)?)
+        };
+        let live = serde_json::json!({
+            "prompts": prompts,
+            "reporter_calls": calls,
+            "receipt_result": outcome,
+            "reporter_authority": format!("{:?}", resolve_reporter_turn(&review_dir, "head")),
+            "reporter_turn": read(&review_dir.join("threads/reporter/turn-001.json"))?,
+            "continuation_turn": read(&review_dir.join("threads/tests-oracle/turn-001.json"))?,
+            "lane_reason": lanes[0].reason,
+            "lane_turn": lanes[0].turn,
+        });
+        let mut shadows = Vec::new();
+        if control != "io-unavailable" {
+            for name in [
+                "reporter-000",
+                "continuation-tests-oracle-001",
+                "reporter-001",
+                "receipt-tests-oracle-002",
+            ] {
+                shadows.push(read(
+                    &review_dir
+                        .join("semantic-shadow")
+                        .join(format!("{name}.json")),
+                )?);
+            }
+        }
+        Ok((live, shadows))
+    }
+
+    #[test]
+    fn legacy_live_semantic_shadow_is_observational_even_when_unavailable() -> Result<()> {
+        let payload = r#"{"conclusion":"Recorded live continuation answer"}"#;
+        let (baseline, baseline_shadow) = legacy_shadow_run("current", payload)?;
+        assert_eq!(baseline["reporter_calls"], 3);
+        assert_eq!(baseline["receipt_result"]["calls_attempted"], 1);
+        assert_eq!(baseline["lane_reason"], "Recorded receipt confirms claim-A");
+        let actual_prompts = baseline["prompts"].as_array().context("provider prompts")?;
+        assert_eq!(actual_prompts.len(), 4);
+        for prompt in actual_prompts {
+            let prompt = prompt.as_str().context("provider prompt string")?;
+            assert!(prompt.contains("completed"));
+            assert!(!prompt.contains("claim-B lifetime defect"));
+            assert!(
+                !prompt.contains("Recorded live continuation answer"),
+                "legacy alias fallback must remain unchanged"
+            );
+        }
+        for control in ["richer", "missing", "stale", "extreme", "io-unavailable"] {
+            let (live, shadows) = legacy_shadow_run(control, payload)?;
+            assert_eq!(
+                live, baseline,
+                "semantic shadow changed live behavior: {control}"
+            );
+            if control == "io-unavailable" {
+                assert!(shadows.is_empty());
+            } else {
+                assert_ne!(
+                    shadows, baseline_shadow,
+                    "shadow should retain its distinct inputs: {control}"
+                );
+                for envelope in shadows {
+                    assert_eq!(envelope["authority"], false);
+                    assert_eq!(envelope["extra_provider_calls"], 0);
+                    assert_eq!(
+                        envelope["response_provenance"],
+                        "RECORDED LIVE response; counterfactual semantic prompt was not separately answered"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn legacy_live_tolerates_raw_continuation_without_promoting_private_fields() -> Result<()> {
+        for payload in [
+            "PRIVATE_AUDIT_MARKER invalid JSON",
+            r#"{"internal_audit":"PRIVATE_AUDIT_MARKER","conclusion":{"private":"PRIVATE_AUDIT_MARKER"}}"#,
+        ] {
+            let (live, shadows) = legacy_shadow_run("current", payload)?;
+            assert_eq!(live["reporter_calls"], 3);
+            assert_eq!(live["continuation_turn"]["response_summary"], payload);
+            for envelope in shadows {
+                let prompt = envelope["counterfactual_prompt"]
+                    .as_str()
+                    .context("semantic prompt")?;
+                assert!(!prompt.contains("PRIVATE_AUDIT_MARKER"));
+            }
+        }
+        Ok(())
+    }
+
     #[test]
     fn reporter_continuation_then_receipt_uses_latest_scoped_semantics() -> Result<()> {
-        // The production coordination/reconsideration bodies run unchanged;
-        // only the provider boundary is controlled. This proves orchestration,
-        // rather than the quality of an unobserved live-model judgment.
+        // Evaluate semantic orchestration through the shared core with a
+        // controlled provider. Production wrappers retain LegacyLive. This
+        // proves the semantic shadow, not live-model quality or live inputs.
         for control in [
             "current",
             "missing",
@@ -2464,6 +2884,7 @@ mod receipt_reconsideration_tests {
             let mut calls = 0;
             run_reporter_coordination_with_runner(
                 ReporterCoordinationContext {
+                    mode: SemanticInputMode::SemanticShadow,
                     review_dir: &review_dir,
                     shared_context: "shared context",
                     proof_receipts: &[],
@@ -2480,6 +2901,7 @@ mod receipt_reconsideration_tests {
             )?;
             let outcome = run_receipt_reconsiderations_with_runner(
                 ReceiptReconsiderationContext {
+                    mode: SemanticInputMode::SemanticShadow,
                     review_dir: &review_dir,
                     receipts: &[receipt],
                     args: &args,
@@ -2554,7 +2976,13 @@ mod receipt_reconsideration_tests {
             disposition: "unchanged".to_owned(),
             changed: false,
         };
-        apply_lane_reconsideration_update(&mut lanes, "tests-oracle", &unchanged, 3);
+        apply_lane_reconsideration_update(
+            &mut lanes,
+            "tests-oracle",
+            &unchanged,
+            3,
+            SemanticInputMode::SemanticShadow,
+        );
         anyhow::ensure!(lanes[0].reason == "completed");
         anyhow::ensure!(lanes[0].turn == 2);
 
@@ -2562,7 +2990,13 @@ mod receipt_reconsideration_tests {
         changed.changed = true;
         changed.disposition = "confirm".to_owned();
         changed.conclusion = "proof confirms the claim".to_owned();
-        apply_lane_reconsideration_update(&mut lanes, "tests-oracle", &changed, 3);
+        apply_lane_reconsideration_update(
+            &mut lanes,
+            "tests-oracle",
+            &changed,
+            3,
+            SemanticInputMode::SemanticShadow,
+        );
         anyhow::ensure!(lanes[0].reason == "completed");
         anyhow::ensure!(
             lanes[0]

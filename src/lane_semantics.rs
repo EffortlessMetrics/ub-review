@@ -61,3 +61,24 @@ impl ModelLaneReceipt {
         }
     }
 }
+
+/// Inspection sidecar only. Its consumer is a reviewer or explicit shadow
+/// evaluation; the live model/public/gate paths never read this artifact.
+pub(crate) fn write_primary_semantic_shadow(
+    review_dir: &Path,
+    receipts: &[ModelLaneReceipt],
+) -> Result<()> {
+    let dir = review_dir.join("semantic-shadow");
+    fs::create_dir_all(&dir)?;
+    let lanes: Vec<_> = receipts.iter().filter(|r| !r.thread_id.is_empty()).map(|r| {
+        serde_json::json!({"lane":r.lane,"status":r.status,"conclusion":r.semantic_conclusion()})
+    }).collect();
+    fs::write(
+        dir.join("primary.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schema":"ub-review.semantic-shadow.v1", "authority":false,
+            "evaluation":"parsed primary state only", "lanes":lanes,
+        }))?,
+    )?;
+    Ok(())
+}

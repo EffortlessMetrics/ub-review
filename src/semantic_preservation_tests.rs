@@ -24,10 +24,10 @@ fn receipt_fixture() -> Result<ModelLaneReceipt> {
 }
 
 #[test]
-fn semantic_preservation_reporter_receives_review_meaning_instead_of_completed() -> Result<()> {
+fn semantic_preservation_shadow_digest_retains_review_meaning_instead_of_completed() -> Result<()> {
     let receipt = receipt_fixture()?;
     let temp = tempfile::tempdir()?;
-    let digests = reporter::lane_digests_from_receipts(temp.path(), &[receipt]);
+    let digests = reporter::semantic_lane_digests_from_receipts(temp.path(), &[receipt]);
     assert_eq!(digests.len(), 1);
     assert_eq!(digests[0].status, "ok");
     assert!(
@@ -104,7 +104,7 @@ fn semantic_preservation_projects_public_material_and_withholds_private_delibera
     assert!(projection.get("internal_audit").is_none());
     assert!(projection.get("failed_objections").is_none());
     let temp = tempfile::tempdir()?;
-    let digests = reporter::lane_digests_from_receipts(temp.path(), &[receipt]);
+    let digests = reporter::semantic_lane_digests_from_receipts(temp.path(), &[receipt]);
     let prompt = reporter::reporter_prompt(&digests, &[]);
     assert!(prompt.contains("Inline guard witness"));
     assert!(prompt.contains("Witness the guard"));
@@ -147,7 +147,7 @@ fn semantic_preservation_missing_and_stale_evidence_never_reuse_completion() -> 
     assert!(stale.to_ascii_lowercase().contains("stale"));
     assert!(!stale.contains("STALE_MEANING_MUST_NOT_REACH_REPORTER"));
     let temp = tempfile::tempdir()?;
-    let digests = reporter::lane_digests_from_receipts(temp.path(), &[receipt]);
+    let digests = reporter::semantic_lane_digests_from_receipts(temp.path(), &[receipt]);
     let prompt = reporter::reporter_prompt(&digests, &[]);
     assert!(!prompt.contains("STALE_MEANING_MUST_NOT_REACH_REPORTER"));
     assert!(!prompt.contains("completed"));
@@ -232,7 +232,7 @@ fn semantic_preservation_private_parser_diagnostics_stay_out_of_reporter_context
         assert!(!conclusion.contains("empty-internal-audit"));
         assert!(!conclusion.contains("malformed-internal-audit"));
         let temp = tempfile::tempdir()?;
-        let digests = reporter::lane_digests_from_receipts(temp.path(), &[receipt]);
+        let digests = reporter::semantic_lane_digests_from_receipts(temp.path(), &[receipt]);
         let prompt = reporter::reporter_prompt(&digests, &[]);
         assert!(!prompt.contains("PRIVATE_REJECTED_HYPOTHESIS"));
         assert!(!prompt.contains("empty-internal-audit"));
@@ -368,10 +368,70 @@ fn semantic_preservation_runtime_fallback_keeps_successful_provider_review_meani
     assert_eq!(receipts[0].provider, fallback.provider.key());
     assert_eq!(receipts[0].fallback_from, Some(primary.label()));
     assert!(issues.is_empty());
-    let digests = reporter::lane_digests_from_receipts(temp.path(), &receipts);
+    let digests = reporter::semantic_lane_digests_from_receipts(temp.path(), &receipts);
     let prompt = reporter::reporter_prompt(&digests, &[]);
     assert!(prompt.contains("Fallback review found a missing bounds guard"));
     assert!(prompt.contains("Reproduce out-of-bounds route"));
     assert!(!prompt.contains("completed after runtime fallback retry"));
+    Ok(())
+}
+
+#[test]
+fn semantic_shadow_cannot_select_public_reporter_or_gate_authority() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let review_dir = temp.path().join("review");
+    let live = ReporterConclusion {
+        schema: REPORTER_THREAD_SCHEMA.to_owned(),
+        distillation: "Existing live decision".to_owned(),
+        proposed_follow_ups: Vec::new(),
+        verdict: ReporterVerdict::Uncertain,
+        cohort_id: "live-cohort".to_owned(),
+        thread_id: "live-thread".to_owned(),
+    };
+    write_reporter_thread(&review_dir, &live, "current-head")?;
+    let selected = resolve_reporter_turn(&review_dir, "current-head");
+    let mut receipt = receipt_fixture()?;
+    let expected_prompt = reporter::reporter_prompt(
+        &reporter::lane_digests_from_receipts(&review_dir, std::slice::from_ref(&receipt)),
+        &[],
+    );
+    let mut shadow_prompts = Vec::new();
+    for verdict in [ReporterVerdict::Clear, ReporterVerdict::ChangesRequested] {
+        receipt.semantic_state = Some(LaneSemanticState {
+            shared_prefix_hash: receipt.shared_prefix_hash.clone(),
+            conclusion: format!(
+                "Richer shadow conclusion: {verdict:?}; force different public verdict"
+            ),
+        });
+        write_primary_semantic_shadow(&review_dir, std::slice::from_ref(&receipt))?;
+        let shadow = ReporterConclusion {
+            distillation: receipt.semantic_conclusion(),
+            verdict,
+            ..live.clone()
+        };
+        write_reporter_thread(&review_dir.join("semantic-shadow"), &shadow, "current-head")?;
+        shadow_prompts.push(reporter::reporter_prompt(
+            &reporter::semantic_lane_digests_from_receipts(
+                &review_dir,
+                std::slice::from_ref(&receipt),
+            ),
+            &[],
+        ));
+        assert_eq!(
+            reporter::reporter_prompt(
+                &reporter::lane_digests_from_receipts(&review_dir, std::slice::from_ref(&receipt)),
+                &[]
+            ),
+            expected_prompt
+        );
+        let current = resolve_reporter_turn(&review_dir, "current-head");
+        assert_eq!(current, selected);
+        assert_eq!(
+            current.public_distillation(),
+            Some("Existing live decision")
+        );
+        assert_eq!(current.gate_input(), selected.gate_input());
+    }
+    assert_ne!(shadow_prompts[0], shadow_prompts[1]);
     Ok(())
 }

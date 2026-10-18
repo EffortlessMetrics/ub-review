@@ -5380,6 +5380,9 @@ fn write_review_artifacts(
             // gives the reporter (Order 9) a thread to address. Written from the
             // executed receipts; lanes that only reached preflight/planned
             // (empty thread_id) are skipped.
+            // Additive inspection only: failed shadow writes cannot affect the
+            // existing live turn/message or public/gate transaction.
+            let _ = write_primary_semantic_shadow(&review_dir, &model_lanes);
             for receipt in &model_lanes {
                 if receipt.thread_id.is_empty() {
                     continue;
@@ -5393,7 +5396,7 @@ fn write_review_artifacts(
                 let turn = primary_turn(
                     &receipt.thread_id,
                     &receipt.lane,
-                    &receipt.semantic_conclusion(),
+                    &receipt.reason,
                     routed,
                     &receipt_ref,
                 );
@@ -5418,7 +5421,7 @@ fn write_review_artifacts(
                     vec![turn_ref.clone()],
                     serde_json::json!({
                         "status": receipt.status,
-                        "conclusion": receipt.semantic_conclusion(),
+                        "conclusion": receipt.reason,
                         "cohort_id": receipt.cohort_id,
                     }),
                 ) {

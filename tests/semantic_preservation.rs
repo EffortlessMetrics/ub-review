@@ -272,23 +272,13 @@ fn review(
     revision: Revision,
     prior_context: Option<&Path>,
 ) -> Result<ReviewRun> {
-    let listener = TcpListener::bind("127.0.0.1:0")?;
-    listener.set_nonblocking(true)?;
-    let url = format!("http://{}", listener.local_addr()?);
+    // Explicit developer experiment against an original executable; no production override.
+    let baseline_binary = std::env::var_os("UB_REVIEW_SEMANTIC_BASELINE_BIN").map(PathBuf::from);
     let expected = if matches!(revision, Revision::Defect) {
         6
     } else {
         5
     };
-    let provider = thread::spawn(move || {
-        common::serve_fake_http(
-            listener,
-            expected,
-            "semantic preservation",
-            Duration::from_secs(15),
-            move |_, stream| serve_request(stream, revision),
-        )
-    });
     let mut args = vec![
         "run",
         "--dry-run",
@@ -327,21 +317,64 @@ fn review(
     if let Some(path) = prior_context {
         args.extend(["--pr-thread-context", common::path_str(path)?]);
     }
-    let result = common::run_with_env(
-        repo,
-        env!("CARGO_BIN_EXE_ub-review"),
-        &args,
-        &[
-            ("UB_REVIEW_MINIMAX_API_KEY", "semantic-test-only"),
-            ("UB_REVIEW_MINIMAX_API_URL", &url),
-        ],
-    );
-    let captured = common::join_fake_provider(provider)?;
-    result?;
-    let requests = captured
-        .iter()
-        .map(|s| serde_json::from_str(s))
-        .collect::<std::result::Result<Vec<Value>, _>>()?;
+    let execute = |binary: &str| -> Result<Vec<Value>> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        listener.set_nonblocking(true)?;
+        let url = format!("http://{}", listener.local_addr()?);
+        let provider = thread::spawn(move || {
+            common::serve_fake_http(
+                listener,
+                expected,
+                "semantic preservation",
+                Duration::from_secs(15),
+                move |_, stream| serve_request(stream, revision),
+            )
+        });
+        let result = common::run_with_env(
+            repo,
+            binary,
+            &args,
+            &[
+                ("UB_REVIEW_MINIMAX_API_KEY", "semantic-test-only"),
+                ("UB_REVIEW_MINIMAX_API_URL", &url),
+            ],
+        );
+        let captured = common::join_fake_provider(provider)?;
+        result?;
+        let requests = captured
+            .iter()
+            .map(|s| serde_json::from_str(s))
+            .collect::<std::result::Result<Vec<Value>, _>>()?;
+        Ok(requests)
+    };
+    let baseline = if let Some(binary) = baseline_binary.as_deref() {
+        let requests = execute(common::path_str(binary)?)?;
+        let public = common::read_json(&out.join("review/github-review.json"))?;
+        let gate = common::read_json(&out.join("review/gate_outcome.json"))?;
+        let terminal = common::read_json(&out.join("review/terminal_state.json"))?;
+        fs::remove_dir_all(&out)?;
+        Some((requests, public, gate, terminal))
+    } else {
+        None
+    };
+    let requests = execute(env!("CARGO_BIN_EXE_ub-review"))?;
+    if let Some((prior_requests, public, gate, terminal)) = baseline {
+        ensure!(
+            requests == prior_requests,
+            "shadow candidate changed original baseline provider prompts or call ordering"
+        );
+        for (artifact, expected) in [
+            ("github-review.json", public),
+            ("gate_outcome.json", gate),
+            ("terminal_state.json", terminal),
+        ] {
+            let actual = common::read_json(&out.join("review").join(artifact))?;
+            ensure!(
+                actual == expected,
+                "shadow candidate changed original baseline {artifact}: expected {expected}; actual {actual}"
+            );
+        }
+    }
     ensure!(
         requests.len() == expected,
         "expected preflight, primary, optional refuter, reporter, continuation and redistillation"
@@ -522,21 +555,83 @@ fn check_semantics(run: &ReviewRun) -> Result<()> {
         .into_iter()
         .find(|m| m["kind"] == "lane_report" && m["from"] == "bounds" && m["turn"] == 0)
         .context("primary lane report")?;
+    ensure!(
+        primary["response_summary"] == "completed"
+            && message["payload"]["conclusion"] == "completed",
+        "primary live turn/message must preserve original operational conclusion"
+    );
+    let live_prior = continuation
+        .split_once("## Your prior conclusion\n\n")
+        .and_then(|(_, rest)| rest.split_once("\n\n## The reporter's summary"))
+        .map(|(prior, _)| prior)
+        .context("live continuation prior-conclusion section")?;
     for (name, text) in [
-        ("reporter", reporter.to_string()),
-        ("continuation", continuation.to_string()),
+        ("live reporter", *reporter),
+        ("live continuation prior", live_prior),
+    ] {
+        ensure!(
+            text.contains("completed"),
+            "{name} lost original operational input"
+        );
+        ensure!(
+            !text.contains(run.revision.summary())
+                && !text.contains(DEFECT_FINDING)
+                && !text.contains(LIMIT),
+            "inspection-only semantic state entered {name}: {text}"
+        );
+    }
+    let raw = common::read_json(&run.out.join("review/review.json"))?;
+    let semantic = raw["model_lanes"]
+        .as_array()
+        .and_then(|lanes| lanes.iter().find(|lane| lane["lane"] == "bounds"))
+        .and_then(|lane| lane["semantic_state"]["conclusion"].as_str())
+        .context("persisted primary semantic conclusion")?;
+    let shadow_dir = run.out.join("review/semantic-shadow");
+    let shadow_primary = common::read_json(&shadow_dir.join("primary.json"))?;
+    let shadow_reporter = common::read_json(&shadow_dir.join("reporter-000.json"))?;
+    let shadow_continuation = common::read_json(&shadow_dir.join("continuation-bounds-001.json"))?;
+    for (name, sidecar) in [
+        ("primary", &shadow_primary),
+        ("reporter", &shadow_reporter),
+        ("continuation", &shadow_continuation),
+    ] {
+        ensure!(
+            sidecar["schema"] == "ub-review.semantic-shadow.v1" && sidecar["authority"] == false,
+            "{name} sidecar must explicitly remain inspection-only: {sidecar}"
+        );
+    }
+    for (name, sidecar) in [
+        ("reporter", &shadow_reporter),
+        ("continuation", &shadow_continuation),
+    ] {
+        ensure!(
+            sidecar["extra_provider_calls"] == 0
+                && sidecar["response_provenance"]
+                    .as_str()
+                    .is_some_and(|provenance| provenance.contains("not separately answered")),
+            "{name} must distinguish recorded live response from unexecuted shadow prompt"
+        );
+    }
+    let primary_conclusion = shadow_primary["lanes"]
+        .as_array()
+        .and_then(|lanes| lanes.iter().find(|lane| lane["lane"] == "bounds"))
+        .and_then(|lane| lane["conclusion"].as_str())
+        .context("primary shadow bounds conclusion")?;
+    for (name, text) in [
+        ("persisted primary state", semantic.to_owned()),
+        ("primary shadow", primary_conclusion.to_owned()),
         (
-            "primary turn",
-            primary["response_summary"]
+            "reporter shadow",
+            shadow_reporter["counterfactual_prompt"]
                 .as_str()
-                .context("response summary")?
+                .context("shadow reporter prompt")?
                 .to_owned(),
         ),
         (
-            "primary message",
-            message["payload"]["conclusion"]
+            "continuation shadow",
+            shadow_continuation["counterfactual_prompt"]
                 .as_str()
-                .context("message conclusion")?
+                .context("shadow continuation prompt")?
                 .to_owned(),
         ),
     ] {
