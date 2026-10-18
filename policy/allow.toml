@@ -190,3 +190,13 @@ reason = "Issue #1465 bounded native PR admission: standard-library public metad
 created = "2026-10-18"
 review_after = "2027-01-18"
 expires = "2027-04-18"
+
+[[exception]]
+id = "native-premerge-admission-test-bridge"
+kind = "test-process-spawn"
+path = "tests/premerge_admission_helper.rs"
+owner = "release/ci"
+reason = "Issue #1465 preparatory source installation runs one fixed python3 -B scripts/test-premerge-admission.py command from the repository root under native cargo tests. The explicitly selected dormant/installed YAML lanes exercise the complete 28-control offline helper inventory with bounded fixture subprocesses; no public network, product qualification or token is supplied by this bridge. Captured failure and incomplete control inventory fail the cargo test. This receipt governs the test-only process boundary, not runtime admission or new execution authority."
+created = "2026-10-18"
+review_after = "2027-01-18"
+expires = "2027-04-18"
