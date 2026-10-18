@@ -1,0 +1,298 @@
+name: ub-review/independent-baseline
+
+# Temporary self-hosting containment (#947). `pull_request_target` loads this
+# workflow from the protected base branch, then checks out the exact candidate
+# SHA only in isolated deterministic evidence jobs. A fresh no-checkout job
+# aggregates GitHub-owned job results, writes the receipt, and enforces the
+# outcome. This is not the full hostile-head-safe coordinator boundary.
+run-name: premerge-v1 ${{ github.event.pull_request.number || '0' }} ${{ github.event.pull_request.head.sha || github.sha }} ${{ github.event.pull_request.base.sha || github.sha }} ${{ github.event.pull_request.base.ref || '-' }} ${{ github.event.action || 'dispatch' }} ${{ github.actor_id }} ${{ github.event.label.name || (github.event.review.id && format('review:{0}:{1}', github.event.review.id, github.event.review.state)) || '-' }}
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled, edited, converted_to_draft, closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ub-review-baseline-${{ github.event.action == 'labeled' && startsWith(github.event.label.name, 'ci:') && format('request-{0}', github.event.pull_request.number) || format('observe-{0}', github.run_id) }}
+  cancel-in-progress: false
+
+env:
+  POLICY_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+  NATIVE_SHA: ${{ github.sha }}
+  ADAPTER_SOURCE_SHA: ${{ github.event.pull_request.base.sha }}
+  ADAPTER_REPOSITORY: EffortlessMetrics/ub-review
+  ADMISSION_LANE: baseline
+  ADAPTER_SHA256: d1ed65a761b7285c833a753f9ff7b4dbba2f2a463461aebde2304f26f0eab81c
+  POSSIBLE_ADMISSION: ${{ (github.event.action == 'labeled' && startsWith(github.event.label.name, 'ci:')) || github.event.action == 'synchronize' || github.event.action == 'converted_to_draft' || github.event.action == 'closed' || (github.event.action == 'unlabeled' && startsWith(github.event.label.name, 'ci:')) || (github.event.action == 'edited' && github.event.changes.base != null) || (github.event_name == 'pull_request_review' && (github.event.action != 'submitted' || (github.event.review.state != 'approved' && github.event.review.state != 'commented'))) }}
+
+jobs:
+  admission:
+    name: admission snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions: {}
+    outputs:
+      mode: ${{ steps.decision.outputs.mode }}
+      required: ${{ steps.decision.outputs.required }}
+      request: ${{ steps.decision.outputs.request }}
+    steps:
+      - name: Admit one explicit native request
+        id: decision
+        shell: bash
+        env:
+          ADMISSION_PHASE: admit
+          ADMISSION_METADATA_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ "$ADMISSION_PHASE" == admit && "$POSSIBLE_ADMISSION" != true ]]; then
+            echo mode=observation >> "$GITHUB_OUTPUT"
+            echo required=false >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$ADMISSION_PHASE" == finalize ]]; then
+            test "$WORKFLOW_CANCELLED" != true
+            case "$ADMISSION_MODE" in
+              observation|duplicate|replay) exit 0 ;;
+            esac
+            test "$ADMISSION_RESULT" = success
+            test "$ADMISSION_MODE" = admitted
+            test "$PRODUCT_RESULT" = success
+          fi
+          [[ "$POLICY_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$ADAPTER_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$ADAPTER_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+          # Execute only canonical protected-base bytes before candidate checkout.
+          # Existing metadata token stays in this isolated helper step; no fallback.
+          script="$RUNNER_TEMP/premerge-admission.py"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 5 --max-time 20 --max-filesize 131072 \
+            "https://raw.githubusercontent.com/$ADAPTER_REPOSITORY/$ADAPTER_SOURCE_SHA/scripts/premerge-admission.py" -o "$script"
+          echo "$ADAPTER_SHA256  $script" | sha256sum --check --status
+          python3 -I "$script"
+
+  evidence:
+    needs: admission
+    if: ${{ !cancelled() && needs.admission.result == 'success' && needs.admission.outputs.mode == 'admitted' }}
+    name: independent evidence / ${{ matrix.check }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [fmt, check, clippy, test, doc, policy, verifier]
+    env:
+      CANDIDATE_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Revalidate request before candidate checkout
+        shell: bash
+        env:
+          ADMISSION_PHASE: recheck
+          ADMISSION_METADATA_TOKEN: ${{ github.token }}
+          ADMISSION_MODE: ${{ needs.admission.outputs.mode }}
+        run: |
+          set -euo pipefail
+          if [[ "$ADMISSION_PHASE" == admit && "$POSSIBLE_ADMISSION" != true ]]; then
+            echo mode=observation >> "$GITHUB_OUTPUT"
+            echo required=false >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$ADMISSION_PHASE" == finalize ]]; then
+            test "$WORKFLOW_CANCELLED" != true
+            case "$ADMISSION_MODE" in
+              observation|duplicate|replay) exit 0 ;;
+            esac
+            test "$ADMISSION_RESULT" = success
+            test "$ADMISSION_MODE" = admitted
+            test "$PRODUCT_RESULT" = success
+          fi
+          [[ "$POLICY_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$ADAPTER_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$ADAPTER_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+          # Execute only canonical protected-base bytes before candidate checkout.
+          # Existing metadata token stays in this isolated helper step; no fallback.
+          script="$RUNNER_TEMP/premerge-admission.py"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 5 --max-time 20 --max-filesize 131072 \
+            "https://raw.githubusercontent.com/$ADAPTER_REPOSITORY/$ADAPTER_SOURCE_SHA/scripts/premerge-admission.py" -o "$script"
+          echo "$ADAPTER_SHA256  $script" | sha256sum --check --status
+          python3 -I "$script"
+      - name: Checkout exact candidate revision without credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact candidate identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          if [[ "$actual_sha" != "$CANDIDATE_SHA" ]]; then
+            echo "expected candidate $CANDIDATE_SHA, checked out $actual_sha" >&2
+            exit 1
+          fi
+
+      - name: Install fixed Rust toolchain
+        if: ${{ matrix.check != 'verifier' }}
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: 1.95.0
+          components: rustfmt,clippy
+
+      - name: Install fixed Python toolchain
+        if: ${{ matrix.check == 'verifier' }}
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+
+      - name: Run one fixed deterministic check
+        shell: bash
+        env:
+          CHECK: ${{ matrix.check }}
+        run: |
+          set -euo pipefail
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/ub-review-independent-${CHECK}-target"
+          case "$CHECK" in
+            fmt)
+              cargo fmt --all -- --check
+              ;;
+            check)
+              cargo check --workspace --all-targets --locked
+              ;;
+            clippy)
+              cargo clippy --workspace --all-targets --locked -- -D warnings
+              ;;
+            test)
+              cargo test --workspace --all-targets --locked
+              ;;
+            doc)
+              cargo doc --workspace --no-deps --locked
+              ;;
+            policy)
+              cargo run --locked --package xtask -- policy-check
+              ;;
+            verifier)
+              python scripts/verify-bun-review-artifacts.py --self-test
+              ;;
+            *)
+              echo "unknown independent baseline check: $CHECK" >&2
+              exit 2
+              ;;
+          esac
+
+  finalize:
+    name: ${{ needs.admission.outputs.required == 'true' && 'ub-review/independent-baseline' || (needs.admission.result != 'success' && ((github.event.action == 'labeled' && startsWith(github.event.label.name, 'ci:')) || github.event.action == 'synchronize' || github.event.action == 'converted_to_draft' || github.event.action == 'closed' || (github.event.action == 'unlabeled' && startsWith(github.event.label.name, 'ci:')) || (github.event.action == 'edited' && github.event.changes.base != null) || (github.event_name == 'pull_request_review' && (github.event.action != 'submitted' || (github.event.review.state != 'approved' && github.event.review.state != 'commented'))))) && 'ub-review/independent-baseline' || 'admission observation / baseline' }}
+    needs: [admission, evidence]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      CANDIDATE_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+      EVIDENCE_RESULT: ${{ needs.evidence.result }}
+      TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
+    steps:
+      - name: Capture cancellation before finalization
+        id: cancellation
+        if: ${{ cancelled() }}
+        shell: bash
+        run: echo cancelled=true >> "$GITHUB_OUTPUT"
+      - name: Require current complete uncancelled qualification
+        if: ${{ always() }}
+        shell: bash
+        env:
+          ADMISSION_PHASE: finalize
+          ADMISSION_METADATA_TOKEN: ${{ github.token }}
+          WORKFLOW_CANCELLED: ${{ steps.cancellation.outputs.cancelled == 'true' }}
+          ADMISSION_MODE: ${{ needs.admission.outputs.mode }}
+          ADMISSION_RESULT: ${{ needs.admission.result }}
+          PRODUCT_RESULT: ${{ needs.evidence.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$ADMISSION_PHASE" == admit && "$POSSIBLE_ADMISSION" != true ]]; then
+            echo mode=observation >> "$GITHUB_OUTPUT"
+            echo required=false >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$ADMISSION_PHASE" == finalize ]]; then
+            test "$WORKFLOW_CANCELLED" != true
+            case "$ADMISSION_MODE" in
+              observation|duplicate|replay) exit 0 ;;
+            esac
+            test "$ADMISSION_RESULT" = success
+            test "$ADMISSION_MODE" = admitted
+            test "$PRODUCT_RESULT" = success
+          fi
+          [[ "$POLICY_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$ADAPTER_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$ADAPTER_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+          # Execute only canonical protected-base bytes before candidate checkout.
+          # Existing metadata token stays in this isolated helper step; no fallback.
+          script="$RUNNER_TEMP/premerge-admission.py"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 5 --max-time 20 --max-filesize 131072 \
+            "https://raw.githubusercontent.com/$ADAPTER_REPOSITORY/$ADAPTER_SOURCE_SHA/scripts/premerge-admission.py" -o "$script"
+          echo "$ADAPTER_SHA256  $script" | sha256sum --check --status
+          python3 -I "$script"
+      - name: Write trusted exact-head baseline receipt
+        if: ${{ success() && needs.admission.outputs.mode == 'admitted' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          receipt_dir="$RUNNER_TEMP/ub-review-independent-baseline"
+          mkdir -p "$receipt_dir"
+          jq -n \
+            --arg schema "ub-review.independent_baseline.v1" \
+            --arg candidate_repository "$CANDIDATE_REPOSITORY" \
+            --arg candidate_sha "$CANDIDATE_SHA" \
+            --arg workflow_sha "$TRUSTED_WORKFLOW_SHA" \
+            --arg evidence_result "$EVIDENCE_RESULT" \
+            '{
+              schema: $schema,
+              candidate_repository: $candidate_repository,
+              candidate_sha: $candidate_sha,
+              trusted_workflow_sha: $workflow_sha,
+              workflow_source: "protected-base",
+              evidence_topology: "isolated-matrix-jobs",
+              evidence_result: $evidence_result,
+              commands: [
+                "cargo fmt --all -- --check",
+                "cargo check --workspace --all-targets --locked",
+                "cargo clippy --workspace --all-targets --locked -- -D warnings",
+                "cargo test --workspace --all-targets --locked",
+                "cargo doc --workspace --no-deps --locked",
+                "cargo run --locked --package xtask -- policy-check",
+                "python scripts/verify-bun-review-artifacts.py --self-test"
+              ]
+            }' > "$receipt_dir/receipt.json"
+
+      - name: Upload independent baseline receipt
+        if: ${{ success() && needs.admission.outputs.mode == 'admitted' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: independent-baseline-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/ub-review-independent-baseline
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Enforce independent baseline
+        if: ${{ always() && needs.admission.outputs.mode == 'admitted' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$EVIDENCE_RESULT" != "success" ]]; then
+            echo "independent baseline evidence ended $EVIDENCE_RESULT for exact candidate $CANDIDATE_SHA" >&2
+            exit 1
+          fi
+      - name: Reject workflow cancellation during finalization
+        if: ${{ cancelled() }}
+        shell: bash
+        run: exit 1
