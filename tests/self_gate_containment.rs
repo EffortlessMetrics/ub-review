@@ -20,6 +20,62 @@ fn job_section<'a>(workflow: &'a str, job: &str, next_job: Option<&str>) -> Resu
     Ok(&tail[..end])
 }
 
+fn without_protected_helper_token(section: &str, phase: &str) -> Result<String> {
+    let token_line = "          ADMISSION_METADATA_TOKEN: ${{ github.token }}\n";
+    ensure!(
+        section.matches("github.token").count() == 1
+            && section.matches("ADMISSION_METADATA_TOKEN").count() == 1
+            && section.contains(&format!("          ADMISSION_PHASE: {phase}\n{token_line}")),
+        "only the protected adapter step may receive the existing metadata token"
+    );
+    ensure!(
+        section.contains("python3 -I \"$script\"")
+            && section.contains("echo \"$ADAPTER_SHA256  $script\" | sha256sum --check --status"),
+        "token-bearing helper must execute only digest-verified source with isolated imports"
+    );
+    if let Some(checkout) = section.find("actions/checkout") {
+        let token = section.find(token_line).context("helper token missing")?;
+        ensure!(
+            token < checkout,
+            "metadata token helper must precede candidate checkout"
+        );
+        ensure!(
+            !section[checkout..].contains("ADMISSION_METADATA_TOKEN")
+                && !section[checkout..].contains("github.token"),
+            "candidate execution must not receive the helper token"
+        );
+    }
+    Ok(section.replace(token_line, ""))
+}
+
+#[test]
+fn metadata_tokens_are_scoped_to_isolated_protected_source_helpers() -> Result<()> {
+    for (workflow, worker, next_worker) in [(INDEPENDENT_WORKFLOW, "evidence", Some("finalize"))] {
+        ensure!(
+            workflow.contains("ADAPTER_SOURCE_SHA: ${{ github.event.pull_request.base.sha }}")
+                && workflow.contains("ADAPTER_REPOSITORY: EffortlessMetrics/ub-review")
+                && !workflow
+                    .contains("ADAPTER_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}"),
+            "credential-bearing helpers require canonical immutable protected-base source"
+        );
+        for (name, next, phase) in [
+            ("admission", Some(worker), "admit"),
+            (worker, next_worker, "recheck"),
+            ("finalize", None, "finalize"),
+        ] {
+            let section = job_section(workflow, name, next)?;
+            without_protected_helper_token(section, phase)?;
+            if name != worker {
+                ensure!(
+                    !section.contains("actions/checkout"),
+                    "metadata/finalizer must not checkout candidate code"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
 #[test]
 fn candidate_gate_job_is_model_off_artifact_only_and_without_privileged_inputs() -> Result<()> {
     ensure!(
@@ -120,6 +176,8 @@ fn independent_baseline_isolates_candidate_evidence_from_trusted_finalization() 
 
     let evidence = job_section(INDEPENDENT_WORKFLOW, "evidence", Some("finalize"))?;
     let finalize = job_section(INDEPENDENT_WORKFLOW, "finalize", None)?;
+    let evidence = without_protected_helper_token(evidence, "recheck")?;
+    let finalize = without_protected_helper_token(finalize, "finalize")?;
 
     for required in [
         "name: independent evidence / ${{ matrix.check }}",
@@ -166,8 +224,8 @@ fn independent_baseline_isolates_candidate_evidence_from_trusted_finalization() 
     }
 
     for required in [
-        "name: ub-review/independent-baseline",
-        "needs: evidence",
+        "'ub-review/independent-baseline'",
+        "needs: [admission, evidence]",
         "if: ${{ always() }}",
         "EVIDENCE_RESULT: ${{ needs.evidence.result }}",
         "TRUSTED_WORKFLOW_SHA: ${{ github.sha }}",
