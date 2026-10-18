@@ -7,3 +7,7 @@ This document is a placeholder for the CI policy surface named by
 The intended shape is receipt-backed and LEM-aware: labels select explicit risk
 packs, inventory explains what proof exists, and learned budgets compare planned
 Linux-equivalent minutes with actual CI cost.
+
+The proposed repository-local explicit pre-merge label and its digest-bound
+request/duplicate semantics are specified in [native admission](premerge-admission.md).
+This is pending source/native acceptance, not evidence that main's triggers changed.

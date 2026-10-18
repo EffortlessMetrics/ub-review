@@ -71,7 +71,7 @@ fn coverage_oidc_is_isolated_in_a_non_candidate_telemetry_job() -> Result<()> {
     let coverage = job_section(WORKFLOW, "coverage-upload", None)?;
 
     for required in [
-        "needs: gate",
+        "needs: [admission, gate]",
         "actions: read",
         "id-token: write",
         "actions/download-artifact@v5",
@@ -166,8 +166,8 @@ fn independent_baseline_isolates_candidate_evidence_from_trusted_finalization() 
     }
 
     for required in [
-        "name: ub-review/independent-baseline",
-        "needs: evidence",
+        "'ub-review/independent-baseline'",
+        "needs: [admission, evidence]",
         "if: ${{ always() }}",
         "EVIDENCE_RESULT: ${{ needs.evidence.result }}",
         "TRUSTED_WORKFLOW_SHA: ${{ github.sha }}",

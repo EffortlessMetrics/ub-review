@@ -160,3 +160,15 @@ reason = "Runs the actual composite Action Bash resolver with recording Cargo an
 created = "2026-09-05"
 review_after = "2026-12-05"
 expires = "2027-03-05"
+
+[[exception]]
+id = "native-premerge-admission-wrapper"
+kind = "non-rust-file"
+glob = "scripts/{premerge-admission,test-premerge-admission}.py"
+category = "platform-wrapper-test"
+language = "python"
+owner = "release/ci"
+reason = "Issue #1465 bounded native PR admission: standard-library public metadata validation runs without compiling or checking out candidate code. Digest-bound owner request, complete anchored native history, worker/finalizer currentness and production YAML shell controls preserve the two existing proof populations. No token, permissions, protected settings, check writer or merge service. Python is already supplied by hosted runners; compiling Rust for cheap admission would allocate avoidable product setup. Replace only after equivalent no-checkout custody/negative controls are established."
+created = "2026-10-18"
+review_after = "2027-01-18"
+expires = "2027-04-18"
