@@ -166,7 +166,7 @@ class Fixture:
                 from pathlib import Path
                 with open(os.environ["TEST_CALLS"], "a") as log: log.write("bootstrap\\n")
                 if os.environ["TEST_BOOTSTRAP_FAILURE"] == "true": sys.exit(22)
-                assert "https://raw.githubusercontent.com/EffortlessMetrics/ub-review/" + "b"*40 + "/scripts/premerge-admission.py" in sys.argv
+                assert "https://raw.githubusercontent.com/EffortlessMetrics/ub-review/" + os.environ["ADAPTER_SOURCE_SHA"] + "/scripts/premerge-admission.py" in sys.argv
                 shutil.copyfile(os.environ["TEST_SOURCE"], sys.argv[sys.argv.index("-o")+1])
             '''))
             (work / "curl").chmod(0o700)
@@ -180,6 +180,8 @@ class Fixture:
                    "ADMISSION_PHASE": phase, "ADMISSION_MODE": mode, "PRODUCT_RESULT": product,
                    "ADMISSION_RESULT": admission_result, "WORKFLOW_CANCELLED": str(cancelled).lower(),
                    "POLICY_BASE_SHA": "b" * 40, "NATIVE_SHA": "c" * 40,
+                   "ADAPTER_SOURCE_SHA": ("a" if self.lane == "gate" else "b") * 40,
+                   "ADAPTER_REPOSITORY": ADMISSION.REPO,
                    "ADAPTER_SHA256": re.search(r"^  ADAPTER_SHA256: (.+)$", source, re.M).group(1),
                    "POSSIBLE_ADMISSION": str(bool(expression(possible, self.context()))).lower()}
             result = subprocess.run(["bash", "-euo", "pipefail", "-c", shell(source, name)],
@@ -361,16 +363,102 @@ class NativeAdmission(unittest.TestCase):
                 actual = actual.replace("depth: standard", "depth: ${{ github.event_name == 'workflow_dispatch' && 'deep' || 'standard' }}")
             self.assertEqual(actual, job(baseline, worker), "proof command, matrix, permission or artifact drift")
 
+    def test_admission_failure_cannot_allocate_even_with_an_admitted_output(self):
+        for lane, source in WORKFLOWS.items():
+            f = Fixture(lane)
+            worker = "gate" if lane == "gate" else "evidence"
+            guard = re.search(r"^    if: (.+)$", job(source, worker), re.M).group(1)
+            self.assertFalse(expression(guard, f.context({"mode": "admitted"}, "failure")))
+
+    def test_missing_gate_artifact_cannot_finalize_required_success(self):
+        f = Fixture("gate")
+        f.extra[f"/actions/runs/{f.run_id}/artifacts?per_page=100&page=1"] = {"artifacts": []}
+        code, _, _, _ = f.invoke(WORKFLOWS["gate"], "Require current complete uncancelled qualification", "finalize", "admitted")
+        self.assertNotEqual(code, 0)
+
+    def test_review_comment_does_not_erase_native_changes_requested(self):
+        for lane, source in WORKFLOWS.items():
+            f = Fixture(lane)
+            f.reviews.insert(0, {**f.reviews[0], "id": 54, "state": "CHANGES_REQUESTED"})
+            f.request["review_generation"] = ADMISSION.generation(f.reviews)
+            f.body = ADMISSION.canonical(f.request)
+            f.label = ADMISSION.label_for(f.body)
+            f.comments[0]["body"] = f.body
+            f.event["label"]["name"] = f.label
+            f.live["labels"] = [{"name": f.label}]
+            f.events[0]["label"]["name"] = f.label
+            f.own["display_title"] = f.row(f.floor+1, f.run_id)["display_title"]
+            self.assert_suppressed(f)
+
+    def test_different_request_encoding_still_elects_original_transaction(self):
+        for lane in WORKFLOWS:
+            f = Fixture(lane)
+            new_body = json.dumps(f.request, indent=2)
+            new_label = ADMISSION.label_for(new_body)
+            f.comments.append({**f.comments[0], "id": 78, "body": new_body})
+            f.event["label"]["name"] = new_label
+            f.live["labels"] = [{"name": new_label}]
+            f.events = [{"event": "labeled", "label": {"name": new_label}, "actor": f.owner}]
+            second = f.row(f.floor+2, 999002)
+            second["display_title"] = second["display_title"].replace(f.label, new_label)
+            f.rows.insert(0, second)
+            f.run_id = 999002
+            outputs, _ = self.assert_suppressed(f, "duplicate")
+            self.assertEqual(outputs["winner"], "999001")
+
+    def test_other_actors_labels_do_not_withdraw_owner_selection(self):
+        for lane, source in WORKFLOWS.items():
+            f = Fixture(lane)
+            f.live["labels"].append({"name": "ci:" + "z"*43})
+            code, outputs, _, error = f.invoke(source, "Admit one explicit native request", "admit")
+            self.assertEqual((code, outputs.get("mode")), (0, "admitted"), error)
+
+    def test_native_submitted_review_order_overrides_allocated_id(self):
+        for lane in WORKFLOWS:
+            f = Fixture(lane)
+            f.reviews.extend([
+                {**f.reviews[0], "id": 54, "state": "CHANGES_REQUESTED", "submitted_at": "2026-10-18T00:00:02Z"},
+                {**f.reviews[0], "id": 56, "state": "APPROVED", "submitted_at": "2026-10-18T00:00:01Z"}])
+            f.request["review_generation"] = ADMISSION.generation(f.reviews)
+            f.body = ADMISSION.canonical(f.request)
+            f.label = ADMISSION.label_for(f.body)
+            f.comments[0]["body"] = f.body
+            f.event["label"]["name"] = f.label
+            f.live["labels"] = [{"name": f.label}]
+            f.events[0]["label"]["name"] = f.label
+            f.own["display_title"] = f.row(f.floor+1, f.run_id)["display_title"]
+            self.assert_suppressed(f)
+
+    def test_public_transport_refuses_byte_and_request_overflow_and_redirect(self):
+        api = ADMISSION.PublicGitHub()
+        api.calls = 40
+        with self.assertRaisesRegex(ADMISSION.Refusal, "request bound"):
+            api.get("/pulls/1502")
+        api = ADMISSION.PublicGitHub()
+        class Transport:
+            def open(self, _request, timeout):
+                return io.BytesIO(b" " * 2_000_001)
+        api.opener = Transport()
+        with self.assertRaisesRegex(ADMISSION.Refusal, "byte bound"):
+            api.get("/pulls/1502")
+        redirect = next(handler for handler in ADMISSION.PublicGitHub().opener.handlers
+                        if hasattr(handler, "redirect_request"))
+        with self.assertRaisesRegex(ADMISSION.Refusal, "redirect"):
+            redirect.redirect_request(None, None, 302, None, None, "https://other.example/")
+
     def test_parsing_bounds_and_digest_custody(self):
         with self.assertRaises(ADMISSION.Refusal): ADMISSION.decode('{"schema":1,"schema":2}')
         with self.assertRaises(ADMISSION.Refusal): ADMISSION.decode('{"schema":NaN}')
         api = ADMISSION.PublicGitHub()
         api.get = lambda suffix: [{}] * 100
         with self.assertRaisesRegex(ADMISSION.Refusal, "pagination"): api.pages("/pulls/1502/reviews")
+        self.assertIn('ADAPTER_SOURCE_SHA: ${{ github.event.pull_request.base.sha }}', WORKFLOWS['baseline'])
+        self.assertIn('ADAPTER_REPOSITORY: EffortlessMetrics/ub-review', WORKFLOWS['baseline'])
+        self.assertIn('ADAPTER_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}', WORKFLOWS['gate'])
         for source in WORKFLOWS.values():
             self.assertIn(hashlib.sha256(SOURCE.read_bytes()).hexdigest(), source)
             self.assertIn('echo "$ADAPTER_SHA256  $script" | sha256sum --check --status', source)
-            self.assertIn('https://raw.githubusercontent.com/EffortlessMetrics/ub-review/$POLICY_BASE_SHA/', source)
+            self.assertIn('https://raw.githubusercontent.com/$ADAPTER_REPOSITORY/$ADAPTER_SOURCE_SHA/', source)
             self.assertNotIn('pull-requests:', source)
             self.assertNotIn('checks: write', source)
             self.assertIn('cancel-in-progress: false', source)

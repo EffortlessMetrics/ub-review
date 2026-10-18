@@ -114,15 +114,26 @@ permission expansion is hidden as recovery. Responses are capped at2MB, ordinary
 lists at5x100 rows, history at12x100 rows, requests at40 calls, each call at10s,
 and metadata execution at120s wall time. Bounds refuse rather than truncate clean.
 
-The no-checkout bootstrap downloads the adapter only at the native main-base SHA
-and verifies the workflow-pinned full digest before execution. There is no fallback
-to candidate, latest/default tip or another credential. Missing protected source
-or a hash mismatch refuses. Heavy permissions, thresholds, proof timeouts and
+The baseline's no-checkout bootstrap downloads the adapter only at the native
+main-base SHA in the canonical repository. The gate's bootstrap uses the exact
+candidate head repository/SHA, preserving that lane's existing candidate workflow
+and Action authority; its metadata/finalizer jobs receive no token permissions.
+Both verify the workflow-pinned full digest before execution, with no default-tip,
+source fallback or credential recovery. Missing source or a hash mismatch refuses.
+The gate bootstrap is not independent hostile-head admission. During the initial
+configuration PR it can qualify the reviewed candidate without first installing
+its adapter on main; the unchanged old-base baseline still runs its seven workers
+on opening. Subsequent adapter-policy changes require a coordinated version
+migration: a candidate/base policy mismatch remains unavailable, never a fallback. Heavy permissions, thresholds, proof timeouts and
 release/deployment routes are preserved. The explicit label uses the supported
 `manual` full-pass policy while retaining the true native labeled event metadata;
 `auto` would classify it as PullRequestOther and could omit first-pass work.
 
 ## Local verification and integration hold
+
+The cheap `ci/admission-contract` workflow runs offline controls on changes to the
+configuration/adapter and does not compile or run product proof. It fetches only
+the immutable preservation baseline.
 
 Run `python3 scripts/test-premerge-admission.py` for the actual extracted YAML
 shells with public HTTP fixtures beneath the production reader. Positive controls
@@ -141,7 +152,10 @@ results. No <=20-minute claim follows from metadata tests or unchanged timeouts.
 
 Opening a Draft against the unchanged base necessarily starts its old seven-lane
 pull_request_target baseline. Present that exact one-time old-base qualification
-for a validation decision only after source/review are ready; otherwise retain the
+for a validation decision only after source/review are ready. The candidate gate
+then needs its distinct explicit eligible native request; opening alone cannot
+produce required gate success under this candidate. Keep Draft to avoid another
+old-base Ready admission; otherwise retain the
 branch/evidence without opening it. There is no skip directive or protection bypass.
 Rollback after an authorized cutover restores the exact prior workflow and source
 revision, preserving request/run history and failed attempts; rollback itself is

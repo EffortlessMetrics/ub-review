@@ -5,6 +5,7 @@ Policy owner: release/ci (#1465). Not an approval, check writer or merge service
 """
 import argparse
 import base64
+import datetime
 import hashlib
 import json
 import os
@@ -190,14 +191,19 @@ def current(api, event, label, policy_hash):
         require(review["commit_id"] == request["head_sha"] and review["state"] in {"APPROVED", "COMMENTED"}
                 and review["body"].strip() and review["author_association"] in ASSOCIATIONS,
                 "referenced review is absent, stale, dismissed or not a substantive native report")
-    latest = {}
-    for review in sorted(reviews, key=lambda item: item["id"]):
+    decisive = {}
+    for review in reviews:
         require(review["state"] in {"PENDING", "COMMENTED", "APPROVED", "CHANGES_REQUESTED", "DISMISSED"},
                 "unknown native review state")
-        # A later COMMENTED review does not dismiss an earlier blocking review.
+        # Draft review IDs precede submission. COMMENTED does not dismiss a block.
         if review["state"] in {"APPROVED", "CHANGES_REQUESTED"}:
-            latest[review["user"]["id"]] = review
-    require(all(review["state"] != "CHANGES_REQUESTED" for review in latest.values()), "native blocking review")
+            submitted = datetime.datetime.fromisoformat(review["submitted_at"])
+            require(submitted.tzinfo is not None, "decisive review timestamp has no timezone")
+            decisive.setdefault(review["user"]["id"], []).append((submitted, review["state"]))
+    for submissions in decisive.values():
+        latest_time = max(item[0] for item in submissions)
+        require(all(state != "CHANGES_REQUESTED" for time, state in submissions if time == latest_time),
+                "native blocking review (ambiguous same-time decisions remain blocking)")
     require(live["merge_commit_sha"] == request["merge_sha"], "integration subject changed")
     merge = api.get("/git/commits/" + request["merge_sha"])
     require(merge["sha"] == request["merge_sha"] and merge["tree"]["sha"] == request["merge_tree"]

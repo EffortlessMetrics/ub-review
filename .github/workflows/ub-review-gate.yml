@@ -25,8 +25,10 @@ concurrency:
 env:
   POLICY_BASE_SHA: ${{ github.event.pull_request.base.sha }}
   NATIVE_SHA: ${{ github.sha }}
+  ADAPTER_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+  ADAPTER_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
   ADMISSION_LANE: gate
-  ADAPTER_SHA256: 3a6e95347ce402c54dd004158640c0770cf664e7b24c1f107671820ad276627f
+  ADAPTER_SHA256: 537ca847e570bc176ffbde14322d64e95de4fd67cfb5be15436848a7b7deae34
   POSSIBLE_ADMISSION: ${{ (github.event.action == 'labeled' && startsWith(github.event.label.name, 'ci:')) || github.event.action == 'synchronize' || github.event.action == 'converted_to_draft' || github.event.action == 'closed' || (github.event.action == 'unlabeled' && startsWith(github.event.label.name, 'ci:')) || (github.event.action == 'edited' && github.event.changes.base != null) || github.event_name == 'pull_request_review' }}
 
 jobs:
@@ -62,11 +64,14 @@ jobs:
             test "$PRODUCT_RESULT" = success
           fi
           [[ "$POLICY_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          # Protected main event base only. Never use candidate/default-tip source or a fallback.
+          [[ "$ADAPTER_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$ADAPTER_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+          # Baseline source is protected base; gate source has its existing candidate authority.
+          # Both are exact immutable source + pinned bytes. No default-tip/fallback/credentials.
           script="$RUNNER_TEMP/premerge-admission.py"
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 5 --max-time 20 --max-filesize 131072 \
-            "https://raw.githubusercontent.com/EffortlessMetrics/ub-review/$POLICY_BASE_SHA/scripts/premerge-admission.py" -o "$script"
+            "https://raw.githubusercontent.com/$ADAPTER_REPOSITORY/$ADAPTER_SOURCE_SHA/scripts/premerge-admission.py" -o "$script"
           echo "$ADAPTER_SHA256  $script" | sha256sum --check --status
           python3 "$script"
 
@@ -101,11 +106,14 @@ jobs:
             test "$PRODUCT_RESULT" = success
           fi
           [[ "$POLICY_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          # Protected main event base only. Never use candidate/default-tip source or a fallback.
+          [[ "$ADAPTER_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$ADAPTER_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+          # Baseline source is protected base; gate source has its existing candidate authority.
+          # Both are exact immutable source + pinned bytes. No default-tip/fallback/credentials.
           script="$RUNNER_TEMP/premerge-admission.py"
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 5 --max-time 20 --max-filesize 131072 \
-            "https://raw.githubusercontent.com/EffortlessMetrics/ub-review/$POLICY_BASE_SHA/scripts/premerge-admission.py" -o "$script"
+            "https://raw.githubusercontent.com/$ADAPTER_REPOSITORY/$ADAPTER_SOURCE_SHA/scripts/premerge-admission.py" -o "$script"
           echo "$ADAPTER_SHA256  $script" | sha256sum --check --status
           python3 "$script"
       - uses: actions/checkout@v5
@@ -289,11 +297,14 @@ jobs:
             test "$PRODUCT_RESULT" = success
           fi
           [[ "$POLICY_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          # Protected main event base only. Never use candidate/default-tip source or a fallback.
+          [[ "$ADAPTER_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$ADAPTER_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+          # Baseline source is protected base; gate source has its existing candidate authority.
+          # Both are exact immutable source + pinned bytes. No default-tip/fallback/credentials.
           script="$RUNNER_TEMP/premerge-admission.py"
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 5 --max-time 20 --max-filesize 131072 \
-            "https://raw.githubusercontent.com/EffortlessMetrics/ub-review/$POLICY_BASE_SHA/scripts/premerge-admission.py" -o "$script"
+            "https://raw.githubusercontent.com/$ADAPTER_REPOSITORY/$ADAPTER_SOURCE_SHA/scripts/premerge-admission.py" -o "$script"
           echo "$ADAPTER_SHA256  $script" | sha256sum --check --status
           python3 "$script"
       - name: Reject workflow cancellation during finalization
