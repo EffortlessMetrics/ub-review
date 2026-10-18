@@ -299,12 +299,14 @@ fn record_semantic_shadow(
     digests: Option<&[LaneDigest]>,
     recorded_response: Option<&str>,
     mode: SemanticInputMode,
+    shadow_invocation: Option<&ShadowInvocation>,
 ) {
     let write = || -> Result<()> {
         let dir = review_dir.join("semantic-shadow");
         fs::create_dir_all(&dir)?;
         let value = serde_json::json!({
             "schema": "ub-review.semantic-shadow.v1",
+            "invocation": shadow_invocation,
             "authority": false,
             "authority_description": "observational-only; never selected for live judgment",
             "counterfactual_prompt": prompt,
@@ -364,6 +366,7 @@ fn run_lane_continuation_turn(
     proof_receipts: &[ProofReceipt],
     late_sensor_evidence: &[LateSensorDigest],
     mode: SemanticInputMode,
+    shadow_invocation: Option<&ShadowInvocation>,
 ) -> Result<LaneContinuationAnswer> {
     // Route proof receipts back into the lane's continuation prompt (Order 9c
     // of #678). The lane sees the deterministic evidence and can revise its
@@ -437,6 +440,7 @@ fn run_lane_continuation_turn(
         None,
         None,
         mode,
+        shadow_invocation,
     );
     let content = run_prompt(&lane_thread_dir, &prompt)?;
     record_semantic_shadow(
@@ -446,6 +450,7 @@ fn run_lane_continuation_turn(
         None,
         Some(&content.json_payload),
         mode,
+        shadow_invocation,
     );
     let semantic_conclusion = parse_semantic_continuation(&content.json_payload);
     let revised = if mode.uses_semantics() {
@@ -573,11 +578,13 @@ pub(crate) fn run_reporter_coordination(
     message_log: &MessageLog,
     current_head: &str,
     calls_attempted: &mut usize,
+    shadow_invocation: Option<&ShadowInvocation>,
 ) -> Result<()> {
     let spec = direct_minimax_spec(args);
     run_reporter_coordination_with_runner(
         ReporterCoordinationContext {
             mode: SemanticInputMode::LegacyLive,
+            shadow_invocation,
             review_dir,
             shared_context,
             proof_receipts,
@@ -606,6 +613,7 @@ pub(crate) fn run_reporter_coordination(
 
 struct ReporterCoordinationContext<'a> {
     mode: SemanticInputMode,
+    shadow_invocation: Option<&'a ShadowInvocation>,
     review_dir: &'a Path,
     shared_context: &'a str,
     proof_receipts: &'a [ProofReceipt],
@@ -625,6 +633,7 @@ fn run_reporter_coordination_with_runner(
 ) -> Result<()> {
     let ReporterCoordinationContext {
         mode,
+        shadow_invocation,
         review_dir,
         shared_context,
         proof_receipts,
@@ -678,6 +687,7 @@ fn run_reporter_coordination_with_runner(
         Some(&semantic_digests),
         None,
         mode,
+        shadow_invocation,
     );
     *calls_attempted = calls_attempted.saturating_add(1);
     let content = match run_prompt(&reporter_dir, &prompt) {
@@ -705,6 +715,7 @@ fn run_reporter_coordination_with_runner(
         Some(&semantic_digests),
         Some(&content.json_payload),
         mode,
+        shadow_invocation,
     );
     let conclusion = parse_reporter_conclusion(&content.json_payload, &cohort_id, &thread_id);
     write_reporter_thread(review_dir, &conclusion, current_head)?;
@@ -800,6 +811,7 @@ fn run_reporter_coordination_with_runner(
             proof_receipts,
             late_sensor_evidence,
             mode,
+            shadow_invocation,
         );
         *calls_attempted = calls_attempted.saturating_add(1);
         calls_used += 1;
@@ -853,6 +865,7 @@ fn run_reporter_coordination_with_runner(
             Some(&semantic_digests),
             None,
             mode,
+            shadow_invocation,
         );
         let re_dir = review_dir.join("threads").join("reporter");
         *calls_attempted = calls_attempted.saturating_add(1);
@@ -877,6 +890,7 @@ fn run_reporter_coordination_with_runner(
                     Some(&semantic_digests),
                     Some(&content.json_payload),
                     mode,
+                    shadow_invocation,
                 );
                 Ok(content)
             },
@@ -1167,11 +1181,13 @@ pub(crate) fn run_receipt_reconsiderations(
     model_calls_used: usize,
     event_log: &EventLog,
     message_log: &MessageLog,
+    shadow_invocation: Option<&ShadowInvocation>,
 ) -> Result<ReceiptReconsiderationResult> {
     let spec = direct_minimax_spec(args);
     run_receipt_reconsiderations_with_runner(
         ReceiptReconsiderationContext {
             mode: SemanticInputMode::LegacyLive,
+            shadow_invocation,
             review_dir,
             receipts,
             args,
@@ -1196,6 +1212,7 @@ pub(crate) fn run_receipt_reconsiderations(
 
 struct ReceiptReconsiderationContext<'a> {
     mode: SemanticInputMode,
+    shadow_invocation: Option<&'a ShadowInvocation>,
     review_dir: &'a Path,
     receipts: &'a [ProofReceipt],
     args: &'a RunArgs,
@@ -1211,6 +1228,7 @@ fn run_receipt_reconsiderations_with_runner(
 ) -> Result<ReceiptReconsiderationResult> {
     let ReceiptReconsiderationContext {
         mode,
+        shadow_invocation,
         review_dir,
         receipts,
         args,
@@ -1268,6 +1286,7 @@ fn run_receipt_reconsiderations_with_runner(
             None,
             None,
             mode,
+            shadow_invocation,
         );
         let content = match run_prompt(&lane_dir, &prompt) {
             Ok(content) => content,
@@ -1286,6 +1305,7 @@ fn run_receipt_reconsiderations_with_runner(
             None,
             Some(&content.json_payload),
             mode,
+            shadow_invocation,
         );
         let parsed = serde_json::from_str::<serde_json::Value>(&content.json_payload).ok();
         let conclusion = parsed
@@ -2669,6 +2689,7 @@ mod receipt_reconsideration_tests {
         run_reporter_coordination_with_runner(
             ReporterCoordinationContext {
                 mode: SemanticInputMode::LegacyLive,
+                shadow_invocation: None,
                 review_dir: &review_dir,
                 shared_context: "shared context",
                 proof_receipts: &[],
@@ -2690,6 +2711,7 @@ mod receipt_reconsideration_tests {
         let outcome = run_receipt_reconsiderations_with_runner(
             ReceiptReconsiderationContext {
                 mode: SemanticInputMode::LegacyLive,
+                shadow_invocation: None,
                 review_dir: &review_dir,
                 receipts: &[receipt],
                 args: &args,
@@ -2885,6 +2907,7 @@ mod receipt_reconsideration_tests {
             run_reporter_coordination_with_runner(
                 ReporterCoordinationContext {
                     mode: SemanticInputMode::SemanticShadow,
+                    shadow_invocation: None,
                     review_dir: &review_dir,
                     shared_context: "shared context",
                     proof_receipts: &[],
@@ -2902,6 +2925,7 @@ mod receipt_reconsideration_tests {
             let outcome = run_receipt_reconsiderations_with_runner(
                 ReceiptReconsiderationContext {
                     mode: SemanticInputMode::SemanticShadow,
+                    shadow_invocation: None,
                     review_dir: &review_dir,
                     receipts: &[receipt],
                     args: &args,

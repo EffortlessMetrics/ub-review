@@ -111,6 +111,17 @@ constructs these same stable input artifacts from four fail-closed explicit
 objects while the root remains on the verified base tree; it does not resolve
 or check out the candidate head.
 
+Optional `review/semantic-shadow/*.json` files are observational only and may
+retain historical bytes when a stage is skipped or its best-effort write fails
+in a reused output directory. A shadow file belongs to the completed current
+review only when its entire `invocation` object equals
+`review/review.json.semantic_shadow_invocation`. The object binds a fresh
+invocation ID, base, head, and shared-prefix hash; even same-head reruns receive
+a fresh ID. Missing or mismatched metadata means unknown or stale, never current
+evidence. An aborted run that did not publish its current `review.json` has no
+completed-review freshness witness. This metadata grants no public or gate
+authority and does not change live provider inputs.
+
 Root-level NDJSON streams (each is line-for-line parity with a `review/`
 JSON array; see parity rules):
 

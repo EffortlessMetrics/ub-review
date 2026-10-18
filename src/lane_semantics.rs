@@ -3,6 +3,37 @@
 
 use crate::*;
 
+/// Freshness witness for inspection only. A stage is current only when its
+/// entire invocation object equals `review.json.semantic_shadow_invocation`.
+/// Missing or mismatched metadata is unknown/stale, including same-head reruns.
+/// This does not grant semantic or public authority, or qualify an aborted run
+/// which did not publish a current `review.json`.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct ShadowInvocation {
+    pub(crate) id: String,
+    pub(crate) base: String,
+    pub(crate) head: String,
+    pub(crate) shared_prefix_hash: String,
+}
+
+impl ShadowInvocation {
+    pub(crate) fn new(base: &str, head: &str, shared_prefix_hash: &str) -> Self {
+        static SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let nonce = format!(
+            "{}:{}:{}",
+            Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+            std::process::id(),
+            SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        );
+        Self {
+            id: sha256_hex(nonce.as_bytes()),
+            base: base.to_owned(),
+            head: head.to_owned(),
+            shared_prefix_hash: shared_prefix_hash.to_owned(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct LaneSemanticState {
     pub(crate) shared_prefix_hash: String,
@@ -67,6 +98,7 @@ impl ModelLaneReceipt {
 pub(crate) fn write_primary_semantic_shadow(
     review_dir: &Path,
     receipts: &[ModelLaneReceipt],
+    invocation: Option<&ShadowInvocation>,
 ) -> Result<()> {
     let dir = review_dir.join("semantic-shadow");
     fs::create_dir_all(&dir)?;
@@ -77,6 +109,7 @@ pub(crate) fn write_primary_semantic_shadow(
         dir.join("primary.json"),
         serde_json::to_vec_pretty(&serde_json::json!({
             "schema":"ub-review.semantic-shadow.v1", "authority":false,
+            "invocation": invocation,
             "evaluation":"parsed primary state only", "lanes":lanes,
         }))?,
     )?;

@@ -403,7 +403,7 @@ fn semantic_shadow_cannot_select_public_reporter_or_gate_authority() -> Result<(
                 "Richer shadow conclusion: {verdict:?}; force different public verdict"
             ),
         });
-        write_primary_semantic_shadow(&review_dir, std::slice::from_ref(&receipt))?;
+        write_primary_semantic_shadow(&review_dir, std::slice::from_ref(&receipt), None)?;
         let shadow = ReporterConclusion {
             distillation: receipt.semantic_conclusion(),
             verdict,

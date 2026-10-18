@@ -184,7 +184,15 @@ impl Revision {
     }
 }
 
-fn serve_request(mut stream: TcpStream, revision: Revision) -> Result<String> {
+fn serve_request(stream: TcpStream, revision: Revision) -> Result<String> {
+    serve_request_mode(stream, revision, false)
+}
+
+fn serve_request_mode(
+    mut stream: TcpStream,
+    revision: Revision,
+    malformed: bool,
+) -> Result<String> {
     stream.set_read_timeout(Some(common::FAKE_HTTP_STREAM_TIMEOUT))?;
     stream.set_write_timeout(Some(common::FAKE_HTTP_STREAM_TIMEOUT))?;
     let mut reader = BufReader::new(stream.try_clone()?);
@@ -228,7 +236,11 @@ fn serve_request(mut stream: TcpStream, revision: Revision) -> Result<String> {
     } else if prompt.starts_with("# Lane continuation:") {
         json!({"conclusion":format!("CONTINUED: {}; {LIMIT}",revision.summary())})
     } else if prompt.starts_with("Lane: bounds\n") {
-        revision.primary()
+        if malformed {
+            json!({})
+        } else {
+            revision.primary()
+        }
     } else {
         anyhow::bail!(
             "unexpected model role prompt: {}",
@@ -786,5 +798,255 @@ fn cli_defect_repair_and_independent_control_preserve_semantics() -> Result<()> 
     for run in [&defective, &repaired, &independent] {
         check_semantics(run)?;
     }
+    Ok(())
+}
+
+#[test]
+fn reused_output_rejects_semantic_shadow_from_prior_review_identity() -> Result<()> {
+    use sha2::{Digest, Sha256};
+    let _guard = common::cli_subprocess_test_lock()?;
+    let temp = tempfile::Builder::new()
+        .prefix("reuse-999-cli-")
+        .tempdir()?;
+    let retained = temp.path().to_path_buf();
+    let _cleanup = if std::env::var_os("UB_REVIEW_FRESHNESS_RETAIN").is_some() {
+        let _retained_path = temp.keep();
+        None
+    } else {
+        Some(temp)
+    };
+    eprintln!("retained freshness reproduction: {}", retained.display());
+    let repo = retained.join("repo");
+    fs::create_dir_all(repo.join("src"))?;
+    common::run(&repo, "git", &["init"])?;
+    common::run(
+        &repo,
+        "git",
+        &["config", "user.email", "freshness@example.invalid"],
+    )?;
+    common::run(
+        &repo,
+        "git",
+        &["config", "user.name", "Freshness regression"],
+    )?;
+    let base = commit(&repo, STRICT, "baseline")?;
+    let old_head = commit(&repo, DEFECT, "prior unmistakable equality defect")?;
+    let config = retained.join("review.toml");
+    fs::write(
+        &config,
+        "[review]\nenable_default_lanes = false\n[[lanes]]\nid = \"bounds\"\nrole = \"Bounds review\"\nfocus = \"Review byte_at equality behavior\"\n[tools.cargo-allow]\nenabled = false\n",
+    )?;
+    let out = retained.join("reused-out");
+    let first = review(
+        &repo,
+        &config,
+        &base,
+        &old_head,
+        out.clone(),
+        Revision::Defect,
+        None,
+    )?;
+    check_semantics(&first)?;
+    let stage = out.join("review/semantic-shadow/reporter-001.json");
+    let old_stage = fs::read(&stage)?;
+    ensure!(
+        String::from_utf8_lossy(&old_stage).contains(DEFECT_FINDING),
+        "initial stage lacks prior defect"
+    );
+    let old_review = fs::read(out.join("review/review.json"))?;
+    let old_current: Value = serde_json::from_slice(&old_review)?;
+    let new_head = commit(&repo, REPAIRED, "distinct repaired review identity")?;
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    listener.set_nonblocking(true)?;
+    let url = format!("http://{}", listener.local_addr()?);
+    let provider = thread::spawn(move || {
+        common::serve_fake_http(
+            listener,
+            2,
+            "malformed primary freshness",
+            Duration::from_secs(15),
+            |_, stream| serve_request_mode(stream, Revision::Repair, true),
+        )
+    });
+    let result = common::run_capture_with_env(
+        &repo,
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            common::path_str(&config)?,
+            "--root",
+            common::path_str(&repo)?,
+            "--base",
+            &old_head,
+            "--head",
+            &new_head,
+            "--out",
+            common::path_str(&out)?,
+            "--no-github-summary",
+            "--model-mode",
+            "auto",
+            "--provider-policy",
+            "minimax-only",
+            "--minimax-provider-kind",
+            "openai",
+            "--lanes",
+            "bounds",
+            "--tools",
+            "cargo-allow",
+            "--model-concurrency",
+            "1",
+            "--max-model-calls",
+            "1",
+            "--model-timeout-sec",
+            "5",
+        ],
+        &[
+            ("UB_REVIEW_MINIMAX_API_KEY", "semantic-test-only"),
+            ("UB_REVIEW_MINIMAX_API_URL", &url),
+        ],
+    );
+    let requests = common::join_fake_provider(provider)?;
+    let stdout = result?;
+    fs::write(retained.join("second-run-output.txt"), stdout)?;
+    fs::write(
+        retained.join("second-run-requests.json"),
+        serde_json::to_vec_pretty(&requests)?,
+    )?;
+    let current_review_bytes = fs::read(out.join("review/review.json"))?;
+    let current: Value = serde_json::from_slice(&current_review_bytes)?;
+    let lanes = current["model_lanes"]
+        .as_array()
+        .context("current model lanes")?;
+    let lane = lanes
+        .iter()
+        .find(|lane| lane["lane"] == "bounds")
+        .context("current bounds lane")?;
+    ensure!(
+        lane["semantic_state"].is_null(),
+        "malformed primary unexpectedly has semantic state: {lane}"
+    );
+    ensure!(
+        lane["status"] != "ok",
+        "malformed primary incorrectly completed: {lane}"
+    );
+    let primary = fs::read(out.join("review/semantic-shadow/primary.json"))?;
+    let latest_stage = fs::read(&stage)?;
+    let envelope: Value = serde_json::from_slice(&latest_stage)?;
+    let public_path = out.join("review/github-review.json");
+    let public = if public_path.exists() {
+        fs::read_to_string(&public_path)?
+    } else {
+        String::new()
+    };
+    let gate = fs::read_to_string(out.join("review/gate_outcome.json"))?;
+    let retained_evidence = json!({
+        "old_head":old_head,"current_head":new_head,
+        "old_review_sha256":format!("{:x}", Sha256::digest(&old_review)),
+        "current_review_sha256":format!("{:x}", Sha256::digest(&current_review_bytes)),
+        "old_stage_sha256":format!("{:x}", Sha256::digest(&old_stage)),
+        "current_stage_sha256":format!("{:x}", Sha256::digest(&latest_stage)),
+        "current_primary_shadow_sha256":format!("{:x}", Sha256::digest(&primary)),
+        "current_primary_lane":lane,
+        "stage_top_level_keys":envelope.as_object().context("stage envelope")?.keys().collect::<Vec<_>>(),
+        "stage_invocation":envelope["invocation"],
+        "current_invocation":current["semantic_shadow_invocation"],
+        "public_contains_prior_finding":public.contains(DEFECT_FINDING),
+        "gate_contains_prior_finding":gate.contains(DEFECT_FINDING),
+    });
+    fs::write(
+        retained.join("freshness-evidence.json"),
+        serde_json::to_vec_pretty(&retained_evidence)?,
+    )?;
+    eprintln!("freshness evidence: {retained_evidence}");
+    ensure!(
+        !public.contains(DEFECT_FINDING) && !gate.contains(DEFECT_FINDING),
+        "shadow stale data entered current public/gate output"
+    );
+    // A supported same-head, model-off rerun also skips reporter execution.
+    fs::write(
+        retained.join("failed-primary-review.json"),
+        &current_review_bytes,
+    )?;
+    common::run(
+        &repo,
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            common::path_str(&config)?,
+            "--root",
+            common::path_str(&repo)?,
+            "--base",
+            &old_head,
+            "--head",
+            &new_head,
+            "--out",
+            common::path_str(&out)?,
+            "--no-github-summary",
+            "--model-mode",
+            "off",
+            "--lanes",
+            "bounds",
+            "--tools",
+            "cargo-allow",
+            "--max-model-calls",
+            "0",
+        ],
+    )?;
+    let rerun_stage = fs::read(&stage)?;
+    let rerun_review = fs::read(out.join("review/review.json"))?;
+    let rerun: Value = serde_json::from_slice(&rerun_review)?;
+    let rerun_evidence = json!({
+        "head":new_head, "mode":"off", "max_model_calls":0,
+        "review_sha256":format!("{:x}", Sha256::digest(&rerun_review)),
+        "stage_sha256":format!("{:x}", Sha256::digest(&rerun_stage)),
+        "stage_is_prior_bytes":rerun_stage == old_stage,
+        "invocation":rerun["semantic_shadow_invocation"],
+    });
+    fs::write(
+        retained.join("same-head-skipped-evidence.json"),
+        serde_json::to_vec_pretty(&rerun_evidence)?,
+    )?;
+    eprintln!("same-head skipped evidence: {rerun_evidence}");
+    let prior_invocation = &envelope["invocation"];
+    let current_invocation = &current["semantic_shadow_invocation"];
+    let rerun_invocation = &rerun["semantic_shadow_invocation"];
+    ensure!(
+        prior_invocation["id"]
+            .as_str()
+            .is_some_and(|id| !id.is_empty())
+            && current_invocation["id"]
+                .as_str()
+                .is_some_and(|id| !id.is_empty())
+            && rerun_invocation["id"]
+                .as_str()
+                .is_some_and(|id| !id.is_empty()),
+        "STALE SHADOW CANNOT BE CLASSIFIED: old stage/current failed review/same-head skipped rerun lack invocation identity; evidence {}",
+        retained.display()
+    );
+    ensure!(
+        prior_invocation["head"] == old_head && current_invocation["head"] == new_head,
+        "stage and current review must retain distinct reviewed heads"
+    );
+    ensure!(
+        *prior_invocation == old_current["semantic_shadow_invocation"],
+        "successful first reporter stage must match its current review invocation"
+    );
+    ensure!(
+        prior_invocation != current_invocation && prior_invocation != rerun_invocation,
+        "prior reporter stage must be classifiable stale for both current transactions"
+    );
+    ensure!(
+        current_invocation["id"] != rerun_invocation["id"],
+        "same-head skipped rerun must have an independent invocation identity"
+    );
+    let primary_envelope: Value = serde_json::from_slice(&primary)?;
+    ensure!(
+        primary_envelope["invocation"] == *current_invocation,
+        "current primary shadow must match the failed review invocation"
+    );
     Ok(())
 }

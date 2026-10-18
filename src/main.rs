@@ -1778,6 +1778,8 @@ struct ReviewTerminalState {
 
 #[derive(Clone, Debug, Serialize)]
 struct ReviewArtifacts {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    semantic_shadow_invocation: Option<ShadowInvocation>,
     shared_context_id: String,
     review_profile: String,
     mode: String,
@@ -5243,6 +5245,7 @@ fn write_review_artifacts(
     // sections with byte ranges, cache policy, truncations — so the cohort's
     // cache-coherence claim is inspectable.
     let shared_context_id = sha256_hex(shared_context.as_bytes());
+    let shadow_invocation = ShadowInvocation::new(&diff.base, &diff.head, &shared_context_id);
     write_shared_prefix_manifest(
         &review_dir,
         &shared_context_id,
@@ -5382,7 +5385,8 @@ fn write_review_artifacts(
             // (empty thread_id) are skipped.
             // Additive inspection only: failed shadow writes cannot affect the
             // existing live turn/message or public/gate transaction.
-            let _ = write_primary_semantic_shadow(&review_dir, &model_lanes);
+            let _ =
+                write_primary_semantic_shadow(&review_dir, &model_lanes, Some(&shadow_invocation));
             for receipt in &model_lanes {
                 if receipt.thread_id.is_empty() {
                     continue;
@@ -5680,6 +5684,7 @@ fn write_review_artifacts(
         &message_log,
         &diff.head,
         &mut reporter_calls_attempted,
+        Some(&shadow_invocation),
     );
     let reporter_outcome = finalize_reporter_coordination(
         &review_dir,
@@ -5760,6 +5765,7 @@ fn write_review_artifacts(
         reporter_distillation: None,
     })?;
     let mut review = ReviewArtifacts {
+        semantic_shadow_invocation: Some(shadow_invocation.clone()),
         shared_context_id,
         review_profile: config.review_profile.clone(),
         mode: args.mode.key().to_owned(),
@@ -5918,6 +5924,7 @@ fn write_review_artifacts(
         model_calls_used,
         event_log,
         &message_log,
+        Some(&shadow_invocation),
     )?;
     review.proof_receipts.extend(follow_up_proof_receipts);
     apply_receipt_reconsiderations(
@@ -18981,6 +18988,7 @@ index 1111111..2222222 100644
         terminal_state.summary_only_findings = 10;
         terminal_state.substantive_summary_only_findings = 0;
         let review = super::ReviewArtifacts {
+            semantic_shadow_invocation: None,
             shared_context_id: "abc123".to_owned(),
             review_profile: DEFAULT_REVIEW_PROFILE.to_owned(),
             mode: "review-byok".to_owned(),
@@ -19052,6 +19060,7 @@ index 1111111..2222222 100644
             cache_read_input_tokens: Some(400),
         };
         let review = super::ReviewArtifacts {
+            semantic_shadow_invocation: None,
             shared_context_id: "abc123".to_owned(),
             review_profile: DEFAULT_REVIEW_PROFILE.to_owned(),
             mode: "review-byok".to_owned(),
@@ -23322,6 +23331,7 @@ index 1111111..2222222 100644
     fn observation_artifacts_include_aggregate_and_lane_ndjson() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let review = super::ReviewArtifacts {
+            semantic_shadow_invocation: None,
             shared_context_id: "abc123".to_owned(),
             review_profile: DEFAULT_REVIEW_PROFILE.to_owned(),
             mode: "review-byok".to_owned(),
@@ -24295,6 +24305,7 @@ index 1111111..2222222 100644
 
     fn test_review_artifacts() -> super::ReviewArtifacts {
         super::ReviewArtifacts {
+            semantic_shadow_invocation: None,
             shared_context_id: "abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abcd"
                 .to_owned(),
             review_profile: DEFAULT_REVIEW_PROFILE.to_owned(),
