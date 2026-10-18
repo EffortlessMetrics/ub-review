@@ -7444,8 +7444,8 @@ mod tests {
         let workflow = include_str!("../.github/workflows/ub-review-gate.yml");
         let profile = include_str!("../.ub-review.toml");
         assert!(
-            workflow.contains("types: [opened, reopened, ready_for_review, synchronize]"),
-            "self gate should run on every PR pass, including synchronize"
+            workflow.contains("types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled, edited, converted_to_draft, closed]"),
+            "native PR observations and the explicit request edge must remain wired"
         );
         assert!(
             profile.contains("post_review_on = [\"opened\", \"ready_for_review\"]"),
@@ -7456,18 +7456,16 @@ mod tests {
             "candidate-controlled self gate must not deliver a PR review"
         );
         assert!(
-            workflow.contains("run-pass: auto"),
-            "run-pass must preserve the exact pull-request event identity"
+            workflow.contains("run-pass: manual"),
+            "an admitted labeled request must run the complete explicit pass; native event metadata stays labeled"
         );
         assert!(
-            workflow.contains(
-                "base: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.event.pull_request.base.ref) || 'origin/main' }}"
-            ),
-            "self gate must diff against the PR's declared base branch so stacked PRs measure only their layer"
+            workflow.contains("base: ${{ github.event.pull_request.base.sha }}"),
+            "self gate must diff against the admitted immutable base, even if origin/main moves during checkout"
         );
         assert!(
-            workflow.contains("cancel-in-progress: true"),
-            "synchronize passes must collapse push storms via concurrency"
+            workflow.contains("cancel-in-progress: false"),
+            "ordinary events and duplicate requests must preserve active qualification"
         );
         assert!(
             workflow.contains("model-mode: off"),

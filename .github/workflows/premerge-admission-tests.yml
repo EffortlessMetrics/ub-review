@@ -1,0 +1,25 @@
+name: ci/admission-contract
+
+# release/ci #1465: offline controls over production YAML and public HTTP fixtures.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/premerge-admission-tests.yml'
+      - '.github/workflows/ub-review-gate.yml'
+      - '.github/workflows/independent-baseline.yml'
+      - 'scripts/premerge-admission.py'
+      - 'scripts/test-premerge-admission.py'
+permissions:
+  contents: read
+jobs:
+  controls:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Read the immutable worker-preservation baseline
+        run: git fetch --no-tags --depth=1 origin ac06293dd0871531c1826e4a3266c8dc537cf4f6
+      - name: Exercise production admission without product proof
+        run: python3 -B scripts/test-premerge-admission.py

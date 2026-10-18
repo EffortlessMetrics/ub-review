@@ -50,7 +50,10 @@ fn without_protected_helper_token(section: &str, phase: &str) -> Result<String> 
 
 #[test]
 fn metadata_tokens_are_scoped_to_isolated_protected_source_helpers() -> Result<()> {
-    for (workflow, worker, next_worker) in [(INDEPENDENT_WORKFLOW, "evidence", Some("finalize"))] {
+    for (workflow, worker, next_worker) in [
+        (WORKFLOW, "gate", Some("coverage-upload")),
+        (INDEPENDENT_WORKFLOW, "evidence", Some("finalize")),
+    ] {
         ensure!(
             workflow.contains("ADAPTER_SOURCE_SHA: ${{ github.event.pull_request.base.sha }}")
                 && workflow.contains("ADAPTER_REPOSITORY: EffortlessMetrics/ub-review")
@@ -83,6 +86,7 @@ fn candidate_gate_job_is_model_off_artifact_only_and_without_privileged_inputs()
         "workflow defaults must grant no token permissions"
     );
     let gate = job_section(WORKFLOW, "gate", Some("coverage-upload"))?;
+    let gate = without_protected_helper_token(gate, "recheck")?;
 
     for required in [
         "permissions:\n      contents: read",
@@ -124,10 +128,10 @@ fn candidate_gate_job_is_model_off_artifact_only_and_without_privileged_inputs()
 
 #[test]
 fn coverage_oidc_is_isolated_in_a_non_candidate_telemetry_job() -> Result<()> {
-    let coverage = job_section(WORKFLOW, "coverage-upload", None)?;
+    let coverage = job_section(WORKFLOW, "coverage-upload", Some("finalize"))?;
 
     for required in [
-        "needs: gate",
+        "needs: [admission, gate]",
         "actions: read",
         "id-token: write",
         "actions/download-artifact@v5",

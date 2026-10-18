@@ -3,7 +3,7 @@ use std::{path::Path, process::Command};
 
 // Preparatory source installation tests the dormant exact cutover fixtures.
 // Each cutover explicitly selects its installed lanes; uninstalled lanes use fixtures.
-const ACTIVE_LANES: &[&str] = &["baseline"];
+const ACTIVE_LANES: &[&str] = &["gate", "baseline"];
 
 #[test]
 fn native_admission_helper_contract_is_exercised_without_network_or_product_proof() -> Result<()> {
