@@ -87,7 +87,7 @@ class Fixture:
                         "merge_sha": "c" * 40, "merge_tree": "d" * 40,
                         "policy_sha256": hashlib.sha256(SOURCE.read_bytes()).hexdigest(),
                         "owner_id": 30, "objective": "https://github.com/" + ADMISSION.REPO + "/issues/1465",
-                        "review_ids": [55], "review_generation": ADMISSION.generation(self.reviews)}
+                        "review_ids": [55], "review_generation": ADMISSION.generation(self.reviews, [55])}
         self.body = ADMISSION.canonical(self.request)
         self.label = ADMISSION.label_for(self.body)
         self.live = {"number": 1502, "state": "open", "draft": False, "mergeable": True,
@@ -102,7 +102,7 @@ class Fixture:
         self.anchor = self.row(self.floor, self.anchor_id, "legacy", "opened")
         self.own = self.row(self.floor + 1, self.run_id)
         self.rows = [self.own, self.anchor]
-        self.events = [{"event": "labeled", "label": {"name": self.label}, "actor": self.owner}]
+        self.events = [{"event": "labeled", "label": {"name": self.label}, "actor": self.owner, "created_at": "2026-10-18T00:00:10Z"}]
         self.extra = {}
 
     def row(self, number, run_id, title=None, action="labeled"):
@@ -118,6 +118,7 @@ class Fixture:
         return {"/pulls/1502": self.live,
                 "/issues/1502/comments?per_page=100&page=1": self.comments,
                 "/issues/1465": {"state": "open"},
+                "/collaborators/assigned-lead/permission": {"user": {"id": 30}, "permission": "write"},
                 "/pulls/1502/reviews?per_page=100&page=1": self.reviews,
                 "/git/commits/" + "c" * 40: {"sha": "c" * 40, "tree": {"sha": "d" * 40},
                                              "parents": [{"sha": "b" * 40}, {"sha": "a" * 40}]},
@@ -254,6 +255,10 @@ class NativeAdmission(unittest.TestCase):
             "retarget": lambda f: f.live["base"].update(ref="other"),
             "head repository": lambda f: f.live["head"]["repo"].update(full_name="other/repo"),
             "owner removed": lambda f: f.live.update(assignees=[]),
+            "permission lost": lambda f: f.extra.update({"/collaborators/assigned-lead/permission": {"user": {"id": 30}, "permission": "none"}}),
+            "permission read only": lambda f: f.extra.update({"/collaborators/assigned-lead/permission": {"user": {"id": 30}, "permission": "read"}}),
+            "permission unknown": lambda f: f.extra.update({"/collaborators/assigned-lead/permission": None}),
+            "permission wrong user": lambda f: f.extra.update({"/collaborators/assigned-lead/permission": {"user": {"id": 99}, "permission": "write"}}),
             "wrong actor": lambda f: f.event.update(sender={"id": 99, "type": "User"}),
             "App actor": lambda f: f.event.update(sender={"id": 30, "type": "Bot"}),
             "draft": lambda f: f.live.update(draft=True),
@@ -358,10 +363,29 @@ class NativeAdmission(unittest.TestCase):
             if lane == "gate":
                 actual = actual.replace("name: contained candidate evidence", "name: ub-review/gate")
                 actual = actual.replace("          ref: ${{ github.sha }}\n", "", 1)
-                actual = actual.replace('      - name: Verify exact native merge checkout\n        shell: bash\n        run: test "$(git rev-parse HEAD)" = "$NATIVE_SHA"\n\n', '', 1)
+                identity_start = actual.index('      - name: Verify exact native merge checkout\n')
+                identity_end = actual.index('      - name: Verify task projection regressions\n', identity_start)
+                actual = actual[:identity_start] + actual[identity_end:]
+                actual = actual.replace("base: ${{ github.event.pull_request.base.sha }}", "base: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.event.pull_request.base.ref) || 'origin/main' }}")
                 actual = actual.replace("run-pass: manual", "run-pass: auto")
                 actual = actual.replace("depth: standard", "depth: ${{ github.event_name == 'workflow_dispatch' && 'deep' || 'standard' }}")
             self.assertEqual(actual, job(baseline, worker), "proof command, matrix, permission or artifact drift")
+
+    def test_actual_checkout_identity_and_immutable_diff_base(self):
+        source = WORKFLOWS["gate"]
+        self.assertIn("base: ${{ github.event.pull_request.base.sha }}", job(source, "gate"))
+        command = shell(source, "Verify exact native merge checkout")
+        for mutate in ("", "HEAD", "HEAD^1", "HEAD^2"):
+            with tempfile.TemporaryDirectory(prefix="premerge-git-control-") as directory:
+                work = Path(directory)
+                (work / "git").write_text('#!/usr/bin/env python3\nimport os,sys\nkey=sys.argv[-1]\nvalue={"HEAD":"c"*40,"HEAD^1":"b"*40,"HEAD^2":"a"*40}[key]\nprint("e"*40 if key==os.environ["MUTATE_REF"] else value)\n')
+                (work / "git").chmod(0o700)
+                result = subprocess.run(["bash", "-euo", "pipefail", "-c", command],
+                                        env={**os.environ, "PATH": directory + os.pathsep + os.environ["PATH"],
+                                             "NATIVE_SHA": "c"*40, "EXPECTED_BASE": "b"*40,
+                                             "EXPECTED_HEAD": "a"*40, "MUTATE_REF": mutate},
+                                        check=False, capture_output=True)
+                self.assertEqual(result.returncode == 0, mutate == "")
 
     def test_admission_failure_cannot_allocate_even_with_an_admitted_output(self):
         for lane, source in WORKFLOWS.items():
@@ -380,7 +404,7 @@ class NativeAdmission(unittest.TestCase):
         for lane, source in WORKFLOWS.items():
             f = Fixture(lane)
             f.reviews.insert(0, {**f.reviews[0], "id": 54, "state": "CHANGES_REQUESTED"})
-            f.request["review_generation"] = ADMISSION.generation(f.reviews)
+            f.request["review_generation"] = ADMISSION.generation(f.reviews, f.request["review_ids"])
             f.body = ADMISSION.canonical(f.request)
             f.label = ADMISSION.label_for(f.body)
             f.comments[0]["body"] = f.body
@@ -398,7 +422,7 @@ class NativeAdmission(unittest.TestCase):
             f.comments.append({**f.comments[0], "id": 78, "body": new_body})
             f.event["label"]["name"] = new_label
             f.live["labels"] = [{"name": new_label}]
-            f.events = [{"event": "labeled", "label": {"name": new_label}, "actor": f.owner}]
+            f.events = [{"event": "labeled", "label": {"name": new_label}, "actor": f.owner, "created_at": "2026-10-18T00:00:10Z"}]
             second = f.row(f.floor+2, 999002)
             second["display_title"] = second["display_title"].replace(f.label, new_label)
             f.rows.insert(0, second)
@@ -419,7 +443,7 @@ class NativeAdmission(unittest.TestCase):
             f.reviews.extend([
                 {**f.reviews[0], "id": 54, "state": "CHANGES_REQUESTED", "submitted_at": "2026-10-18T00:00:02Z"},
                 {**f.reviews[0], "id": 56, "state": "APPROVED", "submitted_at": "2026-10-18T00:00:01Z"}])
-            f.request["review_generation"] = ADMISSION.generation(f.reviews)
+            f.request["review_generation"] = ADMISSION.generation(f.reviews, f.request["review_ids"])
             f.body = ADMISSION.canonical(f.request)
             f.label = ADMISSION.label_for(f.body)
             f.comments[0]["body"] = f.body
@@ -428,6 +452,46 @@ class NativeAdmission(unittest.TestCase):
             f.events[0]["label"]["name"] = f.label
             f.own["display_title"] = f.row(f.floor+1, f.run_id)["display_title"]
             self.assert_suppressed(f)
+
+    def test_harmless_review_traffic_preserves_selected_generation(self):
+        source = WORKFLOWS["gate"]
+        for state in ("approved", "commented"):
+            f = Fixture("gate")
+            f.event_name = "pull_request_review"
+            f.event.update(action="submitted", review={"id": 99, "state": state})
+            outputs, calls = self.assert_suppressed(f, "observation")
+            self.assertEqual(calls, [])
+        f = Fixture("gate")
+        f.reviews.append({**f.reviews[0], "id": 99, "state": "COMMENTED", "body": "Thanks"})
+        code, outputs, _, error = f.invoke(source, "Admit one explicit native request", "admit")
+        self.assertEqual((code, outputs.get("mode")), (0, "admitted"), error)
+        for review_id, expected in ((99, "observation"), (55, "invalidated")):
+            for action in ("dismissed", "edited"):
+                f = Fixture("gate")
+                f.event_name = "pull_request_review"
+                f.event.update(action=action, review={"id": review_id, "state": "dismissed"})
+                self.assert_suppressed(f, expected)
+        f = Fixture("gate")
+        blocked = f.row(f.floor+2, 999002)
+        blocked["event"] = "pull_request_review"
+        blocked["display_title"] = blocked["display_title"].replace("labeled 30 " + f.label,
+                                                                    "submitted 30 review:99:changes_requested")
+        f.rows.insert(0, blocked)
+        code, _, _, _ = f.invoke(source, "Revalidate request before candidate checkout", "recheck", "admitted")
+        self.assertNotEqual(code, 0, "withdrawn blocking state restored stale request")
+
+    def test_native_review_retirement_is_independent_of_gate_run_history(self):
+        for lane, source in WORKFLOWS.items():
+            for dismissed in (False, True):
+                with self.subTest(lane=lane, dismissed=dismissed):
+                    f = Fixture(lane)
+                    f.reviews.extend([
+                        {**f.reviews[0], "id": 56, "state": "DISMISSED" if dismissed else "CHANGES_REQUESTED", "submitted_at": "2026-10-18T00:00:11Z"},
+                        {**f.reviews[0], "id": 57, "state": "APPROVED", "submitted_at": "2026-10-18T00:00:12Z"}])
+                    if dismissed:
+                        f.events.append({"event": "review_dismissed", "created_at": "2026-10-18T00:00:13Z",
+                                         "dismissed_review": {"review_id": "56", "state": "changes_requested"}})
+                    self.assert_suppressed(f)
 
     def test_public_transport_refuses_byte_and_request_overflow_and_redirect(self):
         api = ADMISSION.PublicGitHub()

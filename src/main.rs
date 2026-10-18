@@ -7461,9 +7461,9 @@ mod tests {
         );
         assert!(
             workflow.contains(
-                "base: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.event.pull_request.base.ref) || 'origin/main' }}"
+                "base: ${{ github.event.pull_request.base.sha }}"
             ),
-            "self gate must diff against the PR's declared base branch so stacked PRs measure only their layer"
+            "self gate must diff against the admitted immutable base, even if origin/main moves during checkout"
         );
         assert!(
             workflow.contains("cancel-in-progress: false"),

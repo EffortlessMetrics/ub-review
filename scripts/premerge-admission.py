@@ -51,6 +51,13 @@ def decode(data):
                       parse_constant=lambda _: require(False, "nonfinite JSON"))
 
 
+def native_time(value):
+    require(isinstance(value, str), "missing native event timestamp")
+    stamp = datetime.datetime.fromisoformat(value)
+    require(stamp.tzinfo is not None, "native event timestamp has no timezone")
+    return stamp
+
+
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
@@ -99,11 +106,12 @@ class PublicGitHub:
         raise Refusal("incomplete metadata pagination; no qualification allocated")
 
 
-def generation(reviews):
+def generation(reviews, review_ids=None):
+    selected = [review for review in reviews if review_ids is None or review["id"] in review_ids]
     return digest(sorted(({**{key: review[key] for key in
                             ("id", "state", "commit_id", "submitted_at", "body", "author_association")},
                            "reviewer_id": review["user"]["id"]}
-                          for review in reviews), key=lambda review: review["id"]))
+                          for review in selected), key=lambda review: review["id"]))
 
 
 def classify(event_name, event):
@@ -118,8 +126,13 @@ def classify(event_name, event):
             return "invalidate"
         if action == "edited" and "base" in event.get("changes", {}):
             return "invalidate"
-    if event_name == "pull_request_review" and action in {"submitted", "dismissed"}:
-        return "invalidate"
+    if event_name == "pull_request_review":
+        if action == "submitted":
+            state = event["review"]["state"].lower()
+            require(state in {"approved", "commented", "changes_requested"}, "unknown submitted review state")
+            return "invalidate" if state == "changes_requested" else "observation"
+        if action in {"dismissed", "edited"}:
+            return "review"
     return "observation"
 
 
@@ -166,8 +179,15 @@ def current(api, event, label, policy_hash):
             and pr["base"]["repo"]["full_name"] == live["base"]["repo"]["full_name"] == REPO
             and request["base_sha"] == pr["base"]["sha"] == live["base"]["sha"],
             "request repository/PR/head/base/target is stale or mismatched")
-    require(request["owner_id"] in [owner["id"] for owner in live["assignees"]],
-            "requester is not the current assigned candidate owner")
+    owners = [owner for owner in live["assignees"] if owner["id"] == request["owner_id"]]
+    require(len(owners) == 1, "requester is not the current assigned candidate owner")
+    login = owners[0]["login"]
+    require(isinstance(login, str) and re.fullmatch("[A-Za-z0-9-]{1,39}", login), "invalid native owner login")
+    # Current assignment/old association are not a current permission grant.
+    # Never fall back to a token in candidate-fetched code if this public read refuses.
+    permission = api.get(f"/collaborators/{login}/permission")
+    require(permission["user"]["id"] == request["owner_id"] and permission["permission"] in {"write", "admin"},
+            "current native owner permission lost, read-only, unknown or mismatched")
     require(request["policy_sha256"] == policy_hash, "request policy generation is stale")
     require(label in [item["name"] for item in live["labels"]], "request withdrawn")
     # Other actors' labels are not selection authority and cannot withdraw this request.
@@ -184,7 +204,7 @@ def current(api, event, label, policy_hash):
     objective = api.get("/issues/" + request["objective"].rsplit("/", 1)[1])
     require(objective["state"] == "open" and "pull_request" not in objective, "objective unavailable or no longer open")
     reviews = api.pages(f"/pulls/{number}/reviews")
-    require(generation(reviews) == request["review_generation"], "review/evidence generation changed")
+    require(generation(reviews, request["review_ids"]) == request["review_generation"], "review/evidence generation changed")
     by_id = {review["id"]: review for review in reviews}
     for review_id in request["review_ids"]:
         review = by_id[review_id]
@@ -197,8 +217,7 @@ def current(api, event, label, policy_hash):
                 "unknown native review state")
         # Draft review IDs precede submission. COMMENTED does not dismiss a block.
         if review["state"] in {"APPROVED", "CHANGES_REQUESTED"}:
-            submitted = datetime.datetime.fromisoformat(review["submitted_at"])
-            require(submitted.tzinfo is not None, "decisive review timestamp has no timezone")
+            submitted = native_time(review["submitted_at"])
             decisive.setdefault(review["user"]["id"], []).append((submitted, review["state"]))
     for submissions in decisive.values():
         latest_time = max(item[0] for item in submissions)
@@ -212,9 +231,25 @@ def current(api, event, label, policy_hash):
     events = api.pages(f"/issues/{number}/events")
     edges = [edge for edge in events if edge.get("label", {}).get("name") == label
              and edge["event"] in {"labeled", "unlabeled"}]
-    require(len(edges) == 1 and edges[0]["event"] == "labeled"
-            and edges[0]["actor"]["id"] == request["owner_id"],
+    require(edges and all(edge["event"] == "labeled" and edge["actor"]["id"] == request["owner_id"] for edge in edges),
             "request edge is absent, replayed after withdrawal, or has another owner")
+    requested_at = min(native_time(edge["created_at"]) for edge in edges)
+    # Native review records, not candidate-controlled gate titles, retire BOTH populations.
+    require(not any(review["state"] == "CHANGES_REQUESTED" and native_time(review["submitted_at"]) >= requested_at
+                    for review in reviews), "blocking review after request permanently retired its generation")
+    for event_record in events:
+        if event_record["event"] != "review_dismissed":
+            continue
+        dismissed = event_record["dismissed_review"]
+        review_id = dismissed["review_id"]
+        require((type(review_id) is int and review_id > 0) or
+                (isinstance(review_id, str) and re.fullmatch("[1-9][0-9]*", review_id)), "unknown dismissed native review ID")
+        state = dismissed["state"].lower()
+        require(state in {"commented", "approved", "changes_requested"}, "unknown dismissed native review state")
+        if state == "changes_requested" and native_time(event_record["created_at"]) >= requested_at:
+            review = by_id.get(int(review_id))
+            require(review is not None and native_time(review["submitted_at"]) < requested_at,
+                    "post-request blocking review was dismissed; prior request remains retired")
     return request, comments
 
 
@@ -285,13 +320,37 @@ def elect(api, event, lane, run_id, request, comments):
                         for pr in row["pull_requests"]), "native PR association does not match request")
             if canonical(previous) == canonical(request):
                 candidates.append(row)
-        if row["run_number"] > own["run_number"] and (
+        review_event = re.fullmatch(r"review:([1-9][0-9]*):([a-zA-Z_]+)", label)
+        review_invalidated = row["event"] == "pull_request_review" and review_event and (
+            (action == "submitted" and review_event[2].lower() == "changes_requested") or
+            (action in {"edited", "dismissed"} and int(review_event[1]) in request["review_ids"]))
+        if row["run_number"] > own["run_number"] and (review_invalidated or
                 action in {"synchronize", "converted_to_draft", "closed"}
                 or (action == "edited" and (head != request["head_sha"] or base != request["base_sha"] or base_ref != "main"))
                 or (action == "unlabeled" and label == event["label"]["name"])):
             raise Refusal("native material transition retired this request")
     require(any(row["id"] == run_id for row in candidates), "current request not verifiable in native history")
     return min(candidates, key=lambda row: row["run_number"])
+
+
+def review_transition(api, event):
+    """Only mutation/withdrawal of selected evidence invalidates an otherwise harmless review event."""
+    number = event["pull_request"]["number"]
+    live = api.get(f"/pulls/{number}")
+    comments = api.pages(f"/issues/{number}/comments")
+    owners = [owner["id"] for owner in live["assignees"]]
+    for label in live["labels"]:
+        if not LABEL.fullmatch(label["name"]):
+            continue
+        try:
+            request = request_for(comments, label["name"])
+        except (Refusal, KeyError, TypeError, ValueError):
+            continue
+        if request["owner_id"] in owners and request["head_sha"] == live["head"]["sha"] \
+                and request["base_sha"] == live["base"]["sha"] and request["base_ref"] == live["base"]["ref"] \
+                and event["review"]["id"] in request["review_ids"]:
+            return {"mode": "invalidated", "required": "true"}
+    return {"mode": "observation", "required": "false"}
 
 
 def execute(api, event_name, event, lane, run_id, attempt, phase, policy_hash,
@@ -301,6 +360,8 @@ def execute(api, event_name, event, lane, run_id, attempt, phase, policy_hash,
         return {"mode": "observation", "required": "false"}
     if phase == "finalize" and mode in {"observation", "duplicate", "replay"}:
         return {"mode": mode, "required": "false"}
+    if route == "review":
+        return review_transition(api, event)
     if route == "invalidate":
         # Material events emit failure only, never a replacement green context.
         return {"mode": "invalidated", "required": "true"}
@@ -343,7 +404,7 @@ def prepare(api, number, objective, owner_id, review_ids, policy_hash):
                "base_ref": "main", "base_sha": pr["base"]["sha"], "merge_sha": pr["merge_commit_sha"],
                "merge_tree": merge["tree"]["sha"], "policy_sha256": policy_hash,
                "owner_id": owner_id, "objective": f"https://github.com/{REPO}/issues/{objective}",
-               "review_ids": sorted(set(review_ids)), "review_generation": generation(reviews)}
+               "review_ids": sorted(set(review_ids)), "review_generation": generation(reviews, review_ids)}
     body = canonical(request)
     return {"body": body, "label": label_for(body)}
 

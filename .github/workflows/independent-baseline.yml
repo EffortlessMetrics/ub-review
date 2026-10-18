@@ -5,7 +5,7 @@ name: ub-review/independent-baseline
 # SHA only in isolated deterministic evidence jobs. A fresh no-checkout job
 # aggregates GitHub-owned job results, writes the receipt, and enforces the
 # outcome. This is not the full hostile-head-safe coordinator boundary.
-run-name: premerge-v1 ${{ github.event.pull_request.number || '0' }} ${{ github.event.pull_request.head.sha || github.sha }} ${{ github.event.pull_request.base.sha || github.sha }} ${{ github.event.pull_request.base.ref || '-' }} ${{ github.event.action || 'dispatch' }} ${{ github.actor_id }} ${{ github.event.label.name || '-' }}
+run-name: premerge-v1 ${{ github.event.pull_request.number || '0' }} ${{ github.event.pull_request.head.sha || github.sha }} ${{ github.event.pull_request.base.sha || github.sha }} ${{ github.event.pull_request.base.ref || '-' }} ${{ github.event.action || 'dispatch' }} ${{ github.actor_id }} ${{ github.event.label.name || (github.event.review.id && format('review:{0}:{1}', github.event.review.id, github.event.review.state)) || '-' }}
 on:
   pull_request_target:
     types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled, edited, converted_to_draft, closed]
@@ -23,8 +23,8 @@ env:
   ADAPTER_SOURCE_SHA: ${{ github.event.pull_request.base.sha }}
   ADAPTER_REPOSITORY: EffortlessMetrics/ub-review
   ADMISSION_LANE: baseline
-  ADAPTER_SHA256: 537ca847e570bc176ffbde14322d64e95de4fd67cfb5be15436848a7b7deae34
-  POSSIBLE_ADMISSION: ${{ (github.event.action == 'labeled' && startsWith(github.event.label.name, 'ci:')) || github.event.action == 'synchronize' || github.event.action == 'converted_to_draft' || github.event.action == 'closed' || (github.event.action == 'unlabeled' && startsWith(github.event.label.name, 'ci:')) || (github.event.action == 'edited' && github.event.changes.base != null) || github.event_name == 'pull_request_review' }}
+  ADAPTER_SHA256: 1e5dc099e6511e442471708b4af285071e40b0f4fe0f78b6b3b33e261c52eb53
+  POSSIBLE_ADMISSION: ${{ (github.event.action == 'labeled' && startsWith(github.event.label.name, 'ci:')) || github.event.action == 'synchronize' || github.event.action == 'converted_to_draft' || github.event.action == 'closed' || (github.event.action == 'unlabeled' && startsWith(github.event.label.name, 'ci:')) || (github.event.action == 'edited' && github.event.changes.base != null) || (github.event_name == 'pull_request_review' && (github.event.action != 'submitted' || (github.event.review.state != 'approved' && github.event.review.state != 'commented'))) }}
 
 jobs:
   admission:
@@ -185,7 +185,7 @@ jobs:
           esac
 
   finalize:
-    name: ${{ needs.admission.outputs.required == 'true' && 'ub-review/independent-baseline' || (needs.admission.result != 'success' && ((github.event.action == 'labeled' && startsWith(github.event.label.name, 'ci:')) || github.event.action == 'synchronize' || github.event.action == 'converted_to_draft' || github.event.action == 'closed' || (github.event.action == 'unlabeled' && startsWith(github.event.label.name, 'ci:')) || (github.event.action == 'edited' && github.event.changes.base != null) || github.event_name == 'pull_request_review')) && 'ub-review/independent-baseline' || 'admission observation / baseline' }}
+    name: ${{ needs.admission.outputs.required == 'true' && 'ub-review/independent-baseline' || (needs.admission.result != 'success' && ((github.event.action == 'labeled' && startsWith(github.event.label.name, 'ci:')) || github.event.action == 'synchronize' || github.event.action == 'converted_to_draft' || github.event.action == 'closed' || (github.event.action == 'unlabeled' && startsWith(github.event.label.name, 'ci:')) || (github.event.action == 'edited' && github.event.changes.base != null) || (github.event_name == 'pull_request_review' && (github.event.action != 'submitted' || (github.event.review.state != 'approved' && github.event.review.state != 'commented'))))) && 'ub-review/independent-baseline' || 'admission observation / baseline' }}
     needs: [admission, evidence]
     if: ${{ always() }}
     runs-on: ubuntu-latest

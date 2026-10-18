@@ -5,12 +5,12 @@ name: ub-review/gate
 # receives no provider credentials, PR/check write authority, or OIDC authority.
 # It runs model-off and artifact-only. This is not independent gate authority;
 # #947 and the later #876/#814 trust boundary own that progression.
-run-name: premerge-v1 ${{ github.event.pull_request.number || '0' }} ${{ github.event.pull_request.head.sha || github.sha }} ${{ github.event.pull_request.base.sha || github.sha }} ${{ github.event.pull_request.base.ref || '-' }} ${{ github.event.action || 'dispatch' }} ${{ github.actor_id }} ${{ github.event.label.name || '-' }}
+run-name: premerge-v1 ${{ github.event.pull_request.number || '0' }} ${{ github.event.pull_request.head.sha || github.sha }} ${{ github.event.pull_request.base.sha || github.sha }} ${{ github.event.pull_request.base.ref || '-' }} ${{ github.event.action || 'dispatch' }} ${{ github.actor_id }} ${{ github.event.label.name || (github.event.review.id && format('review:{0}:{1}', github.event.review.id, github.event.review.state)) || '-' }}
 on:
   pull_request:
     types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled, edited, converted_to_draft, closed]
   pull_request_review:
-    types: [submitted, dismissed]
+    types: [submitted, dismissed, edited]
   workflow_dispatch:
 
 # Every job declares its own minimum token permissions. In particular, the
@@ -28,8 +28,8 @@ env:
   ADAPTER_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
   ADAPTER_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
   ADMISSION_LANE: gate
-  ADAPTER_SHA256: 537ca847e570bc176ffbde14322d64e95de4fd67cfb5be15436848a7b7deae34
-  POSSIBLE_ADMISSION: ${{ (github.event.action == 'labeled' && startsWith(github.event.label.name, 'ci:')) || github.event.action == 'synchronize' || github.event.action == 'converted_to_draft' || github.event.action == 'closed' || (github.event.action == 'unlabeled' && startsWith(github.event.label.name, 'ci:')) || (github.event.action == 'edited' && github.event.changes.base != null) || github.event_name == 'pull_request_review' }}
+  ADAPTER_SHA256: 1e5dc099e6511e442471708b4af285071e40b0f4fe0f78b6b3b33e261c52eb53
+  POSSIBLE_ADMISSION: ${{ (github.event.action == 'labeled' && startsWith(github.event.label.name, 'ci:')) || github.event.action == 'synchronize' || github.event.action == 'converted_to_draft' || github.event.action == 'closed' || (github.event.action == 'unlabeled' && startsWith(github.event.label.name, 'ci:')) || (github.event.action == 'edited' && github.event.changes.base != null) || (github.event_name == 'pull_request_review' && (github.event.action != 'submitted' || (github.event.review.state != 'approved' && github.event.review.state != 'commented'))) }}
 
 jobs:
   admission:
@@ -124,7 +124,14 @@ jobs:
 
       - name: Verify exact native merge checkout
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "$NATIVE_SHA"
+        env:
+          EXPECTED_BASE: ${{ github.event.pull_request.base.sha }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$NATIVE_SHA"
+          test "$(git rev-parse HEAD^1)" = "$EXPECTED_BASE"
+          test "$(git rev-parse HEAD^2)" = "$EXPECTED_HEAD"
 
       - name: Verify task projection regressions
         timeout-minutes: 2
@@ -172,7 +179,7 @@ jobs:
           # Lease the heavy witness classes so the enabled coverage sensor runs.
           allow-heavy: 'true'
           root: .
-          base: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.event.pull_request.base.ref) || 'origin/main' }}
+          base: ${{ github.event.pull_request.base.sha }}
           # A1.2 (#949): exact PR-head metadata so the synthetic merge checkout
           # is admitted as merge_result instead of failing as ambiguous.
           pr-head-sha: ${{ github.event.pull_request.head.sha }}
@@ -258,7 +265,7 @@ jobs:
           fail_ci_if_error: false
 
   finalize:
-    name: ${{ needs.admission.outputs.required == 'true' && 'ub-review/gate' || (needs.admission.result != 'success' && ((github.event.action == 'labeled' && startsWith(github.event.label.name, 'ci:')) || github.event.action == 'synchronize' || github.event.action == 'converted_to_draft' || github.event.action == 'closed' || (github.event.action == 'unlabeled' && startsWith(github.event.label.name, 'ci:')) || (github.event.action == 'edited' && github.event.changes.base != null) || github.event_name == 'pull_request_review')) && 'ub-review/gate' || 'admission observation / gate' }}
+    name: ${{ needs.admission.outputs.required == 'true' && 'ub-review/gate' || (needs.admission.result != 'success' && ((github.event.action == 'labeled' && startsWith(github.event.label.name, 'ci:')) || github.event.action == 'synchronize' || github.event.action == 'converted_to_draft' || github.event.action == 'closed' || (github.event.action == 'unlabeled' && startsWith(github.event.label.name, 'ci:')) || (github.event.action == 'edited' && github.event.changes.base != null) || (github.event_name == 'pull_request_review' && (github.event.action != 'submitted' || (github.event.review.state != 'approved' && github.event.review.state != 'commented'))))) && 'ub-review/gate' || 'admission observation / gate' }}
     needs: [admission, gate]
     if: ${{ always() }}
     runs-on: ubuntu-latest

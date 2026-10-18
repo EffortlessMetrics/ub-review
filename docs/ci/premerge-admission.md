@@ -17,7 +17,9 @@ workflow authority; this change does not make that lane hostile-head-independent
 
 The existing accountable lead selects the candidate for its existing objective,
 keeps local proof and independent exact-head review in the native PR, and is
-recorded as its native assignee. Selection remains per objective, not a global
+recorded as its native assignee. A fresh native collaborator-permission read must
+also confirm the same user still has effective write/admin permission; old comment
+association or assignment alone is not authority after queue wait. Selection remains per objective, not a global
 max-one queue. Native assignment, native comment identity and the actor's actual
 ability to label this repository supply ownership evidence; JSON does not grant
 request, review, merge or App authority.
@@ -45,14 +47,18 @@ there is no silent alias or central trigger rename.
 
 The strict request object binds repository/PR, existing objective, assigned owner
 ID, full head repository/SHA, main base SHA/ref, actual synthetic merge SHA/tree,
-adapter-policy SHA-256, specific native review IDs and the complete native review
-generation. Unknown/duplicate fields, nonfinite JSON, wrong actor/source/owner,
+adapter-policy SHA-256, specific native review IDs and their complete selected-evidence
+generation. The complete native review inventory separately controls current
+blocking decisions; unrelated comments/approvals do not mutate selected evidence. Unknown/duplicate fields, nonfinite JSON, wrong actor/source/owner,
 missing reviews, review changes and current native blocking reviews refuse.
 COMMENTED owner-published delegated-review reports retain their actual identity;
 they are not formal approvals. The adapter verifies reference/currentness, not
 the semantic quality or independence of prose. The lead must obtain substantive
 independent review, and existing native approval/protection policy still applies.
-No self-authored success flag substitutes for either obligation.
+No self-authored success flag substitutes for either obligation. Arbitrary prose
+is not automatically classified as a material finding: use native blocking review
+or withdraw/update the selected evidence, and retain the lead's final findings
+judgment. Unknown or unavailable review metadata is never clean.
 
 Keep exactly one owner-selected request label for the current subject. Unrelated
 actors' malformed labels are not selection evidence. A withdrawn/reapplied
@@ -65,7 +71,8 @@ remove/re-add a label or rerun a workflow to recover a lost response.
 Both workflows retain their native PR event families, including the baseline's
 protected-base definition. Draft/open/reopen/Ready, ordinary edits, unrelated
 labels and diagnostic dispatch are non-required observations. Synchronize,
-retarget, draft/close, withdrawal and gate review events only invalidate; they
+retarget, draft/close, withdrawal, blocking reviews and changes to selected
+review evidence only invalidate; they
 never start heavy work or publish required success. Harmless events have separate
 run-ID concurrency groups and cannot cancel or replace qualification. Requests
 use per-PR, per-workflow groups with cancel-in-progress false. A native pending
@@ -91,7 +98,8 @@ and pagination consistency still require hosted witnesses.
 
 Every worker revalidates source, owner, live request edge, reviews, integration
 parents/tree and election immediately before credential-free candidate checkout.
-The gate additionally verifies its actual checkout SHA. Fresh no-checkout
+The gate additionally verifies its actual checkout SHA and ordered parents, and
+diffs against the immutable admitted base SHA rather than ambient origin/main. Fresh no-checkout
 finalizers repeat validation, reject failed/skipped/cancelled/missing evidence
 and own-workflow cancellation, and preserve artifact upload failures. Gate
 finalization also requires one nonempty, unexpired digest-bearing gate packet
@@ -101,7 +109,13 @@ seven-worker aggregate. No protected-name skipped success is used.
 Only the elected eligible request can emit the existing required context.
 Duplicates/harmless events have observation names. Material invalidations emit
 failure, never success; a delayed invalidation can conservatively block newer
-proof. Sequential reads and native check completion are not an atomic merge lock.
+proof. Sequential reads and native check completion are not an atomic merge lock. Both populations inspect
+complete native review records and label-edge timestamps: a post-request blocking
+review remains a retirement even after a later approval/dismissal. Unknown native
+timestamps or dismissal identities refuse. Gate event history additionally sees
+selected report body edit/revert; the baseline has no equivalent historical edit
+witness, and relies on current selected bytes plus explicit withdrawal/native
+blocking signals. That historical limitation is not declared solved.
 The owning lead still refreshes repository state and findings before its separate
 normal protected merge judgment. This service does not merge.
 
@@ -109,7 +123,13 @@ normal protected merge judgment. This service does not merge.
 
 Metadata uses only public HTTPS GitHub reads, with no token, credential fallback,
 redirect, retry or candidate checkout. Private repositories and unavailable public
-metadata refuse. Public rate limits can make qualification unavailable; no
+metadata refuse. In particular, current collaborator permissions may require
+an authenticated Metadata-read endpoint. The adapter does NOT fall back to a
+token in candidate-fetched code. If anonymous permission reads refuse, the explicit
+route is **unavailable**, and activation is blocked until either anonymous support
+is demonstrated or a separately reviewed, immutable protected-base authority
+helper with the existing scoped job token is integrated. This source does not
+install that credential-bearing helper, create credentials, or expand scopes. Public rate limits can make qualification unavailable; no
 permission expansion is hidden as recovery. Responses are capped at2MB, ordinary
 lists at5x100 rows, history at12x100 rows, requests at40 calls, each call at10s,
 and metadata execution at120s wall time. Bounds refuse rather than truncate clean.
@@ -148,15 +168,24 @@ merge/raw-head checkout and parents/tree, public metadata/artifact availability,
 queued duplicate/lost-response settlement, pending replacement, withdrawal,
 blocking review and cancellation before/during finalization. Verify required
 checks without changing protection. Retain exact-head failed/skipped/partial
-results. No <=20-minute claim follows from metadata tests or unchanged timeouts.
+results. No <=20-minute claim follows from metadata tests or unchanged timeouts. Native
+worker success still has the installed product's compatibility meaning; this
+adapter does not repair or waive the separately tracked gate_result=not_proven,
+model-off, Required accounting or shadow-result limitations (#1015/#1277). Inspect
+the actual packet in native acceptance rather than promoting a wrapper green to
+unproven semantic sufficiency.
 
 Opening a Draft against the unchanged base necessarily starts its old seven-lane
 pull_request_target baseline. Present that exact one-time old-base qualification
 for a validation decision only after source/review are ready. The candidate gate
 then needs its distinct explicit eligible native request; opening alone cannot
-produce required gate success under this candidate. Keep Draft to avoid another
-old-base Ready admission; otherwise retain the
-branch/evidence without opening it. There is no skip directive or protection bypass.
+produce required gate success under this candidate. Admission retains non-draft
+eligibility. Consequently a Draft-first bootstrap also needs a later Ready
+transition, which the old base would independently charge another seven-worker
+baseline. A validation decision must account for both old-base admissions, or
+explicitly choose one late non-draft opening (one old-base baseline) instead of
+Draft-first publication. Neither alternative is performed or silently authorized
+here; retaining the branch avoids both. Keep the branch/evidence while either transition is on hold. There is no skip directive or protection bypass.
 Rollback after an authorized cutover restores the exact prior workflow and source
 revision, preserving request/run history and failed attempts; rollback itself is
 not authorized or performed by this document.
