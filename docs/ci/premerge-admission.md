@@ -17,7 +17,7 @@ workflow authority; this change does not make that lane hostile-head-independent
 
 The existing accountable lead selects the candidate for its existing objective,
 keeps local proof and independent exact-head review in the native PR, and is
-recorded as its native assignee. A fresh native collaborator-permission read must
+recorded as its sole native assignee. Multiple assignees refuse before admission, even when each has write authority and a valid request. A fresh native collaborator-permission read must
 also confirm the same user still has effective write/admin permission; old comment
 association or assignment alone is not authority after queue wait. Selection remains per objective, not a global
 max-one queue. Native assignment, native comment identity and the actor's actual
@@ -64,7 +64,7 @@ Keep exactly one owner-selected request label for the current subject. Unrelated
 actors' malformed labels are not selection evidence. A withdrawn/reapplied
 request is retired, even if source readiness is later restored. A new source,
 policy or materially refreshed review needs a newly prepared request. Never
-remove/re-add a label or rerun a workflow to recover a lost response.
+remove/re-add the same label or rerun a workflow to recover a lost response.
 
 ## Admission, duplicates and currentness
 
@@ -85,9 +85,35 @@ anchors baseline39015965202/#678 and gate39015965204/#1858. Native workflow,
 repository, actor, run-number and PR/head/base association are checked against
 request/display identities. Identical canonical requests elect the earliest
 native run number, even if a later run starts first. A queued, failed or cancelled
-winner remains the winner. Later duplicates/replayed attempts are non-required
-observations returning the original run/attempt-1 link, preserving its truthful
-result. No automatic retry erases a failed attempt.
+winner remains the winner. Later duplicates/replayed attempts of that transaction
+are non-required observations returning the original run/attempt-1 link, preserving
+its truthful result. No automatic retry erases a failed attempt.
+
+Schema `ub-review.premerge.v2` carries `retry: null` for an initial transaction.
+A recovery request uses a strict retry object containing a consecutive generation
+(1 through 3), the canonical prior request SHA-256, and both native prior winner
+run IDs keyed by gate/baseline. There is no nonce or reason field that can evade
+deduplication. Prepare it with the same command plus `--retry-of PRIOR_REQUEST_SHA256
+--gate-run PRIOR_GATE_WINNER --baseline-run PRIOR_BASELINE_WINNER`. This only
+prepares bytes; admission rechecks all provenance. The same assigned owner,
+objective, head/base/merge/tree, policy and selected reviews must remain unchanged.
+Both native original attempt-1 winners must be completed, with conclusions limited
+to success/failure/cancelled/timed_out and at least one non-success. Complete
+anchored histories establish the actual earliest winners in both populations.
+The new owner comment and label edge must follow both terminal rows' native
+updated_at timestamps; unknown times, queued/running attempts, successful-only
+transactions, reruns, missing lanes, skipped generations and changed subjects
+refuse. updated_at is a conservative native last-update bound, not a fabricated
+completion timestamp. Every ancestor is checked, and the fourth retry refuses.
+
+For a retry, withdraw the previous selected label and apply the newly prepared
+one. Withdrawal truthfully invalidates the previous context. The fresh explicit
+retry admits **both** populations again, including a previously successful lane;
+that user-requested spend avoids silently reusing a now-invalidated required
+context. Original run/attempt receipts remain. A duplicate/lost-response request
+for the same retry generation still elects its original winner regardless of byte
+formatting or startup order. This is an explicit bounded recovery transaction,
+not a workflow rerun or a change to source/reviews merely to get another attempt.
 
 Deleted rows/anchor, missing current run, inconsistent pages, unknown request
 bytes or incomplete history fail closed. The bounded prefix is at most1200 runs;
@@ -121,30 +147,43 @@ normal protected merge judgment. This service does not merge.
 
 ## Source, credentials and bounds
 
-Metadata uses only public HTTPS GitHub reads, with no token, credential fallback,
-redirect, retry or candidate checkout. Private repositories and unavailable public
-metadata refuse. In particular, current collaborator permissions may require
-an authenticated Metadata-read endpoint. The adapter does NOT fall back to a
-token in candidate-fetched code. If anonymous permission reads refuse, the explicit
-route is **unavailable**, and activation is blocked until either anonymous support
-is demonstrated or a separately reviewed, immutable protected-base authority
-helper with the existing scoped job token is integrated. This source does not
-install that credential-bearing helper, create credentials, or expand scopes. Public rate limits can make qualification unavailable; no
-permission expansion is hidden as recovery. Responses are capped at2MB, ordinary
+The adapter runs only from digest-verified canonical protected-base bytes, in
+isolated Python mode (`python3 -I`). Metadata and finalizer jobs never check out
+candidate code. Worker preflight runs before candidate checkout, and no
+credential-bearing adapter runs later in that worker job. The existing ephemeral
+job token is scoped to those helper steps only; it is not a workflow/job-wide
+environment value, command argument, output, artifact or product input.
+
+All reads remain anonymous except the fixed canonical HTTPS
+`/collaborators/{validated-live-owner-login}/permission` GET. Only that request
+uses the existing job token's implicit Metadata-read permission. Other API reads
+and source downloads receive no Authorization header. No persisted credential,
+new token, permission block, App setting or protection change is introduced.
+Redirects, retries, alternate endpoints and credential recovery are refused.
+Private repositories remain unsupported; missing/denied permission metadata
+refuses, never falls back to assignment or an old association. The earlier
+anonymous permission probe is not retried. See GitHub's [token metadata scope](https://docs.github.com/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-hashicorp-vault)
+and [collaborator API contract](https://github.com/github/rest-api-description/blob/main/descriptions/api.github.com/api.github.com.json).
+Documentation supports this source design; actual hosted token acceptance remains
+unproven and requires the later authorized native acceptance, without scope expansion.
+
+Responses are capped at2MB, ordinary
 lists at5x100 rows, history at12x100 rows, requests at40 calls, each call at10s,
 and metadata execution at120s wall time. Bounds refuse rather than truncate clean.
 
-The baseline's no-checkout bootstrap downloads the adapter only at the native
-main-base SHA in the canonical repository. The gate's bootstrap uses the exact
-candidate head repository/SHA, preserving that lane's existing candidate workflow
-and Action authority; its metadata/finalizer jobs receive no token permissions.
-Both verify the workflow-pinned full digest before execution, with no default-tip,
-source fallback or credential recovery. Missing source or a hash mismatch refuses.
-The gate bootstrap is not independent hostile-head admission. During the initial
-configuration PR it can qualify the reviewed candidate without first installing
-its adapter on main; the unchanged old-base baseline still runs its seven workers
-on opening. Subsequent adapter-policy changes require a coordinated version
-migration: a candidate/base policy mismatch remains unavailable, never a fallback. Heavy permissions, thresholds, proof timeouts and
+Both lanes' no-checkout bootstrap downloads the adapter only at the native
+main-base SHA in the canonical repository, verifies the workflow-pinned full
+digest, then executes it in isolated mode. No candidate-head source, default-tip,
+source fallback or credential recovery is accepted. The gate remains a candidate
+workflow/Action lane; this does not create hostile-head-independent gate authority.
+Missing protected source or a digest/version mismatch refuses. **The initial
+configuration candidate can no longer bootstrap its own adapter from its head:**
+old main lacks that protected source. Ordinary PR opening cannot qualify this
+protocol. A separately reviewed/authorized installation and native acceptance
+sequence must establish protected source before an explicit request can work.
+No bootstrap, PR opening or protected branch mutation is performed here.
+Subsequent adapter-policy changes also require a coordinated version migration;
+a candidate/base mismatch stays unavailable, never a source fallback. Heavy permissions, thresholds, proof timeouts and
 release/deployment routes are preserved. The explicit label uses the supported
 `manual` full-pass policy while retaining the true native labeled event metadata;
 `auto` would classify it as PullRequestOther and could omit first-pass work.
@@ -178,8 +217,9 @@ unproven semantic sufficiency.
 Opening a Draft against the unchanged base necessarily starts its old seven-lane
 pull_request_target baseline. Present that exact one-time old-base qualification
 for a validation decision only after source/review are ready. The candidate gate
-then needs its distinct explicit eligible native request; opening alone cannot
-produce required gate success under this candidate. Admission retains non-draft
+additionally requires the protected-base adapter installation and a distinct
+explicit eligible native request; opening alone cannot produce required gate
+success under this candidate, and candidate-source fallback is forbidden. Admission retains non-draft
 eligibility. Consequently a Draft-first bootstrap also needs a later Ready
 transition, which the old base would independently charge another seven-worker
 baseline. A validation decision must account for both old-base admissions, or

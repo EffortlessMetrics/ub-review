@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Public, read-only native PR admission. No candidate checkout or credentials.
+"""Protected-source read-only native PR admission. No candidate checkout.
 
 Policy owner: release/ci (#1465). Not an approval, check writer or merge service.
 """
@@ -17,7 +17,7 @@ import urllib.parse
 import urllib.request
 
 REPO = "EffortlessMetrics/ub-review"
-SCHEMA = "ub-review.premerge.v1"
+SCHEMA = "ub-review.premerge.v2"
 ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
 ANCHORS = {
     "gate": (289600864, 39015965204, 1858, ".github/workflows/ub-review-gate.yml"),
@@ -26,7 +26,7 @@ ANCHORS = {
 LABEL = re.compile(r"ci:[A-Za-z0-9_-]{43}\Z")
 TITLE = re.compile(r"premerge-v1 ([1-9][0-9]*) ([0-9a-f]{40}) ([0-9a-f]{40}) (\S+) (\S+) ([0-9]+) ([\s\S]+)\Z")
 KEYS = {"schema", "repository", "pr", "head_repository", "head_sha", "base_ref", "base_sha",
-        "merge_sha", "merge_tree", "policy_sha256", "owner_id", "objective", "review_ids", "review_generation"}
+        "merge_sha", "merge_tree", "policy_sha256", "owner_id", "objective", "review_ids", "review_generation", "retry"}
 
 
 class Refusal(Exception):
@@ -71,13 +71,18 @@ def label_for(body):
 
 
 class PublicGitHub:
-    """No token, redirects, credential lookup, retry or alternate transport."""
+    """Public reads; existing job token only for the fixed current-authority read.
+
+    Run solely from digest-verified protected base, before any candidate checkout.
+    Never load candidate modules, credential stores, redirects or retry transports.
+    """
     def __init__(self):
         class NoRedirect(urllib.request.HTTPRedirectHandler):
             def redirect_request(self, req, fp, code, msg, headers, newurl):
                 raise Refusal("public GitHub redirect refused")
         self.opener = urllib.request.build_opener(NoRedirect)
         self.calls = 0
+        self.histories = {}
 
     def get(self, suffix):
         self.calls += 1
@@ -85,9 +90,13 @@ class PublicGitHub:
         require(suffix.startswith("/") and ".." not in suffix and "#" not in suffix,
                 "invalid metadata path")
         url = "https://api.github.com/repos/" + REPO + suffix
-        request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json",
-                                                       "User-Agent": "ub-review-premerge-v1",
-                                                       "X-GitHub-Api-Version": "2022-11-28"})
+        headers = {"Accept": "application/vnd.github+json", "User-Agent": "ub-review-premerge-v1",
+                   "X-GitHub-Api-Version": "2022-11-28"}
+        if re.fullmatch(r"/collaborators/[A-Za-z0-9-]{1,39}/permission", suffix):
+            token = os.environ.get("ADMISSION_METADATA_TOKEN", "")
+            require(token and not any(char.isspace() for char in token), "existing job metadata token unavailable")
+            headers["Authorization"] = "Bearer " + token
+        request = urllib.request.Request(url, headers=headers)
         with self.opener.open(request, timeout=10) as response:
             data = response.read(2_000_001)
         require(len(data) <= 2_000_000, "public metadata byte bound exceeded")
@@ -157,6 +166,13 @@ def request_for(comments, label, owner_id=None):
     require(isinstance(body["objective"], str) and re.fullmatch(
         r"https://github.com/EffortlessMetrics/ub-review/issues/[1-9][0-9]*", body["objective"]),
         "missing existing objective evidence")
+    retry = body["retry"]
+    require(retry is None or (isinstance(retry, dict) and set(retry) == {"generation", "prior_request", "runs"}
+            and type(retry["generation"]) is int and 1 <= retry["generation"] <= 3
+            and isinstance(retry["prior_request"], str) and re.fullmatch("[0-9a-f]{64}", retry["prior_request"])
+            and isinstance(retry["runs"], dict) and set(retry["runs"]) == set(ANCHORS)
+            and all(type(value) is int and value > 0 for value in retry["runs"].values())),
+            "invalid bounded retry transaction")
     return body
 
 
@@ -179,12 +195,13 @@ def current(api, event, label, policy_hash):
             and pr["base"]["repo"]["full_name"] == live["base"]["repo"]["full_name"] == REPO
             and request["base_sha"] == pr["base"]["sha"] == live["base"]["sha"],
             "request repository/PR/head/base/target is stale or mismatched")
-    owners = [owner for owner in live["assignees"] if owner["id"] == request["owner_id"]]
-    require(len(owners) == 1, "requester is not the current assigned candidate owner")
+    owners = live["assignees"]
+    require(len(owners) == 1 and owners[0]["id"] == request["owner_id"],
+            "exactly one accountable native assignee must own the selected candidate")
     login = owners[0]["login"]
     require(isinstance(login, str) and re.fullmatch("[A-Za-z0-9-]{1,39}", login), "invalid native owner login")
     # Current assignment/old association are not a current permission grant.
-    # Never fall back to a token in candidate-fetched code if this public read refuses.
+    # Only this protected-source helper receives the existing metadata-read token.
     permission = api.get(f"/collaborators/{login}/permission")
     require(permission["user"]["id"] == request["owner_id"] and permission["permission"] in {"write", "admin"},
             "current native owner permission lost, read-only, unknown or mismatched")
@@ -255,6 +272,11 @@ def current(api, event, label, policy_hash):
 
 def history(api, lane, run_id):
     workflow_id, anchor_id, floor, path = ANCHORS[lane]
+    if lane in api.histories:
+        rows = api.histories[lane]
+        own = [row for row in rows if row["id"] == run_id]
+        require(len(own) == 1, "referenced run absent from complete native history")
+        return own[0], rows
     anchor = api.get(f"/actions/runs/{anchor_id}")
     require((anchor["id"], anchor["workflow_id"], anchor["run_number"], anchor["path"])
             == (anchor_id, workflow_id, floor, path), "native history anchor unavailable or changed")
@@ -282,6 +304,7 @@ def history(api, lane, run_id):
             "deleted, missing or incomplete native run history")
     own = [row for row in rows if row["id"] == run_id]
     require(len(own) == 1, "current run absent from native history")
+    api.histories[lane] = rows
     return own[0], rows
 
 
@@ -333,6 +356,89 @@ def elect(api, event, lane, run_id, request, comments):
     return min(candidates, key=lambda row: row["run_number"])
 
 
+def prior_request(comments, identity, owner_id):
+    matches = []
+    for comment in comments:
+        if comment.get("user", {}).get("id") != owner_id:
+            continue
+        try:
+            request = request_for(comments, label_for(comment["body"]), owner_id)
+            if digest(request) == identity:
+                matches.append(request)
+        except (Refusal, KeyError, TypeError, ValueError):
+            continue
+    require(matches, "retry predecessor request absent or not owned by the same native lead")
+    return matches[0]
+
+
+def validate_retry(api, request, comments, events):
+    """At most three explicit successor transactions; no nonce or automatic rerun.
+
+    Both prior populations must be terminal, with at least one failed/cancelled.
+    An explicit successor spends both populations again, preserving old receipts.
+    """
+    child = request
+    while child["retry"] is not None:
+        retry = child["retry"]
+        parent = prior_request(comments, retry["prior_request"], child["owner_id"])
+        require({key: value for key, value in parent.items() if key != "retry"}
+                == {key: value for key, value in child.items() if key != "retry"},
+                "retry changed source, evidence, owner, objective or policy")
+        previous_generation = parent["retry"]["generation"] if parent["retry"] is not None else 0
+        require(retry["generation"] == previous_generation + 1, "retry generation is not consecutive")
+        conclusions = []
+        terminal_times = []
+        for lane, run_id in retry["runs"].items():
+            row, rows = history(api, lane, run_id)
+            expected_event = "pull_request_target" if lane == "baseline" else "pull_request"
+            candidates = []
+            for other in rows:
+                match = TITLE.fullmatch(other["display_title"])
+                if not match:
+                    require(not other["display_title"].startswith("premerge-v1 "), "unknown predecessor protocol row")
+                    continue
+                number, head, base, base_ref, action, actor, label = match.groups()
+                if int(number) != parent["pr"] or action != "labeled" or not LABEL.fullmatch(label):
+                    continue
+                if int(actor) != parent["owner_id"]:
+                    continue
+                predecessor = request_for(comments, label, parent["owner_id"])
+                if canonical(predecessor) != canonical(parent):
+                    continue
+                require(other["event"] == expected_event and other["actor"]["id"] == parent["owner_id"]
+                        and other["head_sha"] == head == parent["head_sha"]
+                        and base == parent["base_sha"] and base_ref == parent["base_ref"]
+                        and any(pr["number"] == parent["pr"] and pr["head"]["sha"] == head
+                                and pr["base"]["sha"] == base and pr["base"]["ref"] == base_ref
+                                for pr in other["pull_requests"]), "retry predecessor native identity mismatch")
+                candidates.append(other)
+            require(candidates and min(candidates, key=lambda item: item["run_number"])["id"] == run_id,
+                    "retry does not reference the original elected predecessor")
+            require(row["run_attempt"] == 1 and row["status"] == "completed"
+                    and row["conclusion"] in {"success", "failure", "cancelled", "timed_out"},
+                    "retry predecessor is nonterminal, rerun, unknown or ineligible")
+            conclusions.append(row["conclusion"])
+            terminal_times.append(native_time(row["updated_at"]))
+        require(any(value != "success" for value in conclusions), "successful transaction cannot be retried")
+        # Native comment and application must both follow terminal completion.
+        matching = []
+        for comment in comments:
+            if comment.get("user", {}).get("id") != child["owner_id"]:
+                continue
+            try:
+                if digest(request_for(comments, label_for(comment.get("body", "")), child["owner_id"])) == digest(child):
+                    matching.append(comment)
+            except (Refusal, KeyError, TypeError, ValueError):
+                continue
+        labels = {label_for(comment["body"]) for comment in matching}
+        edges = [edge for edge in events if edge.get("label", {}).get("name") in labels and edge["event"] == "labeled"]
+        require(matching and edges and all(edge["actor"]["id"] == child["owner_id"] for edge in edges)
+                and all(native_time(comment["created_at"]) > max(terminal_times) for comment in matching)
+                and all(native_time(edge["created_at"]) > max(terminal_times) for edge in edges),
+                "retry intent predates terminal predecessor settlement")
+        child = parent
+
+
 def review_transition(api, event):
     """Only mutation/withdrawal of selected evidence invalidates an otherwise harmless review event."""
     number = event["pull_request"]["number"]
@@ -374,6 +480,9 @@ def execute(api, event_name, event, lane, run_id, attempt, phase, policy_hash,
     if winner["id"] != run_id:
         return {"mode": "duplicate", "required": "false", "winner": str(winner["id"]),
                 "attempt": "1"}
+    if request["retry"] is not None:
+        edges = api.pages(f"/issues/{request['pr']}/events")
+        validate_retry(api, request, comments, edges)
     require(not cancelled, "own workflow cancelled")
     if phase == "finalize":
         require(admission_result == "success" and mode == "admitted" and product == "success",
@@ -389,14 +498,15 @@ def execute(api, event_name, event, lane, run_id, attempt, phase, policy_hash,
     return {"mode": "admitted", "required": "true", "request": digest(request)}
 
 
-def prepare(api, number, objective, owner_id, review_ids, policy_hash):
+def prepare(api, number, objective, owner_id, review_ids, policy_hash, retry_of=None, gate_run=None, baseline_run=None):
     """Prepare bytes only. The existing external caller posts/labels explicitly."""
     pr = api.get(f"/pulls/{number}")
     require(pr["state"] == "open" and pr["draft"] is False and pr["mergeable"] is True,
             "prepare requires the selected, non-draft conflict-free candidate")
     require(pr["base"]["repo"]["full_name"] == REPO and pr["base"]["ref"] == "main",
             "prepare requires the canonical protected target")
-    require(owner_id in [owner["id"] for owner in pr["assignees"]], "assign the existing candidate lead first")
+    require(len(pr["assignees"]) == 1 and pr["assignees"][0]["id"] == owner_id,
+            "assign exactly one accountable candidate lead first")
     reviews = api.pages(f"/pulls/{number}/reviews")
     merge = api.get("/git/commits/" + pr["merge_commit_sha"])
     request = {"schema": SCHEMA, "repository": REPO, "pr": number,
@@ -404,7 +514,18 @@ def prepare(api, number, objective, owner_id, review_ids, policy_hash):
                "base_ref": "main", "base_sha": pr["base"]["sha"], "merge_sha": pr["merge_commit_sha"],
                "merge_tree": merge["tree"]["sha"], "policy_sha256": policy_hash,
                "owner_id": owner_id, "objective": f"https://github.com/{REPO}/issues/{objective}",
-               "review_ids": sorted(set(review_ids)), "review_generation": generation(reviews, review_ids)}
+               "review_ids": sorted(set(review_ids)), "review_generation": generation(reviews, review_ids), "retry": None}
+    if retry_of is not None:
+        comments = api.pages(f"/issues/{number}/comments")
+        previous = prior_request(comments, retry_of, owner_id)
+        request["retry"] = {"generation": (previous["retry"]["generation"] if previous["retry"] else 0) + 1,
+                            "prior_request": retry_of, "runs": {"gate": gate_run, "baseline": baseline_run}}
+        require(1 <= request["retry"]["generation"] <= 3 and type(gate_run) is int and gate_run > 0
+                and type(baseline_run) is int and baseline_run > 0, "retry needs both native winners and generation <=3")
+        require({key: value for key, value in previous.items() if key != "retry"}
+                == {key: value for key, value in request.items() if key != "retry"}, "retry subject changed")
+    else:
+        require(gate_run is None and baseline_run is None, "native predecessor runs require --retry-of")
     body = canonical(request)
     return {"body": body, "label": label_for(body)}
 
@@ -421,10 +542,14 @@ def main():
         parser.add_argument("--objective", type=int, required=True)
         parser.add_argument("--owner-id", type=int, required=True)
         parser.add_argument("--review-id", type=int, action="append", required=True)
+        parser.add_argument("--retry-of")
+        parser.add_argument("--gate-run", type=int)
+        parser.add_argument("--baseline-run", type=int)
         args = parser.parse_args()
         try:
             print(canonical(prepare(PublicGitHub(), args.pr, args.objective, args.owner_id,
-                                    args.review_id, hashlib.sha256(Path(__file__).read_bytes()).hexdigest())))
+                                    args.review_id, hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                                    args.retry_of, args.gate_run, args.baseline_run)))
             return 0
         except (Refusal, KeyError, TypeError, ValueError, OSError) as error:
             print("request preparation refused:", error, file=sys.stderr)

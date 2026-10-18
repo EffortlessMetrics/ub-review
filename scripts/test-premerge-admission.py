@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -87,7 +88,7 @@ class Fixture:
                         "merge_sha": "c" * 40, "merge_tree": "d" * 40,
                         "policy_sha256": hashlib.sha256(SOURCE.read_bytes()).hexdigest(),
                         "owner_id": 30, "objective": "https://github.com/" + ADMISSION.REPO + "/issues/1465",
-                        "review_ids": [55], "review_generation": ADMISSION.generation(self.reviews, [55])}
+                        "review_ids": [55], "review_generation": ADMISSION.generation(self.reviews, [55]), "retry": None}
         self.body = ADMISSION.canonical(self.request)
         self.label = ADMISSION.label_for(self.body)
         self.live = {"number": 1502, "state": "open", "draft": False, "mergeable": True,
@@ -98,7 +99,8 @@ class Fixture:
                       "repository": {"full_name": ADMISSION.REPO, "private": False},
                       "pull_request": copy.deepcopy(self.live)}
         self.event_name = "pull_request_target" if lane == "baseline" else "pull_request"
-        self.comments = [{"id": 77, "user": self.owner, "body": self.body, "author_association": "MEMBER"}]
+        self.comments = [{"id": 77, "user": self.owner, "body": self.body, "author_association": "MEMBER",
+                          "created_at": "2026-10-18T00:00:01Z"}]
         self.anchor = self.row(self.floor, self.anchor_id, "legacy", "opened")
         self.own = self.row(self.floor + 1, self.run_id)
         self.rows = [self.own, self.anchor]
@@ -112,7 +114,7 @@ class Fixture:
                 "display_title": title or f"premerge-v1 1502 {'a'*40} {'b'*40} main {action} 30 {self.label}",
                 "pull_requests": [{"number": 1502, "head": {"sha": "a" * 40},
                                    "base": {"sha": "b" * 40, "ref": "main"}}],
-                "conclusion": None, "status": "queued"}
+                "conclusion": None, "status": "queued", "run_attempt": 1, "updated_at": "2026-10-18T00:01:00Z"}
 
     def data(self):
         return {"/pulls/1502": self.live,
@@ -136,7 +138,7 @@ class Fixture:
                           "gate": {"result": "skipped"}, "evidence": {"result": "skipped"}}}
 
     def invoke(self, source, name, phase, mode="", product="success", cancelled=False,
-               admission_result="success", attempt=1, bootstrap_failure=False):
+               admission_result="success", attempt=1, bootstrap_failure=False, metadata_token="fixture-job-token"):
         with tempfile.TemporaryDirectory(prefix="premerge-control-") as directory:
             work = Path(directory)
             fixture = work / "fixture.json"
@@ -147,22 +149,29 @@ class Fixture:
             calls = work / "calls"
             # Inject the transport beneath the real PublicGitHub reader in a fresh process.
             # Unknown URLs raise; no test can silently contact GitHub.
-            (work / "sitecustomize.py").write_text(textwrap.dedent('''
-                import io, json, os, urllib.request
+            (work / "python3").write_text('#!' + sys.executable + '\n' + textwrap.dedent('''
+                import io, json, os, urllib.request, sys, runpy
                 from pathlib import Path
                 class Transport:
                     def open(self, request, timeout):
                         prefix = "https://api.github.com/repos/EffortlessMetrics/ub-review"
                         assert request.full_url.startswith(prefix) and timeout == 10
-                        assert "Authorization" not in request.headers
                         suffix = request.full_url[len(prefix):]
+                        if suffix.startswith("/collaborators/"):
+                            assert request.headers.get("Authorization") == "Bearer fixture-job-token"
+                        else:
+                            assert "Authorization" not in request.headers
                         with open(os.environ["TEST_CALLS"], "a") as log: log.write(suffix + "\\n")
                         data = json.loads(Path(os.environ["TEST_FIXTURE"]).read_text())
                         if suffix not in data: raise OSError("fixture metadata unavailable")
                         return io.BytesIO(json.dumps(data[suffix]).encode())
                 urllib.request.build_opener = lambda *args: Transport()
+                assert sys.argv[1] == "-I", "production protected helper must isolate Python imports"
+                sys.argv = sys.argv[2:]
+                runpy.run_path(sys.argv[0], run_name="__main__")
             '''))
-            (work / "curl").write_text('#!/usr/bin/env python3\n' + textwrap.dedent('''
+            (work / "python3").chmod(0o700)
+            (work / "curl").write_text('#!' + sys.executable + '\n' + textwrap.dedent('''
                 import os, shutil, sys
                 from pathlib import Path
                 with open(os.environ["TEST_CALLS"], "a") as log: log.write("bootstrap\\n")
@@ -180,8 +189,9 @@ class Fixture:
                    "GITHUB_RUN_ATTEMPT": str(attempt), "ADMISSION_LANE": self.lane,
                    "ADMISSION_PHASE": phase, "ADMISSION_MODE": mode, "PRODUCT_RESULT": product,
                    "ADMISSION_RESULT": admission_result, "WORKFLOW_CANCELLED": str(cancelled).lower(),
+                   "ADMISSION_METADATA_TOKEN": metadata_token,
                    "POLICY_BASE_SHA": "b" * 40, "NATIVE_SHA": "c" * 40,
-                   "ADAPTER_SOURCE_SHA": ("a" if self.lane == "gate" else "b") * 40,
+                   "ADAPTER_SOURCE_SHA": "b" * 40,
                    "ADAPTER_REPOSITORY": ADMISSION.REPO,
                    "ADAPTER_SHA256": re.search(r"^  ADAPTER_SHA256: (.+)$", source, re.M).group(1),
                    "POSSIBLE_ADMISSION": str(bool(expression(possible, self.context()))).lower()}
@@ -189,6 +199,57 @@ class Fixture:
                                     env=env, capture_output=True, text=True, timeout=10, check=False)
             outputs = dict(line.split("=", 1) for line in output.read_text().splitlines()) if output.exists() else {}
             return result.returncode, outputs, calls.read_text().splitlines() if calls.exists() else [], result.stderr
+
+    def retry(self, conclusions=None):
+        conclusions = conclusions or {"gate": "failure", "baseline": "cancelled"}
+        previous = copy.deepcopy(self.request)
+        previous_row = self.own
+        runs = {self.lane: previous_row["id"]}
+        self.prior_rows = {self.lane: previous_row}
+        other_lane = "baseline" if self.lane == "gate" else "gate"
+        generation = previous["retry"]["generation"] + 1 if previous["retry"] else 1
+        if generation == 1:
+            self.other_fixture = Fixture(other_lane)
+            self.other_fixture.own["id"] = 888001
+            self.other_current = self.other_fixture.own
+        other = self.other_fixture
+        runs[other_lane] = self.other_current["id"]
+        self.prior_rows[other_lane] = self.other_current
+        for lane, row in self.prior_rows.items():
+            row.update(status="completed", conclusion=conclusions[lane],
+                       updated_at=f"2026-10-18T00:{2*generation-1:02d}:00Z")
+        self.extra.update({f"/actions/runs/{other.anchor_id}": other.anchor,
+                           f"/actions/workflows/{other.workflow_id}/runs?per_page=100&page=1": {"workflow_runs": other.rows}})
+        self.request["retry"] = {"generation": generation, "prior_request": ADMISSION.digest(previous), "runs": runs}
+        self.body = ADMISSION.canonical(self.request)
+        old_label = self.label
+        self.label = ADMISSION.label_for(self.body)
+        self.comments.append({"id": 78, "user": self.owner, "body": self.body, "author_association": "MEMBER",
+                              "created_at": f"2026-10-18T00:{2*generation:02d}:00Z"})
+        self.live["labels"] = [{"name": self.label}]
+        self.event["label"] = {"name": self.label}
+        self.events.extend([{"event": "unlabeled", "label": {"name": old_label}, "actor": self.owner,
+                             "created_at": f"2026-10-18T00:{2*generation:02d}:05Z"},
+                            {"event": "labeled", "label": {"name": self.label}, "actor": self.owner,
+                             "created_at": f"2026-10-18T00:{2*generation:02d}:10Z"}])
+        self.run_id = previous_row["id"] + 1
+        self.own = self.row(previous_row["run_number"] + 1, self.run_id)
+        self.rows.insert(0, self.own)
+        self.other_current = other.row(self.other_current["run_number"] + 1, self.other_current["id"] + 1,
+                                       title=self.own["display_title"])
+        other.rows.insert(0, self.other_current)
+
+    def reseal(self):
+        old_label = self.label
+        self.body = ADMISSION.canonical(self.request)
+        self.label = ADMISSION.label_for(self.body)
+        self.comments[-1]["body"] = self.body
+        self.live["labels"] = [{"name": self.label}]
+        self.event["label"] = {"name": self.label}
+        self.own["display_title"] = self.own["display_title"].replace(old_label, self.label)
+        for edge in self.events:
+            if edge.get("label", {}).get("name") == old_label:
+                edge["label"]["name"] = self.label
 
 
 class NativeAdmission(unittest.TestCase):
@@ -232,6 +293,136 @@ class NativeAdmission(unittest.TestCase):
                     f.event["action"] = action
                     if action == "edited": f.event["changes"] = {"base": {"ref": {"from": "other"}}}
                     self.assert_suppressed(f, "invalidated")
+
+    def test_two_valid_assignees_cannot_each_admit_same_subject(self):
+        for lane in WORKFLOWS:
+            for actor in (30, 32):
+                f = Fixture(lane)
+                second = {"id": 32, "login": "second-lead", "type": "User"}
+                f.live["assignees"].append(second)
+                request = {**f.request, "owner_id": 32}
+                body = ADMISSION.canonical(request)
+                label = ADMISSION.label_for(body)
+                f.comments.append({"id": 79, "user": second, "body": body, "author_association": "MEMBER"})
+                f.live["labels"].append({"name": label})
+                f.extra["/collaborators/second-lead/permission"] = {"user": {"id": 32}, "permission": "write"}
+                if actor == 32:
+                    f.event.update(sender=second, label={"name": label})
+                self.assert_suppressed(f)
+
+    def test_explicit_terminal_retry_admits_both_populations_and_deduplicates(self):
+        for lane, source in WORKFLOWS.items():
+            for result in ("failure", "cancelled", "timed_out"):
+                f = Fixture(lane)
+                f.retry({"gate": result, "baseline": "success"})
+                code, output, _, error = f.invoke(source, "Admit one explicit native request", "admit")
+                self.assertEqual((code, output.get("mode")), (0, "admitted"), error)
+                code, _, _, error = f.invoke(source, "Revalidate request before candidate checkout", "recheck", "admitted")
+                self.assertEqual(code, 0, error)
+                # Distinct run for the SAME explicit retry still returns its first winner.
+                duplicate = f.row(f.floor+3, 999003)
+                f.rows.insert(0, duplicate)
+                f.run_id = 999003
+                output, _ = self.assert_suppressed(f, "duplicate")
+                self.assertEqual(output["winner"], "999002")
+                code, output, _, _ = f.invoke(source, "Admit one explicit native request", "admit", attempt=2)
+                self.assertEqual((code, output.get("mode")), (0, "replay"))
+
+    def test_invalid_or_unauthorized_retry_never_allocates(self):
+        def later_duplicate_predecessor(f):
+            other = f.other_fixture
+            row = copy.deepcopy(f.prior_rows[other.lane])
+            row.update(id=777001, run_number=f.other_current['run_number']+1)
+            other.rows.insert(0, row)
+            f.request['retry']['runs'][other.lane] = row['id']
+        mutations = {
+            "queued": lambda f: f.prior_rows['gate'].update(status="queued", conclusion=None),
+            "running": lambda f: f.prior_rows['baseline'].update(status="in_progress", conclusion=None),
+            "success only": lambda f: [row.update(conclusion="success") for row in f.prior_rows.values()],
+            "unknown terminal": lambda f: f.prior_rows['gate'].update(conclusion="neutral"),
+            "prior rerun": lambda f: f.prior_rows['baseline'].update(run_attempt=2),
+            "unknown prior": lambda f: f.request['retry'].update(prior_request='f'*64),
+            "missing lane": lambda f: f.request['retry']['runs'].pop('gate'),
+            "wrong winner": lambda f: f.request['retry']['runs'].update(gate=123),
+            "later duplicate predecessor": later_duplicate_predecessor,
+            "skipped generation": lambda f: f.request['retry'].update(generation=2),
+            "over bound": lambda f: f.request['retry'].update(generation=4),
+            "arbitrary nonce": lambda f: f.request['retry'].update(nonce='retry-again'),
+            "changed subject": lambda f: f.request.update(objective='https://github.com/'+ADMISSION.REPO+'/issues/123'),
+            "changed owner": lambda f: f.request.update(owner_id=99),
+            "early comment": lambda f: f.comments[-1].update(created_at="2026-10-18T00:00:59Z"),
+            "early edge": lambda f: f.events[-1].update(created_at="2026-10-18T00:00:59Z"),
+            "other actor": lambda f: f.event.update(sender={"id": 99, "type": "User"}),
+        }
+        for lane in WORKFLOWS:
+            for name, mutate in mutations.items():
+                with self.subTest(lane=lane, condition=name):
+                    f = Fixture(lane)
+                    f.retry()
+                    mutate(f)
+                    f.reseal()
+                    self.assert_suppressed(f)
+
+    def test_retry_chain_is_consecutive_bounded_and_preserves_native_history(self):
+        for lane, source in WORKFLOWS.items():
+            f = Fixture(lane)
+            for generation in (1, 2, 3):
+                f.retry()
+                self.assertEqual(f.request['retry']['generation'], generation)
+                code, output, _, error = f.invoke(source, 'Admit one explicit native request', 'admit')
+                self.assertEqual((code, output.get('mode')), (0, 'admitted'), error)
+            # The protocol refuses a fourth successor even when prior runs failed.
+            f.retry()
+            self.assert_suppressed(f)
+
+    def test_retry_serialization_cannot_create_another_transaction(self):
+        for lane in WORKFLOWS:
+            f = Fixture(lane)
+            f.retry()
+            alternate = json.dumps(f.request, indent=2)
+            label = ADMISSION.label_for(alternate)
+            f.comments.append({**f.comments[-1], 'id': 79, 'body': alternate})
+            f.live['labels'] = [{'name': label}]
+            f.event['label'] = {'name': label}
+            f.events.append({'event': 'labeled', 'label': {'name': label}, 'actor': f.owner,
+                             'created_at': '2026-10-18T00:02:11Z'})
+            second = f.row(f.floor+3, 999003)
+            second['display_title'] = second['display_title'].replace(f.label, label)
+            f.rows.insert(0, second)
+            f.run_id = 999003
+            output, _ = self.assert_suppressed(f, 'duplicate')
+            self.assertEqual(output['winner'], '999002')
+
+    def test_protected_helper_token_is_isolated_and_never_sent_to_public_reads(self):
+        for lane, source in WORKFLOWS.items():
+            self.assertIn('ADAPTER_SOURCE_SHA: ${{ github.event.pull_request.base.sha }}', source)
+            self.assertIn('ADAPTER_REPOSITORY: EffortlessMetrics/ub-review', source)
+            for name in ("Admit one explicit native request", "Revalidate request before candidate checkout",
+                         "Require current complete uncancelled qualification"):
+                self.assertIn('python3 -I "$script"', shell(source, name))
+            f = Fixture(lane)
+            code, output, _, error = f.invoke(source, "Admit one explicit native request", "admit", metadata_token="")
+            self.assertNotEqual(code, 0)
+            self.assertEqual(output['mode'], 'rejected')
+            code, output, _, error = f.invoke(source, "Admit one explicit native request", "admit")
+            self.assertEqual(code, 0, error)
+            self.assertNotIn('fixture-job-token', json.dumps(output)+error)
+            worker = job(source, "gate" if lane == "gate" else "evidence")
+            checkout = '- uses: actions/checkout@' if lane == 'gate' else '- name: Checkout exact candidate'
+            self.assertNotIn('ADMISSION_METADATA_TOKEN', worker.split(checkout, 1)[1])
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            marker = work/'candidate-imported'
+            (work/'sitecustomize.py').write_text('from pathlib import Path\nPath('+repr(str(marker))+').touch()\n')
+            f = Fixture('gate')
+            f.event['action'] = 'opened'
+            (work/'event').write_text(json.dumps(f.event))
+            env = {**os.environ, 'PYTHONPATH': str(work), 'GITHUB_EVENT_PATH': str(work/'event'),
+                   'GITHUB_OUTPUT': str(work/'out'), 'GITHUB_EVENT_NAME': 'pull_request', 'ADMISSION_LANE': 'gate',
+                   'GITHUB_RUN_ID': '999001', 'GITHUB_RUN_ATTEMPT': '1', 'ADMISSION_PHASE': 'admit'}
+            result = subprocess.run([sys.executable, '-I', str(SOURCE)], env=env, capture_output=True, timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(marker.exists(), 'candidate import path reached protected helper')
 
     def test_explicit_request_reaches_real_worker_preflight_and_finalizer(self):
         for lane, source in WORKFLOWS.items():
@@ -518,7 +709,7 @@ class NativeAdmission(unittest.TestCase):
         with self.assertRaisesRegex(ADMISSION.Refusal, "pagination"): api.pages("/pulls/1502/reviews")
         self.assertIn('ADAPTER_SOURCE_SHA: ${{ github.event.pull_request.base.sha }}', WORKFLOWS['baseline'])
         self.assertIn('ADAPTER_REPOSITORY: EffortlessMetrics/ub-review', WORKFLOWS['baseline'])
-        self.assertIn('ADAPTER_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}', WORKFLOWS['gate'])
+        self.assertIn('ADAPTER_SOURCE_SHA: ${{ github.event.pull_request.base.sha }}', WORKFLOWS['gate'])
         for source in WORKFLOWS.values():
             self.assertIn(hashlib.sha256(SOURCE.read_bytes()).hexdigest(), source)
             self.assertIn('echo "$ADAPTER_SHA256  $script" | sha256sum --check --status', source)

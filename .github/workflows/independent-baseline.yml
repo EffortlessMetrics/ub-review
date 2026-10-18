@@ -23,7 +23,7 @@ env:
   ADAPTER_SOURCE_SHA: ${{ github.event.pull_request.base.sha }}
   ADAPTER_REPOSITORY: EffortlessMetrics/ub-review
   ADMISSION_LANE: baseline
-  ADAPTER_SHA256: 1e5dc099e6511e442471708b4af285071e40b0f4fe0f78b6b3b33e261c52eb53
+  ADAPTER_SHA256: b054421d7438251cf314441afb01576d47f49370639736768e9d261edc4cdfa8
   POSSIBLE_ADMISSION: ${{ (github.event.action == 'labeled' && startsWith(github.event.label.name, 'ci:')) || github.event.action == 'synchronize' || github.event.action == 'converted_to_draft' || github.event.action == 'closed' || (github.event.action == 'unlabeled' && startsWith(github.event.label.name, 'ci:')) || (github.event.action == 'edited' && github.event.changes.base != null) || (github.event_name == 'pull_request_review' && (github.event.action != 'submitted' || (github.event.review.state != 'approved' && github.event.review.state != 'commented'))) }}
 
 jobs:
@@ -42,6 +42,7 @@ jobs:
         shell: bash
         env:
           ADMISSION_PHASE: admit
+          ADMISSION_METADATA_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if [[ "$ADMISSION_PHASE" == admit && "$POSSIBLE_ADMISSION" != true ]]; then
@@ -61,14 +62,14 @@ jobs:
           [[ "$POLICY_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$ADAPTER_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$ADAPTER_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
-          # Baseline source is protected base; gate source has its existing candidate authority.
-          # Both are exact immutable source + pinned bytes. No default-tip/fallback/credentials.
+          # Execute only canonical protected-base bytes before candidate checkout.
+          # Existing metadata token stays in this isolated helper step; no fallback.
           script="$RUNNER_TEMP/premerge-admission.py"
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 5 --max-time 20 --max-filesize 131072 \
             "https://raw.githubusercontent.com/$ADAPTER_REPOSITORY/$ADAPTER_SOURCE_SHA/scripts/premerge-admission.py" -o "$script"
           echo "$ADAPTER_SHA256  $script" | sha256sum --check --status
-          python3 "$script"
+          python3 -I "$script"
 
   evidence:
     needs: admission
@@ -90,6 +91,7 @@ jobs:
         shell: bash
         env:
           ADMISSION_PHASE: recheck
+          ADMISSION_METADATA_TOKEN: ${{ github.token }}
           ADMISSION_MODE: ${{ needs.admission.outputs.mode }}
         run: |
           set -euo pipefail
@@ -110,14 +112,14 @@ jobs:
           [[ "$POLICY_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$ADAPTER_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$ADAPTER_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
-          # Baseline source is protected base; gate source has its existing candidate authority.
-          # Both are exact immutable source + pinned bytes. No default-tip/fallback/credentials.
+          # Execute only canonical protected-base bytes before candidate checkout.
+          # Existing metadata token stays in this isolated helper step; no fallback.
           script="$RUNNER_TEMP/premerge-admission.py"
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 5 --max-time 20 --max-filesize 131072 \
             "https://raw.githubusercontent.com/$ADAPTER_REPOSITORY/$ADAPTER_SOURCE_SHA/scripts/premerge-admission.py" -o "$script"
           echo "$ADAPTER_SHA256  $script" | sha256sum --check --status
-          python3 "$script"
+          python3 -I "$script"
       - name: Checkout exact candidate revision without credentials
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -208,6 +210,7 @@ jobs:
         shell: bash
         env:
           ADMISSION_PHASE: finalize
+          ADMISSION_METADATA_TOKEN: ${{ github.token }}
           WORKFLOW_CANCELLED: ${{ steps.cancellation.outputs.cancelled == 'true' }}
           ADMISSION_MODE: ${{ needs.admission.outputs.mode }}
           ADMISSION_RESULT: ${{ needs.admission.result }}
@@ -231,14 +234,14 @@ jobs:
           [[ "$POLICY_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$ADAPTER_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$ADAPTER_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
-          # Baseline source is protected base; gate source has its existing candidate authority.
-          # Both are exact immutable source + pinned bytes. No default-tip/fallback/credentials.
+          # Execute only canonical protected-base bytes before candidate checkout.
+          # Existing metadata token stays in this isolated helper step; no fallback.
           script="$RUNNER_TEMP/premerge-admission.py"
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 5 --max-time 20 --max-filesize 131072 \
             "https://raw.githubusercontent.com/$ADAPTER_REPOSITORY/$ADAPTER_SOURCE_SHA/scripts/premerge-admission.py" -o "$script"
           echo "$ADAPTER_SHA256  $script" | sha256sum --check --status
-          python3 "$script"
+          python3 -I "$script"
       - name: Write trusted exact-head baseline receipt
         if: ${{ success() && needs.admission.outputs.mode == 'admitted' }}
         shell: bash
