@@ -647,6 +647,7 @@ mod tests {
 
     fn test_lane_receipt() -> ModelLaneReceipt {
         ModelLaneReceipt {
+            semantic_state: None,
             lane: "security".to_owned(),
             provider: "minimax".to_owned(),
             model: "MiniMax-M3".to_owned(),

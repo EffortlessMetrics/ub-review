@@ -160,3 +160,12 @@ reason = "Runs the actual composite Action Bash resolver with recording Cargo an
 created = "2026-09-05"
 review_after = "2026-12-05"
 expires = "2027-03-05"
+
+[[exception]]
+id = "semantic-preservation-cli-fixture-999"
+kind = "test-network-process"
+path = "tests/semantic_preservation.rs"
+owner = "ub-review/core"
+reason = "Issue #999 deterministic orchestration regression binds an ephemeral loopback-only provider with dummy keys and invokes git for isolated fixture revisions, rustc for boundary witnesses, and the actual ub-review CLI. Socket/provider and subprocess deadlines bound the fixture. No external provider, GitHub publication, inherited provider credentials, heavy sensor or CI request is authorized by this receipt."
+created = "2026-10-18"
+review_after = "2027-01-18"

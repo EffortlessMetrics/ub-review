@@ -537,6 +537,10 @@ pub(crate) fn run_available_model_lanes_with_runner(
                             "completed".to_owned()
                         };
                     }
+                    receipt.semantic_state = Some(LaneSemanticState::from_output(
+                        &outcome.output,
+                        &sha256_hex(context.shared_context.as_bytes()),
+                    )?);
                     receipt.duration_ms = Some(outcome.duration_ms);
                     receipt.http_status = outcome.http_status;
                     receipt.response_shape = Some(outcome.response_shape.clone());

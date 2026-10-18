@@ -190,6 +190,7 @@ pub(crate) fn build_model_lane_receipts(
                 }
             };
             ModelLaneReceipt {
+                semantic_state: None,
                 lane: assignment.lane.id.clone(),
                 provider: spec.provider.key().to_owned(),
                 model: spec.model.clone(),

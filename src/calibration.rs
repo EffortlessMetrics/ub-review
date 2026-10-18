@@ -473,6 +473,7 @@ mod tests {
         let review_dir = temp.path().join("review");
         std::fs::create_dir_all(&review_dir)?;
         let receipt = crate::ModelLaneReceipt {
+            semantic_state: None,
             lane: "tests-red-green".to_owned(),
             provider: "minimax".to_owned(),
             model: "MiniMax-M3".to_owned(),
@@ -586,6 +587,7 @@ mod tests {
             reason: "test does not discriminate".to_owned(),
         };
         let lane_receipt = crate::ModelLaneReceipt {
+            semantic_state: None,
             lane: "tests-red-green".to_owned(),
             provider: "minimax".to_owned(),
             model: "MiniMax-M3".to_owned(),
@@ -643,6 +645,7 @@ mod tests {
         let review_dir = temp.path().join("review");
         std::fs::create_dir_all(&review_dir)?;
         let lane = crate::ModelLaneReceipt {
+            semantic_state: None,
             lane: "correctness".to_owned(),
             provider: "minimax".to_owned(),
             model: "MiniMax-M3".to_owned(),
@@ -691,6 +694,7 @@ mod tests {
         std::fs::create_dir_all(&review_dir)?;
         // A lane with no thread_id (preflight only, model_mode=off)
         let lane = crate::ModelLaneReceipt {
+            semantic_state: None,
             lane: "correctness".to_owned(),
             provider: "minimax".to_owned(),
             model: "MiniMax-M3".to_owned(),
@@ -738,6 +742,7 @@ mod tests {
         let review_dir = temp.path().join("review");
         std::fs::create_dir_all(&review_dir)?;
         let lane = crate::ModelLaneReceipt {
+            semantic_state: None,
             lane: "tests-red-green".to_owned(),
             provider: "minimax".to_owned(),
             model: "MiniMax-M3".to_owned(),

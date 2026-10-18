@@ -74,6 +74,7 @@ pub(crate) fn run_refuter_pass(
         None,
     );
     let mut receipt = ModelLaneReceipt {
+        semantic_state: None,
         lane: "refuter".to_owned(),
         provider: spec.provider.key().to_owned(),
         model: spec.model.clone(),
@@ -329,7 +330,7 @@ fn run_lane_continuation_turn(
     let prompt = lane_continuation_prompt(
         &lane_receipt.lane,
         "specialist reviewer",
-        &lane_receipt.reason,
+        &lane_receipt.semantic_conclusion(),
         question,
         reporter_distillation,
         &proof_excerpts,
@@ -643,7 +644,9 @@ pub(crate) fn run_reporter_coordination(
                 LaneDigest {
                     lane: r.lane.clone(),
                     status: r.status.clone(),
-                    conclusion: revised.unwrap_or(&r.reason).to_owned(),
+                    conclusion: revised
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| r.semantic_conclusion()),
                     thread_id: r.thread_id.clone(),
                     internal_audit: read_internal_audit(review_dir, &r.lane),
                 }
@@ -961,7 +964,7 @@ pub(crate) fn run_receipt_reconsiderations(
         let Some(lane) = model_lanes.iter().find(|lane| lane.lane == lane_id) else {
             continue;
         };
-        let prior_conclusion = lane.reason.clone();
+        let prior_conclusion = lane.semantic_conclusion();
         let prompt = receipt_reconsideration_prompt(&lane_id, &prior_conclusion, &lane_receipts);
         let turn = next_lane_turn_number(review_dir, &lane_id);
         let lane_dir = review_dir
@@ -1115,7 +1118,14 @@ fn apply_lane_reconsideration_update(
         return;
     }
     if let Some(lane) = model_lanes.iter_mut().find(|lane| lane.lane == lane_id) {
-        lane.reason = reconsideration.conclusion.clone();
+        lane.semantic_state = Some(LaneSemanticState {
+            shared_prefix_hash: lane.shared_prefix_hash.clone(),
+            conclusion: serde_json::json!({
+                "prior_semantic_state": lane.semantic_conclusion(),
+                "request_scoped_reconsideration": reconsideration,
+                "limits": "This update applies only to the named request IDs; preserve other specialist evidence."
+            }).to_string(),
+        });
         lane.turn = turn;
     }
 }
@@ -2272,6 +2282,7 @@ mod receipt_reconsideration_tests {
 
     fn lane_receipt(reason: &str, turn: u32) -> ModelLaneReceipt {
         ModelLaneReceipt {
+            semantic_state: None,
             lane: "tests-oracle".to_owned(),
             provider: "minimax".to_owned(),
             model: "MiniMax-M3".to_owned(),
@@ -2284,7 +2295,7 @@ mod receipt_reconsideration_tests {
             fallback_from: None,
             cache_usage: ModelCacheUsage::default(),
             cohort_id: String::new(),
-            shared_prefix_hash: String::new(),
+            shared_prefix_hash: "review-head".to_owned(),
             thread_id: String::new(),
             turn,
             cohort_broken: false,
@@ -2293,7 +2304,11 @@ mod receipt_reconsideration_tests {
 
     #[test]
     fn unchanged_reconsideration_preserves_lane_audit_state() -> Result<()> {
-        let mut lanes = vec![lane_receipt("prior conclusion", 2)];
+        let mut lanes = vec![lane_receipt("completed", 2)];
+        lanes[0].semantic_state = Some(LaneSemanticState {
+            shared_prefix_hash: lanes[0].shared_prefix_hash.clone(),
+            conclusion: "two independent claims: boundary defect and lifetime defect".to_owned(),
+        });
         let unchanged = ReceiptReconsideration {
             lane: "tests-oracle".to_owned(),
             receipt_ids: vec!["receipt-1".to_owned()],
@@ -2303,7 +2318,7 @@ mod receipt_reconsideration_tests {
             changed: false,
         };
         apply_lane_reconsideration_update(&mut lanes, "tests-oracle", &unchanged, 3);
-        anyhow::ensure!(lanes[0].reason == "prior conclusion");
+        anyhow::ensure!(lanes[0].reason == "completed");
         anyhow::ensure!(lanes[0].turn == 2);
 
         let mut changed = unchanged;
@@ -2311,7 +2326,14 @@ mod receipt_reconsideration_tests {
         changed.disposition = "confirm".to_owned();
         changed.conclusion = "proof confirms the claim".to_owned();
         apply_lane_reconsideration_update(&mut lanes, "tests-oracle", &changed, 3);
-        anyhow::ensure!(lanes[0].reason == "proof confirms the claim");
+        anyhow::ensure!(lanes[0].reason == "completed");
+        anyhow::ensure!(
+            lanes[0]
+                .semantic_conclusion()
+                .contains("proof confirms the claim")
+        );
+        anyhow::ensure!(lanes[0].semantic_conclusion().contains("lifetime defect"));
+        anyhow::ensure!(lanes[0].semantic_conclusion().contains("claim-1"));
         anyhow::ensure!(lanes[0].turn == 3);
         Ok(())
     }

@@ -30,6 +30,7 @@ pub(crate) fn run_proof_planner_model_lane(
     let lane = assignment.lane.clone();
     let mut spec = assignment.spec.clone();
     let mut receipt = ModelLaneReceipt {
+        semantic_state: None,
         lane: lane.id.clone(),
         provider: spec.provider.key().to_owned(),
         model: spec.model.clone(),
@@ -42,7 +43,7 @@ pub(crate) fn run_proof_planner_model_lane(
         fallback_from: None,
         cache_usage: ModelCacheUsage::default(),
         cohort_id: String::new(),
-        shared_prefix_hash: String::new(),
+        shared_prefix_hash: sha256_hex(context.shared_context.as_bytes()),
         thread_id: String::new(),
         turn: 0,
         cohort_broken: false,
@@ -145,6 +146,10 @@ pub(crate) fn run_proof_planner_model_lane(
                 receipt.status = "ok".to_owned();
                 receipt.reason = "completed".to_owned();
             }
+            receipt.semantic_state = Some(LaneSemanticState::from_output(
+                &outcome.output,
+                &receipt.shared_prefix_hash,
+            )?);
             receipt.duration_ms = Some(outcome.duration_ms);
             receipt.http_status = outcome.http_status;
             receipt.response_shape = Some(outcome.response_shape);
@@ -244,6 +249,7 @@ mod tests {
         let model_dir = root.path().join("model");
         std::fs::write(&model_dir, "directory collision")?;
         let mut receipt = ModelLaneReceipt {
+            semantic_state: None,
             lane: "proof-planner".to_owned(),
             provider: "test".to_owned(),
             model: "test".to_owned(),

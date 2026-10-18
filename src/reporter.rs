@@ -204,7 +204,7 @@ pub(crate) fn lane_digests_from_receipts(
         .map(|r| LaneDigest {
             lane: r.lane.clone(),
             status: r.status.clone(),
-            conclusion: r.reason.clone(),
+            conclusion: r.semantic_conclusion(),
             thread_id: r.thread_id.clone(),
             internal_audit: read_internal_audit(review_dir, &r.lane),
         })
@@ -850,6 +850,7 @@ mod tests {
     #[test]
     fn lane_digests_skip_unexecuted_lanes() -> Result<()> {
         let mut receipt = crate::ModelLaneReceipt {
+            semantic_state: None,
             lane: "x".to_owned(),
             provider: "minimax".to_owned(),
             model: "M3".to_owned(),
@@ -892,6 +893,7 @@ mod tests {
             },
         )?;
         let receipt = crate::ModelLaneReceipt {
+            semantic_state: None,
             lane: "foo.bar".to_owned(),
             provider: "minimax".to_owned(),
             model: "M3".to_owned(),

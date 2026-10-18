@@ -73,7 +73,11 @@ mod impact_plan;
 pub(crate) use impact_plan::*;
 mod model_api;
 pub(crate) use model_api::*;
+mod lane_semantics;
+use lane_semantics::*;
 mod model_exec;
+#[cfg(test)]
+mod semantic_preservation_tests;
 pub(crate) use model_exec::*;
 mod validate;
 pub(crate) use validate::*;
@@ -2588,6 +2592,8 @@ struct FollowUpResultMetrics {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct ModelLaneReceipt {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    semantic_state: Option<LaneSemanticState>,
     lane: String,
     provider: String,
     model: String,
@@ -2752,6 +2758,7 @@ mod cohort_contract_tests {
     #[test]
     fn model_lane_receipt_round_trips_and_back_compat() -> Result<()> {
         let receipt = ModelLaneReceipt {
+            semantic_state: None,
             lane: "tests-oracle".to_owned(),
             provider: "minimax".to_owned(),
             model: "MiniMax-M3".to_owned(),
@@ -3397,7 +3404,7 @@ impl InternalAudit {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct ModelCandidateComment {
     severity: String,
     confidence: String,
@@ -3409,7 +3416,7 @@ struct ModelCandidateComment {
     suggestion: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct ModelCandidateFinding {
     severity: String,
     confidence: String,
@@ -3417,7 +3424,7 @@ struct ModelCandidateFinding {
     evidence: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct ModelCandidateObservation {
     claim: String,
     #[serde(default)]
@@ -3452,7 +3459,7 @@ struct ModelFailedObjection {
     kind: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct ModelProofRequest {
     command: String,
     reason: String,
@@ -3464,7 +3471,7 @@ struct ModelProofRequest {
     required: Option<bool>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct ModelProofIntent {
     claim_id: String,
     question: String,
@@ -5386,7 +5393,7 @@ fn write_review_artifacts(
                 let turn = primary_turn(
                     &receipt.thread_id,
                     &receipt.lane,
-                    &receipt.reason,
+                    &receipt.semantic_conclusion(),
                     routed,
                     &receipt_ref,
                 );
@@ -5411,7 +5418,7 @@ fn write_review_artifacts(
                     vec![turn_ref.clone()],
                     serde_json::json!({
                         "status": receipt.status,
-                        "conclusion": receipt.reason,
+                        "conclusion": receipt.semantic_conclusion(),
                         "cohort_id": receipt.cohort_id,
                     }),
                 ) {
@@ -24263,6 +24270,7 @@ index 1111111..2222222 100644
 
     fn model_lane_receipt(lane: &str, status: &str) -> super::ModelLaneReceipt {
         super::ModelLaneReceipt {
+            semantic_state: None,
             lane: lane.to_owned(),
             provider: "minimax".to_owned(),
             model: "MiniMax-M3".to_owned(),
