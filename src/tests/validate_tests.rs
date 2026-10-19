@@ -1399,33 +1399,6 @@ mod independent_leading_b_path_controls {
         )
     }
 
-    fn review(path: &str) -> GitHubReview {
-        GitHubReview {
-            event: "COMMENT".to_owned(),
-            body: "The pointer consumption requires a validity guard.".to_owned(),
-            comments: vec![GitHubReviewComment {
-                path: path.to_owned(),
-                line: 2,
-                side: "RIGHT".to_owned(),
-                body: "[tests] Guard pointer validity before consuming it.".to_owned(),
-                suggestion: Some("    consume_checked(ptr)?;".to_owned()),
-            }],
-        }
-    }
-
-    fn post_args(root: &Path, diff_patch: PathBuf) -> PostArgs {
-        PostArgs {
-            review_json: root.join("review/github-review.json"),
-            diff_patch: Some(diff_patch),
-            out: root.join("post"),
-            github_token: None,
-            repo: None,
-            pull_number: None,
-            github_api_url: "https://api.github.invalid".to_owned(),
-            fail_on_post_error: true,
-        }
-    }
-
     #[test]
     fn independent_path_controls_diff_prefix_removed_once_and_real_b_preserved() {
         for path in ["module.rs", "b/module.rs", "b/b/module.rs"] {
@@ -1449,17 +1422,42 @@ mod independent_leading_b_path_controls {
             let temp = tempfile::tempdir()?;
             let diff_patch = temp.path().join("diff.patch");
             fs::write(&diff_patch, patch(real))?;
-            let args = post_args(temp.path(), diff_patch);
-            let positive = review(real);
-            assert_eq!(positive.comments.len(), 1);
-            validate_github_review_payload_for_post(&args, &positive)?;
-            let invalid = review(alias);
+            let args = PostArgs {
+                review_json: temp.path().join("review/github-review.json"),
+                diff_patch: Some(diff_patch),
+                out: temp.path().join("post"),
+                github_token: None,
+                repo: None,
+                pull_number: None,
+                github_api_url: "https://api.github.invalid".to_owned(),
+                fail_on_post_error: true,
+            };
+            let mut review = GitHubReview {
+                event: "COMMENT".to_owned(),
+                body: "The pointer consumption requires a validity guard.".to_owned(),
+                comments: vec![GitHubReviewComment {
+                    path: real.to_owned(),
+                    line: 2,
+                    side: "RIGHT".to_owned(),
+                    body: "[tests] Guard pointer validity before consuming it.".to_owned(),
+                    suggestion: Some("    consume_checked(ptr)?;".to_owned()),
+                }],
+            };
+            assert_eq!(review.comments.len(), 1);
+            validate_github_review_payload_for_post(&args, &review)?;
+            // Keep the already validated body, line, side and suggestion;
+            // only its path changes for the nonempty negative control.
+            review
+                .comments
+                .first_mut()
+                .context("positive control comment missing")?
+                .path = alias.to_owned();
             assert_eq!(
-                invalid.comments.len(),
+                review.comments.len(),
                 1,
                 "negative control must remain nonempty"
             );
-            let error = validate_github_review_payload_for_post(&args, &invalid)
+            let error = validate_github_review_payload_for_post(&args, &review)
                 .err()
                 .ok_or_else(|| {
                     anyhow::anyhow!("wrong alias {alias} passed for diff path {real}")
