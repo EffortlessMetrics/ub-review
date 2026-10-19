@@ -493,6 +493,10 @@ mod run_boundary_tests {
             .context("calibration cleanup lost its I/O cause")?;
         assert_ne!(cause.kind(), std::io::ErrorKind::NotFound);
         assert!(cause.raw_os_error().is_some());
+        // Linux reports a directory passed to unlink as IsADirectory. Preserve
+        // that native cause rather than replacing it with another OS error.
+        #[cfg(target_os = "linux")]
+        assert_eq!(cause.kind(), std::io::ErrorKind::IsADirectory);
         assert_eq!(
             fs::read_to_string(calibration.join("retained"))?,
             "invalid calibration destination"
@@ -531,6 +535,8 @@ mod run_boundary_tests {
             .context("message cleanup lost its I/O cause")?;
         assert_ne!(cause.kind(), std::io::ErrorKind::NotFound);
         assert!(cause.raw_os_error().is_some());
+        #[cfg(target_os = "linux")]
+        assert_eq!(cause.kind(), std::io::ErrorKind::IsADirectory);
         assert!(!review.join("calibration.json").exists());
         assert_eq!(
             fs::read_to_string(messages.join("retained"))?,
@@ -567,6 +573,8 @@ mod run_boundary_tests {
             .context("thread cleanup lost its I/O cause")?;
         assert_ne!(cause.kind(), std::io::ErrorKind::NotFound);
         assert!(cause.raw_os_error().is_some());
+        #[cfg(target_os = "linux")]
+        assert_eq!(cause.kind(), std::io::ErrorKind::NotADirectory);
         assert!(!review.join("calibration.json").exists());
         assert!(!review.join("messages.ndjson").exists());
         assert_eq!(
