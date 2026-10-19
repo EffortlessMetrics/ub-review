@@ -274,8 +274,9 @@ pub(crate) fn command_version_matches(actual: &str, expected: &str) -> bool {
             .then_some(version)
     }
 
-    let mut parts =
-        actual.split(|ch: char| ch.is_whitespace() || matches!(ch, ',' | ';' | '(' | ')'));
+    let mut parts = actual
+        .split(|ch: char| ch.is_whitespace() || matches!(ch, ',' | ';' | '(' | ')'))
+        .filter(|part| !part.is_empty());
     let Some(first) = parts.next() else {
         return false;
     };
@@ -290,12 +291,13 @@ pub(crate) fn command_version_matches(actual: &str, expected: &str) -> bool {
     let Some(second) = parts.next() else {
         return false;
     };
-    let candidate =
-        if first.eq_ignore_ascii_case("version") || second.eq_ignore_ascii_case("version") {
-            parts.next()
-        } else {
-            Some(second)
-        };
+    let candidate = if first.eq_ignore_ascii_case("version") {
+        Some(second)
+    } else if second.eq_ignore_ascii_case("version") {
+        parts.next()
+    } else {
+        Some(second)
+    };
     candidate.and_then(numeric_version) == Some(expected)
 }
 
@@ -334,6 +336,9 @@ mod version_tests {
             ("ripr 0.10.0 (build 123)", "0.10.0"),
             ("unsafe-review 0.3.4", "0.3.4"),
             ("actionlint version v1.7.12", "1.7.12"),
+            ("version v1.7.12", "1.7.12"),
+            ("tool version 1.7.12", "1.7.12"),
+            ("ripr  0.10.0", "0.10.0"),
             ("v0.10.0", "0.10.0"),
         ] {
             assert!(command_version_matches(actual, expected), "{actual}");
@@ -353,6 +358,7 @@ mod version_tests {
             "ripr unknown (compatible with 0.10.0)",
             "ripr unavailable (built for 0.10.0)",
             "ripr version unknown; expected 0.10.0",
+            "version 0.9.9; 0.10.0",
             // Numeric text in unrelated leading metadata cannot stand in for a version.
             "ripr build 0.10.0; version unknown",
             "ripr ABI 0.10.0, version unavailable",
