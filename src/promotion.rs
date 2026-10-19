@@ -705,6 +705,70 @@ mod tests {
     }
 
     #[test]
+    fn collect_calibrations_rejects_unknown_schema_in_mixed_history() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let valid_dir = temp.path().join("supported/review");
+        let unknown_dir = temp.path().join("nested/unsupported/review");
+        fs::create_dir_all(&valid_dir)?;
+        fs::create_dir_all(&unknown_dir)?;
+        fs::write(
+            valid_dir.join("calibration.json"),
+            serde_json::to_vec(&fixture("expected-quiet", false, None))?,
+        )?;
+        let path = unknown_dir.join("calibration.json");
+        for schema in [
+            "ub-review.calibration.v999",
+            "UB-REVIEW.calibration.v0",
+            "ub-review.quality_receipt.v1",
+            "",
+        ] {
+            let mut cal = fixture("infra-excluded", true, Some("false-positive"));
+            cal.schema = schema.to_owned();
+            fs::write(&path, serde_json::to_vec(&cal)?)?;
+            let error = collect_calibrations(temp.path())
+                .err()
+                .context("unsupported schema must not silently disappear from history")?;
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "{} has schema `{schema}` (expected `ub-review.calibration.v0`); cannot interpret",
+                    path.display()
+                )
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn collect_calibrations_keeps_legacy_optional_fields_and_stable_order() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        for run in ["z-last", "nested/a-first"] {
+            let dir = temp.path().join(run).join("review");
+            fs::create_dir_all(&dir)?;
+            let mut value = serde_json::to_value(fixture("expected-quiet", false, None))?;
+            let object = value.as_object_mut().context("fixture must be an object")?;
+            object.remove("notable_events");
+            object.insert("additive_context".to_owned(), serde_json::json!(true));
+            fs::write(dir.join("calibration.json"), serde_json::to_vec(&value)?)?;
+        }
+        let found = collect_calibrations(temp.path())?;
+        assert_eq!(found.len(), 2);
+        assert_eq!(
+            found
+                .iter()
+                .map(|(path, _)| path.clone())
+                .collect::<Vec<_>>(),
+            ["nested/a-first", "z-last"]
+                .map(|run| temp.path().join(run).join("review/calibration.json"))
+        );
+        for (_, cal) in &found {
+            assert!(cal.notable_events.is_empty());
+            assert_eq!(cal.classification.suggested_class, "expected-quiet");
+        }
+        Ok(())
+    }
+
+    #[test]
     fn cmd_status_prints_notable_events() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let mut cal = fixture("proof-changed-conclusion", false, None);
