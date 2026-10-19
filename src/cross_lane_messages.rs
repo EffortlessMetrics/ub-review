@@ -103,6 +103,11 @@ impl MessageLog {
         references: Vec<String>,
         payload: serde_json::Value,
     ) -> Result<u64> {
+        let mut file = self
+            .file
+            .lock()
+            .map_err(|_| anyhow::anyhow!("message log mutex poisoned"))?;
+        // Allocate while holding the append lock so disk and sequence order agree.
         let seq = self.seq.fetch_add(1, Ordering::SeqCst);
         let msg = CrossLaneMessage {
             schema: CROSS_LANE_MESSAGE_SCHEMA.to_owned(),
@@ -115,10 +120,6 @@ impl MessageLog {
             references,
             payload,
         };
-        let mut file = self
-            .file
-            .lock()
-            .map_err(|_| anyhow::anyhow!("message log mutex poisoned"))?;
         serde_json::to_writer(&mut *file, &msg)?;
         writeln!(&mut *file)?;
         Ok(seq)
