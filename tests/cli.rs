@@ -1369,14 +1369,20 @@ fn calibration_guidance_rejects_unsupported_runs_without_changing_thresholds() -
             serde_json::to_vec(&supported)?,
         )?;
     }
-    for command in ["recommend", "promote"] {
+    for (command, chosen_mode) in [
+        ("recommend", "Recommended mode: strict (strict)"),
+        ("promote", "Target mode:          strict (strict)"),
+    ] {
         let output = Command::new(bin)
             .args([command, "--runs-dir"])
             .arg(&runs)
             .output()?;
         assert!(output.status.success(), "{command}: {:?}", output.stderr);
         let stdout = String::from_utf8(output.stdout)?;
-        assert!(stdout.contains("strict"), "{command}: {stdout}");
+        assert!(
+            stdout.lines().any(|line| line == chosen_mode),
+            "{command}: {stdout}"
+        );
         assert!(stdout.contains("5 runs"), "{command}: {stdout}");
     }
 
@@ -1419,7 +1425,10 @@ fn calibration_guidance_rejects_unsupported_runs_without_changing_thresholds() -
     // denominator and prevent a strict recommendation using existing rules.
     extra["schema"] = serde_json::json!("ub-review.calibration.v0");
     fs::write(extra_path, serde_json::to_vec(&extra)?)?;
-    for command in ["recommend", "promote"] {
+    for (command, chosen_mode) in [
+        ("recommend", "Recommended mode: advisory (advisory)"),
+        ("promote", "Target mode:          advisory (advisory)"),
+    ] {
         let output = Command::new(bin)
             .args([command, "--runs-dir"])
             .arg(&runs)
@@ -1428,7 +1437,10 @@ fn calibration_guidance_rejects_unsupported_runs_without_changing_thresholds() -
         let stdout = String::from_utf8(output.stdout)?;
         assert!(stdout.contains("6 runs"), "{command}: {stdout}");
         assert!(stdout.contains("16.7%"), "{command}: {stdout}");
-        assert!(stdout.contains("advisory"), "{command}: {stdout}");
+        assert!(
+            stdout.lines().any(|line| line == chosen_mode),
+            "{command}: {stdout}"
+        );
     }
     Ok(())
 }
