@@ -4532,6 +4532,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
     apply_runtime_profile_limits(&mut args, profile)?;
     let selected_model_lanes = selected_review_lanes_for_args(&plan, &args)?;
     print_plan(&plan, &box_state);
+    calibration::prepare_calibration_run(&args.review.out)?;
     write_plan_artifacts(
         &args.review.out,
         &config,

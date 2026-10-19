@@ -13,12 +13,40 @@
 //! If both stay near zero, ub-review is mostly an expensive review bot. If
 //! they are consistently positive, ub-review is doing something distinctive.
 
+use std::fs;
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::artifacts::CALIBRATION_SCHEMA;
+
+/// Replace one output directory's calibration inputs when a new run is
+/// admitted. Thread turns and messages span this run's waves, never invocations.
+/// Remove the old result first so an interrupted reset cannot expose it beside
+/// partially replaced inputs. Completed packets in other directories stay intact.
+pub(crate) fn prepare_calibration_run(out: &Path) -> Result<()> {
+    let review_dir = out.join("review");
+    for name in ["calibration.json", "messages.ndjson"] {
+        let path = review_dir.join(name);
+        match fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!("clear previous calibration input {}", path.display())
+                });
+            }
+        }
+    }
+    let threads = review_dir.join("threads");
+    match fs::remove_dir_all(&threads) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error)
+            .with_context(|| format!("clear previous calibration threads {}", threads.display())),
+    }
+}
 
 /// Read `review/messages.ndjson` into a `Vec<CrossLaneMessage>`.
 pub(crate) fn read_messages_ndjson(review_dir: &Path) -> Vec<crate::CrossLaneMessage> {
@@ -335,6 +363,135 @@ pub(crate) fn read_turn_file(lane_dir: &Path, filename: &str) -> Option<crate::L
     let path = lane_dir.join(filename);
     let bytes = std::fs::read(&path).ok()?;
     serde_json::from_slice(&bytes).ok()
+}
+
+#[cfg(test)]
+mod run_boundary_tests {
+    use super::*;
+
+    #[test]
+    fn reset_clears_only_previous_inputs_and_preserves_current_wave_messages() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("retry");
+        let review = out.join("review");
+        let saved = temp.path().join("completed/review");
+        fs::create_dir_all(review.join("threads/old-lane"))?;
+        fs::create_dir_all(review.join("model"))?;
+        fs::create_dir_all(&saved)?;
+        write_calibration_artifact(
+            &saved,
+            &[],
+            &[],
+            &[],
+            &[],
+            0,
+            0,
+            "pass",
+            "review-byok",
+            "base",
+            "head",
+        )?;
+        let completed = fs::read(saved.join("calibration.json"))?;
+        fs::write(review.join("calibration.json"), &completed)?;
+        fs::write(review.join("messages.ndjson"), "cancelled messages")?;
+        fs::write(
+            review.join("threads/old-lane/turn-001.json"),
+            "cancelled turn",
+        )?;
+        for path in [
+            out.join("events.ndjson"),
+            review.join("resolved_candidates.json"),
+            review.join("model/content.json"),
+        ] {
+            fs::write(path, "preserved history")?;
+        }
+        prepare_calibration_run(&out)?;
+        assert!(!review.join("calibration.json").exists());
+        assert!(!review.join("messages.ndjson").exists());
+        assert!(!review.join("threads").exists());
+        assert_eq!(fs::read(saved.join("calibration.json"))?, completed);
+        let loaded = crate::promotion::load_calibration(&temp.path().join("completed"))?;
+        assert_eq!(loaded.head, "head");
+        for path in [
+            out.join("events.ndjson"),
+            review.join("resolved_candidates.json"),
+            review.join("model/content.json"),
+        ] {
+            assert_eq!(fs::read_to_string(path)?, "preserved history");
+        }
+
+        // One writer remains append-only across the current run's waves.
+        let log = crate::MessageLog::open(&review.join("messages.ndjson"))?;
+        assert_eq!(
+            log.append(
+                crate::CrossLaneMessageKind::ReporterQuestion,
+                "reporter",
+                "correctness",
+                0,
+                vec![],
+                serde_json::json!({"question": "current question"})
+            )?,
+            0
+        );
+        assert_eq!(
+            log.append(
+                crate::CrossLaneMessageKind::LaneAnswer,
+                "correctness",
+                "reporter",
+                1,
+                vec![],
+                serde_json::json!({"answer": "current answer"})
+            )?,
+            1
+        );
+        let messages = read_messages_ndjson(&review);
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].payload["question"], "current question");
+        assert_eq!(messages[1].payload["answer"], "current answer");
+        let fresh = build_calibration(
+            &review,
+            &[],
+            &[],
+            &[],
+            &messages,
+            0,
+            0,
+            "pass",
+            "review-byok",
+            "base",
+            "head",
+        );
+        assert_eq!(fresh.counts.messages, 2);
+        assert_eq!(fresh.counts.reporter_questions, 1);
+        assert_eq!(fresh.counts.proof_receipts_routed, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn reset_invalidates_completed_result_before_fallible_thread_cleanup() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review = temp.path().join("review");
+        fs::create_dir_all(&review)?;
+        fs::write(review.join("calibration.json"), "previous completed result")?;
+        fs::write(review.join("messages.ndjson"), "previous messages")?;
+        // A regular file cannot be recursively removed as a thread directory.
+        fs::write(review.join("threads"), "unusable thread destination")?;
+        let error = prepare_calibration_run(temp.path())
+            .err()
+            .context("invalid thread destination unexpectedly accepted")?;
+        assert!(
+            error
+                .to_string()
+                .contains("clear previous calibration threads")
+        );
+        assert!(!review.join("calibration.json").exists());
+        assert!(!review.join("messages.ndjson").exists());
+        assert_eq!(
+            fs::read_to_string(review.join("threads"))?,
+            "unusable thread destination"
+        );
+        Ok(())
+    }
 }
 
 #[cfg(test)]

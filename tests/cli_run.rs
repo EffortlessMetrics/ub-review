@@ -10,6 +10,138 @@ mod common;
 use common::*;
 
 #[test]
+fn fresh_run_replaces_interrupted_calibration_without_losing_completed_history() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+    let out = temp.path().join("packet");
+    let history = temp.path().join("history/completed");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let args = [
+        "run",
+        "--dry-run",
+        "--config",
+        path_str(&config)?,
+        "--root",
+        path_str(&repo)?,
+        "--base",
+        "HEAD~1",
+        "--head",
+        "HEAD",
+        "--out",
+        path_str(&out)?,
+        "--no-github-summary",
+        "--model-mode",
+        "off",
+        "--lanes",
+        "correctness",
+        "--tools",
+        "cargo-allow",
+    ];
+    run(temp.path(), bin, &args)?;
+    let calibration_path = out.join("review/calibration.json");
+    let completed = fs::read(&calibration_path)?;
+    let baseline: serde_json::Value = serde_json::from_slice(&completed)?;
+    assert_eq!(baseline["counts"]["messages"], 1);
+    assert_eq!(baseline["counts"]["reporter_questions"], 0);
+    fs::create_dir_all(history.join("review"))?;
+    fs::write(history.join("review/calibration.json"), &completed)?;
+    run(
+        temp.path(),
+        bin,
+        &["status", "--run-dir", path_str(&history)?],
+    )?;
+
+    // An invocation rejected before admission must not replace a completed run.
+    let mut invalid = args.to_vec();
+    invalid.extend(["--profile", "missing-calibration-profile"]);
+    run_expect_failure(temp.path(), bin, &invalid)?;
+    assert_eq!(fs::read(&calibration_path)?, completed);
+
+    // Literal partial artifacts from the cancelled reporter/continuation seam.
+    // There is no final receipt granting these inputs to a new invocation.
+    let messages = [
+        serde_json::json!({
+            "schema": "ub-review.cross_lane_message.v1", "seq": 0,
+            "ts": "2026-10-19T00:00:00Z", "kind": "reporter_question",
+            "from": "reporter", "to": "correctness", "turn": 0,
+            "references": [], "payload": {"question": "cancelled-question-canary"}
+        }),
+        serde_json::json!({
+            "schema": "ub-review.cross_lane_message.v1", "seq": 1,
+            "ts": "2026-10-19T00:00:00Z", "kind": "lane_answer",
+            "from": "correctness", "to": "reporter", "turn": 1,
+            "references": ["review/threads/correctness/turn-001.json"],
+            "payload": {"answer": "cancelled-answer-canary"}
+        }),
+    ];
+    let old_messages = messages
+        .iter()
+        .map(serde_json::to_string)
+        .collect::<Result<Vec<_>, _>>()?
+        .join("\n")
+        + "\n";
+    fs::write(out.join("review/messages.ndjson"), old_messages)?;
+    for (turn, summary) in [(0, "before-cancelled-proof"), (1, "after-cancelled-proof")] {
+        let thread = serde_json::json!({
+            "schema": "ub-review.lane_thread.v1", "thread_id": "cancelled-thread",
+            "turn": turn, "stage": "follow-up", "prompt_packet_path": "lanes/correctness.md",
+            "response_summary": summary, "routed_evidence_refs": ["proof:cancelled"],
+            "receipt_ref": "review/model/correctness/content.json"
+        });
+        write_file(
+            &out.join(format!("review/threads/correctness/turn-{turn:03}.json")),
+            &serde_json::to_string(&thread)?,
+        )?;
+    }
+    run(temp.path(), bin, &args)?;
+    let recovered: serde_json::Value = serde_json::from_slice(&fs::read(&calibration_path)?)?;
+    assert_eq!(recovered["counts"]["lanes_executed"], 0);
+    assert_eq!(
+        recovered["counts"]["messages"], 1,
+        "cancelled messages entered the fresh calibration"
+    );
+    for name in [
+        "reporter_questions",
+        "proof_receipts_routed",
+        "lane_continuations",
+        "lane_conclusions_changed_by_proof",
+    ] {
+        assert_eq!(
+            recovered["counts"][name], 0,
+            "stale {name} survived the new run"
+        );
+    }
+    assert_eq!(recovered["notable_events"], serde_json::json!([]));
+    let fresh_messages = fs::read_to_string(out.join("review/messages.ndjson"))?;
+    assert_eq!(fresh_messages.lines().count(), 1);
+    let first: serde_json::Value = serde_json::from_str(&fresh_messages)?;
+    assert_eq!(first["seq"], 0);
+    assert!(!fresh_messages.contains("cancelled-"));
+    assert_eq!(
+        fs::read(history.join("review/calibration.json"))?,
+        completed
+    );
+    run(
+        temp.path(),
+        bin,
+        &["status", "--run-dir", path_str(&history)?],
+    )?;
+    run(
+        temp.path(),
+        bin,
+        &[
+            "recommend",
+            "--runs-dir",
+            path_str(&temp.path().join("history"))?,
+        ],
+    )?;
+    Ok(())
+}
+
+#[test]
 fn trusted_diff_run_uses_base_root_and_explicit_objects() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
