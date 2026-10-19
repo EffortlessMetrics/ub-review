@@ -165,20 +165,12 @@ pub(crate) fn absolute_path(path: &Path) -> PathBuf {
 }
 
 pub(crate) fn changed_paths_for_tokmd_context(root: &Path, plan: &Plan) -> Vec<String> {
-    git_lines(
-        root,
-        &[
-            "diff",
-            "--name-only",
-            &format!("{}...{}", plan.base, plan.head),
-        ],
-    )
-    .or_else(|_| git_lines(root, &["diff", "--name-only", &plan.base, &plan.head]))
-    .unwrap_or_default()
-    .into_iter()
-    .filter(|path| root.join(path).is_file())
-    .take(40)
-    .collect()
+    git_changed_paths(root, &plan.base, &plan.head)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|path| root.join(path).is_file())
+        .take(40)
+        .collect()
 }
 
 pub(crate) fn commands_json(commands: &[SensorSubcommand]) -> serde_json::Value {

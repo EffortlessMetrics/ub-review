@@ -247,9 +247,7 @@ pub(crate) fn print_plan(plan: &Plan, box_state: &BoxState) {
 impl DiffContext {
     pub(crate) fn from_git(root: &Path, base: &str, head: &str) -> Result<Self> {
         let range = format!("{base}...{head}");
-        let changed_files = git_lines(root, &["diff", "--name-only", &range])
-            .or_else(|_| git_lines(root, &["diff", "--name-only", base, head]))
-            .with_context(|| format!("git diff --name-only {range}"))?;
+        let changed_files = git_changed_paths(root, base, head)?;
         let patch = git_text(root, &["diff", "--patch", &range])
             .or_else(|_| git_text(root, &["diff", "--patch", base, head]))
             .unwrap_or_else(|_| String::new());
@@ -264,6 +262,19 @@ impl DiffContext {
             diff_class,
         })
     }
+}
+
+pub(crate) fn git_changed_paths(root: &Path, base: &str, head: &str) -> Result<Vec<String>> {
+    let range = format!("{base}...{head}");
+    let names = git_text(root, &["diff", "--name-only", "-z", &range])
+        .or_else(|_| git_text(root, &["diff", "--name-only", "-z", base, head]))
+        .with_context(|| format!("git diff --name-only -z {range}"))?;
+    // Git's ordinary name output is a quoted display format. NUL records
+    // preserve whitespace and escaped UTF-8 names as repository paths.
+    Ok(names
+        .split_terminator('\0')
+        .map(ToOwned::to_owned)
+        .collect())
 }
 
 pub(crate) fn git_lines(root: &Path, args: &[&str]) -> Result<Vec<String>> {
@@ -338,6 +349,21 @@ mod changed_path_tests {
             assert_eq!(actual, expected, "Git fixture changed");
             let diff = DiffContext::from_git(root, "HEAD~1", "HEAD")?;
             assert_eq!(diff.changed_files, expected, "quotePath={quote_path}");
+            let mut plan = crate::tests::test_plan(Vec::new());
+            assert_eq!(changed_paths_for_tokmd_context(root, &plan), expected);
+            // Tree objects cannot form a merge-base range; keep the existing
+            // two-endpoint fallback path byte-equivalent as well.
+            plan.base = "HEAD~1^{tree}".to_owned();
+            plan.head = "HEAD^{tree}".to_owned();
+            let fallback = DiffContext::from_git(root, &plan.base, &plan.head)?;
+            assert_eq!(fallback.changed_files, expected);
+            assert_eq!(fallback.patch, diff.patch);
+            assert_eq!(changed_paths_for_tokmd_context(root, &plan), expected);
+            assert!(
+                DiffContext::from_git(root, "HEAD", "HEAD")?
+                    .changed_files
+                    .is_empty()
+            );
         }
         Ok(())
     }
