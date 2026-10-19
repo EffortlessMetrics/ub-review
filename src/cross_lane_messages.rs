@@ -174,6 +174,68 @@ mod tests {
     }
 
     #[test]
+    fn concurrent_message_log_appends_preserve_sequence_order() -> Result<()> {
+        const WRITERS: usize = 8;
+        const MESSAGES_PER_WRITER: u32 = 64;
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("messages.ndjson");
+        let log = MessageLog::open(&path)?;
+        let start = std::sync::Barrier::new(WRITERS);
+        let mut returned = std::thread::scope(|scope| -> Result<Vec<_>> {
+            let mut handles = Vec::new();
+            for writer in 0..WRITERS {
+                let log = &log;
+                let start = &start;
+                handles.push(scope.spawn(move || -> Result<Vec<_>> {
+                    start.wait();
+                    let mut appended = Vec::new();
+                    for turn in 0..MESSAGES_PER_WRITER {
+                        let seq = log.append(
+                            CrossLaneMessageKind::LaneReport,
+                            &format!("writer-{writer}"),
+                            "reporter",
+                            turn,
+                            vec![],
+                            serde_json::json!({"writer": writer, "turn": turn}),
+                        )?;
+                        appended.push((seq, writer, turn));
+                    }
+                    Ok(appended)
+                }));
+            }
+            let mut appended = Vec::new();
+            for handle in handles {
+                appended.extend(
+                    handle
+                        .join()
+                        .map_err(|_| anyhow::anyhow!("message writer panicked"))??,
+                );
+            }
+            Ok(appended)
+        })?;
+        returned.sort_unstable();
+        let text = std::fs::read_to_string(&path)?;
+        let recorded = text
+            .lines()
+            .map(serde_json::from_str::<CrossLaneMessage>)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        assert_eq!(recorded.len(), WRITERS * MESSAGES_PER_WRITER as usize);
+        assert_eq!(recorded.len(), returned.len());
+        for (index, (message, (seq, writer, turn))) in recorded.iter().zip(returned).enumerate() {
+            assert_eq!(message.seq, index as u64, "physical append order");
+            assert_eq!(message.seq, seq, "returned sequence identifies its record");
+            assert_eq!(message.kind, CrossLaneMessageKind::LaneReport);
+            assert_eq!(message.from, format!("writer-{writer}"));
+            assert_eq!(message.turn, turn);
+            assert_eq!(
+                message.payload,
+                serde_json::json!({"writer": writer, "turn": turn})
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn message_kind_serializes_snake_case() -> Result<()> {
         // Pin the on-wire kind names the reporter (Order 9) will match on.
         let wire = serde_json::to_string(&CrossLaneMessageKind::LaneReport)?;
