@@ -54,12 +54,9 @@ fn collect_calibrations_inner(
 ) -> Result<()> {
     let cal_path = dir.join("review").join("calibration.json");
     if cal_path.is_file() {
-        let bytes = fs::read(&cal_path).with_context(|| format!("read {}", cal_path.display()))?;
-        let artifact: CalibrationArtifact = serde_json::from_slice(&bytes)
-            .with_context(|| format!("parse {}", cal_path.display()))?;
-        if artifact.schema == CALIBRATION_SCHEMA {
-            out.push((cal_path, artifact));
-        }
+        // Reject incompatible runs before aggregation rather than quietly
+        // recommending a mode from a smaller, potentially biased sample.
+        out.push((cal_path, load_calibration(dir)?));
     }
     let Ok(entries) = fs::read_dir(dir) else {
         return Ok(());
