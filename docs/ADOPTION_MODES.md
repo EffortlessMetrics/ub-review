@@ -137,10 +137,11 @@ ub-review promote --runs-dir <dir>
 
 A new admitted `run` replaces the calibration at its `--out` directory, including
 human labels, messages, and thread turns from an earlier invocation. Save completed
-packets in separate run directories for reuse by these commands. A rejected run
-request preserves the existing packet; an interrupted admitted run has no completed
-calibration until it finishes. Messages and continuation turns remain available
-across every wave within the current invocation.
+packets in separate run directories for reuse by these commands. A run rejected
+before admission preserves the existing packet. Once an admitted run begins, the
+previous calibration is unavailable; a new calibration appears only when recomputed
+for the current invocation. Messages and continuation turns remain available across
+every wave within that invocation.
 
 Their calibration-based suggestions are not branch-protection or release
 permissions. A sample-size threshold, low reported noise, or one acted-on
