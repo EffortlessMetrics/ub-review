@@ -267,9 +267,13 @@ pub(crate) fn doctor_tool_version_fix(tool_id: &str, expected: &str) -> String {
 }
 
 pub(crate) fn command_version_matches(actual: &str, expected: &str) -> bool {
+    // Compare the reported version, not a later compatibility/build reference.
+    // This is only a text compatibility check, not executable provenance.
     actual
         .split(|ch: char| ch.is_whitespace() || matches!(ch, ',' | ';' | '(' | ')'))
-        .any(|part| part.trim_start_matches('v') == expected)
+        .map(|part| part.strip_prefix('v').unwrap_or(part))
+        .find(|part| part.starts_with(|ch: char| ch.is_ascii_digit()))
+        .is_some_and(|part| part == expected)
 }
 
 pub(crate) fn cache_root_path(value: Option<&PathBuf>) -> PathBuf {
@@ -293,4 +297,38 @@ pub(crate) fn env_flag(name: &str) -> bool {
             )
         })
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::command_version_matches;
+
+    #[test]
+    fn version_match_preserves_pinned_tool_output_formats() {
+        for (actual, expected) in [
+            ("tokmd 1.12.0", "1.12.0"),
+            ("cargo-allow 0.1.8", "0.1.8"),
+            ("ripr 0.10.0 (build 123)", "0.10.0"),
+            ("unsafe-review 0.3.4", "0.3.4"),
+            ("actionlint version v1.7.12", "1.7.12"),
+            ("v0.10.0", "0.10.0"),
+        ] {
+            assert!(command_version_matches(actual, expected), "{actual}");
+        }
+    }
+
+    #[test]
+    fn version_match_rejects_later_pin_references_and_nonexact_versions() {
+        for actual in [
+            "ripr 0.9.9 (compatible with 0.10.0)",
+            "ripr v0.9.9; expected v0.10.0",
+            "ripr 0.10.0-rc.1 (target 0.10.0)",
+            "ripr 0.10.00",
+            "ripr vv0.10.0",
+            "ripr unknown",
+            "",
+        ] {
+            assert!(!command_version_matches(actual, "0.10.0"), "{actual}");
+        }
+    }
 }

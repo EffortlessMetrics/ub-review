@@ -3459,6 +3459,52 @@ fn doctor_reports_advisory_stale_tool_fix_without_requiring_core_tools() -> Resu
 }
 
 #[test]
+fn doctor_rejects_stale_version_with_pin_in_compatibility_text() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let fake_bin = temp.path().join("fake-bin");
+    write_fake_core_review_tools_with_versions(
+        &fake_bin,
+        &[
+            ("tokmd", "1.12.0"),
+            ("cargo-allow", "0.1.8"),
+            ("ripr", "0.9.9 (compatible with 0.10.0)"),
+            ("unsafe-review", "0.3.4"),
+            ("ast-grep", "0.0.0"),
+            ("actionlint", "1.7.12"),
+        ],
+    )?;
+    assert_fake_core_review_tool_version(&fake_bin, "ripr", "0.9.9 (compatible with 0.10.0)")?;
+    let path = prepend_to_path(&fake_bin)?;
+    let config = temp.path().join(".ub-review.toml");
+    write_file(&config, r#"profile = "gh-runner""#)?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let output = run_expect_failure_with_env(
+        temp.path(),
+        bin,
+        &[
+            "doctor",
+            "--config",
+            path_str(&config)?,
+            "--require-core-tools",
+        ],
+        &[("PATH", path.as_str())],
+    )?;
+    assert!(output.contains("ripr expected 0.10.0, got ripr 0.9.9 (compatible with 0.10.0)"));
+    assert!(
+        output.contains("ripr version drift: cargo install ripr --locked --version 0.10.0 --force")
+    );
+    let advisory = run_capture_with_env(
+        temp.path(),
+        bin,
+        &["doctor", "--config", path_str(&config)?],
+        &[("PATH", path.as_str())],
+    )?;
+    assert!(advisory.contains("ripr version drift:"));
+    Ok(())
+}
+
+#[test]
 fn doctor_standard_image_env_requires_core_tools() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let config = temp.path().join(".ub-review.toml");
