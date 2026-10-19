@@ -5,6 +5,16 @@ tool = "cargo-allow"
 # exception volume proves that narrower ledgers improve reviewability.
 
 [[exception]]
+id = "transport-output-read-cleanup-fixture"
+kind = "process-spawn"
+path = "src/model_api.rs"
+owner = "ub-review/core"
+reason = "Issue #1527's output_file_tests spawn only the current Rust test executable and an exact inert/sleeping fixture, with null streams, to exercise normal-completion and timeout output-file cleanup. No provider, shell, network or descendant process is invoked; production process creation is unchanged."
+created = "2026-10-19"
+review_after = "2027-01-19"
+expires = "2027-04-19"
+
+[[exception]]
 id = "clippy-too-many-arguments-artifact-writers"
 kind = "clippy-suppression"
 path = "src/main.rs"
