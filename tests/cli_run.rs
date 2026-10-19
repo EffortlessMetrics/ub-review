@@ -56,8 +56,14 @@ fn fresh_run_replaces_interrupted_calibration_without_losing_completed_history()
 
     // An invocation rejected before admission must not replace a completed run.
     let mut invalid = args.to_vec();
-    invalid.extend(["--profile", "missing-calibration-profile"]);
-    run_expect_failure(temp.path(), bin, &invalid)?;
+    let lane_index = invalid
+        .iter()
+        .position(|arg| *arg == "--lanes")
+        .ok_or_else(|| anyhow::anyhow!("fixture is missing its lane selector"))?;
+    invalid[lane_index + 1] = "missing-calibration-lane";
+    let rejection = run_expect_failure(temp.path(), bin, &invalid)?;
+    assert!(rejection.contains("unknown lane selector"), "{rejection}");
+    assert!(!rejection.contains("Usage:"), "{rejection}");
     assert_eq!(fs::read(&calibration_path)?, completed);
 
     // Literal partial artifacts from the cancelled reporter/continuation seam.
