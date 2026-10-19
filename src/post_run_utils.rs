@@ -326,6 +326,13 @@ mod version_tests {
             "ripr 0.10.00",
             "ripr vv0.10.0",
             "ripr unknown",
+            // A compatibility/build reference is not the reported version.
+            "ripr unknown (compatible with 0.10.0)",
+            "ripr unavailable (built for 0.10.0)",
+            "ripr version unknown; expected 0.10.0",
+            // Numeric text in unrelated leading metadata must not stand in for a version.
+            "ripr build 0.10.0; version unknown",
+            "ripr ABI 0.10.0, version unavailable",
             "",
         ] {
             assert!(!command_version_matches(actual, "0.10.0"), "{actual}");
