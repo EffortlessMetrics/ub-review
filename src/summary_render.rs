@@ -87,6 +87,23 @@ pub(crate) fn plan_lane_model_display(plan: &Plan, lane_id: &str) -> Option<Stri
 }
 
 pub(crate) fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Result<String> {
+    render_summary_for_phase(out, plan, diff, true)
+}
+
+pub(crate) fn render_preliminary_summary(
+    out: &Path,
+    plan: &Plan,
+    diff: &DiffContext,
+) -> Result<String> {
+    render_summary_for_phase(out, plan, diff, false)
+}
+
+fn render_summary_for_phase(
+    out: &Path,
+    plan: &Plan,
+    diff: &DiffContext,
+    review_evidence_expected: bool,
+) -> Result<String> {
     let mut text = String::new();
     text.push_str("# UB Review Packet\n\n");
     text.push_str("This is an advisory evidence packet plus review compiler. Posting is a separate grouped Pull Request Review step.\n\n");
@@ -134,7 +151,9 @@ pub(crate) fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Res
         ));
     }
     render_evidence_sections(&mut text, out, plan);
-    render_model_status_sections(&mut text, out);
+    if review_evidence_expected {
+        render_model_status_sections(&mut text, out);
+    }
     text.push_str("\n## Lane packets\n\n");
     text.push_str("| Lane | Model | Packet |\n");
     text.push_str("|---|---|---|\n");
