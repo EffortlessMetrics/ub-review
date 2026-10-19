@@ -418,7 +418,7 @@ fn reconcile_wait_failure(
     }
 }
 
-trait TerminateAndReap {
+pub(crate) trait TerminateAndReap {
     fn kill_process(&mut self) -> io::Result<()>;
     fn reap_process(&mut self) -> io::Result<()>;
 }
@@ -435,7 +435,7 @@ impl TerminateAndReap for std::process::Child {
 
 // A confirmed reap permits physical cleanup even when the kill request failed.
 // Return that failure separately so natural exit cannot erase its diagnostic.
-fn terminate_and_reap_child(
+pub(crate) fn terminate_and_reap_child(
     child: &mut impl TerminateAndReap,
     observe_process: &mut dyn FnMut(CommandProcessObservation),
 ) -> Result<Option<io::Error>> {
