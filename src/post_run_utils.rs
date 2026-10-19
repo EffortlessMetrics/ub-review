@@ -267,13 +267,36 @@ pub(crate) fn doctor_tool_version_fix(tool_id: &str, expected: &str) -> String {
 }
 
 pub(crate) fn command_version_matches(actual: &str, expected: &str) -> bool {
-    // Compare the reported version, not a later compatibility/build reference.
-    // This is only a text compatibility check, not executable provenance.
-    actual
-        .split(|ch: char| ch.is_whitespace() || matches!(ch, ',' | ';' | '(' | ')'))
-        .map(|part| part.strip_prefix('v').unwrap_or(part))
-        .find(|part| part.starts_with(|ch: char| ch.is_ascii_digit()))
-        .is_some_and(|part| part == expected)
+    fn numeric_version(part: &str) -> Option<&str> {
+        let version = part.strip_prefix('v').unwrap_or(part);
+        version
+            .starts_with(|ch: char| ch.is_ascii_digit())
+            .then_some(version)
+    }
+
+    let mut parts =
+        actual.split(|ch: char| ch.is_whitespace() || matches!(ch, ',' | ';' | '(' | ')'));
+    let Some(first) = parts.next() else {
+        return false;
+    };
+
+    // Supported tools either print a bare version first, a tool name followed
+    // by the version, or a tool name plus the explicit `version` label.
+    // Do not search later build/ABI/compatibility text for a matching pin.
+    if let Some(version) = numeric_version(first) {
+        return version == expected;
+    }
+
+    let Some(second) = parts.next() else {
+        return false;
+    };
+    let candidate =
+        if first.eq_ignore_ascii_case("version") || second.eq_ignore_ascii_case("version") {
+            parts.next()
+        } else {
+            Some(second)
+        };
+    candidate.and_then(numeric_version) == Some(expected)
 }
 
 pub(crate) fn cache_root_path(value: Option<&PathBuf>) -> PathBuf {
@@ -326,6 +349,13 @@ mod version_tests {
             "ripr 0.10.00",
             "ripr vv0.10.0",
             "ripr unknown",
+            // Compatibility/build references do not report the installed version.
+            "ripr unknown (compatible with 0.10.0)",
+            "ripr unavailable (built for 0.10.0)",
+            "ripr version unknown; expected 0.10.0",
+            // Numeric text in unrelated leading metadata cannot stand in for a version.
+            "ripr build 0.10.0; version unknown",
+            "ripr ABI 0.10.0, version unavailable",
             "",
         ] {
             assert!(!command_version_matches(actual, "0.10.0"), "{actual}");
