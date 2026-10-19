@@ -275,6 +275,74 @@ pub(crate) fn git_lines(root: &Path, args: &[&str]) -> Result<Vec<String>> {
         .collect())
 }
 
+#[cfg(test)]
+mod changed_path_tests {
+    use super::*;
+
+    #[test]
+    fn changed_paths_match_git_names_with_quoting_and_renames() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path();
+        git_text(root, &["init", "-q"])?;
+        let paths = [
+            "plain.rs",
+            "space name.rs",
+            "tab\tname.rs",
+            "café.rs",
+            " trailing.rs ",
+        ];
+        for path in paths {
+            fs::write(root.join(path), "// before\n")?;
+        }
+        fs::write(root.join("old space.rs"), "// rename\n")?;
+        git_text(root, &["add", "."])?;
+        git_text(
+            root,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "commit",
+                "-qm",
+                "base",
+            ],
+        )?;
+        for path in paths {
+            fs::write(root.join(path), "// after\n")?;
+        }
+        git_text(root, &["mv", "old space.rs", "new\t雪.rs"])?;
+        git_text(root, &["add", "."])?;
+        git_text(
+            root,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "commit",
+                "-qm",
+                "head",
+            ],
+        )?;
+        let mut expected = paths.map(str::to_owned).to_vec();
+        expected.push("new\t雪.rs".to_owned());
+        expected.sort();
+        for quote_path in ["true", "false"] {
+            git_text(root, &["config", "core.quotePath", quote_path])?;
+            let actual = git_text(root, &["diff", "--name-only", "-z", "HEAD~1...HEAD"])?;
+            let actual = actual
+                .split_terminator('\0')
+                .map(str::to_owned)
+                .collect::<Vec<_>>();
+            assert_eq!(actual, expected, "Git fixture changed");
+            let diff = DiffContext::from_git(root, "HEAD~1", "HEAD")?;
+            assert_eq!(diff.changed_files, expected, "quotePath={quote_path}");
+        }
+        Ok(())
+    }
+}
+
 pub(crate) fn git_text(root: &Path, args: &[&str]) -> Result<String> {
     let output = ProcessCommand::new("git")
         .arg("-C")
