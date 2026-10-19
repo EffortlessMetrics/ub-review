@@ -468,6 +468,82 @@ mod run_boundary_tests {
     }
 
     #[test]
+    fn reset_rejects_calibration_directory_before_touching_other_inputs() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review = temp.path().join("review");
+        let calibration = review.join("calibration.json");
+        fs::create_dir_all(&calibration)?;
+        fs::write(
+            calibration.join("retained"),
+            "invalid calibration destination",
+        )?;
+        fs::write(review.join("messages.ndjson"), "previous messages")?;
+        fs::create_dir_all(review.join("threads"))?;
+        fs::write(review.join("threads/turn-001.json"), "previous turn")?;
+
+        let error = prepare_calibration_run(temp.path())
+            .err()
+            .context("calibration directory unexpectedly accepted")?;
+        assert_eq!(
+            error.to_string(),
+            format!("clear previous calibration input {}", calibration.display())
+        );
+        let cause = error
+            .downcast_ref::<std::io::Error>()
+            .context("calibration cleanup lost its I/O cause")?;
+        assert_ne!(cause.kind(), std::io::ErrorKind::NotFound);
+        assert!(cause.raw_os_error().is_some());
+        assert_eq!(
+            fs::read_to_string(calibration.join("retained"))?,
+            "invalid calibration destination"
+        );
+        assert_eq!(
+            fs::read_to_string(review.join("messages.ndjson"))?,
+            "previous messages"
+        );
+        assert_eq!(
+            fs::read_to_string(review.join("threads/turn-001.json"))?,
+            "previous turn"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn reset_invalidates_calibration_before_rejecting_messages_directory() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review = temp.path().join("review");
+        let messages = review.join("messages.ndjson");
+        fs::create_dir_all(&messages)?;
+        fs::write(review.join("calibration.json"), "previous completed result")?;
+        fs::write(messages.join("retained"), "invalid message destination")?;
+        fs::create_dir_all(review.join("threads"))?;
+        fs::write(review.join("threads/turn-001.json"), "previous turn")?;
+
+        let error = prepare_calibration_run(temp.path())
+            .err()
+            .context("messages directory unexpectedly accepted")?;
+        assert_eq!(
+            error.to_string(),
+            format!("clear previous calibration input {}", messages.display())
+        );
+        let cause = error
+            .downcast_ref::<std::io::Error>()
+            .context("message cleanup lost its I/O cause")?;
+        assert_ne!(cause.kind(), std::io::ErrorKind::NotFound);
+        assert!(cause.raw_os_error().is_some());
+        assert!(!review.join("calibration.json").exists());
+        assert_eq!(
+            fs::read_to_string(messages.join("retained"))?,
+            "invalid message destination"
+        );
+        assert_eq!(
+            fs::read_to_string(review.join("threads/turn-001.json"))?,
+            "previous turn"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn reset_invalidates_completed_result_before_fallible_thread_cleanup() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let review = temp.path().join("review");
@@ -479,11 +555,18 @@ mod run_boundary_tests {
         let error = prepare_calibration_run(temp.path())
             .err()
             .context("invalid thread destination unexpectedly accepted")?;
-        assert!(
-            error
-                .to_string()
-                .contains("clear previous calibration threads")
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "clear previous calibration threads {}",
+                review.join("threads").display()
+            )
         );
+        let cause = error
+            .downcast_ref::<std::io::Error>()
+            .context("thread cleanup lost its I/O cause")?;
+        assert_ne!(cause.kind(), std::io::ErrorKind::NotFound);
+        assert!(cause.raw_os_error().is_some());
         assert!(!review.join("calibration.json").exists());
         assert!(!review.join("messages.ndjson").exists());
         assert_eq!(
