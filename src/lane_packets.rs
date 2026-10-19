@@ -868,6 +868,136 @@ mod tests {
         Ok(())
     }
 
+    // Investigation fixture for #1062: synthetic inputs only; no global env mutation.
+    #[cfg(unix)]
+    #[test]
+    fn sensor_environment_override_and_path_boundary() -> Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+        let temp = tempfile::tempdir()?;
+        let root = temp.path();
+        let name = "ub-review-harmless-env-boundary";
+        for (directory, marker) in [
+            ("ambient", "ambient"),
+            ("override", "override"),
+            ("", "root"),
+        ] {
+            let directory = root.join(directory);
+            fs::create_dir_all(&directory)?;
+            let executable = directory.join(name);
+            fs::write(
+                &executable,
+                format!(
+                    "#!/bin/sh\nprintf '%s|%s|%s:%s|%s:%s|%s' '{marker}' \"$PATH\" \"${{LANG+x}}\" \"${{LANG-}}\" \"${{TMPDIR+x}}\" \"${{TMPDIR-}}\" \"${{UB_REVIEW_SENSOR_SENTINEL-unset}}\"\n"
+                ),
+            )?;
+            fs::set_permissions(&executable, fs::Permissions::from_mode(0o700))?;
+        }
+        let ambient_path = root.join("ambient").display().to_string();
+        let override_path = root.join("override").display().to_string();
+        let ambient = BTreeMap::from([
+            ("PATH".to_owned(), ambient_path.clone()),
+            ("LANG".to_owned(), "ambient-locale".to_owned()),
+            ("TMPDIR".to_owned(), "ambient-temp".to_owned()),
+            (
+                "UB_REVIEW_SENSOR_SENTINEL".to_owned(),
+                "ambient-inert".to_owned(),
+            ),
+        ]);
+        let cases = [
+            (
+                "inherited",
+                name.to_owned(),
+                BTreeMap::new(),
+                format!("ambient|{ambient_path}|x:ambient-locale|x:ambient-temp|unset"),
+            ),
+            (
+                "override",
+                name.to_owned(),
+                BTreeMap::from([
+                    ("PATH".to_owned(), override_path.clone()),
+                    ("LANG".to_owned(), "configured-locale".to_owned()),
+                    (
+                        "UB_REVIEW_SENSOR_SENTINEL".to_owned(),
+                        "configured-inert".to_owned(),
+                    ),
+                ]),
+                format!("override|{override_path}|x:configured-locale|x:ambient-temp|unset"),
+            ),
+            (
+                "empty",
+                name.to_owned(),
+                BTreeMap::from([
+                    ("PATH".to_owned(), String::new()),
+                    ("LANG".to_owned(), String::new()),
+                    ("TMPDIR".to_owned(), String::new()),
+                ]),
+                "root||x:|x:|unset".to_owned(),
+            ),
+            (
+                "relative-path",
+                name.to_owned(),
+                BTreeMap::from([("PATH".to_owned(), "override".to_owned())]),
+                "override|override|x:ambient-locale|x:ambient-temp|unset".to_owned(),
+            ),
+            (
+                "relative-program",
+                format!("./{name}"),
+                BTreeMap::new(),
+                format!("root|{ambient_path}|x:ambient-locale|x:ambient-temp|unset"),
+            ),
+            (
+                "absolute-program",
+                root.join("override").join(name).display().to_string(),
+                BTreeMap::new(),
+                format!("override|{ambient_path}|x:ambient-locale|x:ambient-temp|unset"),
+            ),
+        ];
+        for (label, program, overrides, expected) in cases {
+            let stdout = root.join(format!("{label}.stdout"));
+            let stderr = root.join(format!("{label}.stderr"));
+            let status = super::run_command_to_files_inner(CommandRun {
+                root,
+                argv: &[program],
+                env: &overrides,
+                ambient: &ambient,
+                timeout_sec: 5,
+                stdout_path: &stdout,
+                stderr_path: &stderr,
+                quarantine_environment: true,
+                observe_process: &mut |_| {},
+            })?;
+            ensure!(status.success, "{label}: {}", status.reason);
+            ensure!(
+                fs::read_to_string(stdout)? == expected,
+                "{label}: unexpected child environment/selected executable"
+            );
+            ensure!(fs::read(stderr)?.is_empty(), "{label}: unexpected stderr");
+        }
+        let stdout = root.join("missing.stdout");
+        let stderr = root.join("missing.stderr");
+        let overrides =
+            BTreeMap::from([("PATH".to_owned(), root.join("absent").display().to_string())]);
+        let error = super::run_command_to_files_inner(CommandRun {
+            root,
+            argv: &[name.to_owned()],
+            env: &overrides,
+            ambient: &ambient,
+            timeout_sec: 5,
+            stdout_path: &stdout,
+            stderr_path: &stderr,
+            quarantine_environment: true,
+            observe_process: &mut |_| {},
+        })
+        .err()
+        .context("missing configured PATH must not fall back to ambient PATH")?;
+        ensure!(
+            error
+                .downcast_ref::<io::Error>()
+                .is_some_and(|error| error.kind() == io::ErrorKind::NotFound)
+        );
+        Ok(())
+    }
+
     #[test]
     fn sensor_environment_excludes_credentials_and_keeps_execution_metadata() -> Result<()> {
         let exe = std::env::current_exe()?;
