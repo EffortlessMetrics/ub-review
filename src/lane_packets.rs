@@ -401,7 +401,7 @@ fn reconcile_wait_failure(
     }
 }
 
-trait TerminateAndReap {
+pub(crate) trait TerminateAndReap {
     fn kill_process(&mut self) -> io::Result<()>;
     fn reap_process(&mut self) -> io::Result<()>;
 }
@@ -416,7 +416,7 @@ impl TerminateAndReap for std::process::Child {
     }
 }
 
-fn terminate_and_reap_child(
+pub(crate) fn terminate_and_reap_child(
     child: &mut impl TerminateAndReap,
     observe_process: &mut dyn FnMut(CommandProcessObservation),
 ) -> Result<()> {

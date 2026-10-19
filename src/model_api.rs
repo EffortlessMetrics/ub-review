@@ -417,7 +417,36 @@ pub(crate) fn wait_for_child_output_files(
     stderr_path: &Path,
     timeout_sec: u64,
 ) -> Result<FileCommandOutput> {
-    let status = match child.wait_timeout(Duration::from_secs(timeout_sec))? {
+    wait_for_child_output_files_with_wait(
+        &mut child,
+        stdout_path,
+        stderr_path,
+        timeout_sec,
+        &mut |child, timeout| child.wait_timeout(timeout),
+    )
+}
+
+fn wait_for_child_output_files_with_wait(
+    child: &mut Child,
+    stdout_path: &Path,
+    stderr_path: &Path,
+    timeout_sec: u64,
+    wait_for_child: &mut dyn FnMut(&mut Child, Duration) -> std::io::Result<Option<ExitStatus>>,
+) -> Result<FileCommandOutput> {
+    let wait_result = match wait_for_child(child, Duration::from_secs(timeout_sec)) {
+        Ok(status) => status,
+        Err(wait_error) => {
+            let cleanup = terminate_and_reap_child(child, &mut |_| {});
+            remove_output_files(stdout_path, stderr_path);
+            return match cleanup {
+                Ok(()) => Err(wait_error).context("wait for child process"),
+                Err(cleanup_error) => Err(cleanup_error).context(format!(
+                    "terminate child after wait failure; original wait error: {wait_error}"
+                )),
+            };
+        }
+    };
+    let status = match wait_result {
         Some(status) => status,
         None => {
             let _ = child.kill();
@@ -439,6 +468,10 @@ pub(crate) fn wait_for_child_output_files(
         stderr,
     })
 }
+
+#[cfg(test)]
+#[path = "model_api_lifecycle_tests.rs"]
+mod lifecycle_tests;
 
 pub(crate) fn read_and_remove_output_file(path: &Path) -> Result<Vec<u8>> {
     let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
