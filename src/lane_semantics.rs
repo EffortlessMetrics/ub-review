@@ -2,6 +2,9 @@
 //! This is a view of the existing parsed output, not the SpecialistResult contract.
 
 use crate::*;
+use std::fs::OpenOptions;
+use std::io::{self, Write};
+use std::path::PathBuf;
 
 /// Freshness witness for inspection only. A stage is current only when its
 /// entire invocation object equals `review.json.semantic_shadow_invocation`.
@@ -32,6 +35,84 @@ impl ShadowInvocation {
             shared_prefix_hash: shared_prefix_hash.to_owned(),
         }
     }
+}
+
+struct StagedShadowFile {
+    path: PathBuf,
+    file: Option<File>,
+    published: bool,
+}
+
+impl Drop for StagedShadowFile {
+    fn drop(&mut self) {
+        drop(self.file.take());
+        if !self.published {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+}
+
+/// Replace one observational shadow artifact only after its complete contents
+/// have been written and flushed to a same-directory staging file. Rename gives
+/// atomic visibility on supported filesystems; this does not sync the file or
+/// directory and therefore does not claim crash durability.
+pub(crate) fn write_semantic_shadow_json(path: &Path, bytes: &[u8]) -> Result<()> {
+    write_semantic_shadow_json_with(path, bytes, |file, bytes| file.write_all(bytes))
+}
+
+fn write_semantic_shadow_json_with(
+    path: &Path,
+    bytes: &[u8],
+    write_bytes: impl FnOnce(&mut File, &[u8]) -> io::Result<()>,
+) -> Result<()> {
+    static SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let parent = path
+        .parent()
+        .context("semantic shadow path has no parent")?;
+    let name = path
+        .file_name()
+        .context("semantic shadow path has no file name")?
+        .to_string_lossy();
+    let prior_permissions = match fs::metadata(path) {
+        Ok(metadata) => Some(metadata.permissions()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error).context("inspect prior semantic shadow file"),
+    };
+    let (staged_path, file) = loop {
+        let sequence = SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let staged_path = parent.join(format!(".{name}.{}.{}.tmp", std::process::id(), sequence));
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&staged_path)
+        {
+            Ok(file) => break (staged_path, file),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error).context("create semantic shadow staging file"),
+        }
+    };
+    let mut staged = StagedShadowFile {
+        path: staged_path,
+        file: Some(file),
+        published: false,
+    };
+    let staged_file = staged
+        .file
+        .as_mut()
+        .context("semantic shadow staging file unexpectedly closed")?;
+    if let Some(permissions) = prior_permissions {
+        staged_file
+            .set_permissions(permissions)
+            .context("preserve semantic shadow file permissions")?;
+    }
+    write_bytes(staged_file, bytes).context("write semantic shadow staging file")?;
+    staged_file
+        .flush()
+        .context("flush semantic shadow staging file")?;
+    drop(staged.file.take());
+    fs::rename(&staged.path, path).context("atomically publish semantic shadow file")?;
+    staged.published = true;
+    Ok(())
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -105,13 +186,74 @@ pub(crate) fn write_primary_semantic_shadow(
     let lanes: Vec<_> = receipts.iter().filter(|r| !r.thread_id.is_empty()).map(|r| {
         serde_json::json!({"lane":r.lane,"status":r.status,"conclusion":r.semantic_conclusion()})
     }).collect();
-    fs::write(
-        dir.join("primary.json"),
-        serde_json::to_vec_pretty(&serde_json::json!({
+    write_semantic_shadow_json(
+        &dir.join("primary.json"),
+        &serde_json::to_vec_pretty(&serde_json::json!({
             "schema":"ub-review.semantic-shadow.v1", "authority":false,
             "invocation": invocation,
             "evaluation":"parsed primary state only", "lanes":lanes,
         }))?,
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod atomic_shadow_write_tests {
+    use super::*;
+    use anyhow::ensure;
+
+    #[test]
+    fn partial_stage_write_failure_preserves_the_prior_shadow_file() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let destination = temp.path().join("reporter-001.json");
+        let prior = br#"{"schema":"ub-review.semantic-shadow.v1","authority":false,"invocation":{"id":"prior"}}"#;
+        write_semantic_shadow_json(&destination, prior)?;
+
+        let attempted = vec![b'x'; 4096];
+        let error = write_semantic_shadow_json_with(&destination, &attempted, |file, bytes| {
+            file.write_all(&bytes[..1024])?;
+            Err(io::Error::other("injected short-write failure"))
+        })
+        .err()
+        .context("partial stage write unexpectedly succeeded")?;
+
+        ensure!(
+            format!("{error:#}").contains("injected short-write failure"),
+            "unexpected write failure: {error:#}"
+        );
+        let retained = fs::read(&destination)?;
+        ensure!(
+            retained == prior,
+            "prior shadow bytes changed after failed stage write"
+        );
+        let parsed: serde_json::Value = serde_json::from_slice(&retained)?;
+        ensure!(
+            parsed["invocation"]["id"] == "prior",
+            "prior valid invocation was not retained"
+        );
+        let entries = fs::read_dir(temp.path())?.collect::<io::Result<Vec<_>>>()?;
+        ensure!(entries.len() == 1, "failed stage file was not cleaned up");
+        Ok(())
+    }
+
+    #[test]
+    fn successful_stage_write_replaces_the_shadow_file() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let destination = temp.path().join("reporter-001.json");
+        let prior = br#"{"invocation":{"id":"prior"}}"#;
+        let current = br#"{"invocation":{"id":"current"}}"#;
+        write_semantic_shadow_json(&destination, prior)?;
+        write_semantic_shadow_json(&destination, current)?;
+
+        ensure!(
+            fs::read(&destination)? == current,
+            "new shadow bytes were not published"
+        );
+        let entries = fs::read_dir(temp.path())?.collect::<io::Result<Vec<_>>>()?;
+        ensure!(
+            entries.len() == 1,
+            "staging file remained after publication"
+        );
+        Ok(())
+    }
 }

@@ -322,9 +322,9 @@ fn record_semantic_shadow(
             "recorded_response": recorded_response,
             "extra_provider_calls": 0,
         });
-        fs::write(
-            dir.join(format!("{}.json", sanitize_artifact_name(stage))),
-            serde_json::to_vec_pretty(&value)?,
+        write_semantic_shadow_json(
+            &dir.join(format!("{}.json", sanitize_artifact_name(stage))),
+            &serde_json::to_vec_pretty(&value)?,
         )?;
         Ok(())
     };
