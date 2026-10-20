@@ -454,7 +454,9 @@ until a future stable coordinator consumes it (non-goal of this slice).
 The verdict `state` is one of `terminal` / `pending` / `inconclusive`, and the
 fail-closed invariant of the gate extends to the head: **only a `terminal`
 state carries a `conclusion`, and only an exact-head completed run whose
-matching `gate_outcome.json` is present can produce one — so missing or
+matching `gate_outcome.json` is present can produce one. Only the newest
+exact-head run/attempt is considered; it must complete with `success` or
+`failure`, and a failed run cannot authorize a retained `pass`. Missing or
 malformed evidence can never serialize `pass`.**
 
 ```text
@@ -471,6 +473,10 @@ inconclusive  missing-run                     no completed run for the head
                                               after the deadline
 inconclusive  cancelled-without-replacement   newest exact-head run was
                                               cancelled with nothing replacing it
+inconclusive  incomplete-run                  newest exact-head run/attempt did
+                                              not finish by the deadline, has an
+                                              interrupted/unsupported conclusion,
+                                              or failed while retaining a pass
 inconclusive  stale-success                   only an older-SHA success exists;
                                               it cannot satisfy the current head
 inconclusive  missing-artifact                exact-head run completed but no

@@ -7538,6 +7538,7 @@ GATE_WATCHDOG_REASON_STATES = {
     "coordinator-crash": "inconclusive",
     "orphaned-proof": "inconclusive",
     "cancelled-without-replacement": "inconclusive",
+    "incomplete-run": "inconclusive",
     "missing-artifact": "inconclusive",
     "stale-success": "inconclusive",
     "missing-run": "inconclusive",
@@ -15945,6 +15946,7 @@ def self_test_gate_watchdog_contract() -> None:
 
     require_gate_watchdog(write_root(terminal()))
     require_gate_watchdog(write_root(inconclusive()))
+    require_gate_watchdog(write_root(inconclusive(reason="incomplete-run")))
 
     cases = [
         ("wrong schema", terminal(schema="ub-review.gate_watchdog.v2"), "wrong schema"),
@@ -15960,6 +15962,16 @@ def self_test_gate_watchdog_contract() -> None:
             "non-terminal serializes a pass",
             inconclusive(conclusion="pass"),
             "must not serialize a conclusion",
+        ),
+        (
+            "incomplete run serializes a pass",
+            inconclusive(reason="incomplete-run", conclusion="pass"),
+            "must not serialize a conclusion",
+        ),
+        (
+            "incomplete run is marked terminal",
+            terminal(reason="incomplete-run"),
+            "does not belong to state",
         ),
         (
             "terminal carries retry_action",

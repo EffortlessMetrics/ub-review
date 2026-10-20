@@ -242,18 +242,16 @@ fn required_proof_orphaned(
 pub(crate) fn build_gate_watchdog(obs: &WatchdogObservations) -> GateWatchdog {
     let sha = obs.expected_sha.trim();
 
-    let exact: Vec<&WatchdogRunObservation> =
-        obs.runs.iter().filter(|r| r.sha.trim() == sha).collect();
-    let has_in_progress = exact.iter().any(|r| !r.is_completed());
+    let selected = obs
+        .runs
+        .iter()
+        .filter(|r| r.sha.trim() == sha)
+        .max_by_key(|r| (r.run_id, r.attempt));
 
     // 1. A newer in-progress replacement before the deadline: stay pending and
     //    never serialize pass or fail while the head may still complete.
-    if has_in_progress && !obs.deadline_passed {
-        let latest = exact
-            .iter()
-            .filter(|r| !r.is_completed())
-            .max_by_key(|r| (r.run_id, r.attempt));
-        let run_id = latest.map(|r| r.run_id).unwrap_or_default();
+    if let Some(latest) = selected.filter(|r| !r.is_completed() && !obs.deadline_passed) {
+        let run_id = latest.run_id;
         return GateWatchdog::pending(
             sha,
             "in-progress-replacement",
@@ -309,12 +307,9 @@ pub(crate) fn build_gate_watchdog(obs: &WatchdogObservations) -> GateWatchdog {
         );
     }
 
-    // 4. Exact-head completed runs.
-    if let Some(selected) = exact
-        .iter()
-        .filter(|r| r.is_completed())
-        .max_by_key(|r| (r.run_id, r.attempt))
-    {
+    // 4. Only the newest exact-head run/attempt may authorize a verdict. A
+    //    retained artifact cannot finish an interrupted or still-running attempt.
+    if let Some(selected) = selected {
         if selected.conclusion_is("cancelled") {
             // Step 1 already ruled out an in-progress replacement, so the newest
             // exact-head run is a cancellation with nothing replacing it.
@@ -327,6 +322,21 @@ pub(crate) fn build_gate_watchdog(obs: &WatchdogObservations) -> GateWatchdog {
                 ),
                 format!("run:{}", selected.run_id),
                 "re-dispatch the gate workflow for the head",
+            );
+        }
+
+        if !selected.is_completed()
+            || !(selected.conclusion_is("success") || selected.conclusion_is("failure"))
+        {
+            return GateWatchdog::inconclusive(
+                sha,
+                "incomplete-run",
+                format!(
+                    "newest exact-head run {} attempt {} has status {:?} and conclusion {:?}; retained artifacts cannot establish completion",
+                    selected.run_id, selected.attempt, selected.status, selected.conclusion
+                ),
+                format!("run:{}", selected.run_id),
+                "re-run the gate for the head and observe a completed evidence-producing attempt",
             );
         }
 
@@ -356,6 +366,19 @@ pub(crate) fn build_gate_watchdog(obs: &WatchdogObservations) -> GateWatchdog {
                 "re-run the gate to regenerate review/gate_outcome.json for the head",
             );
         };
+
+        if selected.conclusion_is("failure") && conclusion == "pass" {
+            return GateWatchdog::inconclusive(
+                sha,
+                "incomplete-run",
+                format!(
+                    "exact-head run {} failed; a retained pass cannot establish successful finalization",
+                    selected.run_id
+                ),
+                format!("run:{}", selected.run_id),
+                "inspect the failed run and re-run the gate to confirm finalization",
+            );
+        }
 
         return GateWatchdog::terminal(
             sha,
@@ -480,6 +503,119 @@ mod tests {
             assert!(w.retry_action.is_none());
             assert_eq!(w.schema, GATE_WATCHDOG_SCHEMA);
         }
+    }
+
+    #[test]
+    fn latest_unfinished_attempt_cannot_reuse_an_older_completed_pass() -> Result<()> {
+        for replacement_run in [10, 11] {
+            for deadline_passed in [false, true] {
+                let mut obs = base("head1");
+                obs.deadline_passed = deadline_passed;
+                obs.runs = vec![
+                    run("head1", "completed", Some("success"), 10, 1),
+                    run("head1", "in_progress", None, replacement_run, 2),
+                ];
+                obs.gate_artifact = WatchdogGateArtifact {
+                    present: true,
+                    conclusion: Some("pass".to_owned()),
+                    run_id: Some(10),
+                    sha: Some("head1".to_owned()),
+                };
+                let w = build_gate_watchdog(&obs);
+                assert_eq!(
+                    w.state,
+                    if deadline_passed {
+                        "inconclusive"
+                    } else {
+                        "pending"
+                    }
+                );
+                assert_eq!(
+                    w.reason,
+                    if deadline_passed {
+                        "incomplete-run"
+                    } else {
+                        "in-progress-replacement"
+                    }
+                );
+                let value = serde_json::to_value(&w)?;
+                assert!(value.get("conclusion").is_none());
+                assert!(w.retry_action.is_some());
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn interrupted_run_conclusions_cannot_authorize_retained_pass() -> Result<()> {
+        for conclusion in [
+            Some("timed_out"),
+            Some("startup_failure"),
+            Some("action_required"),
+            Some("skipped"),
+            Some("neutral"),
+            Some("stale"),
+            Some("unknown"),
+            Some(""),
+            None,
+        ] {
+            let mut obs = base("head1");
+            obs.runs = vec![run("head1", "completed", conclusion, 10, 1)];
+            obs.gate_artifact = WatchdogGateArtifact {
+                present: true,
+                conclusion: Some("pass".to_owned()),
+                run_id: Some(10),
+                sha: Some("head1".to_owned()),
+            };
+            let w = build_gate_watchdog(&obs);
+            assert_eq!(w.state, "inconclusive", "{conclusion:?}");
+            assert_eq!(w.reason, "incomplete-run");
+            assert!(serde_json::to_value(&w)?.get("conclusion").is_none());
+            assert!(w.retry_action.is_some());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn newer_completed_run_supersedes_older_unfinished_attempt() {
+        for conclusion in ["success", "failure"] {
+            let mut obs = base("head1");
+            obs.deadline_passed = false;
+            obs.runs = vec![
+                run("head1", "in_progress", None, 9, 99),
+                run("head1", "completed", Some(conclusion), 10, 1),
+            ];
+            let gate_conclusion = if conclusion == "success" {
+                "pass"
+            } else {
+                "fail"
+            };
+            obs.gate_artifact = WatchdogGateArtifact {
+                present: true,
+                conclusion: Some(gate_conclusion.to_owned()),
+                run_id: Some(10),
+                sha: Some("head1".to_owned()),
+            };
+            let w = build_gate_watchdog(&obs);
+            assert_eq!(w.state, "terminal");
+            assert_eq!(w.conclusion.as_deref(), Some(gate_conclusion));
+        }
+    }
+
+    #[test]
+    fn failed_run_cannot_promote_a_retained_pass() {
+        let mut obs = base("head1");
+        obs.runs = vec![run("head1", "completed", Some("failure"), 10, 1)];
+        obs.gate_artifact = WatchdogGateArtifact {
+            present: true,
+            conclusion: Some("pass".to_owned()),
+            run_id: Some(10),
+            sha: Some("head1".to_owned()),
+        };
+        let w = build_gate_watchdog(&obs);
+        assert_eq!(w.state, "inconclusive");
+        assert_eq!(w.reason, "incomplete-run");
+        assert!(w.conclusion.is_none());
     }
 
     #[test]
