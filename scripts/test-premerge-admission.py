@@ -139,7 +139,7 @@ class Fixture:
                           "gate": {"result": "skipped"}, "evidence": {"result": "skipped"}}}
 
     def invoke(self, source, name, phase, mode="", product="success", cancelled=False,
-               admission_result="success", attempt=1, bootstrap_failure=False, metadata_token="fixture-job-token"):
+               admission_result="success", attempt=1, bootstrap_failure=False, metadata_token="test-token-redacted"):
         with tempfile.TemporaryDirectory(prefix="premerge-control-") as directory:
             work = Path(directory)
             fixture = work / "fixture.json"
@@ -159,7 +159,7 @@ class Fixture:
                         assert request.full_url.startswith(prefix) and timeout == 10
                         suffix = request.full_url[len(prefix):]
                         if suffix.startswith("/collaborators/"):
-                            assert request.headers.get("Authorization") == "Bearer fixture-job-token"
+                            assert request.headers.get("Authorization") == "Bearer test-token-redacted"
                         else:
                             assert "Authorization" not in request.headers
                         with open(os.environ["TEST_CALLS"], "a") as log: log.write(suffix + "\\n")
@@ -329,6 +329,36 @@ class NativeAdmission(unittest.TestCase):
                 code, output, _, _ = f.invoke(source, "Admit one explicit native request", "admit", attempt=2)
                 self.assertEqual((code, output.get("mode")), (0, "replay"))
 
+        # A complete, bounded retry can need twelve history pages per lane and
+        # four issue-event pages. Re-fetching those events makes finalization
+        # attempt read 41 instead of finishing within the unchanged 40-call cap.
+        f = Fixture("gate")
+        f.retry()
+        for offset, (fixture, own, previous) in enumerate((
+                (f, f.own, f.prior_rows["gate"]),
+                (f.other_fixture, f.other_current, f.prior_rows["baseline"]))):
+            own["run_number"], previous["run_number"] = fixture.floor+1101, fixture.floor+1100
+            rows = [own, previous]
+            rows.extend(fixture.row(fixture.floor+step, 2_000_000+offset*10_000+step, "legacy")
+                        for step in range(1099, 0, -1))
+            rows.append(fixture.anchor)
+            for page in range(12):
+                suffix = f"/actions/workflows/{fixture.workflow_id}/runs?per_page=100&page={page+1}"
+                f.extra[suffix] = {"workflow_runs": rows[page*100:(page+1)*100]}
+        events = f.events + [{"event": "commented"}] * (301-len(f.events))
+        for page in range(4):
+            f.extra[f"/issues/1502/events?per_page=100&page={page+1}"] = events[page*100:(page+1)*100]
+        code, output, calls, error = f.invoke(WORKFLOWS["gate"],
+            "Require current complete uncancelled qualification", "finalize", "admitted")
+        self.assertEqual((code, output.get("mode")), (0, "admitted"), error)
+        self.assertEqual(len([call for call in calls if call != "bootstrap"]), 37)
+        for page in range(1, 5):
+            self.assertEqual(calls.count(f"/issues/1502/events?per_page=100&page={page}"), 1)
+        api = ADMISSION.PublicGitHub()
+        api.calls = 40
+        with self.assertRaisesRegex(ADMISSION.Refusal, "public metadata request bound exceeded"):
+            api.get("/pulls/1502")
+
     def test_invalid_or_unauthorized_retry_never_allocates(self):
         def later_duplicate_predecessor(f):
             other = f.other_fixture
@@ -427,6 +457,15 @@ class NativeAdmission(unittest.TestCase):
                     self.assert_suppressed(f)
 
     def test_protected_helper_token_is_isolated_and_never_sent_to_public_reads(self):
+        # This source is copied into shared_context by the contained gate. Use
+        # the verifier's recognized redacted fixture spelling and retain a
+        # synthetic credential negative control without embedding its value.
+        spec = importlib.util.spec_from_file_location("artifact_verifier", ROOT / "scripts/verify-bun-review-artifacts.py")
+        verifier = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(verifier)
+        self.assertIsNone(verifier.secret_leak_marker(Path(__file__).read_text()))
+        synthetic = "Bearer " + "ghp_" + hashlib.sha256(b"admission-scanner-negative").hexdigest()
+        self.assertEqual(verifier.secret_leak_marker(synthetic), "Bearer token")
         for lane, source in WORKFLOWS.items():
             self.assertIn('ADAPTER_SOURCE_SHA: ${{ github.event.pull_request.base.sha }}', source)
             self.assertIn('ADAPTER_REPOSITORY: EffortlessMetrics/ub-review', source)
@@ -439,7 +478,7 @@ class NativeAdmission(unittest.TestCase):
             self.assertEqual(output['mode'], 'rejected')
             code, output, _, error = f.invoke(source, "Admit one explicit native request", "admit")
             self.assertEqual(code, 0, error)
-            self.assertNotIn('fixture-job-token', json.dumps(output)+error)
+            self.assertNotIn('test-token-redacted', json.dumps(output)+error)
             worker = job(source, "gate" if lane == "gate" else "evidence")
             checkout = '- uses: actions/checkout@' if lane == 'gate' else '- name: Checkout exact candidate'
             self.assertNotIn('ADMISSION_METADATA_TOKEN', worker.split(checkout, 1)[1])
