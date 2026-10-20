@@ -160,3 +160,14 @@ reason = "Runs the actual composite Action Bash resolver with recording Cargo an
 created = "2026-09-05"
 review_after = "2026-12-05"
 expires = "2027-03-05"
+
+[[exception]]
+id = "non-rust-retained-watchdog-evidence-1534"
+kind = "non-rust-file"
+path = "docs/receipts/1534/evidence.tar.gz"
+category = "retained-review-evidence"
+language = "binary-archive"
+owner = "ub-review/core"
+reason = "Evidence-only branch retains full bounded #1534 fixtures, source patches, test logs and native reports for receiver readback; never merge this artifact branch into production."
+created = "2026-10-20"
+review_after = "2026-11-20"
