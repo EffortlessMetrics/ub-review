@@ -609,11 +609,25 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
             continue;
         };
         match receipt.status.as_str() {
-            "ok" => available.push(format!(
-                "{} ran; {} available.",
-                sensor.id,
-                evidence_label(&sensor.id)
-            )),
+            "ok" => {
+                if sensor.id == "unsafe-review"
+                    && let Err(gap) =
+                        read_unsafe_review_artifacts(&out.join("sensors").join(&sensor.id))
+                {
+                    missing.push(format!(
+                        "{} artifact-gap; {} unavailable; reason: {}.",
+                        sensor.id,
+                        evidence_label(&sensor.id),
+                        gap.reason()
+                    ));
+                } else {
+                    available.push(format!(
+                        "{} ran; {} available.",
+                        sensor.id,
+                        evidence_label(&sensor.id)
+                    ));
+                }
+            }
             "missing" => missing.push(format!(
                 "{} not installed; {} unavailable.",
                 sensor.id,
