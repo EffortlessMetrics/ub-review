@@ -34692,3 +34692,42 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_intent.rs:return_value:b72a971f"
 owner = "ub-review/core"
 reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Same rejection statement classified additionally as return_value; native request/task non-creation is its behavioral oracle. Same native/extracted evidence as row38. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+
+# PR #1537: six exact ready-mode rows; existing manifest receipt owns dating.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:match_arm:05d89d65"
+owner = "ub-review/core"
+reason = "Current ok arm is exercised on absent structured evidence and a valid empty plan; its exact output is observed independently of implementation text. PR #1537, issue #1533; pinned RIPR 0.10.0 on base ac06293/current production 407661e. Direct unsafe_review_evidence_sections_preserve_exact_availability asserts literal complete missing and available sections, including labels, and an ordinary tokmd success control. The exact test passes while the pinned output retains observation_unverified. Returned related-test previews omit this direct oracle; some previews are truncated, so the full association cause is not claimed. Related upstream association/discrimination work: EffortlessMetrics/ripr-swarm#5352/#5502. This is a static-exposure disposition, not runtime proof or gate sufficiency. Re-verify after semantic edits or tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:match_arm:be2f648e"
+owner = "ub-review/core"
+reason = "Removed pre-change ok arm is not a surviving candidate branch. Restoring that old available-only renderer is the original demonstrated regression, rejected by the sensor controls and the new exact missing-section oracle. PR #1537, issue #1533; pinned RIPR 0.10.0 on base ac06293/current production 407661e. Direct unsafe_review_evidence_sections_preserve_exact_availability asserts literal complete missing and available sections, including labels, and an ordinary tokmd success control. The exact test passes while the pinned output retains observation_unverified. Returned related-test previews omit this direct oracle; some previews are truncated, so the full association cause is not claimed. Related upstream association/discrimination work: EffortlessMetrics/ripr-swarm#5352/#5502. This is a static-exposure disposition, not runtime proof or gate sufficiency. Re-verify after semantic edits or tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:call_deletion:d54c748c"
+owner = "ub-review/core"
+reason = "Closing-delimiter probe at line622 represents the complete missing.push effect. The missing-section equality pins its presence, unsafe-review identity, packet label and ingest-gap reason; this is not an independent executable delimiter call. PR #1537, issue #1533; pinned RIPR 0.10.0 on base ac06293/current production 407661e. Direct unsafe_review_evidence_sections_preserve_exact_availability asserts literal complete missing and available sections, including labels, and an ordinary tokmd success control. The exact test passes while the pinned output retains observation_unverified. Returned related-test previews omit this direct oracle; some previews are truncated, so the full association cause is not claimed. Related upstream association/discrimination work: EffortlessMetrics/ripr-swarm#5352/#5502. This is a static-exposure disposition, not runtime proof or gate sufficiency. Re-verify after semantic edits or tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:side_effect:092ca8ae"
+owner = "ub-review/core"
+reason = "Second family for the same missing.push effect/closing delimiter at line622. The complete missing-section equality observes this effect; paired call_deletion ID d54c748c is the same semantic obligation, not a separate untested side effect. PR #1537, issue #1533; pinned RIPR 0.10.0 on base ac06293/current production 407661e. Direct unsafe_review_evidence_sections_preserve_exact_availability asserts literal complete missing and available sections, including labels, and an ordinary tokmd success control. The exact test passes while the pinned output retains observation_unverified. Returned related-test previews omit this direct oracle; some previews are truncated, so the full association cause is not claimed. Related upstream association/discrimination work: EffortlessMetrics/ripr-swarm#5352/#5502. This is a static-exposure disposition, not runtime proof or gate sufficiency. Re-verify after semantic edits or tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:call_deletion:d54c748c.2"
+owner = "ub-review/core"
+reason = "Closing-delimiter probe at line628 represents the complete available.push effect. The valid-empty and ordinary-sensor literal section equalities pin the effect and exact packet label; the original prefix-only tests are deliberately strengthened. PR #1537, issue #1533; pinned RIPR 0.10.0 on base ac06293/current production 407661e. Direct unsafe_review_evidence_sections_preserve_exact_availability asserts literal complete missing and available sections, including labels, and an ordinary tokmd success control. The exact test passes while the pinned output retains observation_unverified. Returned related-test previews omit this direct oracle; some previews are truncated, so the full association cause is not claimed. Related upstream association/discrimination work: EffortlessMetrics/ripr-swarm#5352/#5502. This is a static-exposure disposition, not runtime proof or gate sufficiency. Re-verify after semantic edits or tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:side_effect:092ca8ae.2"
+owner = "ub-review/core"
+reason = "Second family for the same available.push effect/closing delimiter at line628. The valid-empty and ordinary-sensor exact output oracles observe this effect; paired call_deletion ID d54c748c.2 is the same semantic obligation. PR #1537, issue #1533; pinned RIPR 0.10.0 on base ac06293/current production 407661e. Direct unsafe_review_evidence_sections_preserve_exact_availability asserts literal complete missing and available sections, including labels, and an ordinary tokmd success control. The exact test passes while the pinned output retains observation_unverified. Returned related-test previews omit this direct oracle; some previews are truncated, so the full association cause is not claimed. Related upstream association/discrimination work: EffortlessMetrics/ripr-swarm#5352/#5502. This is a static-exposure disposition, not runtime proof or gate sufficiency. Re-verify after semantic edits or tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions."
