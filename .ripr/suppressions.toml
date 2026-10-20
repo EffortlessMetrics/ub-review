@@ -36839,3 +36839,9 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_patch_split.rs:error_path:ef22daae"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1596; probe )?: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by change_slices_carry_surrounding_context, change_slices_split_at_context_between_runs, hunk_line_numbers_handle_boundaries. Re-verify after any edit to src/proof/patch_split.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_watchdog.rs:return_value:bd3eb949"
+owner = "ub-review/core"
+reason = "Issue #1534; exact RIPR0.10.0 base ac06293 to c0b14631 plus expanded receipt test: raw line340 closing return delimiter, incorrectly joined to the next missing-artifact return at344. The enclosing early-return effect is real. Compiled first-return bypass falls through to a retained pass and fails both lifecycle controls and the exact serialized receipt assertion; punctuation itself is not an executable mutant. All six compiled controls reached the real consumer, and restored source passed20/20. Independent row review retained; related upstream return-probe syntax-role repair https://github.com/EffortlessMetrics/ripr-swarm/pull/1525. Applies only to this inspected row; re-verify after semantic edits or tool upgrades. Dating follows policy/allow.toml#non-rust-ripr-suppressions; strict-zero threshold unchanged."
+
