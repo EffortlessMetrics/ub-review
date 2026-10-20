@@ -5006,6 +5006,7 @@ def routed_status_for_proof_receipt(receipt: dict) -> str:
         "timed_out",
         "skipped_budget",
         "skipped_profile",
+        "skipped_unresolved",
     }:
         return "missing-evidence"
     return "recorded"
@@ -5794,6 +5795,11 @@ def require_proof_receipt_ndjson(root: pathlib.Path, proof_receipts: list[dict])
             parsed = json.loads(line)
         except json.JSONDecodeError as error:
             fail(f"invalid proof_receipts.ndjson line {index + 1}: {error}")
+        if not isinstance(parsed, dict):
+            fail(f"proof_receipts.ndjson line {index + 1} is not an object")
+        # Python equality conflates False with 0 (and 0.0 with 0). Validate
+        # streamed command types before parity can erase that distinction.
+        require_proof_receipt_schema(root, parsed)
         if parsed != proof_receipts[index]:
             fail(f"proof_receipts.ndjson line {index + 1} does not match JSON artifact")
 
@@ -5987,6 +5993,9 @@ def require_resource_lease_artifacts(
                 f"lease={lease!r} receipt={receipt!r}"
             )
         expected = expected_lease_statuses_for_proof_result(receipt["result"])
+        if any(command.get("status") in {"passed", "failed", "timed_out"}
+               for command in receipt.get("commands", [])) and lease["status"] != "granted":
+            fail("executed proof command requires granted lease")
         if lease["status"] not in expected:
             fail(
                 "focused proof lease status does not match receipt result: "
@@ -6004,6 +6013,8 @@ def expected_lease_statuses_for_proof_result(result: str) -> set[str]:
         return {"exhausted"}
     if result == "skipped_profile":
         return {"granted", "skipped_profile", "absent"}
+    if result == "skipped_unresolved":
+        return {"granted", "absent"}
     return {"granted"}
 
 
@@ -9163,6 +9174,7 @@ def require_proof_receipt_schema(root: pathlib.Path, receipt: dict) -> None:
         "timed_out",
         "skipped_budget",
         "skipped_profile",
+        "skipped_unresolved",
         "discriminating",
         "non_discriminating",
         "base_patch_failed",
@@ -9179,6 +9191,30 @@ def require_proof_receipt_schema(root: pathlib.Path, receipt: dict) -> None:
         fail(f"proof receipt commands is not a non-empty array: {receipt!r}")
     for command in commands:
         require_proof_command_receipt_schema(root, receipt["id"], command)
+    expected_mode = "base-plus-tests" if receipt["kind"] == "focused-red-green" else "head-only"
+    if receipt["test_patch_mode"] != expected_mode:
+        fail("proof receipt kind/mode mismatch")
+    sides = [command["side"] for command in commands]
+    allowed_sides = [["head"], ["head", "base-plus-tests"]] if receipt["kind"] == "focused-red-green" else [["head"]]
+    if sides not in allowed_sides:
+        fail("proof receipt command sides contradict kind or cardinality")
+    if len(commands) == 2 and commands[0]["status"] != "passed":
+        fail("proof receipt command roles require passed HEAD before baseline")
+    if receipt["result"] == "skipped_unresolved":
+        statuses = [command["status"] for command in commands]
+        if statuses != (["skipped"] if len(commands) == 1 else ["passed", "skipped"]):
+            fail("unresolved proof receipt command roles contradict nonexecution")
+        # A completed HEAD can precede an unresolved baseline. The unresolved
+        # side itself never executed; accepting a failed command here would
+        # hide real failure behind the newly admitted compatibility result.
+        if (not any(command["status"] == "skipped" for command in commands)
+                or any(command["status"] not in {"passed", "skipped"} for command in commands)
+                or any(command["timed_out"] for command in commands)
+                or any(command["status"] == "skipped" and (
+                    command["exit_code"] is not None or command["duration_ms"] != 0
+                    or command["timeout_sec"] != 0
+                ) for command in commands)):
+            fail("unresolved proof receipt contradicts nonexecution")
 
 
 def require_proof_command_receipt_schema(
@@ -9197,16 +9233,25 @@ def require_proof_command_receipt_schema(
         fail(f"proof command receipt has unsupported side: {command!r}")
     if command["status"] not in {"passed", "failed", "timed_out", "skipped"}:
         fail(f"proof command receipt has unsupported status: {command!r}")
-    if command.get("exit_code") is not None and not isinstance(command.get("exit_code"), int):
+    exit_code = command.get("exit_code")
+    if exit_code is not None and type(exit_code) is not int:
         fail(f"proof command receipt exit_code is invalid: {command!r}")
+    if command["status"] == "passed" and (type(exit_code) is not int or exit_code != 0):
+        fail("passed proof command must have integer zero exit_code")
+    if command["status"] == "failed" and exit_code == 0:
+        fail("failed proof command cannot have zero exit_code")
     if not isinstance(command.get("timed_out"), bool):
         fail(f"proof command receipt timed_out is not boolean: {command!r}")
+    if command["timed_out"] is not (command["status"] == "timed_out"):
+        fail("proof command receipt status/timed_out mismatch")
     timeout = command.get("timeout_sec")
-    if not isinstance(timeout, int) or timeout < 0 or timeout > 900:
+    if type(timeout) is not int or timeout < 0 or timeout > 900:
         fail(f"proof command receipt timeout_sec is invalid: {command!r}")
     duration_ms = command.get("duration_ms")
-    if not isinstance(duration_ms, int) or duration_ms < 0:
+    if type(duration_ms) is not int or duration_ms < 0:
         fail(f"proof command receipt duration_ms is invalid: {command!r}")
+    if command["status"] == "skipped" and (exit_code is not None or duration_ms != 0):
+        fail("skipped proof command must retain unavailable exit and zero duration")
     for field in ["stdout", "stderr"]:
         rel = command[field]
         path = pathlib.PurePosixPath(rel.replace("\\", "/"))
@@ -9389,7 +9434,107 @@ def require_tool_registry_artifacts(root: pathlib.Path) -> None:
     require_tool_gate_outcome_artifacts(root, resolved_by_id, status_by_id, runtime_profile)
 
 
-def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
+def load_ripr_source_json(path: pathlib.Path) -> Any:
+    """Reject ambiguous authority keys in the new source-comparison contract."""
+    def unique_fields(pairs: list[tuple[str, Any]]) -> dict:
+        result: dict = {}
+        for key, value in pairs:
+            if key in result:
+                fail(f"RIPR source-comparison duplicate JSON key {key!r} in {path}")
+            result[key] = value
+        return result
+
+    try:
+        return json.loads(require_file(path).read_text(encoding="utf-8"),
+                          object_pairs_hook=unique_fields)
+    except json.JSONDecodeError as error:
+        fail(f"RIPR source-comparison invalid JSON in {path}: {error}")
+
+
+def require_ripr_source_current_gaps(
+    root: pathlib.Path, decision: dict, raw: dict, detail: dict
+) -> int:
+    """#813 bounded source contract; never selects or qualifies an installed tool."""
+    prefix = "RIPR source-comparison"
+    policy = decision.get("policy")
+    if not isinstance(policy, dict) or policy.get("include_unknowns") is not False:
+        fail(f"{prefix} requires the known include_unknowns=false policy")
+    patch = root / "input/diff.patch"
+    if not patch.is_file():
+        fail(f"{prefix} requires frozen input/diff.patch")
+    expected_input = "sha256:" + hashlib.sha256(patch.read_bytes()).hexdigest()
+    wrapper = raw.get("analysis_outcome")
+    if not isinstance(wrapper, dict) or wrapper.get("analysis_complete") is not True:
+        fail(f"{prefix} requires complete raw analysis")
+    findings = raw["findings"]
+    expected_kind = "complete_with_findings" if findings else "complete_no_findings"
+    outcomes = [decision.get("analysis_outcome"), wrapper.get("outcome")]
+    if decision.get("analysis_complete") is not True:
+        fail(f"{prefix} requires complete badge analysis")
+    for outcome in outcomes:
+        if not isinstance(outcome, dict):
+            fail(f"{prefix} requires a complete typed outcome")
+        identity = outcome.get("identity")
+        if not isinstance(identity, dict) or identity.get("input_identity") != expected_input:
+            fail(f"{prefix} input identity does not match frozen diff bytes")
+        if (outcome.get("schema_version") != "0.1"
+                or outcome.get("kind") != expected_kind or outcome.get("limitations") != []):
+            fail(f"{prefix} requires a supported complete limitation-free outcome")
+        counts = outcome.get("counts")
+        if not isinstance(counts, dict):
+            fail(f"{prefix} outcome counts are missing")
+        for field in ["finding_count", "candidate_line_count", "probe_count"]:
+            value = counts.get(field)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                fail(f"{prefix} outcome count {field} is invalid")
+        if counts["finding_count"] != len(findings):
+            fail(f"{prefix} outcome finding count differs from raw findings")
+        if not findings and not (counts["candidate_line_count"] or counts["probe_count"]):
+            fail(f"{prefix} complete empty outcome has no behavioral subject")
+    if outcomes[0] != outcomes[1]:
+        fail(f"{prefix} badge/raw typed outcomes differ")
+    by_id: dict[str, dict] = {}
+    current = 0
+    classes = {"exposed", "weakly_exposed", "reachable_unrevealed", "no_static_path",
+               "infection_unknown", "propagation_unknown", "static_unknown"}
+    for finding in findings:
+        finding_id = finding["id"]  # Common v3 validation has checked object/id/class.
+        if finding_id in by_id:
+            fail(f"{prefix} duplicate raw finding identity")
+        by_id[finding_id] = finding
+        probe = finding.get("probe")
+        line = probe.get("line") if isinstance(probe, dict) else None
+        file = probe.get("file") if isinstance(probe, dict) else None
+        if (not finding_id.strip() or not isinstance(file, str) or not file.strip()
+                or isinstance(line, bool) or not isinstance(line, int) or line <= 0):
+            fail(f"{prefix} has an invalid raw finding probe/id")
+        if finding.get("language") != "rust":
+            fail(f"{prefix} supports Rust findings only")
+        if finding.get("classification") not in classes:
+            fail(f"{prefix} has an unknown finding classification")
+        currentness = finding.get("source_currentness")
+        if currentness not in {"candidate_current", "base_deleted"}:
+            fail(f"{prefix} has missing or unsupported source currentness")
+        if currentness == "candidate_current" and finding["classification"] in {
+            "weakly_exposed", "reachable_unrevealed", "no_static_path"
+        }:
+            current += 1
+    for entry in detail.get("entries", []):
+        finding = by_id.get(entry.get("id")) if isinstance(entry, dict) else None
+        probe = finding.get("probe") if isinstance(finding, dict) else None
+        location = entry.get("range") if isinstance(entry, dict) else None
+        if (not isinstance(probe, dict) or not isinstance(location, dict)
+                or entry.get("classification") != finding.get("classification")
+                or entry.get("path") != probe.get("file")
+                or location.get("start_line") != probe.get("line")
+                or location.get("end_line") != probe.get("line")):
+            fail(f"{prefix} projected entry differs from preserved raw finding")
+    return current
+
+
+def require_ripr_exposure_gap_details(
+    root: pathlib.Path, *, source_comparison: bool = False
+) -> None:
     """#873/#885: reconcile complete raw detail with the authoritative badge.
 
     RIPR 0.10.0 does not expose per-finding suppression state. The v3 detail
@@ -9399,21 +9544,26 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
     decision_path = root / "sensors/ripr/gate-decision.json"
     detail_path = root / "sensors/ripr/exposure-gaps.json"
     if not decision_path.is_file():
+        if source_comparison:
+            fail("RIPR source-comparison requires gate-decision.json")
         if detail_path.is_file():
             fail("sensors/ripr/exposure-gaps.json present without gate-decision.json")
         return
     if not detail_path.is_file():
         fail("sensors/ripr/gate-decision.json present without exposure-gaps.json (#347)")
-    decision = load_json(decision_path)
+    read_json = load_ripr_source_json if source_comparison else load_json
+    decision = read_json(decision_path)
     if not isinstance(decision, dict) or any(
         decision.get(field) != expected
         for field, expected in {
-            "schema_version": "0.6",
+            "schema_version": "0.8" if source_comparison else "0.6",
             "kind": "ripr",
             "scope": "diff",
             "basis": "finding_exposure",
         }.items()
     ):
+        if source_comparison:
+            fail("gate-decision.json has an incompatible RIPR source-comparison 0.8 envelope")
         fail("gate-decision.json has an incompatible pinned RIPR 0.10.0 envelope")
     badge_status = decision.get("status")
     if badge_status not in {"pass", "warn", "fail"}:
@@ -9444,7 +9594,7 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
     suppressed = badge_count("suppressed_exposure_gaps")
     analyzed = badge_count("analyzed_findings")
 
-    detail = load_json(detail_path)
+    detail = read_json(detail_path)
     if not isinstance(detail, dict):
         fail("exposure-gaps.json is not an object")
     if detail.get("schema") != "ub-review.ripr_exposure_gaps.v3":
@@ -9479,7 +9629,9 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
         "mode": "ready",
     }:
         fail("exposure-gaps.json has incompatible pinned RIPR detail source")
-    raw_stdout = load_json(root / raw_outputs["stdout"])
+    raw_stdout = read_json(root / raw_outputs["stdout"])
+    if not isinstance(raw_stdout, dict):
+        fail("preserved RIPR stdout must be an object")
     if raw_stdout.get("schema_version") != "0.2" or raw_stdout.get("tool") != "ripr" or raw_stdout.get("mode") != "ready":
         fail("preserved RIPR stdout has an incompatible detail envelope")
     raw_findings = raw_stdout.get("findings")
@@ -9519,6 +9671,10 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
         fail("exposure-gaps.json total_raw_findings does not match preserved RIPR stdout")
     if len(raw_gap_ids) != total:
         fail("exposure-gaps.json total_raw_gap_findings does not match preserved RIPR stdout")
+    current_gap_total = (
+        require_ripr_source_current_gaps(root, decision, raw_stdout, detail)
+        if source_comparison else total
+    )
     entry_ids: set[str] = set()
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict) or not entry.get("id") or not entry.get("classification"):
@@ -9574,7 +9730,9 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
             f"{raw_total} does not reconcile with gate-decision analyzed_findings {analyzed}"
         )
     expected = unsuppressed + suppressed
-    if total != expected:
+    if current_gap_total != expected:
+        if source_comparison:
+            fail("RIPR source-comparison current gap total does not reconcile with badge counts")
         fail(
             "exposure-gaps.json total_raw_gap_findings "
             f"{total} does not reconcile with gate-decision counts "
@@ -10935,6 +11093,277 @@ def self_test_non_discriminating_routes_as_missing_evidence() -> None:
         fail(f"non_discriminating proof routed as {status!r}, expected missing-evidence")
 
 
+def self_test_skipped_unresolved_receipt_contract() -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as temporary:
+        root = pathlib.Path(temporary)
+        proof_dir = root / "proof" / "proof-unresolved" / "head"
+        proof_dir.mkdir(parents=True)
+        for stream in ("stdout", "stderr"):
+            (proof_dir / f"{stream}.txt").write_text("", encoding="utf-8")
+        command = {
+            "side": "head", "command": "cargo test --locked --test absent", "env": {},
+            "status": "skipped", "exit_code": None, "timed_out": False,
+            "timeout_sec": 0, "duration_ms": 0,
+            "stdout": "proof/proof-unresolved/head/stdout.txt",
+            "stderr": "proof/proof-unresolved/head/stderr.txt",
+            "reason": "approved target could not be resolved",
+        }
+        receipt = {
+            "schema": "ub-review.proof_receipt.v1", "id": "proof-unresolved",
+            "kind": "focused-head", "base": "base", "head": "head",
+            "test_patch_mode": "head-only", "requested_by": ["tests-oracle"],
+            "request_ids": ["request-unresolved"], "commands": [command],
+            "result": "skipped_unresolved", "reason": command["reason"],
+        }
+        for kind in ("focused-head", "focused-red-green", "focused-build"):
+            require_proof_receipt_schema(root, dict(receipt, kind=kind,
+                test_patch_mode="base-plus-tests" if kind == "focused-red-green" else "head-only"))
+        for label, updates, expected in (
+            ("nonzero completed command", {"status": "failed", "exit_code": 101}, "unresolved proof receipt command roles"),
+            ("only successful commands", {"status": "passed", "exit_code": 0}, "unresolved proof receipt command roles"),
+            ("skipped zero exit", {"exit_code": 0}, "skipped proof command must retain unavailable exit"),
+            ("skipped duration", {"duration_ms": 1}, "skipped proof command must retain unavailable exit"),
+            ("skipped timeout", {"timeout_sec": 1}, "unresolved proof receipt contradicts nonexecution"),
+            ("skipped timeout flag", {"timed_out": True}, "status/timed_out mismatch"),
+        ):
+            malformed = dict(receipt, commands=[dict(command, **updates)])
+            expect_self_test_failure(
+                f"unresolved {label}", expected,
+                lambda malformed=malformed: require_proof_receipt_schema(root, malformed),
+            )
+        baseline_dir = root / "proof" / receipt["id"] / "base-plus-tests"
+        baseline_dir.mkdir()
+        for stream in ("stdout", "stderr"):
+            (baseline_dir / f"{stream}.txt").write_text("", encoding="utf-8")
+        baseline = dict(command, side="base-plus-tests",
+                        stdout=f"proof/{receipt['id']}/base-plus-tests/stdout.txt",
+                        stderr=f"proof/{receipt['id']}/base-plus-tests/stderr.txt")
+        passed_head = dict(command, status="passed", exit_code=0, duration_ms=10, timeout_sec=30)
+        require_proof_receipt_schema(root, dict(receipt, kind="focused-red-green",
+                                              test_patch_mode="base-plus-tests",
+                                              commands=[passed_head, baseline]))
+        if routed_status_for_proof_receipt(receipt) != "missing-evidence":
+            fail("skipped_unresolved must route as missing-evidence")
+        for result in ("head_failed", "discriminating", "head_passed"):
+            if routed_status_for_proof_receipt(dict(receipt, result=result)) != "tool-confirmed":
+                fail(f"existing decisive route changed for {result}")
+        expect_self_test_failure(
+            "unknown unresolved vocabulary", "unsupported result",
+            lambda: require_proof_receipt_schema(root, dict(receipt, result="unresolved_new")),
+        )
+        lease = {
+            "schema": "ub-review.resource_lease.v1", "id": "lease-proof-unresolved",
+            "kind": "focused-test", "consumer": receipt["id"], "status": "absent",
+            "reason": command["reason"], "cpu": 0, "memory_mb": 0, "disk_mb": 0,
+            "timeout_sec": 0, "network": False, "scratch": False,
+            "worktree": None, "command": None,
+        }
+        (root / "review").mkdir()
+        (root / "review/resource_leases.json").write_text(json.dumps([lease]), encoding="utf-8")
+        (root / "resource_leases.ndjson").write_text(json.dumps(lease) + "\n", encoding="utf-8")
+        (root / "review/resource_plan.md").write_text(
+            "# Resource lease plan\n\n## Focused proof leases\n\n"
+            "- `lease-proof-unresolved` status=`absent`.\n", encoding="utf-8",
+        )
+        require_resource_lease_artifacts(root, [receipt], [lease])
+        if expected_lease_statuses_for_proof_result("skipped_unresolved") != {"granted", "absent"}:
+            fail("unresolved lease vocabulary changed")
+        expect_self_test_failure(
+            "unresolved lease cannot prove success", "lease status does not match receipt result",
+            lambda: require_resource_lease_artifacts(root, [dict(receipt, result="head_passed")], [lease]),
+        )
+        expect_self_test_failure(
+            "unresolved lease cannot prove baseline discrimination", "lease status does not match receipt result",
+            lambda: require_resource_lease_artifacts(root, [dict(receipt, result="discriminating")], [lease]),
+        )
+
+
+def self_test_unresolved_side_and_lease_contract() -> None:
+    import copy
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as temporary:
+        root = pathlib.Path(temporary)
+        (root / "review").mkdir()
+        commands = {}
+        for side in ("head", "base-plus-tests"):
+            directory = root / "proof" / "proof-sides" / side
+            directory.mkdir(parents=True)
+            for stream in ("stdout", "stderr"):
+                (directory / f"{stream}.txt").write_text("", encoding="utf-8")
+            commands[side] = {
+                "side": side, "command": "cargo test controlled_fixture", "env": {},
+                "status": "skipped", "exit_code": None, "timed_out": False,
+                "timeout_sec": 0, "duration_ms": 0,
+                "stdout": f"proof/proof-sides/{side}/stdout.txt",
+                "stderr": f"proof/proof-sides/{side}/stderr.txt", "reason": "controlled unresolved",
+            }
+        head, baseline = commands["head"], commands["base-plus-tests"]
+        passed = dict(head, status="passed", exit_code=0, timeout_sec=30, duration_ms=1)
+        receipt = {
+            "schema": "ub-review.proof_receipt.v1", "id": "proof-sides", "kind": "focused-head",
+            "base": "base", "head": "head", "test_patch_mode": "head-only",
+            "requested_by": ["tests-oracle"], "request_ids": ["request-sides"],
+            "commands": [head], "result": "skipped_unresolved", "reason": "controlled unresolved",
+        }
+
+        def verify(probe: dict) -> None:
+            (root / "review/proof_receipts.json").write_text(json.dumps([probe]), encoding="utf-8")
+            (root / "proof_receipts.ndjson").write_text(json.dumps(probe) + "\n", encoding="utf-8")
+            require_proof_receipt_ndjson(root, load_json(root / "review/proof_receipts.json"))
+
+        def lease_verify(probe: dict, status: str, include: bool = True) -> None:
+            lease = {
+                "schema": "ub-review.resource_lease.v1", "id": "lease-proof-sides",
+                "kind": "focused-build" if probe["kind"] == "focused-build" else "focused-test",
+                "consumer": probe["id"], "status": status, "reason": "controlled grant",
+                "cpu": 0, "memory_mb": 0, "disk_mb": 0, "timeout_sec": 30,
+                "network": False, "scratch": False, "worktree": None, "command": None,
+            }
+            rows = [lease] if include else []
+            (root / "review/resource_leases.json").write_text(json.dumps(rows), encoding="utf-8")
+            (root / "resource_leases.ndjson").write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+            (root / "review/resource_plan.md").write_text(
+                "# Resource lease plan\n\n## Focused proof leases\n", encoding="utf-8",
+            )
+            require_resource_lease_artifacts(root, [probe], rows)
+
+        for kind in ("focused-head", "focused-build", "focused-red-green"):
+            current = dict(receipt, kind=kind,
+                test_patch_mode="base-plus-tests" if kind == "focused-red-green" else "head-only")
+            verify(current)
+            lease_verify(current, "absent")
+            lease_verify(current, "granted")
+            for rows in ([head, head], [head, baseline, baseline], [baseline], [baseline, head]):
+                expect_self_test_failure(f"{kind} extra/duplicate/reordered sides", "command sides",
+                    lambda rows=rows, current=current: verify(dict(current, commands=rows)))
+            wrong_mode = dict(current, test_patch_mode="head-only" if kind == "focused-red-green" else "base-plus-tests")
+            expect_self_test_failure(f"{kind} mismatched mode", "kind/mode", lambda: verify(wrong_mode))
+            unknown = dict(head, side="unknown")
+            expect_self_test_failure(f"{kind} unknown side", "unsupported side",
+                lambda current=current: verify(dict(current, commands=[unknown])))
+            if kind != "focused-red-green":
+                expect_self_test_failure(f"{kind} successful HEAD plus fake skipped baseline", "command sides",
+                    lambda current=current: verify(dict(current, commands=[passed, baseline])))
+            else:
+                expect_self_test_failure("red-green skipped HEAD plus skipped baseline", "command roles",
+                    lambda current=current: verify(dict(current, commands=[head, baseline])))
+                expect_self_test_failure("red-green completed HEAD labelled unresolved without baseline", "command roles",
+                    lambda current=current: verify(dict(current, commands=[passed])))
+        red_green = dict(receipt, kind="focused-red-green", test_patch_mode="base-plus-tests",
+                         commands=[passed, baseline])
+        verify(red_green)
+        lease_verify(red_green, "granted")
+        expect_self_test_failure("executed HEAD with absent lease", "executed proof command requires granted lease",
+            lambda: lease_verify(red_green, "absent"))
+        expect_self_test_failure("executed HEAD with missing lease", "lacks resource lease",
+            lambda: lease_verify(red_green, "granted", include=False))
+        # The same grant invariant applies when a completed HEAD precedes an
+        # unavailable profile/tool baseline, not only the new unresolved tag.
+        profile = dict(red_green, result="skipped_profile")
+        lease_verify(profile, "granted")
+        expect_self_test_failure("profile-deferred executed HEAD with absent lease", "executed proof command requires granted lease",
+            lambda: lease_verify(profile, "absent"))
+        streamed = copy.deepcopy(red_green)
+        streamed["commands"] = [passed, dict(passed)]
+        expect_self_test_failure("streamed duplicate HEAD", "command sides", lambda: verify(streamed))
+
+
+def self_test_proof_command_exit_contract() -> None:
+    import copy
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as temporary:
+        root = pathlib.Path(temporary)
+        (root / "review").mkdir()
+        commands = []
+        for side in ("head", "base-plus-tests"):
+            directory = root / "proof" / "proof-exits" / side
+            directory.mkdir(parents=True)
+            for stream in ("stdout", "stderr"):
+                (directory / f"{stream}.txt").write_text("", encoding="utf-8")
+            commands.append({
+                "side": side, "command": "cargo test controlled_fixture", "env": {},
+                "status": "passed", "exit_code": 0, "timed_out": False,
+                "timeout_sec": 30, "duration_ms": 1,
+                "stdout": f"proof/proof-exits/{side}/stdout.txt",
+                "stderr": f"proof/proof-exits/{side}/stderr.txt", "reason": "controlled receipt",
+            })
+        receipt = {
+            "schema": "ub-review.proof_receipt.v1", "id": "proof-exits",
+            "kind": "focused-red-green", "base": "base", "head": "head",
+            "test_patch_mode": "base-plus-tests", "requested_by": ["tests-oracle"],
+            "request_ids": ["request-exits"], "commands": commands,
+            "result": "non_discriminating", "reason": "controlled receipt",
+        }
+
+        def verify(rows: dict, streamed: dict | None = None) -> None:
+            (root / "review/proof_receipts.json").write_text(json.dumps([rows]), encoding="utf-8")
+            (root / "proof_receipts.ndjson").write_text(
+                json.dumps(rows if streamed is None else streamed) + "\n", encoding="utf-8",
+            )
+            require_proof_receipt_ndjson(root, load_json(root / "review/proof_receipts.json"))
+
+        verify(receipt)
+        skipped = dict(commands[1], status="skipped", exit_code=None, duration_ms=0, timeout_sec=0)
+        unresolved = dict(receipt, result="skipped_unresolved", commands=[commands[0], skipped])
+        verify(unresolved)
+        verify(dict(receipt, result="head_passed", commands=[commands[0]]))
+        verify(dict(receipt, result="skipped_profile", commands=[dict(skipped, side="head",
+                    stdout=commands[0]["stdout"], stderr=commands[0]["stderr"], timeout_sec=30)]))
+        for code in (101, None):
+            verify(dict(receipt, result="head_failed", commands=[dict(commands[0], status="failed", exit_code=code)]))
+        verify(dict(receipt, result="timed_out", commands=[dict(commands[0], status="timed_out",
+                    exit_code=None, timed_out=True)]))
+
+        for side_index, side in enumerate(("head", "base-plus-tests")):
+            for code in (101, None, True, False):
+                malformed = copy.deepcopy(receipt)
+                malformed["commands"][side_index]["exit_code"] = code
+                expected = "exit_code is invalid" if type(code) is bool else "passed proof command must have integer zero exit_code"
+                expect_self_test_failure(
+                    f"passed {side} exit {code!r} in JSON and NDJSON", expected,
+                    lambda malformed=malformed: verify(malformed),
+                )
+                if side_index == 0:
+                    malformed_unresolved = copy.deepcopy(unresolved)
+                    malformed_unresolved["commands"][0]["exit_code"] = code
+                    expect_self_test_failure(
+                        f"unresolved passed HEAD exit {code!r}", expected,
+                        lambda malformed=malformed_unresolved: verify(malformed),
+                    )
+            # Stream-only corruption must not exploit Python's False == 0 or
+            # 0.0 == 0 comparison to pass parity against valid JSON metadata.
+            for code in (False, 0.0):
+                streamed = copy.deepcopy(receipt)
+                streamed["commands"][side_index]["exit_code"] = code
+                expect_self_test_failure(
+                    f"stream-only {side} exit {code!r}", "exit_code is invalid",
+                    lambda streamed=streamed: verify(receipt, streamed),
+                )
+            for field in ("timeout_sec", "duration_ms"):
+                streamed = copy.deepcopy(receipt)
+                streamed["commands"][side_index][field] = True
+                expect_self_test_failure(
+                    f"Boolean {side} {field}", f"{field} is invalid",
+                    lambda streamed=streamed: verify(streamed),
+                )
+        for updates, expected in (
+            ({"status": "failed", "exit_code": 0}, "failed proof command cannot have zero exit_code"),
+            ({"status": "skipped", "exit_code": 101}, "skipped proof command must retain unavailable exit"),
+            ({"status": "skipped", "exit_code": None, "duration_ms": 1}, "skipped proof command must retain unavailable exit"),
+            ({"timed_out": True}, "status/timed_out mismatch"),
+            ({"status": "timed_out", "exit_code": None}, "status/timed_out mismatch"),
+        ):
+            malformed = dict(receipt, commands=[dict(commands[0], **updates)])
+            expect_self_test_failure(
+                f"contradictory command {updates!r}", expected,
+                lambda malformed=malformed: verify(malformed),
+            )
+
+
 def self_test_absent_resource_lease_contract() -> None:
     import tempfile
 
@@ -11323,6 +11752,142 @@ def self_test_issue_broker_contract() -> None:
             [dict(plan_entry, decision="skip")], [result]
         ): require_issue_broker_artifacts(root, candidates, actions),
     )
+
+
+def self_test_ripr_source_comparison() -> None:
+    """#813: source0.8 admission is explicit, current and not promotion."""
+    import copy
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        sensor = root / "sensors/ripr"
+        sensor.mkdir(parents=True)
+        (root / "input").mkdir()
+        patch = b"--- a/src/a.rs\n+++ b/src/a.rs\n@@ -1 +1 @@\n-old\n+new\n"
+        (root / "input/diff.patch").write_bytes(patch)
+        outcome = {
+            "schema_version": "0.1", "kind": "complete_with_findings",
+            "identity": {"input_identity": "sha256:" + hashlib.sha256(patch).hexdigest()},
+            "counts": {"finding_count": 3, "candidate_line_count": 2, "probe_count": 3},
+            "limitations": [],
+        }
+        findings = [
+            {"id": name, "classification": "weakly_exposed", "language": "rust",
+             "source_currentness": currentness,
+             "probe": {"file": "src/a.rs", "line": index + 1}}
+            for index, (name, currentness) in enumerate([
+                ("current", "candidate_current"), ("moved", "candidate_current"),
+                ("deleted", "base_deleted"),
+            ])
+        ]
+        badge = {
+            "schema_version": "0.8", "kind": "ripr", "scope": "diff",
+            "basis": "finding_exposure", "status": "warn", "warnings": [],
+            "preview_skipped": [], "analysis_complete": True, "analysis_outcome": outcome,
+            "policy": {"include_unknowns": False},
+            "counts": {"unsuppressed_exposure_gaps": 2,
+                       "suppressed_exposure_gaps": 0, "analyzed_findings": 3},
+        }
+        raw = {"schema_version": "0.2", "tool": "ripr", "mode": "ready",
+               "summary": {"findings": 3}, "findings": findings,
+               "analysis_outcome": {"analysis_complete": True, "outcome": outcome}}
+        detail = {
+            "schema": "ub-review.ripr_exposure_gaps.v3", "status": "ok",
+            "semantics": "raw_pre_policy", "policy_authority": "sensors/ripr/gate-decision.json",
+            "raw_outputs": {"stdout": "sensors/ripr/exposure-gaps.ripr.stdout",
+                            "stderr": "sensors/ripr/exposure-gaps.ripr.stderr"},
+            "source": {"tool": "ripr", "schema_version": "0.2", "mode": "ready"},
+            "total_raw_findings": 3, "total_raw_gap_findings": 3,
+            "entries": [
+                {"id": row["id"], "classification": row["classification"],
+                 "exposure_gap_class": row["classification"], "path": "src/a.rs",
+                 "range": {"start_line": i + 1, "end_line": i + 1},
+                 "artifact_pointer": f"sensors/ripr/exposure-gaps.json#/entries/{i}"}
+                for i, row in enumerate(findings)
+            ],
+        }
+
+        def write(b: dict, r: dict, d: dict) -> None:
+            for name, value in [("gate-decision.json", b), ("exposure-gaps.json", d),
+                                ("exposure-gaps.ripr.stdout", r)]:
+                (sensor / name).write_text(json.dumps(value), encoding="utf-8")
+            (sensor / "exposure-gaps.ripr.stderr").write_text("", encoding="utf-8")
+
+        def require() -> None:
+            require_ripr_exposure_gap_details(root, source_comparison=True)
+
+        write(badge, raw, detail)
+        require()  # Three audit gaps; exactly two current policy gaps, still nonzero.
+        expect_self_test_failure("source0.8 is not pinned admission", "incompatible pinned",
+                                 lambda: require_ripr_exposure_gap_details(root))
+        for version in ["0.5", "0.6", "0.7", "0.9", "9.9", None, 0.8]:
+            changed = copy.deepcopy(badge); changed["schema_version"] = version
+            write(changed, raw, detail)
+            expect_self_test_failure(f"source version {version!r}", "source-comparison", require)
+        for name, change, reason in [
+            ("stale badge", lambda b, r, d: b["analysis_outcome"]["identity"].update(input_identity="sha256:" + "0" * 64), "input"),
+            ("stale raw", lambda b, r, d: r["analysis_outcome"]["outcome"]["identity"].update(input_identity="sha256:" + "0" * 64), "input"),
+            ("unknown currentness", lambda b, r, d: r["findings"][0].update(source_currentness="moved"), "currentness"),
+            ("missing currentness", lambda b, r, d: r["findings"][0].pop("source_currentness"), "currentness"),
+            ("different base", lambda b, r, d: b["analysis_outcome"]["identity"].update(base_revision="another-base"), "outcomes differ"),
+            ("wrong current partition", lambda b, r, d: b["counts"].update(unsuppressed_exposure_gaps=3), "current gap"),
+            ("partial badge", lambda b, r, d: b.update(analysis_complete=False), "complete"),
+            ("partial raw", lambda b, r, d: r["analysis_outcome"].update(analysis_complete=False), "complete"),
+            ("partial kind", lambda b, r, d: b["analysis_outcome"].update(kind="limited_partial_scope"), "complete"),
+            ("limitations", lambda b, r, d: b["analysis_outcome"].update(limitations=["budget"]), "complete"),
+            ("unknown policy", lambda b, r, d: b["policy"].update(include_unknowns=True), "policy"),
+            ("nonRust", lambda b, r, d: r["findings"][0].update(language="python"), "Rust"),
+            ("wrong row geometry", lambda b, r, d: d["entries"][0]["range"].update(start_line=9, end_line=9), "raw finding"),
+            ("duplicated raw identity", lambda b, r, d: r["findings"][1].update(id="current"), "duplicate"),
+            ("lying finding count", lambda b, r, d: b["analysis_outcome"]["counts"].update(finding_count=0), "count"),
+        ]:
+            b, r, d = copy.deepcopy(badge), copy.deepcopy(raw), copy.deepcopy(detail)
+            change(b, r, d); write(b, r, d)
+            expect_self_test_failure(name, reason, require)
+        for filename, key in [("gate-decision.json", "schema_version"),
+                              ("exposure-gaps.ripr.stdout", "source_currentness"),
+                              ("exposure-gaps.json", "total_raw_findings")]:
+            write(badge, raw, detail)
+            path = sensor / filename
+            text = path.read_text(encoding="utf-8")
+            # Duplicate the first matching key without changing its effective value.
+            text = text.replace('"' + key + '":', '"' + key + '": null, "' + key + '":', 1)
+            path.write_text(text, encoding="utf-8")
+            expect_self_test_failure(f"duplicate {filename}", "duplicate JSON key", require)
+        for option in ["--min-ok-model-lanes=0", "--max-inline-comments=0",
+                       "--require-no-model-evidence-failures", "--expected-review-profile=bun-ub-v0",
+                       "--expected-repo-kind=bun", "--self-test", "--ci-audit-only",
+                       "--require-no-model-evidence-fail", "--expected-review-prof=bun-ub-v0"]:
+            with contextlib.redirect_stderr(io.StringIO()):
+                try:
+                    parse_args(["verify", "--ripr-source-comparison", option])
+                except SystemExit as error:
+                    assert error.code == 2
+                else:
+                    raise AssertionError(f"source mode accepted conflicting {option}")
+        clean_badge, clean_raw, clean_detail = copy.deepcopy(badge), copy.deepcopy(raw), copy.deepcopy(detail)
+        for row in clean_raw["findings"]:
+            row["classification"] = "exposed"
+        clean_badge["counts"]["unsuppressed_exposure_gaps"] = 0
+        clean_detail["entries"] = []
+        clean_detail["total_raw_gap_findings"] = 0
+        write(clean_badge, clean_raw, clean_detail)
+        require()  # Legitimate zero current gaps; no limitation metadata needed.
+        for name, change in [
+            ("missing non-gap probe", lambda r: r["findings"][0].pop("probe")),
+            ("blank non-gap file", lambda r: r["findings"][0]["probe"].update(file=" ")),
+            ("invalid non-gap line", lambda r: r["findings"][0]["probe"].update(line=True)),
+        ]:
+            changed = copy.deepcopy(clean_raw)
+            change(changed)
+            write(clean_badge, changed, clean_detail)
+            expect_self_test_failure(name, "raw finding probe", require)
+        write(badge, raw, detail)
+        (root / "input/diff.patch").write_bytes(patch + b"stale")
+        expect_self_test_failure("changed input", "input", require)
+        (root / "input/diff.patch").write_bytes(patch)
+        require()
 
 
 def self_test_ripr_exposure_gap_contract() -> None:
@@ -15912,6 +16477,9 @@ def run_self_tests() -> None:
     )
     self_test_coverage_sidecar_receipts()
     self_test_non_discriminating_routes_as_missing_evidence()
+    self_test_skipped_unresolved_receipt_contract()
+    self_test_proof_command_exit_contract()
+    self_test_unresolved_side_and_lease_contract()
     self_test_absent_resource_lease_contract()
     self_test_receipt_route_source_anchor_contract()
     self_test_follow_up_resolved_away_filter_matches_rust_contract()
@@ -15930,6 +16498,7 @@ def run_self_tests() -> None:
     self_test_issue_capture_contract()
     self_test_issue_broker_contract()
     self_test_ripr_exposure_gap_contract()
+    self_test_ripr_source_comparison()
     self_test_cost_receipt_contract()
     self_test_floor_trend_contract()
     self_test_fill_ledger_contract()
@@ -16533,9 +17102,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--require-no-model-evidence-failures", action="store_true")
     parser.add_argument("--expected-review-profile", default="bun-ub-v0")
     parser.add_argument("--expected-repo-kind", default="bun")
-    parser.add_argument("--ci-audit-only", action="store_true")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--ci-audit-only", action="store_true")
+    modes.add_argument("--ripr-source-comparison", action="store_true",
+                       help="check source badge0.8/raw0.2 compatibility only; not installed-tool qualification")
     parser.add_argument("--self-test", action="store_true")
-    return parser.parse_args(argv[1:])
+    args = parser.parse_args(argv[1:])
+    if args.ripr_source_comparison:
+        if any(arg.startswith("-") and arg not in {"--ripr-source-comparison", "--"}
+               for arg in argv[1:]):
+            parser.error("--ripr-source-comparison cannot assert full packet/self-test requirements")
+    return args
 
 
 def main(argv: list[str]) -> int:
@@ -16547,6 +17124,11 @@ def main(argv: list[str]) -> int:
     root = pathlib.Path(args.root)
     if not root.is_dir():
         fail(f"artifact root is not a directory: {root}")
+
+    if args.ripr_source_comparison:
+        require_ripr_exposure_gap_details(root, source_comparison=True)
+        print("RIPR source-comparison contract verified; installed/Required qualification not established")
+        return 0
 
     if args.ci_audit_only:
         require_ci_audit_core_artifacts(root, required=True)

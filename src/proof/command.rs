@@ -161,6 +161,7 @@ where
             completion_unconfirmed = true;
         }
     };
+    let command_started = std::time::Instant::now();
     let status = runner(
         command_root,
         &spec.argv,
@@ -170,6 +171,9 @@ where
         &paths.stderr_path,
         &mut observe_process,
     );
+    // Zero on an old error receipt means timing was unavailable. Preserve a
+    // measured submillisecond failure as one millisecond instead of losing it.
+    let command_elapsed_ms = command_started.elapsed().as_millis().max(1);
     if completion_unconfirmed {
         let error = match status {
             Err(error) => error,
@@ -302,7 +306,7 @@ where
             format!("focused proof command unavailable: {error:#}"),
             None,
             false,
-            0,
+            command_elapsed_ms,
         ),
     };
     Ok(ProofCommandReceipt {

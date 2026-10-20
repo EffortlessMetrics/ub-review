@@ -1410,6 +1410,61 @@ mod tests {
     }
 
     #[test]
+    fn skipped_unresolved_retains_required_unproven_policy() {
+        for blocking in [false, true] {
+            let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+            args.mode = RunMode::IntelligentCi;
+            let mut config = Config::default();
+            config.gate.blocking.required_proof_unproven = blocking;
+            let request = required_policy_proof_request("proof-unresolved");
+            let mut receipt = test_proof_receipt("skipped_unresolved", "skipped");
+            receipt.request_ids = vec![request.id.clone()];
+            receipt.commands[0].exit_code = None;
+            receipt.commands[0].duration_ms = 0;
+            receipt.commands[0].timeout_sec = 0;
+            let plan = test_plan(Vec::new());
+            let terminal_state = test_terminal_state("sufficient");
+            let gate = build_gate_outcome(GateOutcomeInput {
+                args: &args,
+                config: &config,
+                tool_gate_outcomes: &[],
+                plan: &plan,
+                terminal_state: &terminal_state,
+                proof_requests: std::slice::from_ref(&request),
+                proof_receipts: &[receipt],
+                missing_or_failed_sensor_evidence: &[],
+                missing_or_failed_model_evidence: &[],
+                reporter_gate: crate::ReporterGateInput::Absent,
+                planner_portfolio: None,
+                revision_digest: None,
+            });
+            assert_eq!(gate.required_proof.matched, 1);
+            assert_eq!(gate.required_proof.passed, 0);
+            assert_eq!(gate.required_proof.failed, 0);
+            assert_eq!(gate.required_proof.skipped, 1);
+            // Opting unproven Required work into blocking preserves the
+            // existing policy's finding verdict; it is still not an
+            // observed proof failure or a satisfied requirement.
+            assert_eq!(
+                gate.gate_result,
+                if blocking { "finding" } else { "not_proven" }
+            );
+            assert_eq!(gate.conclusion, if blocking { "fail" } else { "pass" });
+            assert_eq!(gate.reasons.len(), usize::from(blocking));
+            assert!(
+                gate.not_proven_reasons
+                    .iter()
+                    .any(|reason| reason.starts_with("required-proof:"))
+            );
+            if blocking {
+                assert_eq!(gate.reasons[0].id, "cargo-check");
+                assert!(gate.reasons[0].detail.contains("skipped_unresolved"));
+                assert!(gate.reasons[0].detail.contains("not proven"));
+            }
+        }
+    }
+
+    #[test]
     fn gate_outcome_fails_on_required_proof_timeout_with_receipt() {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.mode = RunMode::IntelligentCi;
@@ -3004,10 +3059,13 @@ mod tests {
     /// red/green obligation.
     #[test]
     fn skipped_receipt_never_satisfies_required_planner_proof() -> Result<()> {
-        let mut receipt = planner_task_receipt("skipped_budget", "skipped");
-        receipt.revision = Some(planner_revision(PLANNER_TEST_DIGEST));
-        receipt.test_patch_mode = "base-plus-tests".to_owned();
-        assert_planner_receipt_ineligible(receipt)
+        for result in ["skipped_budget", "skipped_unresolved"] {
+            let mut receipt = planner_task_receipt(result, "skipped");
+            receipt.revision = Some(planner_revision(PLANNER_TEST_DIGEST));
+            receipt.test_patch_mode = "base-plus-tests".to_owned();
+            assert_planner_receipt_ineligible(receipt)?;
+        }
+        Ok(())
     }
 
     /// A successful receipt stamped with a stale revision digest never

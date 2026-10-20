@@ -42,7 +42,7 @@ where
     let mut leases = Vec::new();
     let mut executed_tasks = 0_usize;
     let mut executed_files = BTreeSet::new();
-    let mut estimated_seconds = 0_u64;
+    let mut spent_seconds = 0_u64;
     let lease_budget = proof_lease_budget(profile)?;
     for task in tasks {
         let task_timeout_sec = focused_test_task_command_timeout(&task, budget);
@@ -108,7 +108,7 @@ where
             executed_tasks,
             &executed_files,
             &task.file,
-            estimated_seconds,
+            spent_seconds,
             task_timeout_sec,
             task.mode.command_count(),
             budget,
@@ -186,11 +186,12 @@ where
                 &mut prepare_base_plus_tests,
             )?,
         };
+        spent_seconds = spent_seconds.saturating_add(
+            focused_proof_receipt_spent_seconds(&receipt).unwrap_or(lease.timeout_sec),
+        );
         leases.push(lease);
         receipts.push(receipt);
         executed_tasks += 1;
-        estimated_seconds = estimated_seconds
-            .saturating_add(task_timeout_sec.saturating_mul(task.mode.command_count()));
     }
     Ok(ProofBrokerResult {
         proof_receipts: receipts,
