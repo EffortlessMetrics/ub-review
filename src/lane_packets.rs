@@ -762,11 +762,15 @@ mod tests {
                     calls: Vec::new(),
                 };
                 let mut observations = Vec::new();
+                let started = std::time::Instant::now()
+                    .checked_sub(Duration::from_secs(2))
+                    .context("construct elapsed timeout interval")?;
+                let minimum_duration_ms = started.elapsed().as_millis();
                 let result = reconcile_command_timeout(
                     &mut child,
                     &mut |event| observations.push(event),
                     7,
-                    std::time::Instant::now(),
+                    started,
                 );
                 let message = if reap_fails {
                     let error = result.err().context("failed reap must fail closed")?;
@@ -775,6 +779,8 @@ mod tests {
                 } else {
                     let status = result?;
                     ensure!(status.timed_out && !status.success && status.exit_code.is_none());
+                    ensure!(status.duration_ms >= minimum_duration_ms);
+                    ensure!(status.duration_ms <= started.elapsed().as_millis());
                     ensure!(observations.is_empty());
                     status.reason
                 };
@@ -872,8 +878,10 @@ mod tests {
         };
         let mut observations = Vec::new();
 
-        terminate_and_reap_child(&mut child, &mut |event| observations.push(event))?;
+        let kill_error =
+            terminate_and_reap_child(&mut child, &mut |event| observations.push(event))?;
 
+        ensure!(kill_error.is_none());
         ensure!(child.calls == ["kill", "wait", "wait", "wait"]);
         ensure!(observations.is_empty());
         Ok(())
