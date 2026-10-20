@@ -741,7 +741,8 @@ mod tests {
         };
         let mut observations = Vec::new();
         let result = terminate_and_reap_child(&mut child, &mut |event| observations.push(event));
-        ensure!(format!("{result:?}").contains("injected kill failure"));
+        let kill_error = result?.context("failed kill must be returned after confirmed reap")?;
+        ensure!(kill_error.to_string() == "injected kill failure");
         ensure!(child.calls == ["kill", "wait"]);
         ensure!(observations.is_empty());
         Ok(())
@@ -775,14 +776,21 @@ mod tests {
                     let status = result?;
                     ensure!(status.timed_out && !status.success && status.exit_code.is_none());
                     ensure!(observations.is_empty());
-                    if !kill_fails {
-                        ensure!(status.reason == "timed out after 7s");
-                    }
                     status.reason
                 };
-                ensure!(message.contains("timed out after 7s"));
-                ensure!(message.contains("injected kill failure") == kill_fails);
-                ensure!(message.contains("injected wait failure") == reap_fails);
+                let expected = match (kill_fails, reap_fails) {
+                    (false, false) => "timed out after 7s",
+                    (true, false) => {
+                        "timed out after 7s; kill request failed: injected kill failure; child reap confirmed"
+                    }
+                    (false, true) => {
+                        "timed out after 7s: child completion remains unconfirmed (kill request succeeded; wait failed: injected wait failure)"
+                    }
+                    (true, true) => {
+                        "timed out after 7s: child completion remains unconfirmed (kill request failed: injected kill failure; wait failed: injected wait failure)"
+                    }
+                };
+                ensure!(message == expected);
                 ensure!(child.calls == ["kill", "wait"]);
             }
         }
@@ -811,10 +819,27 @@ mod tests {
                 .err()
                 .context("original wait failure must propagate")?;
                 let message = format!("{error:#}");
-                ensure!(message.contains("original wait failure"));
-                ensure!(message.contains("injected kill failure") == kill_fails);
-                ensure!(message.contains("injected wait failure") == reap_fails);
-                ensure!(observations.len() == usize::from(reap_fails));
+                let expected = match (kill_fails, reap_fails) {
+                    (false, false) => "wait for child process: original wait failure",
+                    (true, false) => {
+                        "wait for child process; kill request failed: injected kill failure; child reap confirmed: original wait failure"
+                    }
+                    (false, true) => {
+                        "terminate child after wait-timeout failure; original wait error: original wait failure: child completion remains unconfirmed (kill request succeeded; wait failed: injected wait failure)"
+                    }
+                    (true, true) => {
+                        "terminate child after wait-timeout failure; original wait error: original wait failure: child completion remains unconfirmed (kill request failed: injected kill failure; wait failed: injected wait failure)"
+                    }
+                };
+                ensure!(message == expected);
+                ensure!(
+                    observations
+                        == if reap_fails {
+                            vec![CommandProcessObservation::CompletionUnconfirmed]
+                        } else {
+                            Vec::new()
+                        }
+                );
                 ensure!(child.calls == ["kill", "wait"]);
             }
         }
