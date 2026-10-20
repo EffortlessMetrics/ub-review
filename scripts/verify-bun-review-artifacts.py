@@ -1667,6 +1667,7 @@ def require_events(root: pathlib.Path) -> None:
 
 
 def require_cache_artifacts(root: pathlib.Path) -> None:
+    """Validate cache declarations against the retained shared-context bytes."""
     shared_context = read_text(root / "review/shared_context.md")
     cache_block = read_text(root / "review/shared_context_cache_block.md")
     if cache_block != shared_context:
@@ -1674,11 +1675,25 @@ def require_cache_artifacts(root: pathlib.Path) -> None:
     shared_context_hash = read_text(root / "review/shared_context_hash.txt").strip()
     if not shared_context_hash:
         fail("shared_context_hash.txt is empty")
-    manifest = load_json(root / "review/cache_manifest.json")
+    if not re.fullmatch(r"[0-9a-f]{64}", shared_context_hash):
+        fail("shared_context_hash.txt must contain a lowercase SHA256 digest")
+    manifest_path = root / "review/cache_manifest.json"
+    try:
+        manifest = load_json(manifest_path)
+    except UnicodeDecodeError as error:
+        fail(f"invalid UTF-8 in {manifest_path}: {error}")
+    if not isinstance(manifest, dict):
+        fail("cache_manifest.json is not an object")
     if manifest.get("schema") != "ub-review.cache_manifest.v1":
         fail("cache_manifest.json has wrong schema")
     if manifest.get("shared_context_hash") != shared_context_hash:
         fail("cache_manifest shared_context_hash does not match shared_context_hash.txt")
+    content_hash = hashlib.sha256((root / "review/shared_context.md").read_bytes()).hexdigest()
+    if content_hash != shared_context_hash:
+        fail("shared_context.md content SHA256 does not match shared_context_hash.txt")
+    cache_hash = hashlib.sha256((root / "review/shared_context_cache_block.md").read_bytes()).hexdigest()
+    if cache_hash != shared_context_hash:
+        fail("shared_context_cache_block.md content SHA256 does not match shared_context_hash.txt")
     if manifest.get("cache_block_path") != "review/shared_context_cache_block.md":
         fail("cache_manifest cache_block_path is invalid")
     if manifest.get("hash_path") != "review/shared_context_hash.txt":
@@ -10718,6 +10733,90 @@ def self_test_artifact_only_post_receipt_contract() -> None:
         )
 
 
+def self_test_cache_artifact_integrity() -> None:
+    with tempfile.TemporaryDirectory() as temp:
+        root = pathlib.Path(temp)
+        review = root / "review"
+        review.mkdir()
+
+        def write(content: bytes = b"context\n") -> dict:
+            digest = hashlib.sha256(content).hexdigest()
+            manifest = {
+                "schema": "ub-review.cache_manifest.v1",
+                "shared_context_hash": digest,
+                "shared_context_bytes": len(content),
+                "cache_block_path": "review/shared_context_cache_block.md",
+                "hash_path": "review/shared_context_hash.txt",
+                "events_path": "review/cache_events.ndjson",
+                "explicit_cache_provider": "minimax",
+                "explicit_cache_endpoint": "anthropic-messages",
+                "lanes": [],
+            }
+            (review / "shared_context.md").write_bytes(content)
+            (review / "shared_context_cache_block.md").write_bytes(content)
+            (review / "shared_context_hash.txt").write_text(digest + "\n", encoding="utf-8")
+            write_self_test_json(review / "cache_manifest.json", manifest)
+            write_self_test_json(review / "cache_events.ndjson", {
+                "schema": "ub-review.cache_event.v1",
+                "kind": "shared_context_prepared",
+                "shared_context_hash": digest,
+            })
+            return manifest
+
+        def require() -> None:
+            require_cache_artifacts(root)
+
+        # No model lanes is valid evidence; hash exact bytes, including CRLF.
+        for content in [b"context\n", b"", "context \u03bb\r\n".encode()]:
+            write(content)
+            require()
+
+        write()
+        for name in ["shared_context.md", "shared_context_cache_block.md"]:
+            (review / name).write_bytes(b"changed\n")
+        expect_self_test_failure("changed cache content", "content SHA256", require)
+
+        for value in [[], None, "manifest", 0]:
+            write()
+            write_self_test_json(review / "cache_manifest.json", value)
+            expect_self_test_failure("nonobject cache manifest", "cache_manifest.json is not an object", require)
+
+        write()
+        (review / "cache_manifest.json").write_text("{", encoding="utf-8")
+        expect_self_test_failure("invalid cache manifest JSON", "invalid JSON", require)
+
+        write()
+        (review / "cache_manifest.json").write_bytes(b"\xff")
+        expect_self_test_failure("invalid cache manifest UTF-8", "invalid UTF-8", require)
+
+        for name in ["shared_context.md", "shared_context_cache_block.md",
+                     "shared_context_hash.txt", "cache_manifest.json", "cache_events.ndjson"]:
+            write()
+            (review / name).unlink()
+            expect_self_test_failure("missing cache artifact", f"missing {review / name}", require)
+
+        manifest = write()
+        manifest["shared_context_hash"] = "0" * 64
+        write_self_test_json(review / "cache_manifest.json", manifest)
+        expect_self_test_failure("cache manifest hash mismatch", "cache_manifest shared_context_hash does not match", require)
+
+        write()
+        (review / "shared_context_cache_block.md").write_bytes(b"changed\n")
+        expect_self_test_failure("cache block mismatch", "shared_context_cache_block.md does not match", require)
+
+        write(b"context\r\n")
+        (review / "shared_context_cache_block.md").write_bytes(b"context\n")
+        expect_self_test_failure("cache block newline mismatch", "shared_context_cache_block.md content SHA256", require)
+
+        for digest in ["", "short", "g" * 64, "A" * 64]:
+            write()
+            (review / "shared_context_hash.txt").write_text(digest, encoding="utf-8")
+            expect_self_test_failure("invalid cache digest", "shared_context_hash.txt", require)
+
+        write()
+        require()
+
+
 def self_test_empty_candidate_artifacts_without_dir() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         root = pathlib.Path(temp_dir)
@@ -15802,6 +15901,7 @@ def self_test_proof_planner_resolution_contract() -> None:
 
 
 def run_self_tests() -> None:
+    self_test_cache_artifact_integrity()
     require_run_mode("review-byok", "self-test review-byok mode")
     require_run_mode("intelligent-ci", "self-test intelligent-ci mode")
     self_test_claim_graph_contract()
