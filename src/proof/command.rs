@@ -1542,12 +1542,22 @@ mod tests {
                         if outcome == "wait-error" {
                             ensure!(message.contains("kill request failed; reap confirmed"));
                         } else {
-                            ensure!(message.contains("duration_ms=42"));
-                            ensure!(message.contains(if outcome == "timeout" {
-                                "timed_out=true"
-                            } else {
-                                "exit_code=Some(23)"
-                            }));
+                            let original_outcome = match outcome {
+                                "timeout" => {
+                                    "original proof command outcome: exit_code=None, timed_out=true, success=false, duration_ms=42; reason: original timeout outcome"
+                                }
+                                "exit" => {
+                                    "original proof command outcome: exit_code=Some(23), timed_out=false, success=false, duration_ms=42; reason: original exit outcome"
+                                }
+                                "success" => {
+                                    "original proof command outcome: exit_code=Some(23), timed_out=false, success=true, duration_ms=42; reason: original success outcome"
+                                }
+                                _ => anyhow::bail!("unexpected outcome: {outcome}"),
+                            };
+                            ensure!(
+                                message.contains(original_outcome),
+                                "lost original outcome: {message}"
+                            );
                         }
                     } else {
                         let receipt = result?;
@@ -1634,6 +1644,7 @@ mod tests {
         let message = format!("{error:#}");
         ensure!(message.contains("cleanup proof command after confirmed completion"));
         ensure!(message.contains("injected physical cleanup failure"));
+        ensure!(error.root_cause().to_string() == "injected physical cleanup failure");
         ensure!(message.contains("bound proof command streams"));
 
         let task_id = proof_command_task_id(&focused.id, "head")?;
