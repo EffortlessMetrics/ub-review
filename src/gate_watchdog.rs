@@ -619,6 +619,44 @@ mod tests {
     }
 
     #[test]
+    fn incomplete_run_receipts_preserve_subject_and_recovery_contract() -> Result<()> {
+        let mut obs = base("head1");
+        obs.runs = vec![run("head1", "completed", Some("timed_out"), 10, 1)];
+        obs.gate_artifact = WatchdogGateArtifact {
+            present: true,
+            conclusion: Some("pass".to_owned()),
+            run_id: Some(10),
+            sha: Some("head1".to_owned()),
+        };
+        assert_eq!(
+            serde_json::to_value(build_gate_watchdog(&obs))?,
+            serde_json::json!({
+                "schema": "ub-review.gate_watchdog.v1",
+                "expected_sha": "head1",
+                "state": "inconclusive",
+                "reason": "incomplete-run",
+                "detail": "newest exact-head run 10 attempt 1 has status \"completed\" and conclusion Some(\"timed_out\"); retained artifacts cannot establish completion",
+                "receipt_pointer": "run:10",
+                "retry_action": "re-run the gate for the head and observe a completed evidence-producing attempt"
+            })
+        );
+        obs.runs[0].conclusion = Some("failure".to_owned());
+        assert_eq!(
+            serde_json::to_value(build_gate_watchdog(&obs))?,
+            serde_json::json!({
+                "schema": "ub-review.gate_watchdog.v1",
+                "expected_sha": "head1",
+                "state": "inconclusive",
+                "reason": "incomplete-run",
+                "detail": "exact-head run 10 failed; a retained pass cannot establish successful finalization",
+                "receipt_pointer": "run:10",
+                "retry_action": "inspect the failed run and re-run the gate to confirm finalization"
+            })
+        );
+        Ok(())
+    }
+
+    #[test]
     fn no_exact_head_run_after_deadline_is_missing_run() {
         let obs = base("head1");
         let w = build_gate_watchdog(&obs);
