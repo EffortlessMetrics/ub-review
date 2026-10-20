@@ -34692,3 +34692,191 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_intent.rs:return_value:b72a971f"
 owner = "ub-review/core"
 reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Same rejection statement classified additionally as return_value; native request/task non-creation is its behavioral oracle. Same native/extracted evidence as row38. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+# PR #1539: 31 individually reviewed exact raw IDs; 14 unknowns remain separate.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:4a6682cb"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'exit_code: None,'. Removed old timeout arm; timeout_retains_kill_and_reap_outcomes checks relocated status/elapsed behavior. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:ebed1ee5"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'duration_ms: started.elapsed().as_millis(),'. Removed old timeout arm; timeout_retains_kill_and_reap_outcomes checks relocated status/elapsed behavior. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:return_value:9baf330a"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'exit_code: None,'. Removed old timeout arm; timeout_retains_kill_and_reap_outcomes checks relocated status/elapsed behavior. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:7999b8b2"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'observe_process: &mut dyn FnMut(CommandProcessObservation),'. New callback parameter declaration; timeout_retains_kill_and_reap_outcomes checks exact observation vectors and call order. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:6216c6a2"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'observe_process: &mut dyn FnMut(CommandProcessObservation),'. New callback parameter declaration; timeout_retains_kill_and_reap_outcomes checks exact observation vectors and call order. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:45263cc1"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'timeout_sec: u64,'. New timeout parameter declaration; timeout_retains_kill_and_reap_outcomes checks literal 7s in all four paths. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:e4e687da"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'started: Instant,'. New Instant parameter declaration; timeout_retains_kill_and_reap_outcomes checks elapsed interval with supplied start. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:bc195a1e"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'Ok(CommandStatus {'. New Result/status construction; timeout_retains_kill_and_reap_outcomes requires Ok status vs Err and exact flags/fields. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:return_value:aa01c0de"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'Ok(CommandStatus {'. New Result/status construction; timeout_retains_kill_and_reap_outcomes requires Ok status vs Err and exact flags/fields. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:c323b039"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'exit_code: None,'. New exit_code=None field; timeout_retains_kill_and_reap_outcomes requires None for both confirmed reap twins. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:97d30496"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'exit_code: None,'. New exit_code=None field; timeout_retains_kill_and_reap_outcomes requires None for both confirmed reap twins. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:return_value:f99d6e6a"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'exit_code: None,'. New exit_code=None field; timeout_retains_kill_and_reap_outcomes requires None for both confirmed reap twins. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:b8223e07"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'reason: match kill_error {'. New kill diagnostic match/arms; timeout_retains_kill_and_reap_outcomes checks both literal reasons and all four ordered chains. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:0d3b618d"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'Some(error) => format!(\"{reason}; kill request failed: {error}; child reap confirmed\"),'. New kill diagnostic match/arms; timeout_retains_kill_and_reap_outcomes checks both literal reasons and all four ordered chains. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:fb9cb8d5"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'None => reason,'. New kill diagnostic match/arms; timeout_retains_kill_and_reap_outcomes checks both literal reasons and all four ordered chains. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:ed8652fd"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression '},'. New match-closing syntax, no independent call/field; enclosed match covered by timeout_retains_kill_and_reap_outcomes. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:ecc2d1cc"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression '},'. New match-closing syntax, no independent call/field; enclosed match covered by timeout_retains_kill_and_reap_outcomes. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:5b6f00a7"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'duration_ms: started.elapsed().as_millis(),'. New elapsed duration field; timeout_retains_kill_and_reap_outcomes now checks lower/upper sampled monotonic interval. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:field_construction:6d959e24"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'duration_ms: started.elapsed().as_millis(),'. New elapsed duration field; timeout_retains_kill_and_reap_outcomes now checks lower/upper sampled monotonic interval. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:return_value:eb6183da"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'duration_ms: started.elapsed().as_millis(),'. New elapsed duration field; timeout_retains_kill_and_reap_outcomes now checks lower/upper sampled monotonic interval. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:d9c1cfb6"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression '})'. New status-construction closing syntax; enclosed returned status covered by timeout_retains_kill_and_reap_outcomes. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:bf2ccb90"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'Ok(None) => Err(wait_error).context(\"wait for child process\"),'. New None/Some wait-error arms; wait_failure_retains_kill_and_reap_outcomes checks all four exact error chains and observations. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:c56418f5"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'Ok(Some(kill_error)) => Err(wait_error).context(format!('. New None/Some wait-error arms; wait_failure_retains_kill_and_reap_outcomes checks all four exact error chains and observations. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:call_deletion:7af04f46"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression ')),'. New context-call closing syntax; enclosing Some-kill arm covered by wait_failure_retains_kill_and_reap_outcomes. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets.rs:match_arm:218837ee"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'Ok(()) => return Ok(kill_error),'. New return of optional kill error after reap; failed_kill_diagnostic_survives_confirmed_reap requires typed Some(error), child_cleanup_retries_interrupted_reaps_until_exit_is_confirmed requires typed None after interruptions. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_command.rs:call_deletion:b53bc0a5"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'let mut additional_errors = Vec::new();'. Removed Vec::new initialization; replacement nonempty diagnostics covered by secondary_failures_preserve_original_command_outcome and cleanup_failure_remains_primary_when_stream_bounding_also_fails; original outcome-loss control reused from review5590327902. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_command.rs:match_arm:a12c3842"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'Ok(status) => format!('. New Ok-status diagnostic arm; secondary_failures_preserve_original_command_outcome and cleanup_failure_remains_primary_when_stream_bounding_also_fails checks complete literal fields; new success-false control rejected. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_command.rs:match_arm:d6f9dc98"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression 'Err(error) => format!(\"original proof command failure: {error:#}\"),'. New Err diagnostic arm; secondary_failures_preserve_original_command_outcome and cleanup_failure_remains_primary_when_stream_bounding_also_fails checks original wait-error plus kill/reap; prior original-outcome-loss control rejected. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_command.rs:call_deletion:b2fd572c"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression '&additional_errors,'. New additional_errors argument in stream-error return; secondary_failures_preserve_original_command_outcome and cleanup_failure_remains_primary_when_stream_bounding_also_fails checks original status/failure plus stream error; prior lost-original/lost-stream controls rejected. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_command.rs:error_path:2027c8f8"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression '&additional_errors,'. New additional_errors argument in stream-error return; secondary_failures_preserve_original_command_outcome and cleanup_failure_remains_primary_when_stream_bounding_also_fails checks original status/failure plus stream error; prior lost-original/lost-stream controls rejected. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_command.rs:return_value:cffec4ed"
+owner = "ub-review/core"
+reason = "PR #1539; pinned RIPR0.10.0 exact raw probe, base ac06293 to adopted c99069c (test tree7bf4f2b). Expression '&additional_errors,'. New additional_errors argument in stream-error return; secondary_failures_preserve_original_command_outcome and cleanup_failure_remains_primary_when_stream_bounding_also_fails checks original status/failure plus stream error; prior lost-original/lost-stream controls rejected. Exact source/test mapping and before/after compiled controls: https://github.com/EffortlessMetrics/ub-review/pull/1539#issuecomment-6304295886; prior runtime loss controls: review5590327902. Native tests execute the actual current contract; declaration/deleted/closing-syntax rows are distinguished from behavioral rows, not asserted individually mutated. Active oracle/invocation attribution owner: EffortlessMetrics/ripr#1453 and ripr-swarm#5543. This exact-ID exposure disposition retains raw finding/unknown evidence and grants no runtime/cleanup credit. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions."
