@@ -20,7 +20,7 @@ Installed workflow bytes must exactly match their prepared fixtures. Fixtures
 are not Actions workflows and cannot admit hosted execution.
 
 The helper bytes must stay identical through all three PRs. Current SHA-256:
-`d1ed65a761b7285c833a753f9ff7b4dbba2f2a463461aebde2304f26f0eab81c`.
+`6fd02e765995ca1711e262d220e257a3fea0a385ac29d4e68be34227011b7ebb`.
 PR1 must install the independently reviewed exact adapter before either cutover.
 After each protected normal merge, read actual main and landed helper/workflow
 blobs, compose the next PR on that actual base, and obtain fresh exact-head and

@@ -268,7 +268,7 @@ def current(api, event, label, policy_hash):
             review = by_id.get(int(review_id))
             require(review is not None and native_time(review["submitted_at"]) < requested_at,
                     "post-request blocking review was dismissed; prior request remains retired")
-    return request, comments
+    return request, comments, events
 
 
 def history(api, lane, run_id):
@@ -375,7 +375,8 @@ def prior_request(comments, identity, owner_id):
 def validate_retry(api, request, comments, events):
     """At most three explicit successor transactions; no nonce or automatic rerun.
 
-    Both prior populations must be terminal, with at least one failed/cancelled.
+    Both prior populations must be terminal. A terminal retry needs at least one
+    non-success; withdrawal reinstates both-success proof after verified retirement.
     An explicit successor spends both populations again, preserving old receipts.
     """
     child = request
@@ -489,7 +490,7 @@ def execute(api, event_name, event, lane, run_id, attempt, phase, policy_hash,
         return {"mode": "invalidated", "required": "true"}
     if attempt != 1:
         return {"mode": "replay", "required": "false", "winner": str(run_id), "attempt": "1"}
-    request, comments = current(api, event, event["label"]["name"], policy_hash)
+    request, comments, events = current(api, event, event["label"]["name"], policy_hash)
     if lane == "gate":
         require(native_sha == request["merge_sha"], "native merge checkout differs from requested integration subject")
     winner = elect(api, event, lane, run_id, request, comments)
@@ -497,8 +498,7 @@ def execute(api, event_name, event, lane, run_id, attempt, phase, policy_hash,
         return {"mode": "duplicate", "required": "false", "winner": str(winner["id"]),
                 "attempt": "1"}
     if request["retry"] is not None:
-        edges = api.pages(f"/issues/{request['pr']}/events")
-        validate_retry(api, request, comments, edges)
+        validate_retry(api, request, comments, events)
     require(not cancelled, "own workflow cancelled")
     if phase == "finalize":
         require(admission_result == "success" and mode == "admitted" and product == "success",

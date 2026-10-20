@@ -98,11 +98,12 @@ deduplication. Prepare it with the same command plus `--retry-of PRIOR_REQUEST_S
 prepares bytes; admission rechecks all provenance. The same assigned owner,
 objective, head/base/merge/tree, policy and selected reviews must remain unchanged.
 Both native original attempt-1 winners must be completed, with conclusions limited
-to success/failure/cancelled/timed_out and at least one non-success. Complete
-anchored histories establish the actual earliest winners in both populations.
+to success/failure/cancelled/timed_out. Only a `terminal` retry requires at least
+one non-success. Complete anchored histories establish the actual earliest
+winners in both populations.
 The new owner comment and label edge must follow both terminal rows' native
 updated_at timestamps; unknown times, queued/running attempts, successful-only
-transactions, reruns, missing lanes, skipped generations and changed subjects
+`terminal` retries, reruns, missing lanes, skipped generations and changed subjects
 refuse. A terminal retry uses cause `terminal`. If both winners succeeded, cause `withdrawal` instead requires a verified native withdrawal of the predecessor after both terminal updates, then a fresh owner comment and application after that retirement; use `--retry-cause withdrawal`. For other invalidations, explicitly withdraw the selected label after settlement first. Successful proof is not silently reusable after retirement. Cause selection is determined by native outcomes (terminal for any failure, withdrawal for both success), so changing the cause cannot create a second valid transaction for the same predecessor/generation. Reinstatement deduplicates and shares the same three-generation bound. updated_at is a conservative native last-update bound, not a fabricated
 completion timestamp. Every ancestor is checked, and the fourth retry refuses.
 
@@ -166,6 +167,11 @@ anonymous permission probe is not retried. See GitHub's [token metadata scope](h
 and [collaborator API contract](https://github.com/github/rest-api-description/blob/main/descriptions/api.github.com/api.github.com.json).
 Documentation supports this source design; actual hosted token acceptance remains
 unproven and requires the later authorized native acceptance, without scope expansion.
+Hosted anonymous-read rate-limit acceptance is separately unproven. Before either
+lane is activated, retain per-job read counts and rate-limit response headers for
+the admitted population and retry controls, or independently review a mitigation
+that preserves token isolation. Population totals alone do not establish a shared
+IP rate-limit bucket across hosted jobs.
 
 Responses are capped at2MB, ordinary
 lists at5x100 rows, history at12x100 rows, requests at40 calls, each call at10s,
