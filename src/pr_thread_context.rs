@@ -473,11 +473,32 @@ fn spawn_github_api_get(
         Ok(())
     })();
     if let Err(err) = configured {
-        let _ = child.kill();
-        child.wait().context("reap unconfigured GitHub API curl")?;
-        return Err(err);
+        let kill = child.kill();
+        let reap = child.wait().map(|_| ());
+        return Err(github_api_setup_error(err, kill, reap));
     }
     Ok(child)
+}
+
+fn github_api_setup_error(
+    setup_error: anyhow::Error,
+    kill: std::io::Result<()>,
+    reap: std::io::Result<()>,
+) -> anyhow::Error {
+    if kill.is_ok() && reap.is_ok() {
+        return setup_error;
+    }
+    let kill_detail = match kill {
+        Ok(()) => "kill request succeeded".to_owned(),
+        Err(error) => format!("kill request failed: {error}"),
+    };
+    let completion_detail = match reap {
+        Ok(()) => "child reaped".to_owned(),
+        Err(error) => format!("child completion remains unconfirmed; reap failed: {error}"),
+    };
+    setup_error.context(format!(
+        "cleanup unconfigured GitHub API curl ({kill_detail}; {completion_detail})"
+    ))
 }
 
 pub(crate) fn render_github_pr_thread_section(
@@ -702,6 +723,54 @@ pub(crate) fn pr_thread_reuse_guidance(context: &PrThreadContext) -> Option<&'st
 #[cfg(test)]
 mod structured_thread_tests {
     use super::*;
+
+    #[test]
+    fn github_api_setup_failure_preserves_original_and_cleanup_diagnostics() -> Result<()> {
+        use std::io::{Error, ErrorKind};
+
+        for (kill_fails, reap_fails, expected) in [
+            (false, false, "fixture setup failure"),
+            (
+                true,
+                false,
+                "cleanup unconfigured GitHub API curl (kill request failed: fixture kill refusal; child reaped): fixture setup failure",
+            ),
+            (
+                false,
+                true,
+                "cleanup unconfigured GitHub API curl (kill request succeeded; child completion remains unconfirmed; reap failed: fixture reap uncertainty): fixture setup failure",
+            ),
+            (
+                true,
+                true,
+                "cleanup unconfigured GitHub API curl (kill request failed: fixture kill refusal; child completion remains unconfirmed; reap failed: fixture reap uncertainty): fixture setup failure",
+            ),
+        ] {
+            let setup_error =
+                anyhow::Error::new(Error::new(ErrorKind::BrokenPipe, "fixture setup failure"));
+            let kill = if kill_fails {
+                Err(Error::new(
+                    ErrorKind::PermissionDenied,
+                    "fixture kill refusal",
+                ))
+            } else {
+                Ok(())
+            };
+            let reap = if reap_fails {
+                Err(Error::other("fixture reap uncertainty"))
+            } else {
+                Ok(())
+            };
+            let error = github_api_setup_error(setup_error, kill, reap);
+            assert_eq!(format!("{error:#}"), expected);
+            let original = error
+                .downcast_ref::<Error>()
+                .context("original setup I/O error lost")?;
+            assert_eq!(original.kind(), ErrorKind::BrokenPipe);
+            assert_eq!(original.to_string(), "fixture setup failure");
+        }
+        Ok(())
+    }
 
     #[test]
     fn github_records_preserve_anchor_and_exact_head() -> Result<()> {

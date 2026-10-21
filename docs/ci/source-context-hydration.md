@@ -55,6 +55,14 @@ overflow need not wait for the producer's EOF. There is no response spool or det
 Three stalled endpoints can cost approximately 90 seconds plus small startup
 overhead; this is not a shared hard run deadline or a host-level cgroup limit.
 
+If writing curl's configuration fails, the shared spawn helper still attempts
+kill followed by reap before returning the original setup error. A failed kill
+or reap adds cleanup diagnostics without replacing that original I/O cause.
+Failed reap remains explicitly completion-unconfirmed, including `ECHILD`;
+it never turns failed configuration into a successful request. Successful reap
+confirms completion even if the preceding kill request failed. This diagnostic
+repair does not add a supervisor or change process-tree or timeout policy.
+
 Successful endpoints survive an independent endpoint's network, timeout, 5xx,
 parse, shape or size failure. Original record IDs, full admitted bodies, source
 anchors, commit IDs and head bindings remain unchanged. Failed endpoints are
