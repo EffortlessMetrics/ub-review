@@ -83,3 +83,53 @@ fn transport_wait_failure_terminates_reaps_and_removes_both_outputs() -> Result<
     ensure!(!late_marker, "child completed normally after wait failure");
     Ok(())
 }
+
+#[test]
+fn transport_wait_error_custody_for_confirmed_reap() -> Result<()> {
+    for kill_fails in [false, true] {
+        let wait_error = std::io::Error::from_raw_os_error(24);
+        let wait_message = wait_error.to_string();
+        let cleanup: Result<Option<std::io::Error>> = Ok(kill_fails.then(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "injected kill failure",
+            )
+        }));
+        let error = transport_wait_failure_error(wait_error, cleanup);
+        let typed_wait = error
+            .downcast_ref::<std::io::Error>()
+            .context("original wait error must remain typed")?;
+        ensure!(typed_wait.raw_os_error() == Some(24));
+        let expected = if kill_fails {
+            format!(
+                "wait for child process; kill request failed: injected kill failure; child reap confirmed: {wait_message}"
+            )
+        } else {
+            format!("wait for child process: {wait_message}")
+        };
+        ensure!(format!("{error:#}") == expected);
+    }
+    Ok(())
+}
+
+#[test]
+fn transport_wait_error_custody_for_unconfirmed_reap() -> Result<()> {
+    let wait_error = std::io::Error::from_raw_os_error(24);
+    let wait_message = wait_error.to_string();
+    let cleanup_error = std::io::Error::new(
+        std::io::ErrorKind::PermissionDenied,
+        "injected reap failure",
+    );
+    let error = transport_wait_failure_error(wait_error, Err(cleanup_error.into()));
+    let typed_cleanup = error
+        .downcast_ref::<std::io::Error>()
+        .context("cleanup root cause must remain typed")?;
+    ensure!(typed_cleanup.kind() == std::io::ErrorKind::PermissionDenied);
+    ensure!(
+        format!("{error:#}")
+            == format!(
+                "terminate child after wait failure; original wait error: {wait_message}: injected reap failure"
+            )
+    );
+    Ok(())
+}

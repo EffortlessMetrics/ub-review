@@ -426,6 +426,21 @@ pub(crate) fn wait_for_child_output_files(
     )
 }
 
+fn transport_wait_failure_error(
+    wait_error: std::io::Error,
+    cleanup: Result<Option<std::io::Error>>,
+) -> anyhow::Error {
+    match cleanup {
+        Ok(None) => anyhow::Error::new(wait_error).context("wait for child process"),
+        Ok(Some(kill_error)) => anyhow::Error::new(wait_error).context(format!(
+            "wait for child process; kill request failed: {kill_error}; child reap confirmed"
+        )),
+        Err(cleanup_error) => cleanup_error.context(format!(
+            "terminate child after wait failure; original wait error: {wait_error}"
+        )),
+    }
+}
+
 fn wait_for_child_output_files_with_wait(
     child: &mut Child,
     stdout_path: &Path,
@@ -438,12 +453,7 @@ fn wait_for_child_output_files_with_wait(
         Err(wait_error) => {
             let cleanup = terminate_and_reap_child(child, &mut |_| {});
             remove_output_files(stdout_path, stderr_path);
-            return match cleanup {
-                Ok(()) => Err(wait_error).context("wait for child process"),
-                Err(cleanup_error) => Err(cleanup_error).context(format!(
-                    "terminate child after wait failure; original wait error: {wait_error}"
-                )),
-            };
+            return Err(transport_wait_failure_error(wait_error, cleanup));
         }
     };
     let status = match wait_result {
