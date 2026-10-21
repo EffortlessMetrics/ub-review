@@ -166,7 +166,7 @@ where
                 )?;
                 let result = match head.status.as_str() {
                     "passed" => "head_passed",
-                    "failed" => "head_failed",
+                    "failed" if head.exit_code.is_some() => "head_failed",
                     "timed_out" => "timed_out",
                     _ => "skipped_profile",
                 };
@@ -289,7 +289,7 @@ where
     if head_status != "passed" {
         let result = match head_status.as_str() {
             "timed_out" => "timed_out",
-            "failed" => "head_failed",
+            "failed" if head.exit_code.is_some() => "head_failed",
             _ => "skipped_profile",
         };
         let reason = format!("HEAD proof {}: {}", head.status, head.reason);
@@ -352,8 +352,10 @@ where
         Some(&mut cleanup),
         runner,
     )?;
+    // A signal-terminated process has no exit code. It cannot establish that
+    // the test rejected the baseline, even though the raw command failed.
     let (result, reason) = match base.status.as_str() {
-        "failed" => (
+        "failed" if base.exit_code.is_some() => (
             "discriminating".to_owned(),
             format!("HEAD passed; base+tests failed: {}", base.reason),
         ),
@@ -462,6 +464,279 @@ mod tests {
             requested_by: vec!["tests".to_owned()],
             request_ids: vec!["proof-rust-001".to_owned()],
         }
+    }
+
+    #[test]
+    fn signal_termination_never_earns_red_green_credit() -> Result<()> {
+        for side in ["head", "base-plus-tests"] {
+            for (code, timeout, expected) in [
+                (None, false, "skipped_profile"),
+                (
+                    Some(101),
+                    false,
+                    if side == "head" {
+                        "head_failed"
+                    } else {
+                        "discriminating"
+                    },
+                ),
+                (None, true, "timed_out"),
+                (Some(0), false, "non_discriminating"),
+            ] {
+                let temp = tempfile::tempdir()?;
+                let out = temp.path().join("out");
+                let task = cargo_test_task();
+                let lease = focused_test_resource_lease(
+                    &task,
+                    ProofBudget {
+                        max_focused_test_files: 2,
+                        max_focused_tests: 2,
+                        per_command_timeout_sec: 60,
+                        max_total_seconds: 120,
+                    },
+                    proof_lease_budget(&Profile::default())?,
+                    "granted",
+                    "fixture lease",
+                );
+                let base = temp.path().join("base");
+                let mut calls = 0;
+                let receipt = run_focused_red_green_proof_task_with_cleanup(
+                    temp.path(),
+                    &out,
+                    &test_diff(),
+                    &task,
+                    60,
+                    &lease,
+                    None,
+                    ProofExecutionPhase::ModelRequest,
+                    &mut |root, _argv, _env, _limit, stdout, stderr, observer| {
+                        calls += 1;
+                        observer(CommandProcessObservation::Spawned);
+                        fs::write(stdout, b"retained stdout\n")?;
+                        fs::write(stderr, b"retained stderr\n")?;
+                        let selected = (side == "head") == (root == temp.path());
+                        let (exit_code, timed_out) = if selected {
+                            (code, timeout)
+                        } else {
+                            (Some(0), false)
+                        };
+                        Ok(CommandStatus {
+                            exit_code,
+                            timed_out,
+                            success: exit_code == Some(0) && !timed_out,
+                            reason: "selected process outcome".to_owned(),
+                            duration_ms: 17,
+                        })
+                    },
+                    &mut |_, _, _| {
+                        fs::create_dir_all(&base)?;
+                        Ok(base.clone())
+                    },
+                    &mut |_, root| {
+                        fs::remove_dir(root)?;
+                        Ok(())
+                    },
+                )?;
+                // Cross the serialized receipt boundary before using real reviewer consumers.
+                let receipt: ProofReceipt = serde_json::from_slice(&serde_json::to_vec(&receipt)?)?;
+                ensure!(
+                    receipt.result == expected,
+                    "{side} {code:?}/{timeout}: {receipt:?}"
+                );
+                ensure!(calls == receipt.commands.len());
+                let command = receipt
+                    .commands
+                    .iter()
+                    .find(|command| command.side == side)
+                    .context("selected command missing")?;
+                ensure!(command.exit_code == code && command.timed_out == timeout);
+                ensure!(command.duration_ms == 17 && command.reason == "selected process outcome");
+                ensure!(fs::read(out.join(&command.stderr))? == b"retained stderr\n");
+                if expected == "skipped_profile" {
+                    ensure!(proof_receipt_is_missing_evidence(&receipt));
+                    ensure!(!proof_receipt_is_test_proof_result(&receipt));
+                    ensure!(!proof_receipt_is_public_test_proof_result(&receipt));
+                    let mut summary = String::new();
+                    render_missing_proof_receipt_summary(&mut summary, &receipt);
+                    ensure!(summary.contains("without an exit code"), "{summary}");
+                } else if expected == "discriminating" {
+                    ensure!(proof_receipt_is_public_test_proof_result(&receipt));
+                    let mut summary = String::new();
+                    render_proof_receipt_summary(&mut summary, &receipt);
+                    ensure!(summary.contains("discriminates the patch"), "{summary}");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn real_signal_and_nonzero_exit_keep_distinct_red_green_outcomes() -> Result<()> {
+        for (marker, expected) in [("signal", "skipped_profile"), ("fail", "discriminating")] {
+            let temp = tempfile::tempdir()?;
+            let out = temp.path().join("out");
+            let base = temp.path().join("base");
+            let mut task = cargo_test_task();
+            let spec = ProofCommandSpec {
+                argv: vec![
+                    "/bin/sh".to_owned(),
+                    "-c".to_owned(),
+                    "if test -f signal; then kill -TERM $$; elif test -f fail; then exit 101; fi"
+                        .to_owned(),
+                ],
+                env: BTreeMap::new(),
+            };
+            task.command_specs = Some(FocusedTestCommandSpecs {
+                head: spec.clone(),
+                base_plus_tests: spec,
+            });
+            let lease = focused_test_resource_lease(
+                &task,
+                ProofBudget {
+                    max_focused_test_files: 2,
+                    max_focused_tests: 2,
+                    per_command_timeout_sec: 60,
+                    max_total_seconds: 120,
+                },
+                proof_lease_budget(&Profile::default())?,
+                "granted",
+                "fixture lease",
+            );
+            let receipt = run_focused_red_green_proof_task_with_cleanup(
+                temp.path(),
+                &out,
+                &test_diff(),
+                &task,
+                60,
+                &lease,
+                None,
+                ProofExecutionPhase::ModelRequest,
+                &mut run_command_to_files_with_spawn_observer,
+                &mut |_, _, _| {
+                    fs::create_dir(&base)?;
+                    fs::write(base.join(marker), b"")?;
+                    Ok(base.clone())
+                },
+                &mut |_, root| {
+                    fs::remove_dir_all(root)?;
+                    Ok(())
+                },
+            )?;
+            ensure!(receipt.result == expected, "{marker}: {receipt:?}");
+            let command = receipt
+                .commands
+                .get(1)
+                .context("baseline command missing")?;
+            ensure!(command.status == "failed" && !command.timed_out);
+            ensure!(command.exit_code == if marker == "signal" { None } else { Some(101) });
+            ensure!(command.command.contains("kill -TERM"));
+            ensure!(!base.exists());
+            ensure!(proof_receipt_is_missing_evidence(&receipt) == (marker == "signal"));
+            ensure!(proof_receipt_is_public_test_proof_result(&receipt) == (marker == "fail"));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn signal_termination_keeps_head_only_and_build_unavailable() -> Result<()> {
+        for build in [false, true] {
+            for code in [None, Some(101), Some(0)] {
+                let temp = tempfile::tempdir()?;
+                let out = temp.path().join("out");
+                let budget = ProofBudget {
+                    max_focused_test_files: 1,
+                    max_focused_tests: 1,
+                    per_command_timeout_sec: 60,
+                    max_total_seconds: 60,
+                };
+                let mut runner =
+                    |_: &Path,
+                     _: &[String],
+                     _: &BTreeMap<String, String>,
+                     _: u64,
+                     stdout: &Path,
+                     stderr: &Path,
+                     observer: &mut dyn FnMut(CommandProcessObservation)| {
+                        observer(CommandProcessObservation::Spawned);
+                        fs::write(stdout, b"output")?;
+                        fs::write(stderr, b"diagnostic")?;
+                        Ok(CommandStatus {
+                            exit_code: code,
+                            timed_out: false,
+                            success: code == Some(0),
+                            reason: "selected process outcome".to_owned(),
+                            duration_ms: 17,
+                        })
+                    };
+                let result = if build {
+                    let requests = vec![ProofRequest {
+                        schema: "ub-review.proof_request.v1".to_owned(),
+                        id: "signal-build".to_owned(),
+                        lane: "tests".to_owned(),
+                        requested_by: vec![],
+                        command: "cargo check --locked".to_owned(),
+                        reason: "fixture".to_owned(),
+                        cost: "focused-build".to_owned(),
+                        timeout_sec: 60,
+                        required: false,
+                        status: "requested".to_owned(),
+                    }];
+                    let profile = Profile {
+                        limits: Limits {
+                            builds: 1,
+                            ..Limits::default()
+                        },
+                        ..Profile::default()
+                    };
+                    run_focused_build_proof_tasks_with_runner(
+                        temp.path(),
+                        &out,
+                        &test_diff(),
+                        &profile,
+                        &test_run_args(out.clone()),
+                        budget,
+                        focused_build_candidates_from_requests(&requests),
+                        None,
+                        ProofExecutionPhase::ModelRequest,
+                        &mut runner,
+                    )?
+                } else {
+                    let mut task = cargo_test_task();
+                    task.mode = FocusedProofMode::HeadOnly;
+                    run_focused_red_green_proof_tasks_with_runner(
+                        temp.path(),
+                        &out,
+                        &test_diff(),
+                        &Profile::default(),
+                        &test_run_args(out.clone()),
+                        budget,
+                        vec![task],
+                        None,
+                        ProofExecutionPhase::ModelRequest,
+                        &mut runner,
+                        |_, _, _| anyhow::bail!("head-only proof must not prepare a baseline"),
+                    )?
+                };
+                let receipt = result
+                    .proof_receipts
+                    .first()
+                    .context("proof receipt missing")?;
+                let expected = match code {
+                    None => "skipped_profile",
+                    Some(0) => "head_passed",
+                    _ => "head_failed",
+                };
+                ensure!(
+                    receipt.result == expected,
+                    "build={build}, code={code:?}: {receipt:?}"
+                );
+                ensure!(proof_receipt_is_missing_evidence(receipt) == code.is_none());
+                ensure!(receipt.commands[0].exit_code == code);
+                ensure!(receipt.commands[0].duration_ms == 17);
+            }
+        }
+        Ok(())
     }
 
     /// A Rust unit test that lives beside the fix it pins must come out

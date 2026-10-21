@@ -140,7 +140,7 @@ where
         )?;
         let result = match head.status.as_str() {
             "passed" => "head_passed",
-            "failed" => "head_failed",
+            "failed" if head.exit_code.is_some() => "head_failed",
             "timed_out" => "timed_out",
             _ => "skipped_profile",
         };

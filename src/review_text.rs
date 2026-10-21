@@ -179,6 +179,15 @@ pub(crate) fn render_missing_proof_receipt_summary(text: &mut String, receipt: &
                 "Focused proof was skipped by budget for `{command}`; plan details are in artifacts."
             )
         }
+        "skipped_profile"
+            if receipt.commands.iter().any(|command| {
+                command.status == "failed" && command.exit_code.is_none() && !command.timed_out
+            }) =>
+        {
+            format!(
+                "Focused proof terminated without an exit code for `{command}`; no test verdict was established. Logs are in artifacts."
+            )
+        }
         "skipped_profile" => {
             format!(
                 "Focused proof was unavailable for `{command}`; profile/tool details are in artifacts."
