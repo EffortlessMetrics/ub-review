@@ -154,7 +154,7 @@ repository's `.ub-review.toml` makes the five non-tokmd core sensors
 ### Run-environment inputs
 
 Sensor children receive only the execution-metadata allowlist in
-`src/lane_packets.rs`; configured overrides remain subject to that allowlist.
+`src/lane_packets.rs`; explicit overrides remain subject to that allowlist.
 Native environment bytes are preserved for allowed keys. Unrelated non-Unicode
 keys or values must neither reach the child nor prevent it from launching.
 This quarantine does not establish immutable executable identity or general
