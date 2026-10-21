@@ -316,10 +316,15 @@ fn run_bounded_pr_thread_get(root: &Path, url: &str, auth: &str) -> Result<serde
     let bytes = match capture {
         Ok(bytes) => bytes,
         Err(err) => {
-            // Reap before returning; no detached reader or unbounded spool survives failure.
-            let _ = child.kill();
-            child.wait().context("reap failed GitHub thread curl")?;
-            return Err(err);
+            // Preserve the capture failure even when completion cannot be confirmed.
+            let kill = child.kill();
+            let reap = child.wait().map(|_| ());
+            return Err(github_api_cleanup_error(
+                err,
+                "failed GitHub thread curl",
+                kill,
+                reap,
+            ));
         }
     };
     let status = child
@@ -475,18 +480,24 @@ fn spawn_github_api_get(
     if let Err(err) = configured {
         let kill = child.kill();
         let reap = child.wait().map(|_| ());
-        return Err(github_api_setup_error(err, kill, reap));
+        return Err(github_api_cleanup_error(
+            err,
+            "unconfigured GitHub API curl",
+            kill,
+            reap,
+        ));
     }
     Ok(child)
 }
 
-fn github_api_setup_error(
-    setup_error: anyhow::Error,
+fn github_api_cleanup_error(
+    original_error: anyhow::Error,
+    cleanup_context: &str,
     kill: std::io::Result<()>,
     reap: std::io::Result<()>,
 ) -> anyhow::Error {
     if kill.is_ok() && reap.is_ok() {
-        return setup_error;
+        return original_error;
     }
     let kill_detail = match kill {
         Ok(()) => "kill request succeeded".to_owned(),
@@ -496,8 +507,8 @@ fn github_api_setup_error(
         Ok(()) => "child reaped".to_owned(),
         Err(error) => format!("child completion remains unconfirmed; reap failed: {error}"),
     };
-    setup_error.context(format!(
-        "cleanup unconfigured GitHub API curl ({kill_detail}; {completion_detail})"
+    original_error.context(format!(
+        "cleanup {cleanup_context} ({kill_detail}; {completion_detail})"
     ))
 }
 
@@ -725,6 +736,57 @@ mod structured_thread_tests {
     use super::*;
 
     #[test]
+    fn github_api_capture_failure_preserves_original_and_cleanup_diagnostics() -> Result<()> {
+        use std::io::{Error, ErrorKind};
+
+        for (kill_fails, reap_fails, expected) in [
+            (false, false, "fixture capture failure"),
+            (
+                true,
+                false,
+                "cleanup failed GitHub thread curl (kill request failed: fixture kill refusal; child reaped): fixture capture failure",
+            ),
+            (
+                false,
+                true,
+                "cleanup failed GitHub thread curl (kill request succeeded; child completion remains unconfirmed; reap failed: fixture reap uncertainty): fixture capture failure",
+            ),
+            (
+                true,
+                true,
+                "cleanup failed GitHub thread curl (kill request failed: fixture kill refusal; child completion remains unconfirmed; reap failed: fixture reap uncertainty): fixture capture failure",
+            ),
+        ] {
+            let capture_error = anyhow::Error::new(Error::new(
+                ErrorKind::InvalidData,
+                "fixture capture failure",
+            ));
+            let kill = if kill_fails {
+                Err(Error::new(
+                    ErrorKind::PermissionDenied,
+                    "fixture kill refusal",
+                ))
+            } else {
+                Ok(())
+            };
+            let reap = if reap_fails {
+                Err(Error::other("fixture reap uncertainty"))
+            } else {
+                Ok(())
+            };
+            let error =
+                github_api_cleanup_error(capture_error, "failed GitHub thread curl", kill, reap);
+            assert_eq!(format!("{error:#}"), expected);
+            let original = error
+                .downcast_ref::<Error>()
+                .context("original capture I/O error lost")?;
+            assert_eq!(original.kind(), ErrorKind::InvalidData);
+            assert_eq!(original.to_string(), "fixture capture failure");
+        }
+        Ok(())
+    }
+
+    #[test]
     fn github_api_setup_failure_preserves_original_and_cleanup_diagnostics() -> Result<()> {
         use std::io::{Error, ErrorKind};
 
@@ -761,7 +823,8 @@ mod structured_thread_tests {
             } else {
                 Ok(())
             };
-            let error = github_api_setup_error(setup_error, kill, reap);
+            let error =
+                github_api_cleanup_error(setup_error, "unconfigured GitHub API curl", kill, reap);
             assert_eq!(format!("{error:#}"), expected);
             let original = error
                 .downcast_ref::<Error>()

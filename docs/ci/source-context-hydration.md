@@ -63,6 +63,12 @@ it never turns failed configuration into a successful request. Successful reap
 confirms completion even if the preceding kill request failed. This diagnostic
 repair does not add a supervisor or change process-tree or timeout policy.
 
+Bounded-response capture failures use the same reconciliation: preserve the
+original capture error, attempt kill then reap, and retain cleanup diagnostics.
+A capture-limit failure stays a capture-limit failure when reap also fails;
+failed reap remains completion-unconfirmed. Neither error becomes a successful
+response or clean evidence.
+
 Successful endpoints survive an independent endpoint's network, timeout, 5xx,
 parse, shape or size failure. Original record IDs, full admitted bodies, source
 anchors, commit IDs and head bindings remain unchanged. Failed endpoints are
