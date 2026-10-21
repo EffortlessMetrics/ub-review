@@ -61,6 +61,18 @@ At the source commit named above:
 - candidate self-dogfood remains candidate code, not a released stable judge;
 - existing downstream CI remains authoritative.
 
+The seeded proof broker admits known Required requests before optional impact
+work in both model modes, after joining the late sensor owner. Every phase
+carries the same receipts and leases. Completed, unambiguous receipts bound to
+the current head settle elapsed time; missing, stale, duplicate or otherwise
+invalid settlement inputs retain the original reservation. Individual timeout
+ceilings stay immutable and task/file capacity is not refunded. Consequently,
+the sum of historical ceilings can exceed the time allocation even when spent
+time plus each newly admitted reservation fits it. Required-only admission
+excludes unrelated Bun diff tests. A failed Required command remains failed;
+Required priority does not override command admission, resource or deadline
+refusals. These controls do not promote the shadow ledger to scheduler authority.
+
 Do not describe a planned or shadow contract as live authority. Do not retire
 an existing check because UB Review can run a command with a similar string.
 
