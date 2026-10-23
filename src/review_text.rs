@@ -836,8 +836,11 @@ pub(crate) fn parse_hunk_new_start(line: &str) -> Option<u32> {
     Some(start)
 }
 
+/// Normalize an already repository-relative path. Diff readers remove their
+/// `+++ b/` transport prefix before calling this; a remaining `b/` names a real
+/// directory and must survive candidate, proof and delivery validation.
 pub(crate) fn normalize_repo_path(path: &str) -> String {
-    path.trim().trim_start_matches("b/").replace('\\', "/")
+    path.trim().replace('\\', "/")
 }
 
 pub(crate) fn ensure_lane_prefix(lane: &str, body: &str) -> String {
