@@ -78,6 +78,8 @@ pub(crate) const RESOLVED_CANDIDATE_SCHEMA: &str = "ub-review.resolved_candidate
 pub(crate) const RESOLVED_PLAN_SCHEMA: &str = "ub-review.resolved_plan.v1";
 pub(crate) const RESOLVED_PROFILE_SCHEMA: &str = "ub-review.resolved_profile.v1";
 pub(crate) const RESOLVED_TOOLS_SCHEMA: &str = "ub-review.resolved_tools.v1";
+pub(crate) const ANALYZER_SELECTION_RECEIPT_SCHEMA: &str =
+    "ub-review.analyzer_selection_receipt.v1";
 pub(crate) const RESOURCE_LEASE_SCHEMA: &str = "ub-review.resource_lease.v1";
 pub(crate) const SCHEDULER_SCHEMA: &str = "ub-review.scheduler.v1";
 pub(crate) const SETUP_PR_ERROR_SCHEMA: &str = "ub-review.setup_pr_error.v1";
