@@ -34692,3 +34692,41 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_intent.rs:return_value:b72a971f"
 owner = "ub-review/core"
 reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Same rejection statement classified additionally as return_value; native request/task non-creation is its behavioral oracle. Same native/extracted evidence as row38. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+# #1534: individually reviewed RIPR 0.10.0 return span/sink limitations.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_watchdog.rs:return_value:d667aad9"
+owner = "ub-review/core"
+reason = "Issue #1534; exact RIPR0.10.0 base ac06293 to c0b14631 plus expanded receipt test: raw line332 sha argument in incomplete-run constructor; subject authority is real, but flow_sinks points to the next missing-artifact return at344. New incomplete_run_receipts_preserve_subject_and_recovery_contract asserts literal expected_sha=head1; compiled first-subject wrong-head mutant fails this assertion. All six compiled controls reached the real consumer, and restored source passed20/20. Independent row review retained; related upstream return-probe syntax-role repair https://github.com/EffortlessMetrics/ripr-swarm/pull/1525. Applies only to this inspected row; re-verify after semantic edits or tool upgrades. Dating follows policy/allow.toml#non-rust-ripr-suppressions; strict-zero threshold unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_watchdog.rs:return_value:ade42607"
+owner = "ub-review/core"
+reason = "Issue #1534; exact RIPR0.10.0 base ac06293 to c0b14631 plus expanded receipt test: raw line337 closing format delimiter in incomplete-run detail, incorrectly joined to the next missing-artifact return at344. Exact serialized detail pins run10/attempt1/status/conclusion. Compiled first-detail run/attempt swap fails; this tests the enclosing detail effect, not an executable punctuation mutation. All six compiled controls reached the real consumer, and restored source passed20/20. Independent row review retained; related upstream return-probe syntax-role repair https://github.com/EffortlessMetrics/ripr-swarm/pull/1525. Applies only to this inspected row; re-verify after semantic edits or tool upgrades. Dating follows policy/allow.toml#non-rust-ripr-suppressions; strict-zero threshold unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_watchdog.rs:return_value:bd3eb949"
+owner = "ub-review/core"
+reason = "Issue #1534; exact RIPR0.10.0 base ac06293 to c0b14631 plus expanded receipt test: raw line340 closing return delimiter, incorrectly joined to the next missing-artifact return at344. The enclosing early-return effect is real. Compiled first-return bypass falls through to a retained pass and fails both lifecycle controls and the exact serialized receipt assertion; punctuation itself is not an executable mutant. All six compiled controls reached the real consumer, and restored source passed20/20. Independent row review retained; related upstream return-probe syntax-role repair https://github.com/EffortlessMetrics/ripr-swarm/pull/1525. Applies only to this inspected row; re-verify after semantic edits or tool upgrades. Dating follows policy/allow.toml#non-rust-ripr-suppressions; strict-zero threshold unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_watchdog.rs:return_value:d667aad9.2"
+owner = "ub-review/core"
+reason = "Issue #1534; exact RIPR0.10.0 base ac06293 to c0b14631 plus expanded receipt test: raw line372 sha argument in failed-run retained-pass rejection; subject authority is real, but flow_sinks incorrectly points to the later terminal return at383. Literal expected_sha=head1 is asserted on this branch; compiled failed-subject wrong-head mutant fails the new serialized receipt assertion. All six compiled controls reached the real consumer, and restored source passed20/20. Independent row review retained; related upstream return-probe syntax-role repair https://github.com/EffortlessMetrics/ripr-swarm/pull/1525. Applies only to this inspected row; re-verify after semantic edits or tool upgrades. Dating follows policy/allow.toml#non-rust-ripr-suppressions; strict-zero threshold unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_watchdog.rs:return_value:ade42607.2"
+owner = "ub-review/core"
+reason = "Issue #1534; exact RIPR0.10.0 base ac06293 to c0b14631 plus expanded receipt test: raw line377 closing format delimiter in failed-run detail, incorrectly joined to terminal return383. Literal failed-run detail pins run10. Compiled failed-detail substitutes attempt1 and fails the exact serialized receipt assertion; this is an enclosing-detail control, not an executable punctuation mutation. All six compiled controls reached the real consumer, and restored source passed20/20. Independent row review retained; related upstream return-probe syntax-role repair https://github.com/EffortlessMetrics/ripr-swarm/pull/1525. Applies only to this inspected row; re-verify after semantic edits or tool upgrades. Dating follows policy/allow.toml#non-rust-ripr-suppressions; strict-zero threshold unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_watchdog.rs:return_value:bd3eb949.2"
+owner = "ub-review/core"
+reason = "Issue #1534; exact RIPR0.10.0 base ac06293 to c0b14631 plus expanded receipt test: raw line380 closing return delimiter in failed-run retained-pass rejection, incorrectly joined to terminal return383. Enclosing early-return authority is real. Compiled failed-return bypass permits the retained pass and fails lifecycle plus exact serialized receipt controls; punctuation is not independently executable. All six compiled controls reached the real consumer, and restored source passed20/20. Independent row review retained; related upstream return-probe syntax-role repair https://github.com/EffortlessMetrics/ripr-swarm/pull/1525. Applies only to this inspected row; re-verify after semantic edits or tool upgrades. Dating follows policy/allow.toml#non-rust-ripr-suppressions; strict-zero threshold unchanged."
