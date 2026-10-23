@@ -5,6 +5,15 @@ tool = "cargo-allow"
 # exception volume proves that narrower ledgers improve reviewability.
 
 [[exception]]
+id = "transport-child-cleanup-fixture"
+kind = "process-spawn"
+path = "src/model_api_lifecycle_tests.rs"
+owner = "ub-review/tests"
+reason = "Issue #1522: self-spawn the exact Rust test executable as a local transport child, observe readiness, inject wait failure and verify termination, reap and removal of both temporary outputs. The test retains the child handle and tears it down even when the regression fails; no network, shell or production command admission change."
+created = "2026-10-19"
+review_after = "2027-01-19"
+
+[[exception]]
 id = "clippy-too-many-arguments-artifact-writers"
 kind = "clippy-suppression"
 path = "src/main.rs"
