@@ -4452,8 +4452,19 @@ fn cmd_cache_warm(args: CacheWarmArgs) -> Result<()> {
 }
 
 fn cmd_plan(args: PlanArgs) -> Result<()> {
-    let (config, diff, box_state, plan, revision) =
+    let (config, diff, box_state, mut plan, revision) =
         prepare_plan(&args.review, args.allow_heavy, &args.selectors)?;
+    // Plan previews use the standard run defaults, including applicable repo
+    // lanes. Resolve selectors before printing or publishing any artifacts.
+    let mut lanes = if config.review.enable_default_lanes {
+        review_lanes_for_width(STANDARD_LANE_WIDTH, &plan)
+    } else {
+        Vec::new()
+    };
+    merge_repo_lanes_into(&mut lanes, &plan.repo_lanes);
+    let include = parse_selector_set(&args.selectors.lanes, "--lanes")?;
+    let exclude = parse_selector_set(&args.selectors.except_lanes, "--except-lanes")?;
+    plan.lanes = filter_lane_plans(lanes, &include, &exclude)?;
     print_plan(&plan, &box_state);
     if args.write {
         write_plan_artifacts(
@@ -4466,7 +4477,7 @@ fn cmd_plan(args: PlanArgs) -> Result<()> {
             PlanArtifactSelectors {
                 run_args: None,
                 selectors: &args.selectors,
-                effective_model_lanes: None,
+                effective_model_lanes: Some(&plan.lanes),
             },
         )?;
     }
