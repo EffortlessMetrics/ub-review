@@ -418,3 +418,335 @@ pub(crate) fn off_diff_comment_count(
         })
         .count()
 }
+
+/// The existing run artifact, frozen before this post attempt. No prior
+/// post-result/error file is used to confirm a new attempt.
+pub(crate) struct PostPublication {
+    path: PathBuf,
+    source: serde_json::Value,
+    review_sha256: Option<String>,
+    expected_pull_number: Option<u64>,
+    not_needed: bool,
+}
+
+fn publication_bytes(path: &Path) -> Result<Vec<u8>> {
+    publication_reader_bytes(fs::File::open(path)?)
+}
+
+fn publication_reader_bytes(reader: impl std::io::Read) -> Result<Vec<u8>> {
+    use std::io::Read;
+    let mut bytes = Vec::new();
+    reader.take(1_048_577).read_to_end(&mut bytes)?;
+    anyhow::ensure!(bytes.len() <= 1_048_576, "publication input exceeds 1 MiB");
+    Ok(bytes)
+}
+
+fn publication_source(mut gate: serde_json::Value) -> Result<serde_json::Value> {
+    let object = gate
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("gate outcome must be an object"))?;
+    anyhow::ensure!(
+        object.get("schema").and_then(serde_json::Value::as_str)
+            == Some("ub-review.gate_outcome.v1"),
+        "unsupported gate outcome schema"
+    );
+    for field in [
+        "publication_result",
+        "gate_result",
+        "delivery_result",
+        "delivery_attempt",
+        "delivery_reason",
+        "delivery_receipt_sha256",
+        "delivery_review_sha256",
+    ] {
+        object.remove(field);
+    }
+    if let Some(reasons) = object
+        .get_mut("not_proven_reasons")
+        .and_then(serde_json::Value::as_array_mut)
+    {
+        reasons.retain(|reason| {
+            !reason
+                .as_str()
+                .is_some_and(|text| text.starts_with("publication:"))
+        });
+    }
+    Ok(gate)
+}
+
+pub(crate) fn begin_post_publication(args: &PostArgs) -> Result<Option<PostPublication>> {
+    let path = args
+        .review_json
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("gate_outcome.json");
+    if !path.exists() {
+        return Ok(None); // Standalone posting keeps its existing contract.
+    }
+    let mut gate: serde_json::Value = serde_json::from_slice(&publication_bytes(&path)?)?;
+    let source = publication_source(gate.clone())?;
+    anyhow::ensure!(
+        matches!(
+            source["code_gate_result"].as_str(),
+            Some("pass" | "finding" | "not_proven")
+        ),
+        "gate outcome has no supported independent code result"
+    );
+    anyhow::ensure!(
+        source["not_proven_reasons"].is_array(),
+        "gate outcome reasons must be an array"
+    );
+    let not_needed = gate["publication_result"] == "not_needed";
+    let review_sha256 = args
+        .review_json
+        .exists()
+        .then(|| publication_bytes(&args.review_json).map(|bytes| sha256_hex(&bytes)))
+        .transpose()?;
+    gate["publication_result"] = if not_needed && review_sha256.is_none() {
+        "not_needed".into()
+    } else {
+        "not_proven".into()
+    };
+    gate["delivery_result"] = if review_sha256.is_some() {
+        "prepared"
+    } else {
+        "unknown"
+    }
+    .into();
+    gate["delivery_attempt"] = "not_attempted".into();
+    gate["delivery_reason"] = "post_confirmation_unavailable".into();
+    if let Some(object) = gate.as_object_mut() {
+        object.remove("delivery_receipt_sha256");
+    }
+    gate["delivery_review_sha256"] = serde_json::to_value(&review_sha256)?;
+    project_publication_result(&mut gate, "post_confirmation_unavailable")?;
+    fs::write(&path, serde_json::to_vec_pretty(&gate)?)?;
+    Ok(Some(PostPublication {
+        path,
+        source,
+        review_sha256,
+        expected_pull_number: args.pull_number.or_else(detect_pull_number_from_event),
+        not_needed,
+    }))
+}
+
+fn positive_review_id(value: &serde_json::Value) -> bool {
+    value
+        .as_u64()
+        .or_else(|| value.as_str()?.parse().ok())
+        .is_some_and(|id| id > 0)
+}
+
+fn project_publication_result(gate: &mut serde_json::Value, reason: &str) -> Result<()> {
+    let publication_unproven = matches!(
+        gate["publication_result"].as_str(),
+        Some("failed" | "not_proven")
+    );
+    gate["gate_result"] = if publication_unproven {
+        "not_proven".into()
+    } else {
+        gate["code_gate_result"].clone()
+    };
+    let reasons = gate
+        .get_mut("not_proven_reasons")
+        .and_then(serde_json::Value::as_array_mut)
+        .ok_or_else(|| anyhow::anyhow!("gate outcome reasons must be an array"))?;
+    reasons.retain(|reason| {
+        !reason
+            .as_str()
+            .is_some_and(|text| text.starts_with("publication:"))
+    });
+    if publication_unproven {
+        reasons.push(format!("publication: {reason}").into());
+    }
+    Ok(())
+}
+
+fn post_publication_state(
+    args: &PostArgs,
+    publication: &PostPublication,
+    receipt: &serde_json::Value,
+) -> (&'static str, &'static str, &'static str, &'static str) {
+    if receipt["schema_version"] != 1 {
+        return ("not_proven", "unknown", "unknown", "invalid_post_receipt");
+    }
+    match receipt["status"].as_str() {
+        Some("failed") => {
+            let stage = receipt["failure_stage"].as_str();
+            let attempt = match stage {
+                Some("preflight" | "payload_validation") => "blocked",
+                Some("network_post") => "attempted",
+                _ => "unknown",
+            };
+            let reason = if receipt["error_kind"] == "missing_token" {
+                "missing_token"
+            } else if receipt["error_kind"] == "receipt_persistence" {
+                "receipt_persistence"
+            } else {
+                "post_failed"
+            };
+            ("failed", "failed", attempt, reason)
+        }
+        Some("skipped") if publication.not_needed && publication.review_sha256.is_none() => (
+            "not_needed",
+            "not_needed",
+            "not_attempted",
+            "public_value_not_needed",
+        ),
+        Some("ok") => {
+            let confirmation = &receipt["response"]["delivery_confirmation"];
+            let revision =
+                serde_json::from_value::<RevisionRef>(publication.source["revision"].clone());
+            let current_revision = revision.as_ref().is_ok_and(|value| {
+                value.validate().is_ok()
+                    && receipt["response"]
+                        .get("delivery_confirmation")
+                        .is_none_or(|current| {
+                            matches!(
+                                current["kind"].as_str(),
+                                Some("submitted_review" | "reconciled_comments")
+                            ) && current["exact_head_sha"] == value.reviewed_commit
+                        })
+                    && match receipt["response"].get("commit_id") {
+                        Some(commit) => commit.as_str() == Some(value.reviewed_commit.as_str()),
+                        None => {
+                            matches!(
+                                confirmation["kind"].as_str(),
+                                Some("submitted_review" | "reconciled_comments")
+                            ) && confirmation["exact_head_sha"] == value.reviewed_commit
+                        }
+                    }
+            });
+            let grouped = matches!(
+                receipt["response"]["state"].as_str(),
+                Some("COMMENTED" | "commented")
+            ) && positive_review_id(&receipt["response"]["id"])
+                && matches!(
+                    confirmation["kind"].as_str(),
+                    None | Some("submitted_review")
+                );
+            let planned = confirmation["planned_count"].as_u64();
+            let comments = confirmation["kind"] == "reconciled_comments"
+                && planned.is_some_and(|count| count > 0)
+                && confirmation["confirmed_count"].as_u64() == planned
+                && receipt["comments"].as_u64() == planned
+                && (receipt["response"]["state"] == "already_delivered"
+                    || (receipt["response"]["state"] == "commented"
+                        && positive_review_id(&receipt["response"]["id"])));
+            let valid = current_revision
+                && matches!(
+                    publication.source["code_gate_result"].as_str(),
+                    Some("pass" | "finding" | "not_proven")
+                )
+                && publication.review_sha256.is_some()
+                && (grouped || comments)
+                && receipt["http_status"]
+                    .as_u64()
+                    .is_some_and(|value| (200..300).contains(&value))
+                && receipt["repo"].as_str().is_some_and(|repo| {
+                    is_valid_repo_slug(repo) && args.repo.as_deref() == Some(repo)
+                })
+                && receipt["pull_number"].as_u64().is_some_and(|number| {
+                    number > 0 && publication.expected_pull_number == Some(number)
+                })
+                && receipt["review_json"] == args.review_json.display().to_string()
+                && receipt["repo_valid"] == true
+                && receipt["review_json_exists"] == true
+                && receipt["review_json_valid"] == true
+                && receipt["token_present"] == true
+                && receipt["payload_written"] == true;
+            if valid {
+                (
+                    "posted",
+                    "confirmed",
+                    if receipt["response"]["state"] == "already_delivered" {
+                        "not_attempted"
+                    } else {
+                        "attempted"
+                    },
+                    "current_revision_confirmed",
+                )
+            } else {
+                (
+                    "not_proven",
+                    "unknown",
+                    "attempted",
+                    "post_confirmation_unverifiable",
+                )
+            }
+        }
+        _ => (
+            "not_proven",
+            "unknown",
+            "unknown",
+            "post_confirmation_unavailable",
+        ),
+    }
+}
+
+pub(crate) fn finalize_post_publication(
+    args: &PostArgs,
+    publication: &PostPublication,
+    receipt: &serde_json::Value,
+) -> Result<()> {
+    let mut gate: serde_json::Value =
+        serde_json::from_slice(&publication_bytes(&publication.path)?)?;
+    anyhow::ensure!(
+        publication_source(gate.clone())? == publication.source,
+        "gate source changed during posting"
+    );
+    let current = args
+        .review_json
+        .exists()
+        .then(|| publication_bytes(&args.review_json).map(|bytes| sha256_hex(&bytes)))
+        .transpose()?;
+    let state = if current == publication.review_sha256 {
+        post_publication_state(args, publication, receipt)
+    } else {
+        (
+            "not_proven",
+            "unknown",
+            "unknown",
+            "prepared_review_changed",
+        )
+    };
+    gate["publication_result"] = state.0.into();
+    gate["delivery_result"] = state.1.into();
+    gate["delivery_attempt"] = state.2.into();
+    gate["delivery_reason"] = state.3.into();
+    project_publication_result(&mut gate, state.3)?;
+    gate["delivery_receipt_sha256"] = sha256_hex(&serde_json::to_vec(receipt)?).into();
+    gate["delivery_review_sha256"] = serde_json::to_value(&publication.review_sha256)?;
+    fs::write(&publication.path, serde_json::to_vec_pretty(&gate)?)?;
+    Ok(())
+}
+
+pub(crate) fn write_post_receipt_and_finalize(
+    args: &PostArgs,
+    publication: Option<&PostPublication>,
+    filename: &str,
+    receipt: &impl Serialize,
+) -> Result<()> {
+    let value = serde_json::to_value(receipt)?;
+    if let Err(error) = fs::write(args.out.join(filename), serde_json::to_vec_pretty(&value)?) {
+        if let Some(publication) = publication {
+            finalize_post_publication(
+                args,
+                publication,
+                &serde_json::json!({
+                    "schema_version":1, "status":"failed", "error_kind":"receipt_persistence",
+                    "failure_stage":"receipt_persistence"
+                }),
+            )?;
+        }
+        return Err(error.into());
+    }
+    if let Some(publication) = publication {
+        finalize_post_publication(args, publication, &value)?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "post_publication_tests.rs"]
+mod publication_tests;
