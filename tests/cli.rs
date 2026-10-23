@@ -1337,6 +1337,116 @@ fn init_guide_lists_existing_package_scripts_as_proof_candidates() -> Result<()>
 }
 
 #[test]
+fn calibration_guidance_rejects_unsupported_runs_without_changing_thresholds() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let runs = temp.path().join("runs");
+    let supported = serde_json::json!({
+        "schema": "ub-review.calibration.v0",
+        "repo": "test/repo", "base": "base", "head": "head",
+        "run_mode": "intelligent-ci", "gate_policy": "pass",
+        "cohort": {
+            "provider": "test", "model": "test", "cohort_id": "cohort",
+            "shared_prefix_hash": "hash", "cohort_broken": false
+        },
+        "counts": {
+            "lanes_planned": 1, "lanes_executed": 1, "lane_continuations": 1,
+            "reporter_questions": 0, "messages": 0, "proof_requests_model_selected": 1,
+            "proof_requests_executed": 1, "proof_receipts_routed": 1,
+            "lane_conclusions_changed_by_proof": 1,
+            "inline_comments_posted": 1, "summary_comments_posted": 0
+        },
+        "classification": {
+            "run_class": "proof-changed-conclusion",
+            "suggested_class": "proof-changed-conclusion", "infra_excluded": false,
+            "human_classification": "acted-on"
+        }
+    });
+    for i in 0..5 {
+        let dir = runs.join(format!("run-{i}/review"));
+        fs::create_dir_all(&dir)?;
+        fs::write(
+            dir.join("calibration.json"),
+            serde_json::to_vec(&supported)?,
+        )?;
+    }
+    for (command, chosen_mode) in [
+        ("recommend", "Recommended mode: strict (strict)"),
+        ("promote", "Target mode:          strict (strict)"),
+    ] {
+        let output = Command::new(bin)
+            .args([command, "--runs-dir"])
+            .arg(&runs)
+            .output()?;
+        assert!(output.status.success(), "{command}: {:?}", output.stderr);
+        let stdout = String::from_utf8(output.stdout)?;
+        assert!(
+            stdout.lines().any(|line| line == chosen_mode),
+            "{command}: {stdout}"
+        );
+        assert!(stdout.contains("5 runs"), "{command}: {stdout}");
+    }
+
+    let extra_dir = runs.join("nested/incompatible/review");
+    fs::create_dir_all(&extra_dir)?;
+    let extra_path = extra_dir.join("calibration.json");
+    let mut extra = supported;
+    extra["schema"] = serde_json::json!("ub-review.calibration.v999");
+    extra["classification"]["infra_excluded"] = serde_json::json!(true);
+    extra["classification"]["human_classification"] = serde_json::json!("false-positive");
+    fs::write(&extra_path, serde_json::to_vec(&extra)?)?;
+    for command in ["recommend", "promote"] {
+        let output = Command::new(bin)
+            .args([command, "--runs-dir"])
+            .arg(&runs)
+            .output()?;
+        assert!(
+            !output.status.success(),
+            "{command} silently excluded an incompatible run"
+        );
+        assert!(
+            output.stdout.is_empty(),
+            "guidance must not precede admission"
+        );
+        let stderr = String::from_utf8(output.stderr)?;
+        for needle in [
+            extra_path.to_str().context("fixture path must be UTF-8")?,
+            "ub-review.calibration.v999",
+            "expected `ub-review.calibration.v0`",
+            "cannot interpret",
+        ] {
+            assert!(
+                stderr.contains(needle),
+                "{command}: missing {needle}: {stderr}"
+            );
+        }
+    }
+
+    // The same adverse run under the supported schema must remain in the
+    // denominator and prevent a strict recommendation using existing rules.
+    extra["schema"] = serde_json::json!("ub-review.calibration.v0");
+    fs::write(extra_path, serde_json::to_vec(&extra)?)?;
+    for (command, chosen_mode) in [
+        ("recommend", "Recommended mode: advisory (advisory)"),
+        ("promote", "Target mode:          advisory (advisory)"),
+    ] {
+        let output = Command::new(bin)
+            .args([command, "--runs-dir"])
+            .arg(&runs)
+            .output()?;
+        assert!(output.status.success(), "{command}: {:?}", output.stderr);
+        let stdout = String::from_utf8(output.stdout)?;
+        assert!(stdout.contains("6 runs"), "{command}: {stdout}");
+        assert!(stdout.contains("16.7%"), "{command}: {stdout}");
+        assert!(
+            stdout.lines().any(|line| line == chosen_mode),
+            "{command}: {stdout}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn quality_backfill_cli_writes_rolling_artifact_with_source_receipts() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
