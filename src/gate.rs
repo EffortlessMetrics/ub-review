@@ -393,6 +393,95 @@ pub(crate) struct DeferredPlannerProof {
     pub(crate) request_ids: Vec<String>,
     pub(crate) receipt_ids: Vec<String>,
     pub(crate) receipts_present: bool,
+    pub(crate) receipt_diagnostics: Vec<PlannerReceiptDiagnostic>,
+}
+
+/// Fixed diagnostics only: command text, output and receipt reasons remain private.
+/// These explain rejection; they never confer proof or enforcement authority.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum PlannerReceiptDiagnostic {
+    Missing,
+    WrongSubject,
+    CurrentRevisionUnavailable,
+    ReceiptRevisionUnavailable,
+    StaleRevision,
+    HeadOnly,
+    Failed,
+    NotPassing,
+}
+
+impl PlannerReceiptDiagnostic {
+    pub(crate) fn summary(self) -> &'static str {
+        match self {
+            Self::Missing => "no run receipts; execute the required task for the admitted revision",
+            Self::WrongSubject => {
+                "run receipts share no task request id; execute this task's requests"
+            }
+            Self::CurrentRevisionUnavailable => {
+                "current revision unavailable; restore admission before retrying"
+            }
+            Self::ReceiptRevisionUnavailable => {
+                "receipt revision unavailable; obtain a revision-bound receipt"
+            }
+            Self::StaleRevision => "stale receipt revision; rerun for the admitted revision",
+            Self::HeadOnly => "head-only receipt; obtain the required base-plus-tests proof",
+            Self::Failed => {
+                "failed or timed-out receipt; inspect private proof results before retrying"
+            }
+            Self::NotPassing => {
+                "non-passing receipt; inspect private proof results and complete the obligation"
+            }
+        }
+    }
+}
+
+fn planner_receipt_diagnostics(
+    task: &PlannerPortfolioTask,
+    receipts: &[ProofReceipt],
+    admitted_revision: Option<&crate::RevisionRef>,
+) -> Vec<PlannerReceiptDiagnostic> {
+    use PlannerReceiptDiagnostic as Diagnostic;
+    if receipts.is_empty() {
+        return vec![Diagnostic::Missing];
+    }
+    let matching = receipts
+        .iter()
+        .filter(|receipt| {
+            crate::proof::broker::receipt_shares_proof_request(receipt, &task.request_ids)
+        })
+        .collect::<Vec<_>>();
+    if matching.is_empty() {
+        return vec![Diagnostic::WrongSubject];
+    }
+    let mut diagnostics = Vec::new();
+    for receipt in matching {
+        let revision_issue = match (admitted_revision, receipt.revision.as_ref()) {
+            (None, _) => Some(Diagnostic::CurrentRevisionUnavailable),
+            (_, None) => Some(Diagnostic::ReceiptRevisionUnavailable),
+            (Some(admitted), Some(revision)) if revision != admitted => {
+                Some(Diagnostic::StaleRevision)
+            }
+            _ => None,
+        };
+        for issue in [
+            revision_issue,
+            (receipt.test_patch_mode == "head-only").then_some(Diagnostic::HeadOnly),
+            match required_proof_receipt_class(receipt) {
+                RequiredProofClass::Failed => Some(Diagnostic::Failed),
+                RequiredProofClass::Skipped => Some(Diagnostic::NotPassing),
+                RequiredProofClass::Passed => None,
+            },
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if !diagnostics.contains(&issue) {
+                diagnostics.push(issue);
+            }
+        }
+    }
+    diagnostics
 }
 
 /// Retained accounting over the planner-required portfolio-task denominator
@@ -414,7 +503,7 @@ pub(crate) struct PlannerRequiredProofAccounting {
 pub(crate) const PLANNER_REQUIRED_PROOF_DENOMINATOR: &str = "required planner proof portfolio tasks from review/proof_portfolio.json (planner/broker obligations; distinct from the gate-required [[proof.required]] policy-request denominator counted in required_proof)";
 
 /// A run receipt proves a required planner portfolio task only when it (i)
-/// belongs to the currently reviewed revision (matching revision digest),
+/// belongs to the currently reviewed revision (matching the complete revision reference),
 /// (ii) carries a successful result class (the same
 /// `required_proof_receipt_class` pass notion the gate uses: `head_passed`
 /// or `discriminating`), (iii) is not a head-only receipt
@@ -426,15 +515,15 @@ pub(crate) const PLANNER_REQUIRED_PROOF_DENOMINATOR: &str = "required planner pr
 pub(crate) fn planner_receipt_proves_task(
     receipt: &ProofReceipt,
     task: &PlannerPortfolioTask,
-    revision_digest: Option<&str>,
+    admitted_revision: Option<&crate::RevisionRef>,
 ) -> bool {
-    let Some(digest) = revision_digest else {
+    let Some(admitted) = admitted_revision else {
         return false;
     };
     receipt
         .revision
         .as_ref()
-        .is_some_and(|revision| revision.digest == digest)
+        .is_some_and(|revision| revision == admitted)
         && required_proof_receipt_class(receipt) == RequiredProofClass::Passed
         && receipt.test_patch_mode != "head-only"
         && crate::proof::broker::receipt_shares_proof_request(receipt, &task.request_ids)
@@ -452,7 +541,7 @@ pub(crate) fn build_planner_required_proof_accounting(
     portfolio: &PlannerPortfolioSnapshot,
     proof_receipts: &[ProofReceipt],
     gate_required_requests: usize,
-    revision_digest: Option<&str>,
+    admitted_revision: Option<&crate::RevisionRef>,
 ) -> PlannerRequiredProofAccounting {
     let mut proven = 0_usize;
     let mut unproven_tasks = Vec::new();
@@ -461,7 +550,7 @@ pub(crate) fn build_planner_required_proof_accounting(
         total += 1;
         let satisfied = proof_receipts
             .iter()
-            .any(|receipt| planner_receipt_proves_task(receipt, task, revision_digest));
+            .any(|receipt| planner_receipt_proves_task(receipt, task, admitted_revision));
         if satisfied {
             proven += 1;
         } else {
@@ -473,6 +562,11 @@ pub(crate) fn build_planner_required_proof_accounting(
                 request_ids: task.request_ids.clone(),
                 receipt_ids: task.receipt_ids.clone(),
                 receipts_present: false,
+                receipt_diagnostics: planner_receipt_diagnostics(
+                    task,
+                    proof_receipts,
+                    admitted_revision,
+                ),
             });
         }
     }
@@ -538,11 +632,11 @@ pub(crate) struct GateOutcomeInput<'a> {
     /// `None` when the artifact is absent or unparseable; the gate then
     /// omits the planner-required section without failing.
     pub(crate) planner_portfolio: Option<PlannerPortfolioSnapshot>,
-    /// Digest of the currently reviewed revision (#4271 round 2): a required
-    /// portfolio task is proven only by a receipt stamped with this digest.
+    /// Complete admitted revision reference: required planner tasks are proven
+    /// only by receipts joining digest, semantics, and reviewed commit exactly.
     /// `None` when no revision was admitted; every required task then stays
     /// unproven rather than matching receipts from an unknown revision.
-    pub(crate) revision_digest: Option<String>,
+    pub(crate) admitted_revision: Option<crate::RevisionRef>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -834,7 +928,7 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
             portfolio,
             input.proof_receipts,
             required_proof.matched,
-            input.revision_digest.as_deref(),
+            input.admitted_revision.as_ref(),
         )
     });
 
@@ -1310,7 +1404,7 @@ mod tests {
                 missing_or_failed_model_evidence: &[],
                 reporter_gate: crate::ReporterGateInput::Absent,
                 planner_portfolio: None,
-                revision_digest: None,
+                admitted_revision: None,
             });
 
             assert_eq!(gate.schema, "ub-review.gate_outcome.v1");
@@ -1351,7 +1445,7 @@ mod tests {
             missing_or_failed_model_evidence: &model_issues,
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -1391,7 +1485,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -1436,7 +1530,7 @@ mod tests {
                 missing_or_failed_model_evidence: &[],
                 reporter_gate: crate::ReporterGateInput::Absent,
                 planner_portfolio: None,
-                revision_digest: None,
+                admitted_revision: None,
             });
             assert_eq!(gate.required_proof.matched, 1);
             assert_eq!(gate.required_proof.passed, 0);
@@ -1486,7 +1580,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -1534,7 +1628,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -1593,7 +1687,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -1628,7 +1722,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -1662,7 +1756,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         assert_eq!(gate.conclusion, "inconclusive");
@@ -1690,7 +1784,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         assert_eq!(review_byok_gate.conclusion, "pass");
@@ -1727,7 +1821,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
         assert_eq!(
             gate.conclusion, "inconclusive",
@@ -1761,7 +1855,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         assert_eq!(gate.conclusion, "inconclusive");
@@ -1802,7 +1896,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         assert_eq!(gate.conclusion, "inconclusive");
@@ -1851,7 +1945,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         assert_eq!(gate.reasons.len(), 1);
@@ -1897,7 +1991,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         assert_eq!(gate.reasons.len(), 1);
@@ -1954,7 +2048,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         assert_eq!(gate.reasons.len(), 1);
@@ -2008,7 +2102,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         // Two reasons: one evidence-gap (missing), one finding (failed).
@@ -2061,7 +2155,7 @@ mod tests {
             missing_or_failed_model_evidence: &model_issues,
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -2099,7 +2193,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -2177,7 +2271,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -2233,7 +2327,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -2267,7 +2361,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         // Only the required tool blocks; the non-required gap stays advisory
@@ -2388,7 +2482,7 @@ mod tests {
                 missing_or_failed_model_evidence: &[],
                 reporter_gate: crate::ReporterGateInput::Absent,
                 planner_portfolio: None,
-                revision_digest: None,
+                admitted_revision: None,
             });
             assert_eq!(gate.conclusion, "pass");
             assert_eq!(gate.tool_gates.failed, 0);
@@ -2416,7 +2510,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
         assert_eq!(default_gate.conclusion, "pass");
         assert!(default_gate.reasons.is_empty());
@@ -2432,7 +2526,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
         assert_eq!(opted_in_gate.conclusion, "fail");
         assert_eq!(opted_in_gate.reasons.len(), 1);
@@ -2484,7 +2578,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
         assert_eq!(gate.conclusion, "fail");
         assert_eq!(gate.tool_gates.failed, 1);
@@ -2532,7 +2626,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         anyhow::ensure!(gate.conclusion == "fail");
@@ -2579,7 +2673,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -2623,7 +2717,7 @@ mod tests {
                 receipt: "review/threads/reporter/turn-001.json".to_owned(),
             },
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
         assert_eq!(gate.conclusion, "fail");
         assert_eq!(gate.reasons.len(), 1);
@@ -2681,7 +2775,7 @@ mod tests {
                     receipt: receipt.to_owned(),
                 },
                 planner_portfolio: None,
-                revision_digest: None,
+                admitted_revision: None,
             });
             assert_eq!(gate.conclusion, expected_conclusion);
             match expected_reason {
@@ -2709,7 +2803,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
         assert_eq!(absent.conclusion, "inconclusive");
         assert_eq!(absent.reasons.len(), 1);
@@ -2742,7 +2836,7 @@ mod tests {
                 receipt: "review/threads/reporter/turn-001.json".to_owned(),
             },
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
         assert_eq!(gate.conclusion, "inconclusive");
         assert_eq!(gate.reasons.len(), 1);
@@ -2780,7 +2874,7 @@ mod tests {
                 receipt: receipt.to_owned(),
             },
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
 
         assert_eq!(gate.conclusion, "inconclusive");
@@ -2850,7 +2944,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
             reporter_gate: crate::ReporterGateInput::Absent,
             planner_portfolio: portfolio,
-            revision_digest: revision_digest.map(str::to_owned),
+            admitted_revision: revision_digest.map(planner_revision),
         })
     }
 
@@ -2858,6 +2952,130 @@ mod tests {
         PlannerPortfolioSnapshot {
             decisions: vec![deferred_required_portfolio_task(true)],
         }
+    }
+
+    /// Real gate accounting -> serialized artifact -> summary: receipt presence is
+    /// not proof. Each fixture changes one eligibility leg from the passing control.
+    #[test]
+    fn planner_receipt_diagnostics_distinguish_missing_stale_wrong_subject_and_failed() -> Result<()>
+    {
+        use super::PlannerReceiptDiagnostic as Diagnostic;
+        let mut passing = planner_task_receipt("head_passed", "passed");
+        passing.revision = Some(planner_revision(PLANNER_TEST_DIGEST));
+        passing.test_patch_mode = "base-plus-tests".to_owned();
+        passing.reason = "PRIVATE_RECEIPT_REASON".to_owned();
+        passing.commands[0].stdout = "PRIVATE_COMMAND_OUTPUT".to_owned();
+        let mut stale = passing.clone();
+        stale.revision = Some(planner_revision(PLANNER_STALE_DIGEST));
+        let mut unrelated = passing.clone();
+        unrelated.request_ids = vec!["another-task".to_owned()];
+        let mut failed = passing.clone();
+        failed.result = "head_failed".to_owned();
+        let mut timed_out = passing.clone();
+        timed_out.result = "timed_out".to_owned();
+        let mut skipped = passing.clone();
+        skipped.result = "skipped_budget".to_owned();
+        let mut head_only = passing.clone();
+        head_only.test_patch_mode = "head-only".to_owned();
+        let mut unbound = passing.clone();
+        unbound.revision = None;
+        for (receipts, revision, expected) in [
+            (vec![], Some(PLANNER_TEST_DIGEST), vec![Diagnostic::Missing]),
+            (
+                vec![unrelated.clone()],
+                Some(PLANNER_TEST_DIGEST),
+                vec![Diagnostic::WrongSubject],
+            ),
+            (
+                vec![stale.clone()],
+                Some(PLANNER_TEST_DIGEST),
+                vec![Diagnostic::StaleRevision],
+            ),
+            (
+                vec![failed.clone()],
+                Some(PLANNER_TEST_DIGEST),
+                vec![Diagnostic::Failed],
+            ),
+            (
+                vec![timed_out],
+                Some(PLANNER_TEST_DIGEST),
+                vec![Diagnostic::Failed],
+            ),
+            (
+                vec![skipped],
+                Some(PLANNER_TEST_DIGEST),
+                vec![Diagnostic::NotPassing],
+            ),
+            (
+                vec![head_only],
+                Some(PLANNER_TEST_DIGEST),
+                vec![Diagnostic::HeadOnly],
+            ),
+            (
+                vec![unbound],
+                Some(PLANNER_TEST_DIGEST),
+                vec![Diagnostic::ReceiptRevisionUnavailable],
+            ),
+            (
+                vec![passing.clone()],
+                None,
+                vec![Diagnostic::CurrentRevisionUnavailable],
+            ),
+            (
+                vec![unrelated, stale, failed.clone(), failed],
+                Some(PLANNER_TEST_DIGEST),
+                vec![Diagnostic::StaleRevision, Diagnostic::Failed],
+            ),
+        ] {
+            let gate = planner_gate(Some(required_portfolio()), &receipts, revision);
+            let serialized = serde_json::to_value(&gate)?;
+            let accounting = gate
+                .planner_required_proofs
+                .as_ref()
+                .context("accounting")?;
+            assert_eq!(
+                (accounting.total, accounting.proven, accounting.unproven),
+                (1, 0, 1)
+            );
+            assert_eq!(accounting.unproven_tasks[0].receipt_diagnostics, expected);
+            assert_eq!(
+                serialized["planner_required_proofs"]["unproven_tasks"][0]["receipt_diagnostics"],
+                serde_json::to_value(&expected)?
+            );
+            assert!(!accounting.unproven_tasks[0].receipts_present);
+            assert_eq!(gate.conclusion, "pass");
+            assert_eq!(gate.analysis_result, "not_proven");
+            assert_eq!(gate.gate_result, "not_proven");
+            assert!(gate.reasons.is_empty());
+            let temp = tempfile::tempdir()?;
+            std::fs::create_dir_all(temp.path().join("review"))?;
+            std::fs::write(temp.path().join("review/metrics.json"), "{}")?;
+            std::fs::write(
+                temp.path().join("review/gate_outcome.json"),
+                serde_json::to_vec(&gate)?,
+            )?;
+            let mut summary = String::new();
+            crate::render_review_efficiency_section(&mut summary, temp.path());
+            assert!(summary.contains("receipts: none satisfying"), "{summary}");
+            assert!(summary.contains("review/proof_receipts.json"), "{summary}");
+            for diagnostic in expected {
+                assert!(summary.contains(diagnostic.summary()), "{summary}");
+            }
+            assert!(!summary.contains("PRIVATE_"), "{summary}");
+            assert!(!summary.contains("receipts: none;"), "{summary}");
+        }
+        let gate = planner_gate(
+            Some(required_portfolio()),
+            &[passing],
+            Some(PLANNER_TEST_DIGEST),
+        );
+        let accounting = gate
+            .planner_required_proofs
+            .as_ref()
+            .context("passing accounting")?;
+        assert_eq!((accounting.proven, accounting.unproven), (1, 0));
+        assert!(accounting.unproven_tasks.is_empty());
+        Ok(())
     }
 
     /// F1 required-over-budget: the deferred required obligation is
@@ -2921,8 +3139,12 @@ mod tests {
         let portfolio = PlannerPortfolioSnapshot {
             decisions: vec![deferred_required_portfolio_task(false)],
         };
-        let accounting =
-            build_planner_required_proof_accounting(&portfolio, &[], 0, Some(PLANNER_TEST_DIGEST));
+        let accounting = build_planner_required_proof_accounting(
+            &portfolio,
+            &[],
+            0,
+            Some(&planner_revision(PLANNER_TEST_DIGEST)),
+        );
         assert_eq!(accounting.total, 0);
         assert_eq!(accounting.proven, 0);
         assert_eq!(accounting.unproven, 0);
@@ -3095,6 +3317,219 @@ mod tests {
         let mut receipt = planner_task_receipt("head_passed", "passed");
         receipt.test_patch_mode = "base-plus-tests".to_owned();
         assert_planner_receipt_ineligible(receipt)
+    }
+
+    /// Exercise serialized proof bytes through the production gate API and
+    /// summary command. Identity negatives change one immutable reference field;
+    /// controls retain admission, request matching and mixed rejection causes.
+    #[test]
+    fn planner_currentness_requires_the_complete_admitted_revision() -> Result<()> {
+        use super::PlannerReceiptDiagnostic as Diagnostic;
+        use crate::revision_identity::{CommitTree, ReviewSemantics, RevisionIdentity};
+        let base = CommitTree::new("base", &"1".repeat(40), &"2".repeat(40))?;
+        let head = CommitTree::new("head", &"3".repeat(40), &"4".repeat(40))?;
+        let merge = CommitTree::new("merge", &"5".repeat(40), &"6".repeat(40))?;
+        let identity = RevisionIdentity::new(
+            base,
+            head,
+            merge.clone(),
+            Some(merge),
+            ReviewSemantics::MergeResult,
+            &RevisionIdentity::changed_paths_digest(&["src/lib.rs".to_owned()]),
+            &RevisionIdentity::diff_digest(b"+subject"),
+        )?;
+        let admission = crate::revision_admission::RevisionAdmission {
+            schema: "ub-review.revision_admission.v1".to_owned(),
+            identity_canonical: identity.canonical_form(),
+            identity_digest: identity.identity_digest(),
+            semantics: "merge_result".to_owned(),
+            reviewed_commit_oid: "5".repeat(40),
+            pr_head_commit: Some("3".repeat(40)),
+            worktree_dirty: false,
+        };
+        admission.validate()?;
+        let admitted = crate::RevisionRef::from_admission(&admission);
+        admitted.validate()?;
+        let mut baseline = planner_task_receipt("head_passed", "passed");
+        baseline.revision = Some(admitted.clone());
+        baseline.test_patch_mode = "base-plus-tests".to_owned();
+        let baseline_bytes = serde_json::to_vec(&baseline)?;
+        let mut failures = Vec::new();
+        for case in [
+            "current",
+            "current_discriminating",
+            "current_with_stale",
+            "display_head",
+            "digest",
+            "semantics",
+            "reviewed_commit",
+            "missing",
+            "absent_admission",
+            "wrong_request",
+            "mixed_causes",
+        ] {
+            let mut value: serde_json::Value = serde_json::from_slice(&baseline_bytes)?;
+            match case {
+                "digest" => value["revision"]["digest"] = serde_json::json!("c".repeat(64)),
+                "semantics" => value["revision"]["semantics"] = serde_json::json!("candidate_head"),
+                "reviewed_commit" => {
+                    value["revision"]["reviewed_commit"] = serde_json::json!("d".repeat(40))
+                }
+                "missing" => {
+                    value
+                        .as_object_mut()
+                        .ok_or_else(|| anyhow::anyhow!("receipt object"))?
+                        .remove("revision");
+                }
+                "wrong_request" => value["request_ids"] = serde_json::json!(["another-task"]),
+                "current_discriminating" => value["result"] = serde_json::json!("discriminating"),
+                "display_head" => value["head"] = serde_json::json!("other-display-head"),
+                _ => {}
+            }
+            let mut receipt_values = vec![value.clone()];
+            if matches!(case, "current_with_stale" | "mixed_causes") {
+                let mut stale = value.clone();
+                stale["revision"]["semantics"] = serde_json::json!("candidate_head");
+                if case == "mixed_causes" {
+                    stale["result"] = serde_json::json!("head_failed");
+                    stale["test_patch_mode"] = serde_json::json!("head-only");
+                    receipt_values = vec![stale.clone(), stale];
+                    let mut unrelated = value.clone();
+                    unrelated["request_ids"] = serde_json::json!(["another-task"]);
+                    receipt_values.push(unrelated);
+                } else {
+                    receipt_values.push(stale);
+                }
+            }
+            let input_bytes = serde_json::to_vec(&receipt_values)?;
+            let receipts: Vec<ProofReceipt> = serde_json::from_slice(&input_bytes)?;
+            for receipt in &receipts {
+                if let Some(revision) = &receipt.revision {
+                    revision.validate()?;
+                }
+            }
+            let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+            let plan = test_plan(Vec::new());
+            let terminal_state = test_terminal_state("sufficient");
+            let mut gate = build_gate_outcome(GateOutcomeInput {
+                args: &args,
+                config: &Config::default(),
+                tool_gate_outcomes: &[],
+                plan: &plan,
+                terminal_state: &terminal_state,
+                proof_requests: &[],
+                proof_receipts: &receipts,
+                missing_or_failed_sensor_evidence: &[],
+                missing_or_failed_model_evidence: &[],
+                reporter_gate: crate::ReporterGateInput::Absent,
+                planner_portfolio: Some(required_portfolio()),
+                admitted_revision: (case != "absent_admission").then_some(admitted.clone()),
+            });
+            gate.revision = (case != "absent_admission").then_some(admitted.clone());
+            let temp = tempfile::tempdir()?;
+            let out = temp.path();
+            fs::create_dir_all(out.join("review"))?;
+            fs::create_dir_all(out.join("input"))?;
+            fs::write(out.join("review/metrics.json"), "{}")?;
+            fs::write(
+                out.join("review/gate_outcome.json"),
+                serde_json::to_vec(&gate)?,
+            )?;
+            fs::write(
+                out.join("plan.json"),
+                serde_json::to_vec(&test_plan(Vec::new()))?,
+            )?;
+            fs::write(
+                out.join("input/diff-context.json"),
+                serde_json::to_vec(&crate::tests::test_diff())?,
+            )?;
+            crate::cmd_summary(crate::cli::SummaryArgs {
+                run_dir: out.to_path_buf(),
+            })?;
+            let summary = fs::read_to_string(out.join("running-summary.md"))?;
+            let serialized: serde_json::Value =
+                serde_json::from_slice(&fs::read(out.join("review/gate_outcome.json"))?)?;
+            let accounting = gate
+                .planner_required_proofs
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("missing accounting"))?;
+            let expected = usize::from(matches!(
+                case,
+                "current" | "current_discriminating" | "current_with_stale" | "display_head"
+            ));
+            let expected_diagnostics = match case {
+                "digest" | "semantics" | "reviewed_commit" => vec![Diagnostic::StaleRevision],
+                "missing" => vec![Diagnostic::ReceiptRevisionUnavailable],
+                "absent_admission" => vec![Diagnostic::CurrentRevisionUnavailable],
+                "wrong_request" => vec![Diagnostic::WrongSubject],
+                "mixed_causes" => vec![
+                    Diagnostic::StaleRevision,
+                    Diagnostic::HeadOnly,
+                    Diagnostic::Failed,
+                ],
+                _ => Vec::new(),
+            };
+            eprintln!(
+                "control={case} proven={} unproven={} input_revision={} output_revision={}",
+                accounting.proven,
+                accounting.unproven,
+                value["revision"],
+                serde_json::to_string(&gate.revision)?
+            );
+            eprintln!(
+                "control={case} input_sha256={:x} gate_sha256={:x} summary_sha256={:x}",
+                Sha256::digest(&input_bytes),
+                Sha256::digest(fs::read(out.join("review/gate_outcome.json"))?),
+                Sha256::digest(summary.as_bytes())
+            );
+            assert_eq!(
+                gate.conclusion, "pass",
+                "default enforcement policy must stay advisory"
+            );
+            assert_eq!(serialized["planner_required_proofs"]["proven"], expected);
+            assert_eq!(
+                serialized["planner_required_proofs"]["unproven"],
+                1 - expected
+            );
+            assert_eq!(
+                gate.not_proven_reasons
+                    .iter()
+                    .any(|reason| reason.starts_with("required-planner-proof:")),
+                expected == 0
+            );
+            if expected == 0 {
+                assert_eq!(
+                    serialized["planner_required_proofs"]["unproven_tasks"][0]["receipt_diagnostics"],
+                    serde_json::to_value(&expected_diagnostics)?,
+                    "control={case}"
+                );
+                assert!(
+                    summary.contains("receipts: none satisfying"),
+                    "{case}: {summary}"
+                );
+                for diagnostic in expected_diagnostics {
+                    assert!(summary.contains(diagnostic.summary()), "{case}: {summary}");
+                }
+            } else {
+                assert!(accounting.unproven_tasks.is_empty());
+                assert!(
+                    !summary.contains("Required planner proof unproven:"),
+                    "{case}: {summary}"
+                );
+            }
+            if accounting.proven != expected
+                || accounting.unproven != 1 - expected
+                || !summary.contains(&format!("Required planner proofs: `{expected}/1` proven"))
+                || (expected == 0 && !summary.contains("receipts: none"))
+            {
+                failures.push(case);
+            }
+        }
+        anyhow::ensure!(
+            failures.is_empty(),
+            "wrong revision accepted by production API/summary: {failures:?}"
+        );
+        Ok(())
     }
 
     /// The portfolio reader degrades to `None` for a missing or malformed
