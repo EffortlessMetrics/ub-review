@@ -5,6 +5,15 @@ tool = "cargo-allow"
 # exception volume proves that narrower ledgers improve reviewability.
 
 [[exception]]
+id = "bounded-admission-git-observation"
+kind = "process-spawn"
+path = "src/plan_build.rs"
+owner = "ub-review/core"
+reason = "Read-only Git metadata for additive admission provenance. Six fixed invocations isolate Git environment/global/system config and pin the supplied checkout root; inherited source/config selectors make the supplementary evidence unavailable while legacy admission semantics remain intact. Porcelain and both diffs disable renames; optional locks, fsmonitor and untracked cache are disabled. Each caps stdout at 64 KiB and waits at most two seconds plus a 100 ms owned-child cleanup wait. Stderr is discarded. No hooks, external diff/textconv, file contents, environment or absolute paths are captured. This is not general descendant containment or atomic worktree equivalence."
+created = "2026-10-13"
+review_after = "2027-01-13"
+
+[[exception]]
 id = "clippy-too-many-arguments-artifact-writers"
 kind = "clippy-suppression"
 path = "src/main.rs"

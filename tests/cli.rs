@@ -6694,6 +6694,275 @@ fn env_scrub_driver_invokes_isolated_plan() -> Result<()> {
     )
 }
 
+/// A pristine fixture needs a Git-environment-free child; apply only the
+/// explicit selector under test after removing ambient settings such as pager.
+fn admission_plan_receipt(
+    repo: &Path,
+    output: &Path,
+    envs: &[(&str, &str)],
+) -> Result<serde_json::Value> {
+    let mut command = isolated_command(env!("CARGO_BIN_EXE_ub-review"), repo);
+    for (key, _) in std::env::vars_os() {
+        if key
+            .to_string_lossy()
+            .to_ascii_uppercase()
+            .starts_with("GIT_")
+        {
+            command.env_remove(key);
+        }
+    }
+    command.args([
+        "plan",
+        "--write",
+        "--root",
+        path_str(repo)?,
+        "--base",
+        "HEAD",
+        "--head",
+        "HEAD",
+        "--out",
+        path_str(output)?,
+    ]);
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+    let result = command.output()?;
+    if !result.status.success() {
+        bail!(
+            "admission fixture failed: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+    let receipt: serde_json::Value =
+        serde_json::from_slice(&fs::read(output.join("input/revision-admission.json"))?)?;
+    assert_eq!(
+        receipt["worktree_evidence"]["reviewed_commit_oid"], receipt["reviewed_commit_oid"],
+        "worktree evidence must bind the resolved reviewed commit"
+    );
+    Ok(receipt)
+}
+
+/// Actual plan CLI preserves legacy source selection while withholding new
+/// checkout evidence for an externally selected index; rename inventories
+/// retain both paths regardless of repository rename configuration.
+#[test]
+fn admission_worktree_source_and_rename_controls() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+    let external_index = temp.path().join("external.index");
+    run_with_env(
+        &repo,
+        "git",
+        &["read-tree", "HEAD"],
+        &[("GIT_INDEX_FILE", path_str(&external_index)?)],
+    )?;
+    let blob = run_capture_with_env(&repo, "git", &["rev-parse", "HEAD:src/lib.rs"], &[])?;
+    let cacheinfo = format!("100644,{},phantom-outside-index", blob.trim());
+    run_with_env(
+        &repo,
+        "git",
+        &["update-index", "--add", "--cacheinfo", &cacheinfo],
+        &[("GIT_INDEX_FILE", path_str(&external_index)?)],
+    )?;
+    let output = temp.path().join("external-packet");
+    let external = admission_plan_receipt(
+        &repo,
+        &output,
+        &[("GIT_INDEX_FILE", path_str(&external_index)?)],
+    )?;
+    assert_eq!(external["worktree_evidence"]["outcome"], "unavailable");
+    assert_eq!(
+        external["worktree_evidence"]["reason"],
+        "inherited_git_source"
+    );
+    assert_eq!(external["worktree_dirty"], true); // legacy selected index preserved
+    assert_eq!(
+        external["worktree_evidence"]["identity_digest"],
+        external["identity_digest"]
+    );
+    assert!(!repo.join("phantom-outside-index").exists());
+    assert!(
+        run_capture_with_env(&repo, "git", &["status", "--porcelain"], &[])?
+            .trim()
+            .is_empty()
+    );
+    let destination = "src/renamed\nfile.rs";
+    run(&repo, "git", &["mv", "src/lib.rs", destination])?;
+    let mut previous: Option<serde_json::Value> = None;
+    for value in ["true", "false", "copies"] {
+        run(&repo, "git", &["config", "diff.renames", value])?;
+        let output = temp.path().join(format!("rename-{value}"));
+        let admitted = admission_plan_receipt(&repo, &output, &[])?;
+        let evidence = &admitted["worktree_evidence"];
+        assert_eq!(evidence["outcome"], "complete");
+        assert_eq!(
+            evidence["staged_diff_paths_hex"],
+            serde_json::json!([
+                "7372632f6c69622e7273",
+                "7372632f72656e616d65640a66696c652e7273"
+            ])
+        );
+        assert_eq!(evidence["status"].as_array().map(Vec::len), Some(2));
+        if let Some(previous) = previous.as_ref() {
+            assert_eq!(admitted["identity_digest"], previous["identity_digest"]);
+            assert_eq!(
+                evidence["staged_diff_paths_hex"],
+                previous["worktree_evidence"]["staged_diff_paths_hex"]
+            );
+        }
+        previous = Some(admitted);
+    }
+    Ok(())
+}
+
+/// Replacement refs change effective commit trees without changing HEAD's
+/// object name. Supplementary evidence refuses every inherited Git setting,
+/// including empty presence flags, while legacy admission retains its choice.
+#[test]
+fn admission_worktree_replacement_objects_are_unavailable() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+    let head = run_capture_with_env(&repo, "git", &["rev-parse", "HEAD"], &[])?;
+    let head = head.trim();
+    let normal_tree = run_capture_with_env(&repo, "git", &["rev-parse", "HEAD^{tree}"], &[])?;
+    let blob = run_capture_with_env(&repo, "git", &["rev-parse", "HEAD:src/lib.rs"], &[])?;
+    let index = temp.path().join("replacement.index");
+    let env = [("GIT_INDEX_FILE", path_str(&index)?)];
+    run_with_env(&repo, "git", &["read-tree", "HEAD"], &env)?;
+    let cacheinfo = format!("100644,{},phantom-replacement", blob.trim());
+    run_with_env(
+        &repo,
+        "git",
+        &["update-index", "--add", "--cacheinfo", &cacheinfo],
+        &env,
+    )?;
+    let replacement_tree = run_capture_with_env(&repo, "git", &["write-tree"], &env)?;
+    let replacement = run_capture_with_env(
+        &repo,
+        "git",
+        &[
+            "commit-tree",
+            replacement_tree.trim(),
+            "-p",
+            "HEAD~1",
+            "-m",
+            "replacement",
+        ],
+        &[],
+    )?;
+    run(&repo, "git", &["replace", head, replacement.trim()])?;
+    let plan = |name: &str, env: &[(&str, &str)]| -> Result<serde_json::Value> {
+        let output = temp.path().join(name);
+        admission_plan_receipt(&repo, &output, env)
+    };
+    let enabled = plan("default-replacement", &[])?;
+    assert_eq!(enabled["worktree_evidence"]["outcome"], "complete");
+    assert_eq!(enabled["worktree_dirty"], true);
+    assert_eq!(
+        enabled["worktree_evidence"]["staged_diff_paths_hex"],
+        serde_json::json!(["7068616e746f6d2d7265706c6163656d656e74"])
+    );
+    for (name, key, value, dirty, expected_tree) in [
+        (
+            "no-replace",
+            "GIT_NO_REPLACE_OBJECTS",
+            "1",
+            false,
+            normal_tree.trim(),
+        ),
+        (
+            "empty-no-replace",
+            "GIT_NO_REPLACE_OBJECTS",
+            "",
+            false,
+            normal_tree.trim(),
+        ),
+        (
+            "future-selector",
+            "GIT_FUTURE_SELECTOR",
+            "",
+            true,
+            replacement_tree.trim(),
+        ),
+        (
+            "diagnostic-selector",
+            "GIT_TRACE",
+            "",
+            true,
+            replacement_tree.trim(),
+        ),
+    ] {
+        let admitted = plan(name, &[(key, value)])?;
+        let evidence = &admitted["worktree_evidence"];
+        assert_eq!(evidence["outcome"], "unavailable", "{key}");
+        assert_eq!(evidence["reason"], "inherited_git_source");
+        assert_eq!(evidence["status"], serde_json::json!([]));
+        assert_eq!(evidence["staged_diff_paths_hex"], serde_json::json!([]));
+        assert_eq!(evidence["identity_digest"], admitted["identity_digest"]);
+        assert_eq!(admitted["reviewed_commit_oid"], head);
+        assert_eq!(admitted["worktree_dirty"], dirty);
+        assert!(
+            admitted["identity_canonical"]
+                .as_str()
+                .is_some_and(|s| s.contains(expected_tree))
+        );
+    }
+    // Remove only this test-owned default ref; place the same replacement in
+    // an explicit custom namespace. The ordinary checkout/index remain clean.
+    run(
+        &repo,
+        "git",
+        &["update-ref", "-d", &format!("refs/replace/{head}")],
+    )?;
+    run(
+        &repo,
+        "git",
+        &[
+            "update-ref",
+            &format!("refs/custom-replace/{head}"),
+            replacement.trim(),
+        ],
+    )?;
+    let custom = plan(
+        "custom-replacement",
+        &[("GIT_REPLACE_REF_BASE", "refs/custom-replace/")],
+    )?;
+    assert_eq!(custom["worktree_dirty"], true);
+    assert_eq!(custom["worktree_evidence"]["outcome"], "unavailable");
+    assert_eq!(
+        custom["worktree_evidence"]["reason"],
+        "inherited_git_source"
+    );
+    assert_eq!(
+        custom["worktree_evidence"]["staged_diff_paths_hex"],
+        serde_json::json!([])
+    );
+    assert_eq!(
+        custom["worktree_evidence"]["identity_digest"],
+        custom["identity_digest"]
+    );
+    assert!(
+        custom["identity_canonical"]
+            .as_str()
+            .is_some_and(|s| s.contains(replacement_tree.trim()))
+    );
+    assert!(!repo.join("phantom-replacement").exists());
+    assert!(
+        run_capture_with_env(&repo, "git", &["status", "--porcelain"], &[])?
+            .trim()
+            .is_empty()
+    );
+    assert_eq!(
+        plan("normal-again", &[])?["worktree_evidence"]["outcome"],
+        "complete"
+    );
+    Ok(())
+}
+
 #[test]
 fn isolated_command_scrubs_ambient_profile_env_from_child_runs() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
