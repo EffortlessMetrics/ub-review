@@ -4,10 +4,31 @@ This repo is Rust-first and policy-ledger governed.
 
 Start with [the native workflow](docs/development/AGENTIC_WORKFLOW.md). For a
 change to carry through review, qualification and authorized merge, read
-[deliver-change](.agents/skills/deliver-change/SKILL.md). For independent review
+[deliver-change](.agents/skills/deliver-change/SKILL.md). For focused review
 or reproduction, read [review-change](.agents/skills/review-change/SKILL.md).
 Read the relevant skill on continuation too; it supplies procedure, while the
 current conversation and native issue/PR state supply scope and authority.
+
+## Zero trust development and fallibilism
+
+Current user intent governs the desired outcome and authorized scope; evidence
+governs factual claims. Any premise can be wrong, including one supplied by the
+user, an issue, a specification, a prior review or this guidance. Check the
+load-bearing premise against the relevant source, contract and observed behavior;
+repair or supersede a mistaken premise with its evidence and reason in the native
+issue/PR. Do not silently replace the user's goal or invent new authority.
+
+Reuse applicable evidence with its original source, scope and limits. Refresh it
+when relevant inputs change, evidence contradicts it, or a required boundary
+needs a current observation; do not restart every check on every continuation.
+Prefer the same useful session or a fork for successive review angles. Change
+the question, oracle, threat model or counterexample; use a separate session
+when the additional perspective earns its context and coordination cost. The
+owning lead may make the distinct readiness judgment under existing protections.
+
+Choose source-only review or authorized executable reproduction before checkout,
+build or test. Source-only mode must not execute candidate code; the review skill
+defines the boundary and the separate route for executable evidence.
 
 - Use Rust and durable `cargo`/`xtask`-style automation for repo checks where practical.
 - Treat `policy/allow.toml` as the default source-tree exception ledger.
