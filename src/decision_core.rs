@@ -31,10 +31,11 @@ pub(crate) fn pr_decision_sentence(context: PrDecisionContext) -> Option<&'stati
 }
 
 pub(crate) fn proof_receipt_is_test_proof_result(receipt: &ProofReceipt) -> bool {
-    matches!(
-        receipt.result.as_str(),
-        "discriminating" | "head_passed" | "head_failed"
-    )
+    !proof_receipt_has_contradictory_completion(receipt)
+        && matches!(
+            receipt.result.as_str(),
+            "discriminating" | "head_passed" | "head_failed"
+        )
 }
 
 /// Decide whether a proof receipt earns a bullet in the PR body.
@@ -54,6 +55,9 @@ pub(crate) fn proof_receipt_is_test_proof_result(receipt: &ProofReceipt) -> bool
 /// bans from PR commentary. Failures stay public because a red proof always
 /// changes the decision.
 pub(crate) fn proof_receipt_is_public_test_proof_result(receipt: &ProofReceipt) -> bool {
+    if proof_receipt_has_contradictory_completion(receipt) {
+        return false;
+    }
     match receipt.result.as_str() {
         "discriminating" | "head_failed" => true,
         "head_passed" => {
@@ -68,19 +72,21 @@ pub(crate) fn proof_receipt_is_public_test_proof_result(receipt: &ProofReceipt) 
 }
 
 pub(crate) fn proof_receipt_is_residual_risk(receipt: &ProofReceipt) -> bool {
-    matches!(receipt.result.as_str(), "non_discriminating")
+    !proof_receipt_has_contradictory_completion(receipt)
+        && matches!(receipt.result.as_str(), "non_discriminating")
 }
 
 pub(crate) fn proof_receipt_is_missing_evidence(receipt: &ProofReceipt) -> bool {
-    matches!(
-        receipt.result.as_str(),
-        "non_discriminating"
-            | "base_patch_failed"
-            | "timed_out"
-            | "skipped_budget"
-            | "skipped_profile"
-            | "skipped_unresolved"
-    )
+    proof_receipt_has_contradictory_completion(receipt)
+        || matches!(
+            receipt.result.as_str(),
+            "non_discriminating"
+                | "base_patch_failed"
+                | "timed_out"
+                | "skipped_budget"
+                | "skipped_profile"
+                | "skipped_unresolved"
+        )
 }
 
 pub(crate) fn proof_receipts_answer_summary_test_witness_question(
@@ -440,6 +446,19 @@ mod tests {
 
     use crate::tests::test_proof_receipt;
     use crate::*;
+
+    #[test]
+    fn skipped_budget_and_profile_remain_missing_evidence() {
+        for result in ["skipped_budget", "skipped_profile"] {
+            let receipt = test_proof_receipt(result, "skipped");
+            assert!(proof_receipt_is_missing_evidence(&receipt), "{result}");
+            assert_eq!(
+                routed_status_for_proof_receipt(&receipt),
+                "missing-evidence"
+            );
+            assert!(!proof_receipt_is_test_proof_result(&receipt), "{result}");
+        }
+    }
 
     #[test]
     fn skipped_unresolved_is_missing_evidence_without_decisive_proof() -> Result<()> {
