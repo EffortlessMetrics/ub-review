@@ -310,6 +310,7 @@ pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
         text.push_str(&format!(
             "- Gate: `{conclusion}` with `{blocking_reasons}` blocking reasons (`review/gate_outcome.json`)\n"
         ));
+        render_configured_required_proofs(text, &gate);
         render_planner_required_proofs(text, &gate);
     }
     text.push_str(&format!(
@@ -483,6 +484,30 @@ fn sanitize_planner_summary_text(value: &str) -> String {
         }
     }
     out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Keep configured policy requests separate from planner portfolio obligations.
+/// This reports evidence completeness; the artifact's enforcement conclusion
+/// still follows repository policy (skips are advisory unless opted in).
+fn render_configured_required_proofs(text: &mut String, gate: &serde_json::Value) {
+    let counts = gate.get("required_proof").and_then(|accounting| {
+        let matched = accounting.get("matched")?.as_u64()?;
+        let passed = accounting.get("passed")?.as_u64()?;
+        let failed = accounting.get("failed")?.as_u64()?;
+        let skipped = accounting.get("skipped")?.as_u64()?;
+        (passed.checked_add(failed)?.checked_add(skipped)? == matched)
+            .then_some((matched, passed, failed, skipped))
+    });
+    let Some((matched, passed, failed, skipped)) = counts else {
+        text.push_str("- Configured Required proofs: accounting unavailable (`review/gate_outcome.json`); qualification cannot be inferred.\n");
+        return;
+    };
+    text.push_str(&format!(
+        "- Configured Required proofs: `{passed}/{matched}` passed (`{failed}` failed, `{skipped}` skipped); gate-required `[[proof.required]]` requests, separate from planner obligations (`review/gate_outcome.json`).\n"
+    ));
+    if failed > 0 || skipped > 0 {
+        text.push_str("- Required proof evidence is incomplete. A skipped or missing proof supplies no passing execution evidence; an advisory gate pass does not qualify these obligations. Inspect `review/proof_requests.json` and `review/proof_receipts.json`, resolve failed or unavailable execution, then obtain passing request-bound proof on the candidate revision.\n");
+    }
 }
 
 /// Retained planner-required proof obligations (#4271): the
@@ -713,6 +738,168 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn configured_required_proof_summary_retains_gate_accounting() -> Result<()> {
+        use crate::tests::{test_plan, test_proof_receipt, test_run_args, test_terminal_state};
+
+        for (result, command_status, blocking, expected_gate, expected_counts, incomplete) in [
+            (
+                "head_passed",
+                "passed",
+                false,
+                "pass",
+                "`1/1` passed (`0` failed, `0` skipped)",
+                false,
+            ),
+            (
+                "skipped_budget",
+                "skipped",
+                false,
+                "pass",
+                "`0/1` passed (`0` failed, `1` skipped)",
+                true,
+            ),
+            (
+                "skipped_profile",
+                "skipped",
+                true,
+                "fail",
+                "`0/1` passed (`0` failed, `1` skipped)",
+                true,
+            ),
+            (
+                "missing",
+                "skipped",
+                false,
+                "pass",
+                "`0/1` passed (`0` failed, `1` skipped)",
+                true,
+            ),
+            (
+                "head_failed",
+                "failed",
+                false,
+                "fail",
+                "`0/1` passed (`1` failed, `0` skipped)",
+                true,
+            ),
+            (
+                "timed_out",
+                "timed_out",
+                false,
+                "fail",
+                "`0/1` passed (`1` failed, `0` skipped)",
+                true,
+            ),
+        ] {
+            let temp = tempfile::tempdir()?;
+            let out = temp.path();
+            fs::create_dir_all(out.join("review"))?;
+            fs::write(out.join("review/metrics.json"), "{}")?;
+            let mut args = test_run_args(out.to_path_buf());
+            args.mode = RunMode::IntelligentCi;
+            let mut config = Config::default();
+            config.gate.blocking.required_proof_unproven = blocking;
+            let request = ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "configured-check".to_owned(),
+                lane: "intelligent-ci-policy".to_owned(),
+                requested_by: vec!["proof-policy:cargo-check".to_owned()],
+                command: "cargo check --workspace --locked".to_owned(),
+                reason: "Required check".to_owned(),
+                cost: "focused-build".to_owned(),
+                timeout_sec: 300,
+                required: true,
+                status: "requested".to_owned(),
+            };
+            let mut receipt = test_proof_receipt(result, command_status);
+            receipt.request_ids = vec![request.id.clone()];
+            let receipts = if result == "missing" {
+                vec![]
+            } else {
+                vec![receipt]
+            };
+            let gate = crate::gate::build_gate_outcome(crate::gate::GateOutcomeInput {
+                args: &args,
+                config: &config,
+                tool_gate_outcomes: &[],
+                plan: &test_plan(vec![]),
+                terminal_state: &test_terminal_state("sufficient"),
+                proof_requests: &[request],
+                proof_receipts: &receipts,
+                missing_or_failed_sensor_evidence: &[],
+                missing_or_failed_model_evidence: &[],
+                reporter_gate: crate::ReporterGateInput::Absent,
+                planner_portfolio: None,
+                revision_digest: None,
+            });
+            assert_eq!(gate.conclusion, expected_gate, "{result}");
+            fs::write(
+                out.join("review/gate_outcome.json"),
+                serde_json::to_vec(&gate)?,
+            )?;
+            let mut summary = String::new();
+            render_review_efficiency_section(&mut summary, out);
+            assert!(
+                summary.contains(&format!("- Gate: `{expected_gate}`")),
+                "{summary}"
+            );
+            assert!(
+                summary.contains(&format!("Configured Required proofs: {expected_counts}")),
+                "{result}: {summary}"
+            );
+            assert_eq!(
+                summary.contains("Required proof evidence is incomplete"),
+                incomplete,
+                "{summary}"
+            );
+            if incomplete {
+                assert!(
+                    summary.contains(
+                        "A skipped or missing proof supplies no passing execution evidence"
+                    ),
+                    "{summary}"
+                );
+                assert!(summary.contains("review/proof_requests.json"), "{summary}");
+                assert!(summary.contains("review/proof_receipts.json"), "{summary}");
+            }
+            assert!(!summary.contains("Required planner proofs:"), "{summary}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn configured_required_proof_summary_distinguishes_unknown_and_empty() {
+        for accounting in [
+            serde_json::Value::Null,
+            serde_json::json!({}),
+            serde_json::json!({"matched": 1, "passed": 0, "failed": 0}),
+            serde_json::json!({"matched": 1, "passed": "hostile\n[link](url)", "failed": 0, "skipped": 1}),
+            serde_json::json!({"matched": 0, "passed": 1, "failed": 0, "skipped": 0}),
+            serde_json::json!({"matched": 1, "passed": u64::MAX, "failed": 2, "skipped": 0}),
+        ] {
+            let mut summary = String::new();
+            render_configured_required_proofs(
+                &mut summary,
+                &serde_json::json!({"required_proof": accounting}),
+            );
+            assert_eq!(
+                summary,
+                "- Configured Required proofs: accounting unavailable (`review/gate_outcome.json`); qualification cannot be inferred.\n"
+            );
+        }
+        let mut legacy = String::new();
+        render_configured_required_proofs(&mut legacy, &serde_json::json!({}));
+        assert!(legacy.contains("accounting unavailable"));
+        let mut empty = String::new();
+        render_configured_required_proofs(
+            &mut empty,
+            &serde_json::json!({"required_proof": {"matched": 0, "passed": 0, "failed": 0, "skipped": 0}}),
+        );
+        assert!(empty.contains("`0/0` passed (`0` failed, `0` skipped)"));
+        assert!(!empty.contains("evidence is incomplete"));
+    }
 
     #[test]
     fn lane_packet_model_display_resolves_encoded_hostile_lane_id() -> Result<()> {
