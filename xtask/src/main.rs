@@ -108,7 +108,7 @@ cargo xtask commands
 
 precommit options
 
-  --staged                      inspect only staged changes
+  --staged                      inspect staged changes; requires index/worktree agreement
 
 ripr options
 
@@ -712,6 +712,11 @@ struct ClippyDiagnostic {
 
 fn run_precommit(root: &Path, options: PrecommitOptions) -> Result<PrecommitReport> {
     let out_dir = prepare_precommit_out_dir(root)?;
+    let staged_tree = if options.staged {
+        Some(precommit_staged_tree(root)?)
+    } else {
+        None
+    };
 
     let changed = changed_files(root, options.staged)?;
     let workspace = workspace_packages(root)?;
@@ -879,8 +884,17 @@ fn run_precommit(root: &Path, options: PrecommitOptions) -> Result<PrecommitRepo
     )?;
     receipts.push(ast_grep);
 
-    let summary =
+    if let Some(expected) = &staged_tree {
+        let actual = precommit_staged_tree(root)?;
+        if &actual != expected {
+            bail!("staged index changed during precommit; rerun against the final staged tree");
+        }
+    }
+    let mut summary =
         render_precommit_summary(options, &changed, &affected, &receipts, blocking_failures);
+    if let Some(tree) = staged_tree {
+        summary.push_str(&format!("\nValidated staged tree: `{tree}`.\n"));
+    }
     write_markdown(&out_dir.join("summary.md"), &summary)?;
 
     Ok(PrecommitReport {
@@ -888,6 +902,48 @@ fn run_precommit(root: &Path, options: PrecommitOptions) -> Result<PrecommitRepo
         summary_md: summary,
         blocking_failures,
     })
+}
+
+/// Refuse to label checks of a different working tree as staged validation.
+/// Check all tracked inputs and nonignored untracked files: Cargo can consume
+/// unstaged manifests, modules, includes and build inputs outside the diff.
+/// The before/after checks detect ordinary drift, not atomic snapshot custody.
+fn precommit_staged_tree(root: &Path) -> Result<String> {
+    let diff = Command::new("git")
+        .args([
+            "diff",
+            "--quiet",
+            "--no-ext-diff",
+            "--ignore-submodules=none",
+            "--",
+        ])
+        .current_dir(root)
+        .output()
+        .context("compare precommit worktree with staged index")?;
+    match diff.status.code() {
+        Some(0) => {}
+        Some(1) => bail!(
+            "precommit --staged requires the working tree to match the staged index; \
+             stage or save unstaged changes, or use precommit without --staged"
+        ),
+        _ => bail!(
+            "could not compare precommit worktree with staged index: {}",
+            bounded_text(&diff.stderr)
+        ),
+    }
+    if !git_bytes(root, &["ls-files", "--others", "--exclude-standard", "-z"])?.is_empty() {
+        bail!(
+            "precommit --staged cannot validate nonignored untracked inputs; \
+             stage or save those files, or use precommit without --staged"
+        );
+    }
+    let tree = git_bytes(root, &["write-tree"])?;
+    let tree = String::from_utf8(tree).context("decode staged precommit tree")?;
+    let tree = tree.trim();
+    if tree.is_empty() {
+        bail!("git write-tree returned no staged precommit tree");
+    }
+    Ok(tree.to_owned())
 }
 
 impl CommandReceipt {
