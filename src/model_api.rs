@@ -422,8 +422,7 @@ pub(crate) fn wait_for_child_output_files(
         None => {
             let _ = child.kill();
             let _ = child.wait();
-            let stdout = read_and_remove_output_file(stdout_path)?;
-            let stderr = read_and_remove_output_file(stderr_path)?;
+            let (stdout, stderr) = read_and_remove_output_files(stdout_path, stderr_path)?;
             bail!(
                 "process timed out after {timeout_sec}s: stderr: {}; stdout: {}",
                 String::from_utf8_lossy(&stderr),
@@ -431,8 +430,7 @@ pub(crate) fn wait_for_child_output_files(
             );
         }
     };
-    let stdout = read_and_remove_output_file(stdout_path)?;
-    let stderr = read_and_remove_output_file(stderr_path)?;
+    let (stdout, stderr) = read_and_remove_output_files(stdout_path, stderr_path)?;
     Ok(FileCommandOutput {
         status,
         stdout,
@@ -440,10 +438,14 @@ pub(crate) fn wait_for_child_output_files(
     })
 }
 
-pub(crate) fn read_and_remove_output_file(path: &Path) -> Result<Vec<u8>> {
-    let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
-    let _ = fs::remove_file(path);
-    Ok(bytes)
+fn read_and_remove_output_files(
+    stdout_path: &Path,
+    stderr_path: &Path,
+) -> Result<(Vec<u8>, Vec<u8>)> {
+    let stdout = fs::read(stdout_path).with_context(|| format!("read {}", stdout_path.display()));
+    let stderr = fs::read(stderr_path).with_context(|| format!("read {}", stderr_path.display()));
+    remove_output_files(stdout_path, stderr_path);
+    Ok((stdout?, stderr?))
 }
 
 pub(crate) fn remove_output_files(stdout_path: &Path, stderr_path: &Path) {
@@ -481,4 +483,114 @@ pub(crate) fn http_status_from_error(err: &anyhow::Error) -> Option<u16> {
     let start = text.find(needle)? + needle.len();
     let end = text[start..].find(')')? + start;
     text[start..end].parse::<u16>().ok()
+}
+
+#[cfg(test)]
+mod output_file_tests {
+    use super::*;
+
+    #[test]
+    fn output_read_failure_cleans_the_other_stream_and_recovers() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let stdout_path = temp.path().join("stdout");
+        let stderr_path = temp.path().join("stderr");
+        for missing_stdout in [true, false] {
+            let (missing, present) = if missing_stdout {
+                (&stdout_path, &stderr_path)
+            } else {
+                (&stderr_path, &stdout_path)
+            };
+            fs::write(present, b"retained output\0\xff")?;
+            let error = read_and_remove_output_files(&stdout_path, &stderr_path)
+                .err()
+                .context("missing stream must fail")?;
+            assert_eq!(error.to_string(), format!("read {}", missing.display()));
+            assert_eq!(
+                error
+                    .downcast_ref::<std::io::Error>()
+                    .map(std::io::Error::kind),
+                Some(std::io::ErrorKind::NotFound)
+            );
+            assert!(!stdout_path.exists(), "stdout survived output read failure");
+            assert!(!stderr_path.exists(), "stderr survived output read failure");
+
+            fs::write(&stdout_path, b"stdout\0\xff")?;
+            fs::write(&stderr_path, b"stderr\0\xfe")?;
+            let (stdout, stderr) = read_and_remove_output_files(&stdout_path, &stderr_path)?;
+            assert_eq!(stdout, b"stdout\0\xff");
+            assert_eq!(stderr, b"stderr\0\xfe");
+            assert!(!stdout_path.exists());
+            assert!(!stderr_path.exists());
+        }
+        let error = read_and_remove_output_files(&stdout_path, &stderr_path)
+            .err()
+            .context("both missing streams must fail")?;
+        assert_eq!(error.to_string(), format!("read {}", stdout_path.display()));
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn output_read_failure_removes_unreadable_stream_links() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let stdout_path = temp.path().join("stdout");
+        let stderr_path = temp.path().join("stderr");
+        for path in [&stdout_path, &stderr_path] {
+            std::os::unix::fs::symlink(temp.path().join("missing"), path)?;
+        }
+        let error = read_and_remove_output_files(&stdout_path, &stderr_path)
+            .err()
+            .context("dangling stream links must fail")?;
+        assert_eq!(error.to_string(), format!("read {}", stdout_path.display()));
+        assert!(fs::symlink_metadata(&stdout_path).is_err());
+        assert!(fs::symlink_metadata(&stderr_path).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn output_child_fixture() {
+        if std::env::var_os("UB_REVIEW_OUTPUT_CHILD_SLEEP").is_some() {
+            std::thread::sleep(Duration::from_secs(20));
+        }
+    }
+
+    #[test]
+    fn output_read_failure_cleans_stderr_after_completion_and_timeout() -> Result<()> {
+        for timeout in [false, true] {
+            let temp = tempfile::tempdir()?;
+            let stdout_path = temp.path().join("missing-stdout");
+            let stderr_path = temp.path().join("stderr");
+            fs::write(&stderr_path, b"retained stderr")?;
+            let mut command = ProcessCommand::new(std::env::current_exe()?);
+            command.env_remove("UB_REVIEW_OUTPUT_CHILD_SLEEP");
+            command.args([
+                "--exact",
+                "model_api::output_file_tests::output_child_fixture",
+            ]);
+            if timeout {
+                command.env("UB_REVIEW_OUTPUT_CHILD_SLEEP", "1");
+            }
+            let child = command
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()?;
+            let error = wait_for_child_output_files(
+                child,
+                &stdout_path,
+                &stderr_path,
+                if timeout { 0 } else { 10 },
+            )
+            .err()
+            .context("missing stdout must fail after waiting for child")?;
+            assert_eq!(error.to_string(), format!("read {}", stdout_path.display()));
+            assert_eq!(
+                error
+                    .downcast_ref::<std::io::Error>()
+                    .map(std::io::Error::kind),
+                Some(std::io::ErrorKind::NotFound)
+            );
+            assert!(!stderr_path.exists(), "stderr survived (timeout={timeout})");
+        }
+        Ok(())
+    }
 }

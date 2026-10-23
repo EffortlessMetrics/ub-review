@@ -34692,3 +34692,9 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_intent.rs:return_value:b72a971f"
 owner = "ub-review/core"
 reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Same rejection statement classified additionally as return_value; native request/task non-creation is its behavioral oracle. Same native/extracted evidence as row38. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_api.rs:return_value:eb71dd15"
+owner = "ub-review/core"
+reason = "Issue #1527; reviewed 2026-10-19 on source 0cdfdc4 / base ac06293. Pinned RIPR0.10.0 names the deleted single-file helper return Ok(bytes), then maps it onto the current paired-output return. Independent compiled stdout-empty and stderr-empty controls preserving error propagation fail exact binary recovery oracles; early-return, ignored-error, both caller-restoration, dangling-link cleanup and error-priority controls also fail, followed by pristine restoration. This is one deleted-base/static-attribution disposition, not runtime proof credit for an untested return. Upstream evidence: https://github.com/EffortlessMetrics/ripr/issues/1453#issuecomment-6271519098. Re-verify after helper/oracle semantics or tool changes; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
