@@ -4646,7 +4646,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         evidence_loop,
         "completed",
     )?;
-    let preliminary_summary = render_summary(&args.review.out, &plan, &diff)?;
+    let preliminary_summary = render_preliminary_summary(&args.review.out, &plan, &diff)?;
     fs::write(
         args.review.out.join("running-summary.md"),
         &preliminary_summary,

@@ -10,6 +10,100 @@ mod common;
 use common::*;
 
 #[test]
+fn summary_reports_unavailable_review_receipt() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+    let config = temp.path().join("config.toml");
+    write_file(&config, "[review]\ngithub_summary = false\n")?;
+    let out = temp.path().join("packet");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--model-mode",
+            "off",
+            "--posting",
+            "artifact-only",
+            "--no-github-summary",
+        ],
+    )?;
+    let receipt_path = out.join("review/review.json");
+    let receipt = fs::read(&receipt_path)?;
+    let summary_path = out.join("running-summary.md");
+    let original_summary = fs::read_to_string(&summary_path)?;
+    let summary_args = ["summary", "--run-dir", path_str(&out)?];
+    run(temp.path(), bin, &summary_args)?;
+    assert_eq!(fs::read_to_string(&summary_path)?, original_summary);
+    assert!(original_summary.contains("- Model mode: `off`"));
+    assert!(original_summary.contains("## Model lane status"));
+    assert!(!original_summary.contains("Review evidence is incomplete"));
+    let shared_context = fs::read_to_string(out.join("review/shared_context.md"))?;
+    assert!(!shared_context.contains("Review evidence is incomplete"));
+    assert!(!shared_context.contains("Restore or regenerate"));
+
+    let mut failures = Vec::new();
+    for (case, damaged, diagnostic) in [
+        ("missing", None, "is missing or unreadable"),
+        (
+            "truncated",
+            Some(&receipt[..receipt.len() / 2]),
+            "is invalid",
+        ),
+        ("invalid-json", Some(b"not JSON".as_slice()), "is invalid"),
+        (
+            "wrong-field-type",
+            Some(b"{\"model_lanes\":false}".as_slice()),
+            "is invalid",
+        ),
+        ("invalid-utf8", Some(b"\xff".as_slice()), "is invalid"),
+    ] {
+        if let Some(bytes) = damaged {
+            fs::write(&receipt_path, bytes)?;
+        } else {
+            fs::remove_file(&receipt_path)?;
+        }
+        run(temp.path(), bin, &summary_args)?;
+        let summary = fs::read_to_string(&summary_path)?;
+        if !summary.contains("Review evidence is incomplete")
+            || !summary.contains("`review/review.json`")
+            || !summary.contains(diagnostic)
+            || !summary.contains("Restore or regenerate")
+            || !summary.contains("ub-review summary --run-dir <RUN_DIR>")
+            || summary.contains("No planned model evidence is currently missing or failed.")
+        {
+            failures.push(format!(
+                "{case}: unavailable review receipt was not actionable"
+            ));
+        }
+        // Recovery must reproduce the intact packet, not retain an old warning.
+        fs::write(&receipt_path, &receipt)?;
+        run(temp.path(), bin, &summary_args)?;
+        assert_eq!(
+            fs::read_to_string(&summary_path)?,
+            original_summary,
+            "{case}"
+        );
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    Ok(())
+}
+
+#[test]
 fn trusted_diff_run_uses_base_root_and_explicit_objects() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
