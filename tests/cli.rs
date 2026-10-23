@@ -64,9 +64,7 @@ fn action_forwards_prior_resolved_candidates_input() -> Result<()> {
     );
     assert!(action.contains("review/resolved_candidates.json"));
     assert!(action.contains(".conclusion == \\\"success\\\" or .conclusion == \\\"failure\\\""));
-    assert!(action.contains(
-        "--prior-resolved-candidates \"${{ steps.prior_resolved_candidates.outputs.path }}\""
-    ));
+    assert!(action.contains("--prior-resolved-candidates \"$UB_REVIEW_ACTION_PRIOR_PATH\""));
     Ok(())
 }
 
@@ -134,7 +132,7 @@ fn release_resolver_validates_binary_version_before_acceptance() -> Result<()> {
     anyhow::ensure!(resolver.contains("expected_identity=\"ub-review $expected_version\""));
     anyhow::ensure!(
         resolver
-            .find("echo \"release-url=$url\"")
+            .find("printf 'release-url=%s\\n' \"$url\"")
             .is_some_and(|output| {
                 resolver
                     .find("release binary version mismatch")
@@ -152,13 +150,17 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
     let action_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("action.yml");
     let action = fs::read_to_string(&action_path)?;
     let runner_start = action
-        .find("        set -euo pipefail\n\n        mode=")
+        .find("    - name: Resolve ub-review runner\n")
         .ok_or_else(|| anyhow::anyhow!("release runner block start is missing"))?;
     let runner_end = action[runner_start..]
         .find("\n    - name: Install advisory sensors")
         .ok_or_else(|| anyhow::anyhow!("release runner block end is missing"))?
         + runner_start;
-    let runner = action[runner_start..runner_end]
+    let runner_body = action[runner_start..runner_end]
+        .split_once("      run: |\n")
+        .map(|(_, body)| body)
+        .ok_or_else(|| anyhow::anyhow!("release runner shell is missing"))?;
+    let runner = runner_body
         .lines()
         .map(|line| line.strip_prefix("        ").unwrap_or(line))
         .collect::<Vec<_>>()

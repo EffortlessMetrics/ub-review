@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -259,6 +260,165 @@ if os.environ.get("BOOTSTRAP_TEST_NO_BINARY") != "1":
         self.assertIn("id-token: write", telemetry)
         self.assertNotIn("actions/checkout", telemetry)
         self.assertIn("continue-on-error: true", telemetry)
+
+
+def action_step(name: str) -> tuple[str, dict[str, str]]:
+    """Extract executable bytes and explicit expression transports, without YAML deps."""
+    text = (ROOT / "action.yml").read_text(encoding="utf-8")
+    step = text.split(f"    - name: {name}\n", 1)[1].split("\n    - ", 1)[0]
+    front, script = step.split("      run: |\n", 1)
+    bindings = dict(re.findall(r"^        ([A-Z_]+): \$\{\{ (.*?) \}\}$", front, re.M))
+    lines = []
+    for line in script.splitlines():
+        if line and not line.startswith("        "):
+            break
+        lines.append(line[8:] if line else "")
+    return "\n".join(lines) + "\n", bindings
+
+
+class RuntimeDataContract(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory(prefix="ub-review-runtime-")
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.output = self.root / "github-output"
+        self.log = self.root / "argv.json"
+        self.sentinel = self.root / "SENTINEL"
+        self.binary = self.root / "runner ' $ ` literal"
+        self.binary.write_text(f"#!{sys.executable}\n" +
+                               'import json, os, pathlib, sys\n'
+                               'pathlib.Path(os.environ["ARGV_LOG"]).write_text(json.dumps(sys.argv[1:]))\n')
+        self.binary.chmod(0o755)
+        self.literal = f"space ' quote \" dollar $HOME backtick `touch {self.sentinel}` $(touch {self.sentinel}) <<EOF"
+
+    def run_step(self, name: str, **updates: str) -> subprocess.CompletedProcess[str]:
+        script, bindings = action_step(name)
+        # Every binding gets an explicit value; runner is the only executable fixture.
+        env = {key: "" for key in bindings}
+        env.update(PATH="/usr/bin:/bin", HOME=str(self.root),
+                   GITHUB_ACTION_PATH=str(ROOT), GITHUB_OUTPUT=str(self.output),
+                   GITHUB_STEP_SUMMARY=str(self.root / "summary"), ARGV_LOG=str(self.log),
+                   UB_REVIEW_ACTION_RUNNER_BIN=str(self.binary),
+                   UB_REVIEW_ACTION_OUT=str(self.root / "packet"))
+        env.update(updates)
+        return subprocess.run(["bash", "--noprofile", "--norc", "-c", script],
+                              cwd=self.root, env=env, capture_output=True, text=True,
+                              timeout=15, check=False)
+
+    def test_no_expressions_in_any_executable_block(self) -> None:
+        text = (ROOT / "action.yml").read_text(encoding="utf-8")
+        for step in text.split("    - name: ")[1:]:
+            if "      run: |\n" in step:
+                self.assertNotIn("${{", step.split("      run: |\n", 1)[1], step.splitlines()[0])
+
+    def test_every_runtime_argument_is_one_literal_value(self) -> None:
+        _, bindings = action_step("Build UB review packet")
+        # Exercise each caller/derived transport, including optional arrays and auth.
+        for key in bindings:
+            if key in {"UB_REVIEW_ACTION_RUNNER_BIN", "UB_REVIEW_ACTION_ALLOW_HEAVY"}:
+                continue
+            with self.subTest(binding=key):
+                result = self.run_step("Build UB review packet", **{key: self.literal})
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                argv = json.loads(self.log.read_text())
+                if key not in {"UB_REVIEW_PROFILE", "UB_REVIEW_PRESET", "UB_REVIEW_ACTION_PRESET",
+                               "UB_REVIEW_MINIMAX_API_KEY", "UB_REVIEW_MINIMAX_API_URL",
+                               "UB_REVIEW_OPENCODE_API_KEY", "UB_REVIEW_OPENCODE_API_URL",
+                               "UB_REVIEW_GITHUB_EVENT_ACTION", "UB_REVIEW_PR_HEAD_SHA"}:
+                    self.assertIn(self.literal, argv, key)
+                self.assertFalse(self.sentinel.exists())
+
+    def test_packet_paths_are_exact_single_line_records(self) -> None:
+        result = self.run_step("Set output paths", UB_REVIEW_ACTION_OUT=self.literal)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        raw = self.output.read_bytes()
+        lines = raw.decode().splitlines()
+        self.assertEqual(len(lines), 11)
+        values = dict(line.split("=", 1) for line in lines)
+        self.assertEqual(len(values), 11)
+        self.assertEqual(values["gate-outcome-path"], self.literal + "/review/gate_outcome.json")
+        self.assertEqual(values["summary-path"], self.literal + "/running-summary.md")
+        self.assertFalse(self.sentinel.exists())
+
+    def test_multiline_paths_reject_before_execution_or_output(self) -> None:
+        # Duplicate, arbitrary key, bare record and heredoc/delimiter shapes,
+        # together with isolated CR and CRLF, all reject without emitting a byte.
+        for suffix in ["\ngate-outcome-path=/tmp/forged", "\nextra=forged", "\nbare",
+                       "\nname<<EOF\nforged\nEOF", "\r", "\r\nextra=forged"]:
+            for name in ["Build UB review packet", "Post grouped PR review",
+                         "Append UB review summary", "Set output paths"]:
+                with self.subTest(step=name, suffix=suffix):
+                    self.output.unlink(missing_ok=True)
+                    self.log.unlink(missing_ok=True)
+                    result = self.run_step(name, UB_REVIEW_ACTION_OUT="packet" + suffix)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("out must not contain CR or LF", result.stderr)
+                    self.assertFalse(self.log.exists())
+                    self.assertFalse(self.output.exists())
+
+    def test_prior_receipt_and_binary_paths_preserve_literal_bytes(self) -> None:
+        result = self.run_step("Resolve prior resolved candidates",
+                               MANUAL_PRIOR_RESOLVED_CANDIDATES=self.literal)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.output.read_text(), "path=" + self.literal + "\n")
+        self.output.unlink()
+        result = self.run_step("Resolve ub-review runner", UB_REVIEW_INSTALL_MODE="path",
+                               UB_REVIEW_BINARY_PATH=str(self.binary))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.output.read_text(), "bin=" + str(self.binary) + "\n")
+        self.assertFalse(self.sentinel.exists())
+
+    def test_prior_receipt_and_bootstrap_paths_reject_multiline(self) -> None:
+        for suffix in ["\nextra=forged", "\r", "\r\n"]:
+            result = self.run_step("Resolve prior resolved candidates",
+                                   MANUAL_PRIOR_RESOLVED_CANDIDATES="prior" + suffix)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(self.output.exists())
+            for key in ["UB_REVIEW_BINARY_PATH", "UB_REVIEW_SOURCE_TARGET_DIR", "CARGO_TARGET_DIR", "RUNNER_TEMP"]:
+                with self.subTest(binding=key, suffix=suffix):
+                    result = self.run_step("Resolve ub-review runner", **{key: "path" + suffix})
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("must not contain CR or LF", result.stderr)
+                    self.assertFalse(self.output.exists())
+
+    def test_post_and_gate_consume_configured_identity(self) -> None:
+        for name, command in [("Post grouped PR review", "post"), ("Enforce gate outcome", "gate-check")]:
+            result = self.run_step(name, UB_REVIEW_ACTION_OUT=self.literal,
+                                   UB_REVIEW_GATE_OUTCOME_PATH=self.literal + "/review/gate_outcome.json",
+                                   UB_REVIEW_ACTION_REVIEW_MODE=self.literal)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            argv = json.loads(self.log.read_text())
+            self.assertEqual(argv[0], command)
+            if command == "gate-check":
+                self.assertEqual(argv[argv.index("--gate-outcome") + 1], self.literal + "/review/gate_outcome.json")
+                self.assertEqual(argv[argv.index("--review-mode") + 1], self.literal)
+            else:
+                self.assertEqual(argv[argv.index("--review-json") + 1], self.literal + "/review/github-review.json")
+            self.assertFalse(self.sentinel.exists())
+
+    def test_summary_reads_literal_path(self) -> None:
+        out = self.root / self.literal.replace(str(self.root), "inert")
+        out.mkdir(parents=True)
+        (out / "running-summary.md").write_text("summary bytes\n")
+        result = self.run_step("Append UB review summary", UB_REVIEW_ACTION_OUT=str(out))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root / "summary").read_text(), "summary bytes\n")
+        self.assertFalse(self.sentinel.exists())
+
+    def test_derived_result_scalar_cannot_add_output_record(self) -> None:
+        out = self.root / "packet/review"
+        out.mkdir(parents=True)
+        path = out / "gate_outcome.json"
+        for field in ["conclusion", "analysis_result", "publication_result", "gate_result"]:
+            for value in ["pass\nextra=forged", "pass\r", "pass\r\nextra=forged", "pass\n", "pa\0ss"]:
+                self.output.unlink(missing_ok=True)
+                path.write_text(json.dumps({field: value}))
+                result = self.run_step("Publish gate result outputs", UB_REVIEW_GATE_OUTCOME_PATH=str(path))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                records = dict(line.split("=", 1) for line in self.output.read_text().splitlines())
+                self.assertEqual(len(records), 6)
+                expected = "missing" if field == "conclusion" else "not_proven"
+                self.assertEqual(records[field.replace("_", "-") if field != "conclusion" else "gate-conclusion"], expected)
 
 
 if __name__ == "__main__":

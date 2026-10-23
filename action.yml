@@ -38,7 +38,7 @@ inputs:
     default: HEAD
     required: false
   out:
-    description: Output directory for the packet.
+    description: Output directory for the packet. CR and LF are rejected before packet execution or path publication.
     default: target/ub-review
     required: false
   install-tools:
@@ -302,6 +302,13 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        require_single_line() {
+          if [[ "$2" == *$'\r'* || "$2" == *$'\n'* ]]; then
+            printf '::error::%s must not contain CR or LF\n' "$1" >&2
+            exit 1
+          fi
+        }
+        require_single_line HOME "$HOME"
         if command -v rustup >/dev/null 2>&1; then
           # Pinned to match rust-toolchain.toml + Cargo.toml (three sites, one fact — #610)
           rustup toolchain install 1.95.0 --profile minimal
@@ -328,6 +335,19 @@ runs:
         UB_REVIEW_SERVER_URL: ${{ github.server_url }}
       run: |
         set -euo pipefail
+        require_single_line() {
+          if [[ "$2" == *$'\r'* || "$2" == *$'\n'* ]]; then
+            printf '::error::%s must not contain CR or LF\n' "$1" >&2
+            exit 1
+          fi
+        }
+        require_single_line binary-path "${UB_REVIEW_BINARY_PATH:-}"
+        require_single_line source-target-dir "${UB_REVIEW_SOURCE_TARGET_DIR:-}"
+        require_single_line CARGO_TARGET_DIR "${CARGO_TARGET_DIR:-}"
+        require_single_line RUNNER_TEMP "${RUNNER_TEMP:-/tmp}"
+        require_single_line PWD "$PWD"
+        require_single_line server-url "${UB_REVIEW_SERVER_URL:-https://github.com}"
+        require_single_line action-repository "${UB_REVIEW_ACTION_REPOSITORY:-}"
 
         mode="${UB_REVIEW_INSTALL_MODE:-auto}"
         bin_path="${UB_REVIEW_BINARY_PATH:-}"
@@ -350,12 +370,14 @@ runs:
             echo "::error::install-mode=path requires executable binary-path"
             exit 1
           fi
-          echo "bin=$bin_path" >> "$GITHUB_OUTPUT"
+          printf 'bin=%s\n' "$bin_path" >> "$GITHUB_OUTPUT"
           exit 0
         fi
 
         if [[ "$mode" == "auto" ]] && command -v ub-review >/dev/null 2>&1; then
-          echo "bin=$(command -v ub-review)" >> "$GITHUB_OUTPUT"
+          bin="$(command -v ub-review)"
+          require_single_line bin "$bin"
+          printf 'bin=%s\n' "$bin" >> "$GITHUB_OUTPUT"
           exit 0
         fi
 
@@ -405,8 +427,8 @@ runs:
             echo "::error::current source build did not produce a regular executable at $bin"
             exit 1
           fi
-          echo "source-dir=$workdir" >> "$GITHUB_OUTPUT"
-          echo "bin=$bin" >> "$GITHUB_OUTPUT"
+          printf 'source-dir=%s\n' "$workdir" >> "$GITHUB_OUTPUT"
+          printf 'bin=%s\n' "$bin" >> "$GITHUB_OUTPUT"
         }
 
         normalize_release_version() {
@@ -557,9 +579,9 @@ runs:
             return 1
           fi
           echo "ub-review release binary identity: requested=$release_version actual=$version_output"
-          echo "release-url=$url" >> "$GITHUB_OUTPUT"
-          echo "release-dir=$release_dir" >> "$GITHUB_OUTPUT"
-          echo "bin=$candidate" >> "$GITHUB_OUTPUT"
+          printf 'release-url=%s\n' "$url" >> "$GITHUB_OUTPUT"
+          printf 'release-dir=%s\n' "$release_dir" >> "$GITHUB_OUTPUT"
+          printf 'bin=%s\n' "$candidate" >> "$GITHUB_OUTPUT"
         }
 
         if [[ "$mode" == "release" || "$mode" == "auto" ]]; then
@@ -595,8 +617,17 @@ runs:
         GITHUB_WORKFLOW_NAME_FOR_PRIOR_RECEIPTS: ${{ github.workflow }}
       run: |
         set -euo pipefail
+        require_single_line() {
+          if [[ "$2" == *$'\r'* || "$2" == *$'\n'* ]]; then
+            printf '::error::%s must not contain CR or LF\n' "$1" >&2
+            exit 1
+          fi
+        }
+        require_single_line prior-resolved-candidates "$MANUAL_PRIOR_RESOLVED_CANDIDATES"
+        require_single_line RUNNER_TEMP "${RUNNER_TEMP:-/tmp}"
 
         write_path_output() {
+          require_single_line prior-resolved-candidates "$1"
           printf 'path=%s\n' "$1" >> "$GITHUB_OUTPUT"
         }
 
@@ -693,25 +724,68 @@ runs:
         UB_REVIEW_ACTION_TRUSTED_HEAD_SHA: ${{ inputs['trusted-head-sha'] }}
         UB_REVIEW_ACTION_TRUSTED_CHANGED_FILES: ${{ inputs['trusted-changed-files'] }}
         UB_REVIEW_ACTION_TRUSTED_DIFF_PATCH: ${{ inputs['trusted-diff-patch'] }}
+        UB_REVIEW_ACTION_ALLOW_HEAVY: ${{ inputs['allow-heavy'] }}
+        UB_REVIEW_ACTION_RUNTIME_PROFILE: ${{ inputs['runtime-profile'] }}
+        UB_REVIEW_ACTION_REVIEW_MODE: ${{ inputs['review-mode'] }}
+        UB_REVIEW_ACTION_CONFIG: ${{ inputs.config }}
+        UB_REVIEW_ACTION_PRESET: ${{ inputs.preset }}
+        UB_REVIEW_ACTION_RUNNER_BIN: ${{ steps.runner.outputs.bin }}
+        UB_REVIEW_ACTION_PROFILE: ${{ inputs.profile }}
+        UB_REVIEW_ACTION_ROOT: ${{ inputs.root }}
+        UB_REVIEW_ACTION_BASE: ${{ inputs.base }}
+        UB_REVIEW_ACTION_HEAD: ${{ inputs.head }}
+        UB_REVIEW_ACTION_OUT: ${{ inputs.out }}
+        UB_REVIEW_ACTION_POSTING: ${{ inputs.posting }}
+        UB_REVIEW_ACTION_MODE: ${{ inputs.mode }}
+        UB_REVIEW_ACTION_RUN_PASS: ${{ inputs['run-pass'] }}
+        UB_REVIEW_ACTION_MODEL_MODE: ${{ inputs['model-mode'] }}
+        UB_REVIEW_ACTION_DEPTH: ${{ inputs.depth }}
+        UB_REVIEW_ACTION_LANES: ${{ inputs.lanes }}
+        UB_REVIEW_ACTION_EXCEPT_LANES: ${{ inputs['except-lanes'] }}
+        UB_REVIEW_ACTION_TOOLS: ${{ inputs.tools }}
+        UB_REVIEW_ACTION_EXCEPT_TOOLS: ${{ inputs['except-tools'] }}
+        UB_REVIEW_ACTION_PROVIDER_POLICY: ${{ inputs['provider-policy'] }}
+        UB_REVIEW_ACTION_LANE_WIDTH: ${{ inputs['lane-width'] }}
+        UB_REVIEW_ACTION_MODEL_TIMEOUT_SEC: ${{ inputs['model-timeout-sec'] }}
+        UB_REVIEW_ACTION_MAX_INLINE_COMMENTS: ${{ inputs['max-inline-comments'] }}
+        UB_REVIEW_ACTION_MODEL_CONCURRENCY: ${{ inputs['model-concurrency'] }}
+        UB_REVIEW_ACTION_MAX_MODEL_CALLS: ${{ inputs['max-model-calls'] }}
+        UB_REVIEW_ACTION_MINIMAX_PROVIDER_KIND: ${{ inputs['minimax-provider-kind'] }}
+        UB_REVIEW_ACTION_MINIMAX_MODEL: ${{ inputs['minimax-model'] }}
+        UB_REVIEW_ACTION_OPENCODE_MODEL: ${{ inputs['opencode-model'] }}
+        UB_REVIEW_ACTION_OPENCODE_ENDPOINT_KIND: ${{ inputs['opencode-endpoint-kind'] }}
+        UB_REVIEW_ACTION_LEDGER_PATH: ${{ inputs['ledger-path'] }}
+        UB_REVIEW_ACTION_LEDGER_MAX_BYTES: ${{ inputs['ledger-max-bytes'] }}
+        UB_REVIEW_ACTION_PR_THREAD_CONTEXT: ${{ inputs['pr-thread-context'] }}
+        UB_REVIEW_ACTION_PR_THREAD_CONTEXT_MAX_BYTES: ${{ inputs['pr-thread-context-max-bytes'] }}
+        UB_REVIEW_ACTION_PRIOR_PATH: ${{ steps.prior_resolved_candidates.outputs.path }}
+        UB_REVIEW_ACTION_REVIEW_BODY_MAX_BYTES: ${{ inputs['review-body-max-bytes'] }}
       run: |
         set -euo pipefail
+        require_single_line() {
+          if [[ "$2" == *$'\r'* || "$2" == *$'\n'* ]]; then
+            printf '::error::%s must not contain CR or LF\n' "$1" >&2
+            exit 1
+          fi
+        }
+        require_single_line out "$UB_REVIEW_ACTION_OUT"
         extra=()
         pr_thread_auth="$UB_REVIEW_ACTION_GITHUB_TOKEN"
         if [[ -n "$pr_thread_auth" ]]; then
           extra+=(--github-token "$pr_thread_auth")
         fi
-        if [[ "${{ inputs['allow-heavy'] }}" == "true" ]]; then
+        if [[ "$UB_REVIEW_ACTION_ALLOW_HEAVY" == "true" ]]; then
           extra+=(--allow-heavy)
         fi
-        if [[ -n "${{ inputs['runtime-profile'] }}" ]]; then
-          extra+=(--runtime-profile "${{ inputs['runtime-profile'] }}")
+        if [[ -n "$UB_REVIEW_ACTION_RUNTIME_PROFILE" ]]; then
+          extra+=(--runtime-profile "$UB_REVIEW_ACTION_RUNTIME_PROFILE")
         fi
         # #719: forward the user-facing review-mode preset when set. The binary
         # applies the {mode, fail-on-gate, review_forward} override during run
         # so the gate_outcome.json reflects the preset; the gate-check step
         # repeats the {mode, fail-on-gate} override for enforcement.
-        if [[ -n "${{ inputs['review-mode'] }}" ]]; then
-          extra+=(--review-mode "${{ inputs['review-mode'] }}")
+        if [[ -n "$UB_REVIEW_ACTION_REVIEW_MODE" ]]; then
+          extra+=(--review-mode "$UB_REVIEW_ACTION_REVIEW_MODE")
         fi
         if [[ -n "$UB_REVIEW_ACTION_TRUSTED_BASE_TREE" ]]; then
           extra+=(--trusted-base-tree "$UB_REVIEW_ACTION_TRUSTED_BASE_TREE")
@@ -729,15 +803,15 @@ runs:
           extra+=(--trusted-diff-patch "$UB_REVIEW_ACTION_TRUSTED_DIFF_PATCH")
         fi
 
-        config_path="${{ inputs.config }}"
+        config_path="$UB_REVIEW_ACTION_CONFIG"
         if [[ -z "$config_path" ]]; then
           config_path="$GITHUB_ACTION_PATH/profiles/bun-ub-v0.toml"
-          case "${{ inputs.preset }}" in
+          case "$UB_REVIEW_ACTION_PRESET" in
             bun-ub|bun)
               config_path="$GITHUB_ACTION_PATH/profiles/bun-ub-v0.toml"
               ;;
             *)
-              echo "::warning::Unknown preset '${{ inputs.preset }}'; using bun-ub"
+              echo "::warning::Unknown preset '$UB_REVIEW_ACTION_PRESET'; using bun-ub"
               ;;
           esac
         fi
@@ -745,39 +819,39 @@ runs:
         # Gate enforcement is deferred to the final "Enforce gate outcome"
         # step so a failing gate cannot skip PR review posting; the binary
         # itself therefore always runs with --fail-on-gate false here.
-        "${{ steps.runner.outputs.bin }}" run \
+        "$UB_REVIEW_ACTION_RUNNER_BIN" run \
           --config "$config_path" \
-          --profile "${{ inputs.profile }}" \
-          --root "${{ inputs.root }}" \
-          --base "${{ inputs.base }}" \
-          --head "${{ inputs.head }}" \
-          --out "${{ inputs.out }}" \
-          --posting "${{ inputs.posting }}" \
-          --mode "${{ inputs.mode }}" \
-          --run-pass "${{ inputs['run-pass'] }}" \
-          --model-mode "${{ inputs['model-mode'] }}" \
+          --profile "$UB_REVIEW_ACTION_PROFILE" \
+          --root "$UB_REVIEW_ACTION_ROOT" \
+          --base "$UB_REVIEW_ACTION_BASE" \
+          --head "$UB_REVIEW_ACTION_HEAD" \
+          --out "$UB_REVIEW_ACTION_OUT" \
+          --posting "$UB_REVIEW_ACTION_POSTING" \
+          --mode "$UB_REVIEW_ACTION_MODE" \
+          --run-pass "$UB_REVIEW_ACTION_RUN_PASS" \
+          --model-mode "$UB_REVIEW_ACTION_MODEL_MODE" \
           --fail-on-gate false \
-          --depth "${{ inputs.depth }}" \
-          --lanes "${{ inputs.lanes }}" \
-          --except-lanes "${{ inputs['except-lanes'] }}" \
-          --tools "${{ inputs.tools }}" \
-          --except-tools "${{ inputs['except-tools'] }}" \
-          --provider-policy "${{ inputs['provider-policy'] }}" \
-          --lane-width "${{ inputs['lane-width'] }}" \
-          --model-timeout-sec "${{ inputs['model-timeout-sec'] }}" \
-          --max-inline-comments "${{ inputs['max-inline-comments'] }}" \
-          --model-concurrency "${{ inputs['model-concurrency'] }}" \
-          --max-model-calls "${{ inputs['max-model-calls'] }}" \
-          --minimax-provider-kind "${{ inputs['minimax-provider-kind'] }}" \
-          --minimax-model "${{ inputs['minimax-model'] }}" \
-          --opencode-model "${{ inputs['opencode-model'] }}" \
-          --opencode-endpoint-kind "${{ inputs['opencode-endpoint-kind'] }}" \
-          --ledger-path "${{ inputs['ledger-path'] }}" \
-          --ledger-max-bytes "${{ inputs['ledger-max-bytes'] }}" \
-          --pr-thread-context "${{ inputs['pr-thread-context'] }}" \
-          --pr-thread-context-max-bytes "${{ inputs['pr-thread-context-max-bytes'] }}" \
-          --prior-resolved-candidates "${{ steps.prior_resolved_candidates.outputs.path }}" \
-          --review-body-max-bytes "${{ inputs['review-body-max-bytes'] }}" \
+          --depth "$UB_REVIEW_ACTION_DEPTH" \
+          --lanes "$UB_REVIEW_ACTION_LANES" \
+          --except-lanes "$UB_REVIEW_ACTION_EXCEPT_LANES" \
+          --tools "$UB_REVIEW_ACTION_TOOLS" \
+          --except-tools "$UB_REVIEW_ACTION_EXCEPT_TOOLS" \
+          --provider-policy "$UB_REVIEW_ACTION_PROVIDER_POLICY" \
+          --lane-width "$UB_REVIEW_ACTION_LANE_WIDTH" \
+          --model-timeout-sec "$UB_REVIEW_ACTION_MODEL_TIMEOUT_SEC" \
+          --max-inline-comments "$UB_REVIEW_ACTION_MAX_INLINE_COMMENTS" \
+          --model-concurrency "$UB_REVIEW_ACTION_MODEL_CONCURRENCY" \
+          --max-model-calls "$UB_REVIEW_ACTION_MAX_MODEL_CALLS" \
+          --minimax-provider-kind "$UB_REVIEW_ACTION_MINIMAX_PROVIDER_KIND" \
+          --minimax-model "$UB_REVIEW_ACTION_MINIMAX_MODEL" \
+          --opencode-model "$UB_REVIEW_ACTION_OPENCODE_MODEL" \
+          --opencode-endpoint-kind "$UB_REVIEW_ACTION_OPENCODE_ENDPOINT_KIND" \
+          --ledger-path "$UB_REVIEW_ACTION_LEDGER_PATH" \
+          --ledger-max-bytes "$UB_REVIEW_ACTION_LEDGER_MAX_BYTES" \
+          --pr-thread-context "$UB_REVIEW_ACTION_PR_THREAD_CONTEXT" \
+          --pr-thread-context-max-bytes "$UB_REVIEW_ACTION_PR_THREAD_CONTEXT_MAX_BYTES" \
+          --prior-resolved-candidates "$UB_REVIEW_ACTION_PRIOR_PATH" \
+          --review-body-max-bytes "$UB_REVIEW_ACTION_REVIEW_BODY_MAX_BYTES" \
           --no-github-summary \
           "${extra[@]}"
 
@@ -786,42 +860,70 @@ runs:
       shell: bash
       env:
         UB_REVIEW_GITHUB_TOKEN: ${{ inputs['github-token'] }}
+        UB_REVIEW_ACTION_FAIL_ON_POST_ERROR: ${{ inputs['fail-on-post-error'] }}
+        UB_REVIEW_ACTION_RUNNER_BIN: ${{ steps.runner.outputs.bin }}
+        UB_REVIEW_ACTION_OUT: ${{ inputs.out }}
       run: |
         set -euo pipefail
+        require_single_line() {
+          if [[ "$2" == *$'\r'* || "$2" == *$'\n'* ]]; then
+            printf '::error::%s must not contain CR or LF\n' "$1" >&2
+            exit 1
+          fi
+        }
+        require_single_line out "$UB_REVIEW_ACTION_OUT"
         extra=()
-        if [[ "${{ inputs['fail-on-post-error'] }}" == "true" ]]; then
+        if [[ "$UB_REVIEW_ACTION_FAIL_ON_POST_ERROR" == "true" ]]; then
           extra+=(--fail-on-post-error)
         fi
-        "${{ steps.runner.outputs.bin }}" post \
-          --review-json "${{ inputs.out }}/review/github-review.json" \
-          --diff-patch "${{ inputs.out }}/input/diff.patch" \
-          --out "${{ inputs.out }}/review" \
+        "$UB_REVIEW_ACTION_RUNNER_BIN" post \
+          --review-json "$UB_REVIEW_ACTION_OUT/review/github-review.json" \
+          --diff-patch "$UB_REVIEW_ACTION_OUT/input/diff.patch" \
+          --out "$UB_REVIEW_ACTION_OUT/review" \
           "${extra[@]}"
 
     - name: Append UB review summary
       if: always() && inputs['github-summary'] == 'true'
       shell: bash
+      env:
+        UB_REVIEW_ACTION_OUT: ${{ inputs.out }}
       run: |
-        if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -f "${{ inputs.out }}/running-summary.md" ]; then
-          cat "${{ inputs.out }}/running-summary.md" >> "$GITHUB_STEP_SUMMARY"
+        require_single_line() {
+          if [[ "$2" == *$'\r'* || "$2" == *$'\n'* ]]; then
+            printf '::error::%s must not contain CR or LF\n' "$1" >&2
+            exit 1
+          fi
+        }
+        require_single_line out "$UB_REVIEW_ACTION_OUT"
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -f "$UB_REVIEW_ACTION_OUT/running-summary.md" ]; then
+          cat "$UB_REVIEW_ACTION_OUT/running-summary.md" >> "$GITHUB_STEP_SUMMARY"
         fi
 
     - name: Set output paths
       id: paths
       if: always()
       shell: bash
+      env:
+        UB_REVIEW_ACTION_OUT: ${{ inputs.out }}
       run: |
-        echo "summary-path=${{ inputs.out }}/running-summary.md" >> "$GITHUB_OUTPUT"
-        echo "events-path=${{ inputs.out }}/events.ndjson" >> "$GITHUB_OUTPUT"
-        echo "review-json-path=${{ inputs.out }}/review/review.json" >> "$GITHUB_OUTPUT"
-        echo "metrics-json-path=${{ inputs.out }}/review/metrics.json" >> "$GITHUB_OUTPUT"
-        echo "github-review-path=${{ inputs.out }}/review/github-review.json" >> "$GITHUB_OUTPUT"
-        echo "post-result-path=${{ inputs.out }}/review/post-result.json" >> "$GITHUB_OUTPUT"
-        echo "post-error-path=${{ inputs.out }}/review/post-error.json" >> "$GITHUB_OUTPUT"
-        echo "post-payload-path=${{ inputs.out }}/review/github-review-post-payload.json" >> "$GITHUB_OUTPUT"
-        echo "post-stdout-path=${{ inputs.out }}/review/post-stdout.json" >> "$GITHUB_OUTPUT"
-        echo "post-stderr-path=${{ inputs.out }}/review/post-stderr.txt" >> "$GITHUB_OUTPUT"
-        echo "gate-outcome-path=${{ inputs.out }}/review/gate_outcome.json" >> "$GITHUB_OUTPUT"
+        require_single_line() {
+          if [[ "$2" == *$'\r'* || "$2" == *$'\n'* ]]; then
+            printf '::error::%s must not contain CR or LF\n' "$1" >&2
+            exit 1
+          fi
+        }
+        require_single_line out "$UB_REVIEW_ACTION_OUT"
+        printf 'summary-path=%s\n' "$UB_REVIEW_ACTION_OUT/running-summary.md" >> "$GITHUB_OUTPUT"
+        printf 'events-path=%s\n' "$UB_REVIEW_ACTION_OUT/events.ndjson" >> "$GITHUB_OUTPUT"
+        printf 'review-json-path=%s\n' "$UB_REVIEW_ACTION_OUT/review/review.json" >> "$GITHUB_OUTPUT"
+        printf 'metrics-json-path=%s\n' "$UB_REVIEW_ACTION_OUT/review/metrics.json" >> "$GITHUB_OUTPUT"
+        printf 'github-review-path=%s\n' "$UB_REVIEW_ACTION_OUT/review/github-review.json" >> "$GITHUB_OUTPUT"
+        printf 'post-result-path=%s\n' "$UB_REVIEW_ACTION_OUT/review/post-result.json" >> "$GITHUB_OUTPUT"
+        printf 'post-error-path=%s\n' "$UB_REVIEW_ACTION_OUT/review/post-error.json" >> "$GITHUB_OUTPUT"
+        printf 'post-payload-path=%s\n' "$UB_REVIEW_ACTION_OUT/review/github-review-post-payload.json" >> "$GITHUB_OUTPUT"
+        printf 'post-stdout-path=%s\n' "$UB_REVIEW_ACTION_OUT/review/post-stdout.json" >> "$GITHUB_OUTPUT"
+        printf 'post-stderr-path=%s\n' "$UB_REVIEW_ACTION_OUT/review/post-stderr.txt" >> "$GITHUB_OUTPUT"
+        printf 'gate-outcome-path=%s\n' "$UB_REVIEW_ACTION_OUT/review/gate_outcome.json" >> "$GITHUB_OUTPUT"
 
     # #839: expose the separated results as structured outputs so a consumer
     # workflow branches on values, never on prose. Reads the recorded artifact
@@ -835,6 +937,13 @@ runs:
         UB_REVIEW_GATE_OUTCOME_PATH: ${{ inputs.out }}/review/gate_outcome.json
       run: |
         set -euo pipefail
+        require_single_line() {
+          if [[ "$2" == *$'\r'* || "$2" == *$'\n'* ]]; then
+            printf '::error::%s must not contain CR or LF\n' "$1" >&2
+            exit 1
+          fi
+        }
+        require_single_line gate-outcome-path "$UB_REVIEW_GATE_OUTCOME_PATH"
         if [ ! -f "$UB_REVIEW_GATE_OUTCOME_PATH" ]; then
           echo "::warning::$UB_REVIEW_GATE_OUTCOME_PATH is missing; reporting not_proven"
           {
@@ -851,7 +960,8 @@ runs:
         # fallback, so a future-incompatible artifact never implies a pass.
         read_field() {
           jq -r --arg field "$1" --arg fallback "$2" \
-            '(.[$field] // $fallback) | tostring' \
+            '(.[$field] // $fallback) | tostring |
+             if contains("\u0000") or contains("\r") or contains("\n") then $fallback else . end' \
             "$UB_REVIEW_GATE_OUTCOME_PATH" 2>/dev/null || printf '%s' "$2"
         }
         conclusion="$(read_field conclusion missing)"
@@ -860,6 +970,12 @@ runs:
         gate="$(read_field gate_result not_proven)"
         reasons="$(jq -c '.not_proven_reasons // []' "$UB_REVIEW_GATE_OUTCOME_PATH" 2>/dev/null || printf '[]')"
         coverage="$(jq -c '.sensor_coverage // {}' "$UB_REVIEW_GATE_OUTCOME_PATH" 2>/dev/null || printf '{}')"
+        require_single_line gate-conclusion "$conclusion"
+        require_single_line analysis-result "$analysis"
+        require_single_line publication-result "$publication"
+        require_single_line gate-result "$gate"
+        require_single_line not-proven-reasons "$reasons"
+        require_single_line sensor-coverage "$coverage"
         {
           echo "gate-conclusion=$conclusion"
           echo "analysis-result=$analysis"
@@ -882,16 +998,16 @@ runs:
         UB_REVIEW_FAIL_ON_GATE: ${{ inputs['fail-on-gate'] || 'auto' }}
         UB_REVIEW_MODE: ${{ inputs.mode || 'review-byok' }}
         UB_REVIEW_GATE_OUTCOME_PATH: ${{ inputs.out }}/review/gate_outcome.json
+        UB_REVIEW_ACTION_REVIEW_MODE: ${{ inputs['review-mode'] }}
+        UB_REVIEW_ACTION_RUNNER_BIN: ${{ steps.runner.outputs.bin }}
       run: |
         set -euo pipefail
         review_mode_args=()
-        # #719: forward the review-mode preset (advisory/gate/strict). Inlined
-        # from the input expression (matching the runtime-profile pattern) so
-        # an empty input renders the guard false and the flag is never passed.
-        if [[ -n "${{ inputs['review-mode'] }}" ]]; then
-          review_mode_args+=(--review-mode "${{ inputs['review-mode'] }}")
+        # #719: forward the optional review-mode preset as one literal argument.
+        if [[ -n "$UB_REVIEW_ACTION_REVIEW_MODE" ]]; then
+          review_mode_args+=(--review-mode "$UB_REVIEW_ACTION_REVIEW_MODE")
         fi
-        "${{ steps.runner.outputs.bin }}" gate-check \
+        "$UB_REVIEW_ACTION_RUNNER_BIN" gate-check \
           --gate-outcome "$UB_REVIEW_GATE_OUTCOME_PATH" \
           --fail-on-gate "$UB_REVIEW_FAIL_ON_GATE" \
           --mode "$UB_REVIEW_MODE" \
