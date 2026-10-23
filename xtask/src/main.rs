@@ -10,6 +10,8 @@ use serde_json::{Value as JsonValue, json};
 use toml::Value;
 use toml::map::Map;
 
+mod task_projection_reader;
+
 fn main() {
     if let Err(error) = run() {
         eprintln!("error: {error:#}");
@@ -66,6 +68,12 @@ fn run() -> Result<()> {
             let base = parse_smoke_base_options(args)?;
             println!("{}", resolve_smoke_base(&root, &base)?);
         }
+        "task-projection-reader" => {
+            let exit = task_projection_reader::run(args)?;
+            if exit != 0 {
+                std::process::exit(exit);
+            }
+        }
         "help" | "-h" | "--help" => {
             reject_extra_args(args)?;
             print_help();
@@ -78,7 +86,7 @@ fn run() -> Result<()> {
         }
         other => {
             bail!(
-                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, ripr, smoke-base, calibration-report, or help"
+                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, ripr, smoke-base, task-projection-reader, calibration-report, or help"
             )
         }
     }
@@ -104,6 +112,8 @@ cargo xtask commands
   cargo xtask precommit         run diff-scoped Rust precommit checks
   cargo xtask ripr              reproduce hosted ripr ready-mode feedback locally
   cargo xtask smoke-base        select a non-empty local smoke diff base
+  cargo xtask task-projection-reader <packet> [--kind review|worker]
+                               inspect bounded reader inputs only (#1292)
   cargo xtask calibration-report <dir>  aggregate review/calibration.json files
 
 precommit options

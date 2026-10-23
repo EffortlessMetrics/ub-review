@@ -150,3 +150,40 @@ reducer joins, bounded report contract, and parity corpus into Rust before the
 current policy review date. Its exit condition includes a retained-packet
 parity window and deletion of `scripts/reconcile-task-projections.py` and
 `scripts/test-task-projections.py`; policy expiry is not an implicit migration.
+
+## First native migration component (#1292)
+
+```sh
+cargo xtask task-projection-reader target/ub-review
+cargo xtask task-projection-reader target/worker-proof --kind worker
+cargo test -p xtask task_projection_reader
+cargo test -p xtask --test task_projection_reader_parity
+```
+
+This internal command exercises the reusable Rust packet reader. Its versioned
+`ub-review.task_projection_reader.v1` output has `authority: reader-only-shadow`
+and `reconciliation: not_performed`; exit 0 means only that the inspected inputs
+were readable at this boundary. Exit 2 denotes unavailable input. It neither
+replays a TaskLedger nor compares projection relationships, replaces the Python
+command, publishes a report, or certifies a coherent packet or gate outcome.
+An escaped source inventory exceeding the 512 KiB report cap produces a small
+`reader_report_budget` unavailable receipt with the source inventory explicitly
+truncated, rather than silently omitting output or claiming successful reading.
+
+The reader retains exact numeric tokens in its own JSON representation, including
+the full unsigned 128-bit command-duration domain, without enabling additional
+serde_json features for other workspace consumers. Native unit controls cover
+paths, symlinks, caching, byte/file limits, duplicate decoded keys, nesting and
+numeric domains. Executable differential controls compare source metadata with
+the existing Python Packet on accepted review and worker reader fixtures.
+
+The initial native boundary is deliberately tighter in a few cases: it accepts
+UTF-8 without a BOM and valid Unicode scalar strings only; rejects numbers beyond
+the finite-f64 validation envelope even in unused fields; limits nesting to 128,
+every container to 16,384 members, and the whole parsed document to 262,144 nodes;
+keeps failed reads as cached failures rather than reclassifying them as missing; and
+replaces Unicode-debug-escaped diagnostic characters, including combining marks,
+with `?`. These differences are not full Python byte-parity claims. Native joins,
+revision/event replay, lifecycle/report publication, complete corpus parity and
+the ten-retained-packet parity window remain open under #1292. Existing CI and
+the Python scripts remain the operative reconciliation implementation.
