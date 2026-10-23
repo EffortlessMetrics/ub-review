@@ -439,7 +439,7 @@ impl PlannerReceiptDiagnostic {
 fn planner_receipt_diagnostics(
     task: &PlannerPortfolioTask,
     receipts: &[ProofReceipt],
-    revision_digest: Option<&str>,
+    admitted_revision: Option<&crate::RevisionRef>,
 ) -> Vec<PlannerReceiptDiagnostic> {
     use PlannerReceiptDiagnostic as Diagnostic;
     if receipts.is_empty() {
@@ -456,10 +456,10 @@ fn planner_receipt_diagnostics(
     }
     let mut diagnostics = Vec::new();
     for receipt in matching {
-        let revision_issue = match (revision_digest, receipt.revision.as_ref()) {
+        let revision_issue = match (admitted_revision, receipt.revision.as_ref()) {
             (None, _) => Some(Diagnostic::CurrentRevisionUnavailable),
             (_, None) => Some(Diagnostic::ReceiptRevisionUnavailable),
-            (Some(digest), Some(revision)) if revision.digest != digest => {
+            (Some(admitted), Some(revision)) if revision != admitted => {
                 Some(Diagnostic::StaleRevision)
             }
             _ => None,
@@ -565,7 +565,7 @@ pub(crate) fn build_planner_required_proof_accounting(
                 receipt_diagnostics: planner_receipt_diagnostics(
                     task,
                     proof_receipts,
-                    revision_digest,
+                    admitted_revision,
                 ),
             });
         }
@@ -3320,10 +3320,11 @@ mod tests {
     }
 
     /// Exercise serialized proof bytes through the production gate API and
-    /// summary command. Symbolic heads and the other two identity fields stay
-    /// fixed while each control changes exactly one immutable reference field.
+    /// summary command. Identity negatives change one immutable reference field;
+    /// controls retain admission, request matching and mixed rejection causes.
     #[test]
     fn planner_currentness_requires_the_complete_admitted_revision() -> Result<()> {
+        use super::PlannerReceiptDiagnostic as Diagnostic;
         use crate::revision_identity::{CommitTree, ReviewSemantics, RevisionIdentity};
         let base = CommitTree::new("base", &"1".repeat(40), &"2".repeat(40))?;
         let head = CommitTree::new("head", &"3".repeat(40), &"4".repeat(40))?;
@@ -3356,10 +3357,16 @@ mod tests {
         let mut failures = Vec::new();
         for case in [
             "current",
+            "current_discriminating",
+            "current_with_stale",
+            "display_head",
             "digest",
             "semantics",
             "reviewed_commit",
             "missing",
+            "absent_admission",
+            "wrong_request",
+            "mixed_causes",
         ] {
             let mut value: serde_json::Value = serde_json::from_slice(&baseline_bytes)?;
             match case {
@@ -3374,12 +3381,32 @@ mod tests {
                         .ok_or_else(|| anyhow::anyhow!("receipt object"))?
                         .remove("revision");
                 }
+                "wrong_request" => value["request_ids"] = serde_json::json!(["another-task"]),
+                "current_discriminating" => value["result"] = serde_json::json!("discriminating"),
+                "display_head" => value["head"] = serde_json::json!("other-display-head"),
                 _ => {}
             }
-            let input_bytes = serde_json::to_vec(&value)?;
-            let receipt: ProofReceipt = serde_json::from_slice(&input_bytes)?;
-            if let Some(revision) = &receipt.revision {
-                revision.validate()?;
+            let mut receipt_values = vec![value.clone()];
+            if matches!(case, "current_with_stale" | "mixed_causes") {
+                let mut stale = value.clone();
+                stale["revision"]["semantics"] = serde_json::json!("candidate_head");
+                if case == "mixed_causes" {
+                    stale["result"] = serde_json::json!("head_failed");
+                    stale["test_patch_mode"] = serde_json::json!("head-only");
+                    receipt_values = vec![stale.clone(), stale];
+                    let mut unrelated = value.clone();
+                    unrelated["request_ids"] = serde_json::json!(["another-task"]);
+                    receipt_values.push(unrelated);
+                } else {
+                    receipt_values.push(stale);
+                }
+            }
+            let input_bytes = serde_json::to_vec(&receipt_values)?;
+            let receipts: Vec<ProofReceipt> = serde_json::from_slice(&input_bytes)?;
+            for receipt in &receipts {
+                if let Some(revision) = &receipt.revision {
+                    revision.validate()?;
+                }
             }
             let args = test_run_args(Path::new("target/ub-review").to_path_buf());
             let plan = test_plan(Vec::new());
@@ -3391,14 +3418,14 @@ mod tests {
                 plan: &plan,
                 terminal_state: &terminal_state,
                 proof_requests: &[],
-                proof_receipts: &[receipt],
+                proof_receipts: &receipts,
                 missing_or_failed_sensor_evidence: &[],
                 missing_or_failed_model_evidence: &[],
                 reporter_gate: crate::ReporterGateInput::Absent,
                 planner_portfolio: Some(required_portfolio()),
-                admitted_revision: Some(admitted.clone()),
+                admitted_revision: (case != "absent_admission").then_some(admitted.clone()),
             });
-            gate.revision = Some(admitted.clone());
+            gate.revision = (case != "absent_admission").then_some(admitted.clone());
             let temp = tempfile::tempdir()?;
             let out = temp.path();
             fs::create_dir_all(out.join("review"))?;
@@ -3426,7 +3453,22 @@ mod tests {
                 .planner_required_proofs
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("missing accounting"))?;
-            let expected = usize::from(case == "current");
+            let expected = usize::from(matches!(
+                case,
+                "current" | "current_discriminating" | "current_with_stale" | "display_head"
+            ));
+            let expected_diagnostics = match case {
+                "digest" | "semantics" | "reviewed_commit" => vec![Diagnostic::StaleRevision],
+                "missing" => vec![Diagnostic::ReceiptRevisionUnavailable],
+                "absent_admission" => vec![Diagnostic::CurrentRevisionUnavailable],
+                "wrong_request" => vec![Diagnostic::WrongSubject],
+                "mixed_causes" => vec![
+                    Diagnostic::StaleRevision,
+                    Diagnostic::HeadOnly,
+                    Diagnostic::Failed,
+                ],
+                _ => Vec::new(),
+            };
             eprintln!(
                 "control={case} proven={} unproven={} input_revision={} output_revision={}",
                 accounting.proven,
@@ -3455,6 +3497,26 @@ mod tests {
                     .any(|reason| reason.starts_with("required-planner-proof:")),
                 expected == 0
             );
+            if expected == 0 {
+                assert_eq!(
+                    serialized["planner_required_proofs"]["unproven_tasks"][0]["receipt_diagnostics"],
+                    serde_json::to_value(&expected_diagnostics)?,
+                    "control={case}"
+                );
+                assert!(
+                    summary.contains("receipts: none satisfying"),
+                    "{case}: {summary}"
+                );
+                for diagnostic in expected_diagnostics {
+                    assert!(summary.contains(diagnostic.summary()), "{case}: {summary}");
+                }
+            } else {
+                assert!(accounting.unproven_tasks.is_empty());
+                assert!(
+                    !summary.contains("Required planner proof unproven:"),
+                    "{case}: {summary}"
+                );
+            }
             if accounting.proven != expected
                 || accounting.unproven != 1 - expected
                 || !summary.contains(&format!("Required planner proofs: `{expected}/1` proven"))
