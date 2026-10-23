@@ -1207,7 +1207,7 @@ pub(crate) fn call_model_refuter(
 pub(crate) fn render_refuter_prompt(inline_comments: &[ReviewInlineComment]) -> Result<String> {
     let candidates = serde_json::to_string_pretty(inline_comments)?;
     Ok(format!(
-        r#"You are the final refuter for a Bun UB PR review.
+        r#"You are the final refuter for this PR review.
 
 Use only the cached shared context and candidate inline comments below.
 Do not browse. Do not infer safety from missing evidence.
@@ -1235,6 +1235,117 @@ Rules:
 Candidate inline comments:
 {candidates}"#
     ))
+}
+
+#[cfg(test)]
+mod refuter_prompt_tests {
+    use super::*;
+
+    #[test]
+    fn refuter_wire_prompt_is_repository_neutral_and_preserves_review_contract() -> Result<()> {
+        for (shared_context, path, body) in [
+            (
+                "Rust-only parser review",
+                "src/lib.rs",
+                "The parser drops a valid request.",
+            ),
+            (
+                "Mixed Rust/C++ FFI review",
+                "src/native.cpp",
+                "The callback outlives its owner.",
+            ),
+            (
+                "Bun Zig/TypeScript review",
+                "src/ArrayBuffer.zig",
+                "The ArrayBuffer view can be invalidated.",
+            ),
+        ] {
+            let candidates = vec![ReviewInlineComment {
+                lane: "correctness".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                path: path.to_owned(),
+                line: 7,
+                side: "RIGHT".to_owned(),
+                body: body.to_owned(),
+                evidence: "changed source route".to_owned(),
+                suggestion: None,
+            }];
+            let prompt = render_refuter_prompt(&candidates)?;
+            let (instructions, candidate_json) = prompt
+                .split_once("Candidate inline comments:\n")
+                .context("refuter candidate section missing")?;
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(candidate_json)?,
+                serde_json::to_value(&candidates)?
+            );
+            for rule in [
+                "Use only the cached shared context and candidate inline comments below.",
+                "Do not browse. Do not infer safety from missing evidence.",
+                "Do not post, mutate files, or run shell commands.",
+                "Return strict JSON only:",
+                "\"disposition\": \"inline|summary|drop\"",
+                "`drop` only for high-confidence false positives or duplicates.",
+                "If uncertain, use `summary`.",
+            ] {
+                assert!(
+                    instructions.contains(rule),
+                    "missing refuter contract: {rule}"
+                );
+            }
+            for (provider_kind, cache_mode) in [
+                (
+                    ProviderKindArg::Anthropic,
+                    MinimaxPromptCache::ExplicitAnthropic,
+                ),
+                (ProviderKindArg::Anthropic, MinimaxPromptCache::Off),
+                (
+                    ProviderKindArg::Openai,
+                    MinimaxPromptCache::ExplicitAnthropic,
+                ),
+            ] {
+                let mut args = crate::tests::test_run_args(PathBuf::from("unused"));
+                args.minimax_provider_kind = provider_kind;
+                args.minimax_prompt_cache = cache_mode;
+                let spec = direct_minimax_spec(&args);
+                let use_cache_control =
+                    model_cacheable_prefix(&spec, shared_context, &args).is_some();
+                let payload = model_request_payload_parts_with_cache_control(
+                    &spec,
+                    Some(shared_context),
+                    &prompt,
+                    use_cache_control,
+                );
+                let messages = payload["messages"].as_array().context("messages missing")?;
+                let user = messages
+                    .iter()
+                    .find(|message| message["role"] == "user")
+                    .context("user message missing")?;
+                let task = if let Some(blocks) = user["content"].as_array() {
+                    assert_eq!(blocks.len(), 2);
+                    assert_eq!(blocks[0]["text"], shared_context);
+                    blocks[1]["text"].as_str().context("task block missing")?
+                } else {
+                    let content = user["content"].as_str().context("user content missing")?;
+                    let (prefix, task) = content
+                        .split_once("\n\nLane task:\n\n")
+                        .context("cached task separator missing")?;
+                    assert_eq!(
+                        prefix,
+                        format!("Cached shared context:\n\n{shared_context}")
+                    );
+                    task
+                };
+                assert_eq!(task, prompt);
+                assert_eq!(
+                    task.lines().next(),
+                    Some("You are the final refuter for this PR review."),
+                    "repository-specific refuter framing in {shared_context}"
+                );
+            }
+        }
+        Ok(())
+    }
 }
 
 pub(crate) fn apply_refuter_output(

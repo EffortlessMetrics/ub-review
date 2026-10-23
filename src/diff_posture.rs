@@ -7,13 +7,15 @@ pub(crate) fn default_lanes_for_diff_context(
     diff_class: DiffClass,
     language_mix: &LanguageMix,
 ) -> Vec<LanePlan> {
-    match diff_class {
+    let mut lanes = match diff_class {
         DiffClass::SourceUb => default_lanes(),
         DiffClass::SourceGeneral => source_general_lanes(),
         DiffClass::TestsOnly => tests_only_lanes(),
         DiffClass::WorkflowTooling => workflow_tooling_lanes_for_mix(language_mix),
         DiffClass::DocsOnly | DiffClass::ArtifactOnlySmoke => Vec::new(),
-    }
+    };
+    specialize_native_lanes_for_language(&mut lanes, diff_class, language_mix);
+    lanes
 }
 
 pub(crate) const NO_LGTM_POSTURE: &str = r#"Standalone approval language is banned.
@@ -65,7 +67,7 @@ Do not add source UB, ArrayBuffer, worker-handoff, workflow, or test-proof narra
 
 pub(crate) fn diff_class_posture_heading(diff_class: DiffClass) -> &'static str {
     match diff_class {
-        DiffClass::SourceUb => "Bun UB",
+        DiffClass::SourceUb => "Native safety",
         DiffClass::SourceGeneral => "Source-general",
         DiffClass::TestsOnly => "Tests-only",
         DiffClass::WorkflowTooling => "Workflow/tooling",
@@ -81,5 +83,69 @@ pub(crate) fn review_posture_for_diff_class(diff_class: DiffClass) -> &'static s
         DiffClass::TestsOnly => TESTS_ONLY_POSTURE,
         DiffClass::WorkflowTooling => WORKFLOW_TOOLING_POSTURE,
         DiffClass::DocsOnly | DiffClass::ArtifactOnlySmoke => DOCS_ONLY_POSTURE,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_lanes_preserve_each_diff_class_contract() {
+        let language_mix = classify_language_mix(&["src/lib.rs".to_owned()]);
+        for (diff_class, expected_ids) in [
+            (
+                DiffClass::SourceUb,
+                vec![
+                    "ub",
+                    "source-route",
+                    "tests",
+                    "arch",
+                    "opposition",
+                    "security",
+                ],
+            ),
+            (
+                DiffClass::SourceGeneral,
+                vec![
+                    "correctness",
+                    "tests-red-green",
+                    "source-route",
+                    "architecture",
+                    "opposition",
+                ],
+            ),
+            (
+                DiffClass::TestsOnly,
+                vec![
+                    "tests-red-green",
+                    "tests-oracle",
+                    "proof-request",
+                    "opposition",
+                ],
+            ),
+            (
+                DiffClass::WorkflowTooling,
+                vec![
+                    "tooling-script-proof",
+                    "tooling-policy",
+                    "tooling-opposition",
+                ],
+            ),
+            (DiffClass::DocsOnly, vec![]),
+            (DiffClass::ArtifactOnlySmoke, vec![]),
+        ] {
+            let lanes = default_lanes_for_diff_context(diff_class, &language_mix);
+            assert_eq!(
+                lanes
+                    .iter()
+                    .map(|lane| lane.id.as_str())
+                    .collect::<Vec<_>>(),
+                expected_ids
+            );
+        }
+        let native = default_lanes_for_diff_context(DiffClass::SourceUb, &language_mix);
+        assert!(native[0].role.starts_with("Rust "));
+        assert!(native[0].focus.contains("pointer provenance"));
     }
 }
