@@ -10,9 +10,9 @@ use crate::task_ledger::{TaskNonExecutionDisposition, TaskTerminalDisposition};
 use crate::test_parse::command_display_with_env;
 use crate::*;
 
-struct ProofCommandPaths {
-    stdout_path: PathBuf,
-    stderr_path: PathBuf,
+pub(super) struct ProofCommandPaths {
+    pub(super) stdout_path: PathBuf,
+    pub(super) stderr_path: PathBuf,
     stdout_rel: String,
     stderr_rel: String,
 }
@@ -354,7 +354,7 @@ pub(crate) fn run_proof_command_receipt_for_task<F>(
     task_ledger: Option<&ProofTaskLedger>,
     execution_phase: ProofExecutionPhase,
     runner: &mut F,
-) -> Result<ProofCommandReceipt>
+) -> Result<SelectionCheckedCommand>
 where
     F: FnMut(
         &Path,
@@ -397,7 +397,7 @@ pub(crate) fn run_proof_command_receipt_for_task_with_cleanup<F>(
     execution_phase: ProofExecutionPhase,
     cleanup: Option<&mut dyn FnMut() -> Result<()>>,
     runner: &mut F,
-) -> Result<ProofCommandReceipt>
+) -> Result<SelectionCheckedCommand>
 where
     F: FnMut(
         &Path,
@@ -410,7 +410,7 @@ where
     ) -> Result<CommandStatus>,
 {
     let command_task = ProofCommandTask::focused_test(task, side, timeout_sec, execution_phase);
-    let result = run_proof_command_receipt(
+    let result = run_selection_checked_command(
         ProofCommandInvocation {
             command_root,
             out,
@@ -473,11 +473,11 @@ where
     reconcile_proof_command_result(result, task_ledger, &command_task)
 }
 
-fn reconcile_proof_command_result(
-    result: Result<ProofCommandReceipt>,
+fn reconcile_proof_command_result<T>(
+    result: Result<T>,
     task_ledger: Option<&ProofTaskLedger>,
     command_task: &ProofCommandTask,
-) -> Result<ProofCommandReceipt> {
+) -> Result<T> {
     let Err(error) = result else {
         return result;
     };
@@ -538,7 +538,7 @@ pub(crate) fn skipped_proof_command_receipt(
     skipped_proof_command_receipt_for_id(out, &task.id, side, spec, status, reason)
 }
 
-fn skipped_proof_command_receipt_for_id(
+pub(super) fn skipped_proof_command_receipt_for_id(
     out: &Path,
     receipt_id: &str,
     side: &str,
@@ -690,7 +690,11 @@ pub(crate) fn focused_red_green_receipt(
     }
 }
 
-fn proof_command_paths(out: &Path, receipt_id: &str, side: &str) -> Result<ProofCommandPaths> {
+pub(super) fn proof_command_paths(
+    out: &Path,
+    receipt_id: &str,
+    side: &str,
+) -> Result<ProofCommandPaths> {
     let receipt_component = sanitize_artifact_name(receipt_id);
     let side_component = sanitize_artifact_name(side);
     let rel_dir = format!("proof/{receipt_component}/{side_component}");

@@ -393,7 +393,7 @@ where
             ));
         }
     };
-    let nightly_available = preflight_receipt.status == "passed";
+    let nightly_available = preflight_receipt.command.status == "passed";
 
     let command_task = ProofCommandTask::worker(&request, timeout_sec);
     let kind_str = request.kind.key().to_owned();
@@ -460,14 +460,14 @@ where
         }
     };
 
-    let result = if lease.status == "granted" {
-        classify_worker_proof_result(&request.kind, &command_receipt)
+    let result = if lease.status == "granted" && !command_receipt.unresolved {
+        classify_worker_proof_result(&request.kind, &command_receipt.command)
     } else {
         "skipped_unresolved".to_owned()
     };
     let reason = format!(
         "{}: {}; nightly preflight {}",
-        kind_str, result, preflight_receipt.status
+        kind_str, result, preflight_receipt.command.status
     );
     let receipt = ProofReceipt {
         revision: Some(revision.clone()),
@@ -479,7 +479,7 @@ where
         test_patch_mode: "head-only".to_owned(),
         requested_by: request.requested_by.clone(),
         request_ids: request.claim_ids.clone(),
-        commands: vec![preflight_receipt, command_receipt],
+        commands: vec![preflight_receipt.command, command_receipt.command],
         result,
         reason,
     };
@@ -531,7 +531,7 @@ fn run_worker_command_receipt<F>(
     task_ledger: &ProofTaskLedger,
     task: &ProofCommandTask,
     runner: &mut F,
-) -> Result<ProofCommandReceipt>
+) -> Result<SelectionCheckedCommand>
 where
     F: FnMut(
         &Path,
@@ -543,7 +543,7 @@ where
         &mut dyn FnMut(CommandProcessObservation),
     ) -> Result<CommandStatus>,
 {
-    run_proof_command_receipt(
+    run_selection_checked_command(
         ProofCommandInvocation {
             command_root: root,
             out,
@@ -1167,6 +1167,106 @@ mod worker_proof_tests {
             &proof_command_task_id("proof-request-unresolved", "head")?,
         )?;
         ensure!(task["state"] == serde_json::json!({"TerminallyDeclined": "Refused"}));
+        Ok(())
+    }
+
+    #[test]
+    fn cargo_selection_worker_publication_reconciles_refusal_and_execution() -> Result<()> {
+        for (case, target, expected_calls, success) in [
+            (
+                "target-absent",
+                "cargo test --locked -p fixture --test absent",
+                1,
+                true,
+            ),
+            (
+                "package-unknown",
+                "cargo test --locked -p absent --test probe",
+                1,
+                true,
+            ),
+            (
+                "target-passed",
+                "cargo test --locked -p fixture --test probe",
+                2,
+                true,
+            ),
+            (
+                "target-failed",
+                "cargo test --locked -p fixture --test probe",
+                2,
+                false,
+            ),
+        ] {
+            let temp = tempfile::tempdir()?;
+            let (root, base, _) = worker_repo(&temp)?;
+            crate::proof::cargo_selection::tests::declared_mock_package(
+                &root,
+                "fixture",
+                Some("probe"),
+            )?;
+            crate::tests::run_test_command(&root, "git", &["add", "."])?;
+            crate::tests::run_test_command(
+                &root,
+                "git",
+                &["commit", "-m", "native Cargo declarations"],
+            )?;
+            let head = git_text(&root, &["rev-parse", "HEAD"])?.trim().to_owned();
+            let out = temp.path().join("out");
+            let mut calls = 0;
+            run_worker_request_with_runner(
+                &args(&root, &out),
+                request(case, &base, &head, ProofKind::FocusedTest, target),
+                &mut |_root, _argv, _env, _timeout, stdout, stderr, observer| {
+                    calls += 1;
+                    observer(CommandProcessObservation::Spawned);
+                    fs::write(stdout, b"controlled lifecycle execution\n")?;
+                    fs::write(stderr, b"")?;
+                    let mut status = successful_status();
+                    if calls == 2 && !success {
+                        status.success = false;
+                        status.exit_code = Some(101);
+                    }
+                    Ok(status)
+                },
+            )?;
+            ensure!(calls == expected_calls, "{case}: unexpected proof spawn");
+            let output = std::process::Command::new("python3")
+                .arg(
+                    Path::new(env!("CARGO_MANIFEST_DIR"))
+                        .join("scripts/reconcile-task-projections.py"),
+                )
+                .arg(&out)
+                .args(["--kind", "worker"])
+                .output()?;
+            ensure!(
+                output.status.success(),
+                "{case}: actual worker reconciliation failed: {} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let lease: ResourceLease =
+                serde_json::from_slice(&fs::read(out.join("resource_lease.json"))?)?;
+            if expected_calls == 1 {
+                ensure!(
+                    lease.status == "granted"
+                        && lease.cpu > 0
+                        && lease.memory_mb > 0
+                        && lease.disk_mb > 0
+                        && lease.scratch
+                        && !lease.network
+                );
+                let task = snapshot_task(&out, &proof_command_task_id(case, "head")?)?;
+                let disposition = if case == "target-absent" {
+                    "Unsupported"
+                } else {
+                    "Refused"
+                };
+                ensure!(task["state"] == serde_json::json!({"TerminallyDeclined":disposition}));
+            } else {
+                ensure!(lease.status == "granted");
+            }
+        }
         Ok(())
     }
 
@@ -10160,6 +10260,9 @@ index 1111111..2222222 100644
         let out = temp.path().join("out");
         let base_root = temp.path().join("base-plus-tests");
         fs::create_dir_all(&base_root)?;
+        for root in [temp.path(), base_root.as_path()] {
+            super::proof::cargo_selection::tests::declared_mock_package(root, "ub-review", None)?;
+        }
         let diff = test_diff();
         let command =
             "cargo test --locked -p ub-review cargo_focused_red_green -- --exact".to_owned();
@@ -10223,7 +10326,7 @@ index 1111111..2222222 100644
                 commands.push(super::test_parse::command_display_with_env(env, argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
                 assert!(env.is_empty());
-                assert_eq!(timeout, 300);
+                assert!(timeout > 0 && timeout <= 300);
                 fs::write(
                     stdout,
                     if is_base {

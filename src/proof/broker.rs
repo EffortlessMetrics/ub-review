@@ -2514,7 +2514,14 @@ mod tests {
         let base_root = temp.path().join("base-plus-tests");
         fs::create_dir_all(&base_root)?;
         let diff = test_diff();
-        let test_command = "cargo test --locked --test config_tests".to_owned();
+        for root in [temp.path(), base_root.as_path()] {
+            crate::proof::cargo_selection::tests::declared_mock_package(
+                root,
+                "fixture",
+                Some("config_tests"),
+            )?;
+        }
+        let test_command = "cargo test --locked -p fixture --test config_tests".to_owned();
         let proof_requests = vec![
             ProofRequest {
                 schema: PROOF_REQUEST_SCHEMA.to_owned(),
@@ -2595,7 +2602,7 @@ mod tests {
             |_root, argv, env, timeout, stdout, stderr, _observe_process| {
                 test_commands.push(command_display_with_env(env, argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
-                ensure!(timeout == 60);
+                ensure!(timeout > 0 && timeout <= 60);
                 fs::write(
                     stdout,
                     if is_base {
