@@ -24,6 +24,10 @@ enum Obligation {
 }
 
 fn run_model_off_packet(root: &Path, obligation: Obligation) -> Result<PathBuf> {
+    run_model_packet(root, obligation, "off")
+}
+
+fn run_model_packet(root: &Path, obligation: Obligation, model_mode: &str) -> Result<PathBuf> {
     let repo = root.join("repo");
     fs::create_dir_all(&repo)?;
     common::init_minimal_repo(&repo)?;
@@ -150,7 +154,7 @@ max_load_1m = 1000000.0
             "--mode",
             "intelligent-ci",
             "--model-mode",
-            "off",
+            model_mode,
             "--lanes",
             "configured-first,configured-second",
             "--posting",
@@ -166,21 +170,23 @@ max_load_1m = 1000000.0
         .output()?;
     ensure!(
         output.status.success(),
-        "model-off CLI failed: {}\n{}",
+        "model CLI failed: {}\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-    ensure!(
-        !marker.exists(),
-        "model-mode off invoked provider transport"
-    );
-    let metrics = read_json(&out.join("review/metrics.json"))?;
-    for pointer in [
-        "/models/provider_preflight_calls_attempted",
-        "/models/model_lane_calls_attempted",
-        "/follow_up_results/calls_attempted",
-    ] {
-        assert_eq!(metrics.pointer(pointer), Some(&json!(0)), "{pointer}");
+    if model_mode == "off" {
+        ensure!(
+            !marker.exists(),
+            "model-mode off invoked provider transport"
+        );
+        let metrics = read_json(&out.join("review/metrics.json"))?;
+        for pointer in [
+            "/models/provider_preflight_calls_attempted",
+            "/models/model_lane_calls_attempted",
+            "/follow_up_results/calls_attempted",
+        ] {
+            assert_eq!(metrics.pointer(pointer), Some(&json!(0)), "{pointer}");
+        }
     }
     Ok(out)
 }
@@ -225,6 +231,25 @@ fn assert_disabled_model_receipts(out: &Path) -> Result<()> {
             .starts_with("model-coverage:")
     }));
     assert!(!out.join("review/github-review.json").exists());
+    let summary = fs::read_to_string(out.join("running-summary.md"))?;
+    let missing = summary
+        .split("## Missing or failed model evidence\n")
+        .nth(1)
+        .context("missing model-evidence summary section")?
+        .split("\n## ")
+        .next()
+        .context("model-evidence summary content")?;
+    ensure!(
+        missing.contains("No planned model evidence is currently missing or failed.")
+            && !missing.contains("model-mode off"),
+        "disabled model diagnostics must not become missing evidence: {missing}"
+    );
+    for id in ["configured-first", "configured-second"] {
+        ensure!(
+            summary.contains(&format!("| `{id}` |")) && summary.contains("model-mode off"),
+            "configured skipped diagnostics must remain visible: {id}"
+        );
+    }
     let verifier =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/verify-bun-review-artifacts.py");
     common::run(
@@ -447,6 +472,53 @@ fn model_off_keeps_malformed_required_check_policy_blocking() -> Result<()> {
     ensure!(
         enforced.contains("gate.required_check"),
         "policy enforcement lost: {enforced}"
+    );
+    Ok(())
+}
+
+#[test]
+fn model_auto_keeps_transport_failure_missing_and_unproven() -> Result<()> {
+    let _guard = common::cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let out = run_model_packet(temp.path(), Obligation::None, "auto")?;
+    ensure!(temp.path().join("provider-called").exists());
+    let metrics = read_json(&out.join("review/metrics.json"))?;
+    assert_eq!(metrics["models"]["provider_preflight_calls_attempted"], 1);
+    assert_eq!(metrics["models"]["model_lane_calls_attempted"], 0);
+    let gate = read_json(&out.join("review/gate_outcome.json"))?;
+    assert_eq!(gate["conclusion"], "pass");
+    assert_eq!(gate["analysis_result"], "not_proven");
+    assert_eq!(gate["publication_result"], "not_proven");
+    assert_eq!(gate["gate_result"], "not_proven");
+    ensure!(
+        gate["model_coverage"]["lanes_total"]
+            .as_u64()
+            .unwrap_or_default()
+            > 0
+    );
+    assert_eq!(gate["model_coverage"]["lanes_usable"], 0);
+    let review = read_json(&out.join("review/review.json"))?;
+    let issues = review["missing_or_failed_model_evidence"]
+        .as_array()
+        .context("model evidence issues")?;
+    ensure!(
+        issues
+            .iter()
+            .any(|issue| issue["status"] == "preflight_failed")
+    );
+    let summary = fs::read_to_string(out.join("running-summary.md"))?;
+    let missing = summary
+        .split("## Missing or failed model evidence\n")
+        .nth(1)
+        .context("missing model-evidence summary section")?
+        .split("\n## ")
+        .next()
+        .context("model-evidence summary content")?;
+    ensure!(
+        missing.contains("Provider preflight")
+            && missing.contains("Lane `configured-first`")
+            && missing.contains("preflight_failed"),
+        "enabled transport failure must remain missing evidence: {missing}"
     );
     Ok(())
 }

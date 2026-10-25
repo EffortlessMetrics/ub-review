@@ -89,7 +89,8 @@ pub(crate) fn model_status_evidence_issues(review: &ReviewSummaryReceipt) -> Vec
         }
     }
     for receipt in &review.model_lanes {
-        if is_model_receipt_evidence_issue(receipt) {
+        // Disabled lanes remain status diagnostics, outside owed model evidence.
+        if review.model_mode != "off" && is_model_receipt_evidence_issue(receipt) {
             issues.push(format!(
                 "Lane `{}` via `{}` model `{}` endpoint `{}`: `{}` - {}",
                 receipt.lane,
