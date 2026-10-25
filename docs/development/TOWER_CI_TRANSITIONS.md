@@ -50,22 +50,25 @@ cannot suppress its findings.
    as an executed proof receipt. For CI-to-Tower, verify the imported receipt's
    source/execution identity and digest, preserving failure, not-proven and scope.
    Stale evidence remains historical. More executed evidence may change judgment.
-4. Before local Cargo, measure live CPU, RAM, commit headroom and target-disk
-   space; identify active resource ownership and reserve task-owned resources.
+4. Only in admitted executable mode, before local Cargo, measure live CPU, RAM,
+   commit headroom and target-disk space; identify active resource ownership
+   and reserve task-owned resources.
    Choose concurrency from capacity and the whole invocation, including outer
    builds and descendants. No blanket serial rule. Reuse only verified immutable
    artifacts with compatible source/toolchain/lock/config identity; isolate
    source experiments and mutable targets from sibling work.
-5. Run cheapest relevant real proof and discriminating controls first. Record
-   exact commands, effective executable/tool versions and configuration, actual
-   outcomes and limitations. A control that never compiled or reached the
+5. For executable proof, run cheapest relevant real proof and discriminating
+   controls first. Record exact commands, effective executable/tool versions,
+   configuration, actual outcomes and limitations. A control that never compiled or reached the
    intended consumer proves no rejection. Restore pristine inputs and rerun
    the positive control. Use the native CLAUDE.md baseline and staged precommit
    as applicable; do not substitute a green proxy for required qualification.
-6. Obtain independent review of the exact candidate and reconcile material
-   findings. Bind carried-forward evidence to its original subject and explain
-   applicability. A changed source, policy, execution identity or model answer
-   invalidates the affected proof; it does not erase unrelated historical proof.
+6. Challenge the exact candidate from relevant different angles and reconcile
+   material findings. Prefer the same useful session or a fork under the review
+   skill; a separate judgment does not require a fresh actor. Bind carried-forward
+   evidence to its original subject and explain applicability. A changed source,
+   policy, execution identity or model answer invalidates the affected proof;
+   it does not erase unrelated historical proof.
 7. Before a remote transition, inspect actual workflow triggers, required check
    contexts/App identity, reviews and side effects. Preserve protections and
    holds. At handoff name the next owner, remaining evidence and resume condition.
