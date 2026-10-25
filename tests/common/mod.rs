@@ -634,7 +634,12 @@ pub fn run_capture_with_env(
     for (name, value) in envs {
         command.env(name, value);
     }
-    let output = command.output()?;
+    let output = command.output().with_context(|| {
+        format!(
+            "capture stage: failed to launch executable {program} in {}",
+            cwd.display()
+        )
+    })?;
     let combined = format!(
         "{}\n{}",
         String::from_utf8_lossy(&output.stdout),
@@ -669,7 +674,12 @@ pub fn run_expect_failure_with_env(
     for (name, value) in envs {
         command.env(name, value);
     }
-    let output = command.output()?;
+    let output = command.output().with_context(|| {
+        format!(
+            "expected-failure stage: failed to launch executable {program} in {}",
+            cwd.display()
+        )
+    })?;
     if !output.status.success() {
         return Ok(format!(
             "{}\n{}",
@@ -965,4 +975,75 @@ pub fn has_standalone_approval_line(text: &str) -> bool {
                 | "no actionable"
         )
     })
+}
+
+#[cfg(test)]
+mod launch_context_tests {
+    use super::*;
+
+    #[test]
+    fn launch_errors_identify_stage_and_executable_preserving_io_source() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let missing = temp.path().join("missing-review-tool");
+        let program = path_str(&missing)?;
+        let direct_error = Command::new(&missing)
+            .output()
+            .err()
+            .context("nonexistent executable must fail before running")?;
+        assert_eq!(direct_error.kind(), std::io::ErrorKind::NotFound);
+
+        let errors = [
+            (
+                "capture stage",
+                run_capture_with_env(temp.path(), program, &[], &[]),
+            ),
+            (
+                "expected-failure stage",
+                run_expect_failure_with_env(temp.path(), program, &[], &[]),
+            ),
+        ];
+        for (stage, result) in errors {
+            let error = result
+                .err()
+                .context("launch failure must remain an error")?;
+            let context = error.to_string();
+            assert!(context.contains(stage), "{context}");
+            assert!(context.contains(program), "{context}");
+            assert!(
+                context.contains(&temp.path().display().to_string()),
+                "{context}"
+            );
+            let source = error
+                .root_cause()
+                .downcast_ref::<std::io::Error>()
+                .context("launch context must retain the original I/O error")?;
+            assert_eq!(source.kind(), direct_error.kind());
+            assert_eq!(source.raw_os_error(), direct_error.raw_os_error());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn launch_context_preserves_capture_and_expected_failure_semantics() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let captured = run_capture_with_env(temp.path(), "git", &["--version"], &[])?;
+        assert!(captured.trim().starts_with("git version "));
+        let failed = run_expect_failure_with_env(
+            temp.path(),
+            "git",
+            &["--ub-review-fixture-invalid-option"],
+            &[],
+        )?;
+        assert!(failed.contains("unknown option"));
+        let unexpected_success =
+            run_expect_failure_with_env(temp.path(), "git", &["--version"], &[])
+                .err()
+                .context("successful exit must not satisfy expected failure")?;
+        assert!(
+            unexpected_success
+                .to_string()
+                .contains("unexpectedly succeeded")
+        );
+        Ok(())
+    }
 }
