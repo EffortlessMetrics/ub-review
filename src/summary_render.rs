@@ -87,6 +87,23 @@ pub(crate) fn plan_lane_model_display(plan: &Plan, lane_id: &str) -> Option<Stri
 }
 
 pub(crate) fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Result<String> {
+    render_summary_for_phase(out, plan, diff, true)
+}
+
+pub(crate) fn render_preliminary_summary(
+    out: &Path,
+    plan: &Plan,
+    diff: &DiffContext,
+) -> Result<String> {
+    render_summary_for_phase(out, plan, diff, false)
+}
+
+fn render_summary_for_phase(
+    out: &Path,
+    plan: &Plan,
+    diff: &DiffContext,
+    review_evidence_expected: bool,
+) -> Result<String> {
     let mut text = String::new();
     text.push_str("# UB Review Packet\n\n");
     text.push_str("This is an advisory evidence packet plus review compiler. Posting is a separate grouped Pull Request Review step.\n\n");
@@ -98,7 +115,9 @@ pub(crate) fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Res
         diff.changed_files.len()
     ));
     text.push_str(&format!("- Diff class: `{}`\n", diff.diff_class.key()));
-    render_review_efficiency_section(&mut text, out);
+    if review_evidence_expected {
+        render_review_efficiency_section(&mut text, out);
+    }
     text.push_str("\n## Sensors\n\n");
     text.push_str("| Sensor | Planned | Status | Reason | Receipt |\n");
     text.push_str("|---|---:|---|---|---|\n");
@@ -134,7 +153,9 @@ pub(crate) fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Res
         ));
     }
     render_evidence_sections(&mut text, out, plan);
-    render_model_status_sections(&mut text, out);
+    if review_evidence_expected {
+        render_model_status_sections(&mut text, out);
+    }
     text.push_str("\n## Lane packets\n\n");
     text.push_str("| Lane | Model | Packet |\n");
     text.push_str("|---|---|---|\n");
@@ -181,9 +202,49 @@ pub(crate) fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Res
 }
 
 pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
-    let Some(metrics) = read_review_metrics(out) else {
+    // A written plan has no terminal evidence yet. Once any terminal input
+    // exists, an unavailable sibling must be explicit rather than hidden.
+    if ![
+        "review/gate_outcome.json",
+        "review/metrics.json",
+        "review/calibration.json",
+        "review/terminal_state.json",
+        "review/review.json",
+    ]
+    .iter()
+    .any(|path| out.join(path).try_exists().unwrap_or(true))
+    {
         return;
-    };
+    }
+
+    text.push_str("\n## Review efficiency\n\n");
+    match read_gate_outcome(out) {
+        Ok((gate, admitted)) => {
+            // Admission below restricts the conclusion to the gate-check
+            // vocabulary; calibration is never a substitute for this input.
+            let conclusion = admitted.conclusion.as_deref().unwrap_or("unknown");
+            let blocking_reasons = admitted.reasons.len();
+            text.push_str(&format!(
+                "- Gate: `{conclusion}` with `{blocking_reasons}` blocking reasons (`review/gate_outcome.json`)\n"
+            ));
+            render_planner_required_proofs(text, &gate);
+        }
+        Err(reason) => {
+            text.push_str(&format!(
+                "- Gate: unavailable — `review/gate_outcome.json` {reason}. Recover the original packet or create a new identified run; rerendering cannot recreate gate or proof evidence.\n"
+            ));
+        }
+    }
+    match read_review_metrics(out) {
+        Ok(metrics) => render_available_review_metrics(text, &metrics),
+        Err(reason) => text.push_str(&format!(
+            "- Review metrics: unavailable — `review/metrics.json` {reason}. Available gate evidence is reported independently.\n"
+        )),
+    }
+    render_calibration_summary(text, out);
+}
+
+fn render_available_review_metrics(text: &mut String, metrics: &serde_json::Value) {
     let runtime = metrics
         .get("wall_clock_seconds")
         .and_then(serde_json::Value::as_u64)
@@ -288,7 +349,6 @@ pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
         .and_then(serde_json::Value::as_str)
         .unwrap_or("unknown");
 
-    text.push_str("\n## Review efficiency\n\n");
     text.push_str(&format!("- Runtime: `{runtime}`\n"));
     text.push_str(&format!(
         "- Run streams: coordination `{coordination_wall}`, investigation `{investigation_wall}`, proof `{proof_stream_wall}`, investigation/proof overlap `{overlap}` (`{scheduler_profile}` via `{concurrency_model}`)\n"
@@ -297,21 +357,6 @@ pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
         "- Loop detail: model `{model_wall}`, local proof `{proof_wall}`, compiler `{compiler_wall}`\n"
     ));
     text.push_str(&format!("- Terminal state: `{terminal_state}`\n"));
-    if let Some(gate) = read_gate_outcome(out) {
-        let conclusion = gate
-            .get("conclusion")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("unknown");
-        let blocking_reasons = gate
-            .get("reasons")
-            .and_then(serde_json::Value::as_array)
-            .map(Vec::len)
-            .unwrap_or(0);
-        text.push_str(&format!(
-            "- Gate: `{conclusion}` with `{blocking_reasons}` blocking reasons (`review/gate_outcome.json`)\n"
-        ));
-        render_planner_required_proofs(text, &gate);
-    }
     text.push_str(&format!(
         "- Model lanes: `{usable_lanes}/{total_lanes}` usable (`{ok_lanes}` ok, `{degraded_lanes}` degraded)\n"
     ));
@@ -330,7 +375,9 @@ pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
     text.push_str(&format!(
         "- Review payload: `{payload_status}`; post: `{post_status}`\n"
     ));
+}
 
+fn render_calibration_summary(text: &mut String, out: &Path) {
     // Calibration summary (compact, scannable). Computed from
     // review/calibration.json — NOT from model prose.
     if let Some(cal) = read_calibration_summary(out) {
@@ -356,8 +403,8 @@ pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
             cal.proof_changed_conclusions
         ));
         text.push_str(&format!(
-            "- Final review: `{}` inline, `{}` summary | Gate: `{}`\n",
-            cal.inline_comments, cal.summary_comments, cal.gate
+            "- Final review: `{}` inline, `{}` summary\n",
+            cal.inline_comments, cal.summary_comments
         ));
     }
 }
@@ -375,7 +422,6 @@ struct CalibrationSummary {
     proof_changed_conclusions: usize,
     inline_comments: usize,
     summary_comments: usize,
-    gate: String,
 }
 
 fn read_calibration_summary(out: &Path) -> Option<CalibrationSummary> {
@@ -430,11 +476,6 @@ fn read_calibration_summary(out: &Path) -> Option<CalibrationSummary> {
             .get("summary_comments_posted")
             .and_then(|v| v.as_u64())
             .unwrap_or(0) as usize,
-        gate: cal
-            .get("gate_policy")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_owned(),
     })
 }
 
@@ -460,9 +501,27 @@ pub(crate) fn format_json_status_counts(
     }
 }
 
-pub(crate) fn read_review_metrics(out: &Path) -> Option<serde_json::Value> {
-    let text = fs::read_to_string(out.join("review/metrics.json")).ok()?;
-    serde_json::from_str(&text).ok()
+pub(crate) fn read_review_metrics(
+    out: &Path,
+) -> std::result::Result<serde_json::Value, &'static str> {
+    let bytes = read_summary_bytes(&out.join("review/metrics.json"))?;
+    parse_summary_object(&bytes)
+}
+
+fn read_summary_bytes(path: &Path) -> std::result::Result<Vec<u8>, &'static str> {
+    fs::read(path).map_err(|error| match error.kind() {
+        std::io::ErrorKind::NotFound => "is missing",
+        _ => "cannot be read",
+    })
+}
+
+fn parse_summary_object(bytes: &[u8]) -> std::result::Result<serde_json::Value, &'static str> {
+    let value: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(|_| "contains malformed JSON")?;
+    if !value.is_object() {
+        return Err("does not contain a JSON object");
+    }
+    Ok(value)
 }
 
 /// Sanitize broker-supplied plain text for the step summary (#4271 round
@@ -561,9 +620,25 @@ fn render_planner_required_proofs(text: &mut String, gate: &serde_json::Value) {
     }
 }
 
-pub(crate) fn read_gate_outcome(out: &Path) -> Option<serde_json::Value> {
-    let text = fs::read_to_string(out.join("review/gate_outcome.json")).ok()?;
-    serde_json::from_str(&text).ok()
+pub(crate) fn read_gate_outcome(
+    out: &Path,
+) -> std::result::Result<(serde_json::Value, crate::gate::GateCheckOutcome), &'static str> {
+    let bytes = read_summary_bytes(&out.join("review/gate_outcome.json"))?;
+    let value = parse_summary_object(&bytes)?;
+    // Deserialize the original bytes like gate-check: a Value round-trip
+    // would silently collapse duplicate schema, conclusion or reason fields.
+    let admitted: crate::gate::GateCheckOutcome =
+        serde_json::from_slice(&bytes).map_err(|_| "has an invalid gate shape")?;
+    if admitted.schema.as_deref() != Some(crate::artifacts::GATE_OUTCOME_SCHEMA) {
+        return Err("has a missing or unsupported gate schema");
+    }
+    if !matches!(
+        admitted.conclusion.as_deref(),
+        Some("pass" | "fail" | "inconclusive")
+    ) {
+        return Err("has a missing or unsupported gate conclusion");
+    }
+    Ok((value, admitted))
 }
 
 pub(crate) fn format_seconds(seconds: u64) -> String {

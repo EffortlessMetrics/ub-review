@@ -4646,7 +4646,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         evidence_loop,
         "completed",
     )?;
-    let preliminary_summary = render_summary(&args.review.out, &plan, &diff)?;
+    let preliminary_summary = render_preliminary_summary(&args.review.out, &plan, &diff)?;
     fs::write(
         args.review.out.join("running-summary.md"),
         &preliminary_summary,
@@ -4695,10 +4695,33 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
 }
 
 fn cmd_summary(args: SummaryArgs) -> Result<()> {
+    #[derive(Deserialize)]
+    struct SummaryPlanPhase {
+        schema: String,
+        run_pass: String,
+    }
+
     let plan: Plan = serde_json::from_slice(&fs::read(args.run_dir.join("plan.json"))?)?;
     let diff: DiffContext =
         serde_json::from_slice(&fs::read(args.run_dir.join("input/diff-context.json"))?)?;
-    let summary = render_summary(&args.run_dir, &plan, &diff)?;
+    let phase_path = args.run_dir.join("resolved-plan.json");
+    let recovery = "recover the original packet or create a new identified run";
+    let phase_bytes = fs::read(&phase_path)
+        .with_context(|| format!("cannot read {}; {recovery}", phase_path.display()))?;
+    let phase: SummaryPlanPhase = serde_json::from_slice(&phase_bytes)
+        .with_context(|| format!("cannot parse {}; {recovery}", phase_path.display()))?;
+    if phase.schema != RESOLVED_PLAN_SCHEMA {
+        bail!("unsupported schema in {}; {recovery}", phase_path.display());
+    }
+    let summary = match phase.run_pass.as_str() {
+        "plan-default" => render_preliminary_summary(&args.run_dir, &plan, &diff)?,
+        "opened" | "reopened" | "ready_for_review" | "synchronize" | "pull_request_other"
+        | "manual" => render_summary(&args.run_dir, &plan, &diff)?,
+        _ => bail!(
+            "unsupported or unresolved run_pass in {}; {recovery}",
+            phase_path.display()
+        ),
+    };
     fs::write(args.run_dir.join("running-summary.md"), summary)?;
     println!("wrote {}/running-summary.md", args.run_dir.display());
     Ok(())

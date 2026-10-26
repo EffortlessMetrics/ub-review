@@ -35030,3 +35030,182 @@ kind = "exposure_gap"
 finding_id = "probe:src_shared_context_render.rs:field_construction:bbc2a6cb"
 owner = "ub-review/core"
 reason = "PR #1552; pinned RIPR 0.10.0; own hosted run 40291710437/artifact 12635724834 (archive verification supplied by coordinator). assert_trusted_prefix_sections with_unsafe_review parameter is a declaration in a cfg(test) assertion helper, not production field construction. The helper checks complete section-name sequences and byte-range slices for both optional-section states; no assertion of the helper parameter literal is warranted. Native limitation documented by ripr-swarm#1054/#1055. This disposition grants no runtime or hosted gate proof credit. Re-verify after semantic edits or tool upgrades; dating remains policy/allow.toml#non-rust-ripr-suppressions."
+
+# Reviewed 2026-10-26 for #1554: exact RIPR 0.10.0 subjects.
+# Raw before disposition: 26 unsuppressed, 0 suppressed, 106 unknown.
+# Six compiled behavioral defect controls were rejected; declaration, removed
+# source and Cargo-test evidence roles carry no production mutation claim.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:field_construction:be7fd40c"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. The inspected subject is the out: &Path, parameter declaration in render_preliminary_summary, not executable record construction. RIPR 0.10.0 emits field_construction for this signature. Parser-owned parameter repair is tracked at https://github.com/EffortlessMetrics/ripr-swarm/pull/3755 under https://github.com/EffortlessMetrics/ripr/issues/1453; development repair does not imply installed promotion. The generated preliminary/final summary CLI controls exercise the relevant phase behavior. No runtime mutation claim is attached to a declaration. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:field_construction:732f0b2e"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. The inspected subject is the out: &Path, parameter declaration in render_summary_for_phase, not executable record construction. RIPR 0.10.0 emits field_construction for this signature. Parser-owned parameter repair is tracked at https://github.com/EffortlessMetrics/ripr-swarm/pull/3755 under https://github.com/EffortlessMetrics/ripr/issues/1453; development repair does not imply installed promotion. The generated preliminary/final summary CLI controls exercise the relevant phase behavior. No runtime mutation claim is attached to a declaration. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:field_construction:f4b7b831"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. The inspected subject is the review_evidence_expected: bool, parameter declaration in render_summary_for_phase, not executable record construction. RIPR 0.10.0 emits field_construction for this signature. Parser-owned parameter repair is tracked at https://github.com/EffortlessMetrics/ripr-swarm/pull/3755 under https://github.com/EffortlessMetrics/ripr/issues/1453; development repair does not imply installed promotion. The generated preliminary/final summary CLI controls exercise the relevant phase behavior. No runtime mutation claim is attached to a declaration. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:match_arm:d4fbee3d"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. Real gate dispatch behavior is observed by generated_pass_policy_failure_and_inconclusive_keep_enforcement_distinct and calibration_cannot_turn_invalid_current_gate_into_pass. Compiled defect controls gate-ok-output-removed and gate-error-output-removed are rejected by those actual consumers. All corresponding RIPR 0.10.0 related-test lists omit the new summary_evidence subprocess tests and report observation_unverified against unrelated token matches. Static CLI attribution/match identity remains with https://github.com/EffortlessMetrics/ripr-swarm/issues/1528, https://github.com/EffortlessMetrics/ripr/issues/1714 and https://github.com/EffortlessMetrics/ripr-swarm/issues/7415. Runtime proof and this static disposition remain distinct. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:match_arm:d3c95eb7"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. Real admitted gate arm behavior is observed by generated_pass_policy_failure_and_inconclusive_keep_enforcement_distinct. Compiled defect controls gate-ok-output-removed are rejected by those actual consumers. All corresponding RIPR 0.10.0 related-test lists omit the new summary_evidence subprocess tests and report observation_unverified against unrelated token matches. Static CLI attribution/match identity remains with https://github.com/EffortlessMetrics/ripr-swarm/issues/1528, https://github.com/EffortlessMetrics/ripr/issues/1714 and https://github.com/EffortlessMetrics/ripr-swarm/issues/7415. Runtime proof and this static disposition remain distinct. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:match_arm:3e650b24"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. Real unavailable gate arm behavior is observed by calibration_cannot_turn_invalid_current_gate_into_pass. Compiled defect controls gate-error-output-removed are rejected by those actual consumers. All corresponding RIPR 0.10.0 related-test lists omit the new summary_evidence subprocess tests and report observation_unverified against unrelated token matches. Static CLI attribution/match identity remains with https://github.com/EffortlessMetrics/ripr-swarm/issues/1528, https://github.com/EffortlessMetrics/ripr/issues/1714 and https://github.com/EffortlessMetrics/ripr-swarm/issues/7415. Runtime proof and this static disposition remain distinct. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:match_arm:f1c479f2"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. Real metrics dispatch behavior is observed by model_off_empty_smoke_writes_skip_receipt_instead_of_review_payload and failed_gate_survives_missing_or_truncated_metrics_and_restoration. Compiled defect controls metrics-ok-output-removed and metrics-error-output-removed are rejected by those actual consumers. All corresponding RIPR 0.10.0 related-test lists omit the new summary_evidence subprocess tests and report observation_unverified against unrelated token matches. Static CLI attribution/match identity remains with https://github.com/EffortlessMetrics/ripr-swarm/issues/1528, https://github.com/EffortlessMetrics/ripr/issues/1714 and https://github.com/EffortlessMetrics/ripr-swarm/issues/7415. Runtime proof and this static disposition remain distinct. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:match_arm:ffb8c6a7"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. Real valid metrics arm behavior is observed by model_off_empty_smoke_writes_skip_receipt_instead_of_review_payload. Compiled defect controls metrics-ok-output-removed are rejected by those actual consumers. All corresponding RIPR 0.10.0 related-test lists omit the new summary_evidence subprocess tests and report observation_unverified against unrelated token matches. Static CLI attribution/match identity remains with https://github.com/EffortlessMetrics/ripr-swarm/issues/1528, https://github.com/EffortlessMetrics/ripr/issues/1714 and https://github.com/EffortlessMetrics/ripr-swarm/issues/7415. Runtime proof and this static disposition remain distinct. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:match_arm:06a33719"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. Real unavailable metrics arm behavior is observed by failed_gate_survives_missing_or_truncated_metrics_and_restoration. Compiled defect controls metrics-error-output-removed are rejected by those actual consumers. All corresponding RIPR 0.10.0 related-test lists omit the new summary_evidence subprocess tests and report observation_unverified against unrelated token matches. Static CLI attribution/match identity remains with https://github.com/EffortlessMetrics/ripr-swarm/issues/1528, https://github.com/EffortlessMetrics/ripr/issues/1714 and https://github.com/EffortlessMetrics/ripr-swarm/issues/7415. Runtime proof and this static disposition remain distinct. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:call_deletion:44734204"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. This is the only deleted .unwrap_or(0) in the admitted diff: base src/summary_render.rs:305-309 counted untyped gate reasons and defaulted invalid shapes to zero. It was replaced by admitted.reasons.len(); the reported current line360 is not that expression. Generated pass/fail/inconclusive controls pin exact reason counts, and mistyped/duplicate reasons cannot supply an unqualified pass. Removed-side coordinate/subject identity remains with https://github.com/EffortlessMetrics/ripr/issues/1453. This disposition does not select an arbitrary remaining metrics fallback. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:field_construction:6583d253"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. The inspected subject gate: String, belongs to the removed CalibrationSummary.gate declaration or its removed loader, not the current reported coordinate. calibration_cannot_turn_invalid_current_gate_into_pass keeps a genuine calibration pass while corrupting the current gate, rejects copied pass and restores original bytes; the base-to-fixed RED/GREEN control exposes the original copied-pass defect. Declaration/source-side mapping remains owned by https://github.com/EffortlessMetrics/ripr/issues/1453 and https://github.com/EffortlessMetrics/ripr-swarm/pull/3758. No current executable field mutation is inferred from a deleted subject. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:call_deletion:2f3185b3"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. The inspected subject .and_then(|v| v.as_str()) belongs to the removed CalibrationSummary.gate declaration or its removed loader, not the current reported coordinate. calibration_cannot_turn_invalid_current_gate_into_pass keeps a genuine calibration pass while corrupting the current gate, rejects copied pass and restores original bytes; the base-to-fixed RED/GREEN control exposes the original copied-pass defect. Declaration/source-side mapping remains owned by https://github.com/EffortlessMetrics/ripr/issues/1453 and https://github.com/EffortlessMetrics/ripr-swarm/pull/3758. No current executable field mutation is inferred from a deleted subject. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:call_deletion:42483945"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. The inspected subject .to_owned(), belongs to the removed CalibrationSummary.gate declaration or its removed loader, not the current reported coordinate. calibration_cannot_turn_invalid_current_gate_into_pass keeps a genuine calibration pass while corrupting the current gate, rejects copied pass and restores original bytes; the base-to-fixed RED/GREEN control exposes the original copied-pass defect. Declaration/source-side mapping remains owned by https://github.com/EffortlessMetrics/ripr/issues/1453 and https://github.com/EffortlessMetrics/ripr-swarm/pull/3758. No current executable field mutation is inferred from a deleted subject. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:field_construction:b17f8660"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. The inspected subject is the out: &Path, parameter declaration in read_review_metrics, not executable record construction. RIPR 0.10.0 emits field_construction for this signature. Parser-owned parameter repair is tracked at https://github.com/EffortlessMetrics/ripr-swarm/pull/3755 under https://github.com/EffortlessMetrics/ripr/issues/1453; development repair does not imply installed promotion. The generated preliminary/final summary CLI controls exercise the relevant phase behavior. No runtime mutation claim is attached to a declaration. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:match_arm:c4f4627d"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. The real I/O contract distinguishes a missing artifact from an existing unreadable path. Both gate and metrics CLI matrices now exercise deletion and a directory at the artifact path, assert exact is missing/cannot be read diagnostics, preserve enforcement and restore original bytes. Compiled controls missing-reported-as-unreadable and unreadable-reported-as-missing are rejected by those assertions. Closing map_err delimiter probes also lack the full semantic expression boundary (https://github.com/EffortlessMetrics/ripr/issues/1715); subprocess evidence attribution remains https://github.com/EffortlessMetrics/ripr-swarm/issues/1528. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:match_arm:1889b197"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. The real I/O contract distinguishes a missing artifact from an existing unreadable path. Both gate and metrics CLI matrices now exercise deletion and a directory at the artifact path, assert exact is missing/cannot be read diagnostics, preserve enforcement and restore original bytes. Compiled controls missing-reported-as-unreadable and unreadable-reported-as-missing are rejected by those assertions. Closing map_err delimiter probes also lack the full semantic expression boundary (https://github.com/EffortlessMetrics/ripr/issues/1715); subprocess evidence attribution remains https://github.com/EffortlessMetrics/ripr-swarm/issues/1528. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:call_deletion:b55d9d92"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. The real I/O contract distinguishes a missing artifact from an existing unreadable path. Both gate and metrics CLI matrices now exercise deletion and a directory at the artifact path, assert exact is missing/cannot be read diagnostics, preserve enforcement and restore original bytes. Compiled controls missing-reported-as-unreadable and unreadable-reported-as-missing are rejected by those assertions. Closing map_err delimiter probes also lack the full semantic expression boundary (https://github.com/EffortlessMetrics/ripr/issues/1715); subprocess evidence attribution remains https://github.com/EffortlessMetrics/ripr-swarm/issues/1528. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:error_path:f318f981"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. The real I/O contract distinguishes a missing artifact from an existing unreadable path. Both gate and metrics CLI matrices now exercise deletion and a directory at the artifact path, assert exact is missing/cannot be read diagnostics, preserve enforcement and restore original bytes. Compiled controls missing-reported-as-unreadable and unreadable-reported-as-missing are rejected by those assertions. Closing map_err delimiter probes also lack the full semantic expression boundary (https://github.com/EffortlessMetrics/ripr/issues/1715); subprocess evidence attribution remains https://github.com/EffortlessMetrics/ripr-swarm/issues/1528. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:field_construction:d1375cdf"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. The inspected subject is the out: &Path, parameter declaration in read_gate_outcome, not executable record construction. RIPR 0.10.0 emits field_construction for this signature. Parser-owned parameter repair is tracked at https://github.com/EffortlessMetrics/ripr-swarm/pull/3755 under https://github.com/EffortlessMetrics/ripr/issues/1453; development repair does not imply installed promotion. The generated preliminary/final summary CLI controls exercise the relevant phase behavior. No runtime mutation claim is attached to a declaration. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli_summary_evidence.rs:call_deletion:16423a13"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. This subject is Cargo integration-test BIN executable macro, inside a Cargo integration-test target rather than shipped review behavior. The generated-packet tests exercise the fixture through real CLI calls with model/posting disabled. Do not assign a production policy or output-value invariant to this evidence helper; the successful gate-check diagnostic string is not a product observation. Source-role and unrelated-oracle attribution remain owned by https://github.com/EffortlessMetrics/ripr-swarm/issues/3213, https://github.com/EffortlessMetrics/ripr/issues/1453 and https://github.com/EffortlessMetrics/ripr-swarm/issues/7415. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli_summary_evidence.rs:field_construction:77e275fc"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. This subject is Cargo integration-test BIN executable constant, inside a Cargo integration-test target rather than shipped review behavior. The generated-packet tests exercise the fixture through real CLI calls with model/posting disabled. Do not assign a production policy or output-value invariant to this evidence helper; the successful gate-check diagnostic string is not a product observation. Source-role and unrelated-oracle attribution remain owned by https://github.com/EffortlessMetrics/ripr-swarm/issues/3213, https://github.com/EffortlessMetrics/ripr/issues/1453 and https://github.com/EffortlessMetrics/ripr-swarm/issues/7415. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli_summary_evidence.rs:field_construction:baf4bb38"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. This subject is integration-test CONFIG fixture constant, inside a Cargo integration-test target rather than shipped review behavior. The generated-packet tests exercise the fixture through real CLI calls with model/posting disabled. Do not assign a production policy or output-value invariant to this evidence helper; the successful gate-check diagnostic string is not a product observation. Source-role and unrelated-oracle attribution remain owned by https://github.com/EffortlessMetrics/ripr-swarm/issues/3213, https://github.com/EffortlessMetrics/ripr/issues/1453 and https://github.com/EffortlessMetrics/ripr-swarm/issues/7415. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli_summary_evidence.rs:field_construction:d62df23c"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. This subject is integration-test Fixture.repo field declaration, inside a Cargo integration-test target rather than shipped review behavior. The generated-packet tests exercise the fixture through real CLI calls with model/posting disabled. Do not assign a production policy or output-value invariant to this evidence helper; the successful gate-check diagnostic string is not a product observation. Source-role and unrelated-oracle attribution remain owned by https://github.com/EffortlessMetrics/ripr-swarm/issues/3213, https://github.com/EffortlessMetrics/ripr/issues/1453 and https://github.com/EffortlessMetrics/ripr-swarm/issues/7415. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli_summary_evidence.rs:error_path:0ee60851"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. This subject is private Fixture::new Git identity setup for a disposable test repository, inside a Cargo integration-test target rather than shipped review behavior. The generated-packet tests exercise the fixture through real CLI calls with model/posting disabled. Do not assign a production policy or output-value invariant to this evidence helper; the successful gate-check diagnostic string is not a product observation. Source-role and unrelated-oracle attribution remain owned by https://github.com/EffortlessMetrics/ripr-swarm/issues/3213, https://github.com/EffortlessMetrics/ripr/issues/1453 and https://github.com/EffortlessMetrics/ripr-swarm/issues/7415. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli_summary_evidence.rs:return_value:b5fc6790"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. This subject is Fixture::packet return of the generated test packet path, inside a Cargo integration-test target rather than shipped review behavior. The generated-packet tests exercise the fixture through real CLI calls with model/posting disabled. Do not assign a production policy or output-value invariant to this evidence helper; the successful gate-check diagnostic string is not a product observation. Source-role and unrelated-oracle attribution remain owned by https://github.com/EffortlessMetrics/ripr-swarm/issues/3213, https://github.com/EffortlessMetrics/ripr/issues/1453 and https://github.com/EffortlessMetrics/ripr-swarm/issues/7415. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli_summary_evidence.rs:return_value:23e51578"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554. This subject is successful Fixture::gate_check return of an empty diagnostic string, deliberately ignored by successful callers, inside a Cargo integration-test target rather than shipped review behavior. The generated-packet tests exercise the fixture through real CLI calls with model/posting disabled. Do not assign a production policy or output-value invariant to this evidence helper; the successful gate-check diagnostic string is not a product observation. Source-role and unrelated-oracle attribution remain owned by https://github.com/EffortlessMetrics/ripr-swarm/issues/3213, https://github.com/EffortlessMetrics/ripr/issues/1453 and https://github.com/EffortlessMetrics/ripr-swarm/issues/7415. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:match_arm:769b7ac6"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554 / PR #1559. This is the real cmd_summary dispatch over admitted resolved-plan.run_pass. Actual CLI controls cover same-head and different-head run-to-plan reuse, subsequent actual-run recovery, and twelve unavailable/ambiguous phase inputs. The compiled plan-phase-promoted-to-terminal and unknown-phase-promoted-to-terminal defects are rejected by those consumers. The emitted RIPR 0.10.0 relation-evidence preview lists unrelated same-file/token tests and omits the summary_evidence subprocess consumers (fixture_opaque); it does not enumerate every internal relation. Static CLI attribution and match identity remain with https://github.com/EffortlessMetrics/ripr-swarm/issues/1528, https://github.com/EffortlessMetrics/ripr/issues/1714 and https://github.com/EffortlessMetrics/ripr-swarm/issues/7415. This exact static disposition does not claim whole-packet revision coherence or alter raw classification. Re-verify after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:match_arm:1b65bc28"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554 / PR #1559. This is the real plan-default arm selecting preliminary rendering. same_revision_plan_reuse_keeps_existing_terminal_receipts_out_of_plan_summary and plan_for_new_revision_does_not_relabel_an_old_run_gate_as_current exercise actual run/plan/summary commands while retaining old gate bytes. The compiled plan-phase-promoted-to-terminal defect is rejected at the stale terminal-claim assertion; an actual subsequent run restores terminal rendering. RIPR 0.10.0's emitted relation-evidence preview omits these subprocess consumers and uses unrelated same-file/token matches (fixture_opaque), owned by https://github.com/EffortlessMetrics/ripr-swarm/issues/1528 and https://github.com/EffortlessMetrics/ripr-swarm/issues/7415. No receipt is deleted to hide stale evidence. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:match_arm:33811138"
+owner = "ub-review/core"
+reason = "Reviewed 2026-10-26 for ub-review#1554 / PR #1559. This is the real refusal arm for unknown or unresolved phase values. unavailable_or_ambiguous_phase_cannot_overwrite_a_retained_summary drives the actual CLI and requires failure, named recovery, byte-preserved summary/gate and restoration. The compiled unknown-phase-promoted-to-terminal defect is rejected because the CLI incorrectly succeeds for an unsupported phase. The emitted RIPR 0.10.0 relation-evidence preview omits this subprocess consumer and reports fixture_opaque/proc_macro_opaque with unrelated same-file/token evidence. Static attribution remains with https://github.com/EffortlessMetrics/ripr-swarm/issues/1528, https://github.com/EffortlessMetrics/ripr-swarm/issues/7415 and https://github.com/EffortlessMetrics/ripr/issues/1453. Existing raw unknown classifications remain visible. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
