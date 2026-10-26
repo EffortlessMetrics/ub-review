@@ -3410,6 +3410,9 @@ mod tests {
                     fs::write(
                         out.join("review/gate_outcome.json"),
                         serde_json::to_vec(&serde_json::json!({
+                            "schema": "ub-review.gate_outcome.v1",
+                            "conclusion": "inconclusive",
+                            "reasons": [],
                             "planner_required_proofs": accounting,
                         }))?,
                     )?;

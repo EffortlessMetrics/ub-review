@@ -7225,6 +7225,9 @@ fn fake_setup_ci_listener_survives_handler_error() -> Result<()> {
 #[path = "cli/setup_ci.rs"]
 mod setup_ci;
 
+#[path = "cli/summary_evidence.rs"]
+mod summary_evidence;
+
 mod common;
 use common::*;
 
