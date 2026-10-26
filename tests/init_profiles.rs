@@ -112,7 +112,10 @@ fn init_builtin_profiles_and_config_owned_custom_remain_usable() -> Result<()> {
     let built_in = fs::read_to_string(temp.path().join("gh-runner.toml"))?;
     let mut custom: toml::Value = toml::from_str(&built_in)?;
     let table = custom.as_table_mut().context("starter is not a table")?;
-    table.insert("profile".to_owned(), toml::Value::String("custom".to_owned()));
+    table.insert(
+        "profile".to_owned(),
+        toml::Value::String("custom".to_owned()),
+    );
     let profiles = table
         .get_mut("profiles")
         .and_then(toml::Value::as_table_mut)
