@@ -34692,3 +34692,275 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_intent.rs:return_value:b72a971f"
 owner = "ub-review/core"
 reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Same rejection statement classified additionally as return_value; native request/task non-creation is its behavioral oracle. Same native/extracted evidence as row38. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+# Exact #1551 cfg(test) dispositions; source and retained evidence identities below.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:cb958b72"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:cb958b72, src/main.rs:12932, expression 'ModelRunContext {'. This is the injected-runner context constructed by the cfg(test) helper, not a new production error/return path. Its one-slot provider caps, two-slot global limit and four-call budget feed the real scheduler; exact expected wave/index/provider vectors and 3-versus-4 call assertions observe that schedule. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:432554a0"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:432554a0, src/main.rs:12932, expression 'ModelRunContext {'. This is the injected-runner context constructed by the cfg(test) helper, not a new production error/return path. Its one-slot provider caps, two-slot global limit and four-call budget feed the real scheduler; exact expected wave/index/provider vectors and 3-versus-4 call assertions observe that schedule. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:3cac4b91"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:3cac4b91, src/main.rs:12944, expression '},'. This closes the cfg(test) ProviderConcurrencyLimits literal (both caps Some(1)). A delimiter is not a separate production field/error/return seam. The exact one-task wave sequence observes the provider cap deferral. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:40465332"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:field_construction:40465332, src/main.rs:12944, expression '},'. This closes the cfg(test) ProviderConcurrencyLimits literal (both caps Some(1)). A delimiter is not a separate production field/error/return seam. The exact one-task wave sequence observes the provider cap deferral. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:92d137b0"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:92d137b0, src/main.rs:12944, expression '},'. This closes the cfg(test) ProviderConcurrencyLimits literal (both caps Some(1)). A delimiter is not a separate production field/error/return seam. The exact one-task wave sequence observes the provider cap deferral. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:3cac4b91.2"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:3cac4b91.2, src/main.rs:12945, expression '},'. This closes the cfg(test) injected ModelRunContext literal. There is no production error/return expression at this delimiter; the actual scheduler output is checked by the helper. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:92d137b0.2"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:92d137b0.2, src/main.rs:12945, expression '},'. This closes the cfg(test) injected ModelRunContext literal. There is no production error/return expression at this delimiter; the actual scheduler output is checked by the helper. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:c5024aea"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:c5024aea, src/main.rs:12948, expression '&mut Vec::new(),'. This is an empty throwaway sink for unrelated model-output surfaces. The fake output is empty and this test claims scheduling/provenance, not emitted findings. Testing the empty Vec literal itself would not strengthen the production scheduling oracle. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:9848c609"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:9848c609, src/main.rs:12948, expression '&mut Vec::new(),'. This is an empty throwaway sink for unrelated model-output surfaces. The fake output is empty and this test claims scheduling/provenance, not emitted findings. Testing the empty Vec literal itself would not strengthen the production scheduling oracle. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:c5024aea.2"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:c5024aea.2, src/main.rs:12949, expression '&mut Vec::new(),'. This is an empty throwaway sink for unrelated model-output surfaces. The fake output is empty and this test claims scheduling/provenance, not emitted findings. Testing the empty Vec literal itself would not strengthen the production scheduling oracle. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:9848c609.2"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:9848c609.2, src/main.rs:12949, expression '&mut Vec::new(),'. This is an empty throwaway sink for unrelated model-output surfaces. The fake output is empty and this test claims scheduling/provenance, not emitted findings. Testing the empty Vec literal itself would not strengthen the production scheduling oracle. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:c5024aea.3"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:c5024aea.3, src/main.rs:12950, expression '&mut Vec::new(),'. This is an empty throwaway sink for unrelated model-output surfaces. The fake output is empty and this test claims scheduling/provenance, not emitted findings. Testing the empty Vec literal itself would not strengthen the production scheduling oracle. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:9848c609.3"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:9848c609.3, src/main.rs:12950, expression '&mut Vec::new(),'. This is an empty throwaway sink for unrelated model-output surfaces. The fake output is empty and this test claims scheduling/provenance, not emitted findings. Testing the empty Vec literal itself would not strengthen the production scheduling oracle. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:c5024aea.4"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:c5024aea.4, src/main.rs:12951, expression '&mut Vec::new(),'. This is an empty throwaway sink for unrelated model-output surfaces. The fake output is empty and this test claims scheduling/provenance, not emitted findings. Testing the empty Vec literal itself would not strengthen the production scheduling oracle. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:9848c609.4"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:9848c609.4, src/main.rs:12951, expression '&mut Vec::new(),'. This is an empty throwaway sink for unrelated model-output surfaces. The fake output is empty and this test claims scheduling/provenance, not emitted findings. Testing the empty Vec literal itself would not strengthen the production scheduling oracle. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:c5024aea.5"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:c5024aea.5, src/main.rs:12952, expression '&mut Vec::new(),'. This is an empty throwaway sink for unrelated model-output surfaces. The fake output is empty and this test claims scheduling/provenance, not emitted findings. Testing the empty Vec literal itself would not strengthen the production scheduling oracle. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:9848c609.5"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:9848c609.5, src/main.rs:12952, expression '&mut Vec::new(),'. This is an empty throwaway sink for unrelated model-output surfaces. The fake output is empty and this test claims scheduling/provenance, not emitted findings. Testing the empty Vec literal itself would not strengthen the production scheduling oracle. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:c5024aea.6"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:c5024aea.6, src/main.rs:12953, expression '&mut Vec::new(),'. This is an empty throwaway sink for unrelated model-output surfaces. The fake output is empty and this test claims scheduling/provenance, not emitted findings. Testing the empty Vec literal itself would not strengthen the production scheduling oracle. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:9848c609.6"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:9848c609.6, src/main.rs:12953, expression '&mut Vec::new(),'. This is an empty throwaway sink for unrelated model-output surfaces. The fake output is empty and this test claims scheduling/provenance, not emitted findings. Testing the empty Vec literal itself would not strengthen the production scheduling oracle. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:745b78bc"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:745b78bc, src/main.rs:12960, expression ');'. This closes the cfg(test) waves.borrow_mut().push collection. The collected (lane index, actual provider) values are compared against the full expected wave vector at line12999; this is instrumentation, not an unobserved production return. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:e16daf54"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:e16daf54, src/main.rs:12960, expression ');'. This closes the cfg(test) waves.borrow_mut().push collection. The collected (lane index, actual provider) values are compared against the full expected wave vector at line12999; this is instrumentation, not an unobserved production return. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:b16953b5"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:b16953b5, src/main.rs:12966, expression '{'. This delimiter belongs to the fake runner success/error selector, not a production branch. The two named tests supply both values of second_primary_fails and assert the complete wave sequence, terminal receipts and 3-versus-4 charged calls. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:c95f1b45"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:c95f1b45, src/main.rs:12966, expression '{'. This delimiter belongs to the fake runner success/error selector, not a production branch. The two named tests supply both values of second_primary_fails and assert the complete wave sequence, terminal receipts and 3-versus-4 charged calls. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:df83e8e1"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:df83e8e1, src/main.rs:12967, expression 'Err(anyhow::anyhow!('. This constructs the deterministic fake 429 error in cfg(test), without a live model call. The named primary-failure test requires the real scheduler to produce the additional fallback wave and finish ok; the success case requires only three calls. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:3ff3a25b"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:3ff3a25b, src/main.rs:12967, expression 'Err(anyhow::anyhow!('. This constructs the deterministic fake 429 error in cfg(test), without a live model call. The named primary-failure test requires the real scheduler to produce the additional fallback wave and finish ok; the success case requires only three calls. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:0ead5997"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:0ead5997, src/main.rs:12969, expression '))'. This closes the deterministic fake 429 error constructor in cfg(test). It is not a second independent production error or return; the scheduled retry is observed through exact waves/calls/final provenance. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:147b72dd"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:147b72dd, src/main.rs:12969, expression '))'. This closes the deterministic fake 429 error constructor in cfg(test). It is not a second independent production error or return; the scheduled retry is observed through exact waves/calls/final provenance. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:a83dc899"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:a83dc899, src/main.rs:12970, expression '} else {'. This else delimiter selects the test runner success fixture. Both named tests execute successful fallback outcomes, and the primary-success test pins final primary identity plus no fallback marker. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:0ed6f636"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:0ed6f636, src/main.rs:12970, expression '} else {'. This else delimiter selects the test runner success fixture. Both named tests execute successful fallback outcomes, and the primary-success test pins final primary identity plus no fallback marker. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:e225cff4"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:e225cff4, src/main.rs:12971, expression 'Ok(ModelCallOutcome {'. This is the deterministic cfg(test) ModelCallOutcome success fixture, not production endpoint handling. The scheduler must consume it to emit terminal ok receipts, the correct primary/fallback identity, completion reason and cohort state. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:50fa65d1"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:50fa65d1, src/main.rs:12971, expression 'Ok(ModelCallOutcome {'. This is the deterministic cfg(test) ModelCallOutcome success fixture, not production endpoint handling. The scheduler must consume it to emit terminal ok receipts, the correct primary/fallback identity, completion reason and cohort state. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:52e08d78"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:52e08d78, src/main.rs:12978, expression '})'. This closes the cfg(test) success fixture constructor. It has no independent production return semantics; the fixture feeds real scheduler state observed by the final assertions. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:76a9c344"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:76a9c344, src/main.rs:12978, expression '})'. This closes the cfg(test) success fixture constructor. It has no independent production return semantics; the fixture feeds real scheduler state observed by the final assertions. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:0950cf7b"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:0950cf7b, src/main.rs:12979, expression '};'. This terminates the cfg(test) fake-result local binding. It is not a separately untested production error or return; the resulting value is passed directly in the injected task result. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:d86e86d9"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:d86e86d9, src/main.rs:12979, expression '};'. This terminates the cfg(test) fake-result local binding. It is not a separately untested production error or return; the resulting value is passed directly in the injected task result. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:6c625e67"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:6c625e67, src/main.rs:12980, expression 'ModelLaneTaskResult {'. This constructs a cfg(test) task result with the dispatched task index and deterministic fake result. The wave trace pins the index/provider ordering and terminal receipts pin which lane consumed the outcome. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:e3a9f31a"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:e3a9f31a, src/main.rs:12980, expression 'ModelLaneTaskResult {'. This constructs a cfg(test) task result with the dispatched task index and deterministic fake result. The wave trace pins the index/provider ordering and terminal receipts pin which lane consumed the outcome. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:2f670662"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:2f670662, src/main.rs:12983, expression '}'. This closes the cfg(test) injected task-result literal; no new production return path is defined by the delimiter. Exact wave ordering and lane terminal state are asserted. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:0b359bab"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:0b359bab, src/main.rs:12983, expression '}'. This closes the cfg(test) injected task-result literal; no new production return path is defined by the delimiter. Exact wave ordering and lane terminal state are asserted. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:52e08d78.2"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:52e08d78.2, src/main.rs:12984, expression '})'. This closes the cfg(test) result mapping over dispatched tasks. It does not introduce an independent production error/return path; exact waves, call count and both lane statuses constrain its consumer. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:76a9c344.2"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:76a9c344.2, src/main.rs:12984, expression '})'. This closes the cfg(test) result mapping over dispatched tasks. It does not introduce an independent production error/return path; exact waves, call count and both lane statuses constrain its consumer. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:3cac4b91.3"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:3cac4b91.3, src/main.rs:12986, expression '},'. This closes the cfg(test) injected runner closure after collecting task results. The test calls the actual scheduler and checks its observable schedule/provenance, rather than a model provider. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:92d137b0.3"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:92d137b0.3, src/main.rs:12986, expression '},'. This closes the cfg(test) injected runner closure after collecting task results. The test calls the actual scheduler and checks its observable schedule/provenance, rather than a model provider. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:d1068c1b"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:error_path:d1068c1b, src/main.rs:12987, expression ')?;'. This propagates an unexpected real scheduler error out of a Result-returning test helper. An error fails the invoking test through Rust test harness semantics; swallowing or text-matching the syntax would weaken rather than improve the test. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:9a7cec74"
+owner = "ub-review/core"
+reason = "#1551; run40290671131 artifact12636003872; source8e55872/tree597a8c3; exact raw probe probe:src_main.rs:return_value:9a7cec74, src/main.rs:13019, expression 'Ok(())'. This returns success only after the cfg(test) helper has asserted exact waves, 3/4 charged calls, both terminal statuses, second-lane provider/model/fallback/reason/cohort state and no missing evidence. It is not a production success return. RIPR 0.10.0 cfg(test)/fallible-helper attribution limitation documented by ripr-swarm#1054/#1055 and existing native exact dispositions. Reuses #1551 compiled original-production red controls and exact-tree 18-test green; no new runtime or hosted qualification credit. Re-verify after helper semantics/source-identity or tool changes; dating follows policy/allow.toml#non-rust-ripr-suppressions."
