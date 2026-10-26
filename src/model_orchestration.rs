@@ -461,15 +461,10 @@ pub(crate) fn run_available_model_lanes_with_runner(
                 missing_or_failed_model_evidence.push(model_issue_from_receipt(receipt));
                 continue;
             };
-            if let Some(reason) = preflight_reason {
-                receipt.reason = reason;
-            }
-            if let Some(original) = fallback_from {
-                receipt.fallback_from = Some(original);
-            }
             let env_name = model_api_key_env(spec.provider);
             if !(context.key_present)(env_name) {
                 let key_label = model_api_key_label(spec.provider);
+                receipt.fallback_from = fallback_from;
                 receipt.provider = spec.provider.key().to_owned();
                 receipt.model = spec.model.clone();
                 receipt.endpoint_kind = spec.endpoint_kind.key().to_owned();
@@ -489,6 +484,12 @@ pub(crate) fn run_available_model_lanes_with_runner(
             ) {
                 pending_assignments.push_back(index);
                 continue;
+            }
+            // A capacity-deferred selection did not run. Commit provenance
+            // only when admitted, including clearing a previous fallback.
+            receipt.fallback_from = fallback_from;
+            if let Some(reason) = preflight_reason {
+                receipt.reason = reason;
             }
             receipt.provider = spec.provider.key().to_owned();
             receipt.model = spec.model.clone();
