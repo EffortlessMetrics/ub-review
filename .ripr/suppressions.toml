@@ -34692,3 +34692,69 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_intent.rs:return_value:b72a971f"
 owner = "ub-review/core"
 reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Same rejection statement classified additionally as return_value; native request/task non-creation is its behavioral oracle. Same native/extracted evidence as row38. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_shared_context_render.rs:field_construction:22c9df23"
+owner = "ub-review/core"
+reason = "PR #1552; pinned RIPR 0.10.0; own hosted run 40291710437/artifact 12635724834 (archive verification supplied by coordinator). start_prefix_section section_starts parameter is a type declaration, not a constructed field or executable statement. Actual recorded boundaries are checked by shared_prefix_sections_bind_repeated_headings_to_their_source and the existing exact section/UTF-8 tests. Native limitation documented by ripr-swarm#1054/#1055. This disposition grants no runtime or hosted gate proof credit. Re-verify after semantic edits or tool upgrades; dating remains policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_shared_context_render.rs:field_construction:f57269a5"
+owner = "ub-review/core"
+reason = "PR #1552; pinned RIPR 0.10.0; own hosted run 40291710437/artifact 12635724834 (archive verification supplied by coordinator). start_prefix_section separator parameter is a type declaration, not a constructed field. Emitted separators are observed by exact source-slice membership and unchanged full-prefix compatibility hashes; a signature-text assertion would not add a behavioral oracle. Native limitation documented by ripr-swarm#1054/#1055. This disposition grants no runtime or hosted gate proof credit. Re-verify after semantic edits or tool upgrades; dating remains policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_shared_context_render.rs:field_construction:21b65151"
+owner = "ub-review/core"
+reason = "PR #1552; pinned RIPR 0.10.0; own hosted run 40291710437/artifact 12635724834 (archive verification supplied by coordinator). redact_shared_context_prefix section_starts parameter is a borrowed-slice declaration, not a field construction. The real output byte_start field is not suppressed: the repeated-heading source-membership test rejects a compiled wrong-origin mutant that survived the original suite. Native limitation documented by ripr-swarm#1054/#1055. This disposition grants no runtime or hosted gate proof credit. Re-verify after semantic edits or tool upgrades; dating remains policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_shared_context_render.rs:field_construction:48524edc"
+owner = "ub-review/core"
+reason = "PR #1552; pinned RIPR 0.10.0; own hosted run 40291710437/artifact 12635724834 (archive verification supplied by coordinator). render_prefix_fixture with_unsafe_review parameter is inside cfg(test), not production field construction. Both supplied boolean branches are consumed by the optional-section compatibility-hash test and exact section-order checks. Native limitation documented by ripr-swarm#1054/#1055. This disposition grants no runtime or hosted gate proof credit. Re-verify after semantic edits or tool upgrades; dating remains policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_shared_context_render.rs:field_construction:047af38d"
+owner = "ub-review/core"
+reason = "PR #1552; pinned RIPR 0.10.0; own hosted run 40291710437/artifact 12635724834 (archive verification supplied by coordinator). run: true belongs to the cfg(test) scheduled-late SensorPlan fixture, not a production default or policy change. shared_prefix_rendered_bytes_remain_compatible observes the scheduled-late rendered prefix hash; this disposition does not establish general sensor execution policy. Native limitation documented by ripr-swarm#1054/#1055. This disposition grants no runtime or hosted gate proof credit. Re-verify after semantic edits or tool upgrades; dating remains policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_shared_context_render.rs:field_construction:c10ea661"
+owner = "ub-review/core"
+reason = "PR #1552; pinned RIPR 0.10.0; own hosted run 40291710437/artifact 12635724834 (archive verification supplied by coordinator). timeout_sec: 0 is inert setup in the cfg(test) scheduled-late SensorPlan fixture. The renderer test does not execute a sensor or claim timeout-policy proof. Asserting this fixture literal back to itself would not improve the prefix-boundary oracle. Native limitation documented by ripr-swarm#1054/#1055. This disposition grants no runtime or hosted gate proof credit. Re-verify after semantic edits or tool upgrades; dating remains policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_shared_context_render.rs:field_construction:6be73498"
+owner = "ub-review/core"
+reason = "PR #1552; pinned RIPR 0.10.0; own hosted run 40291710437/artifact 12635724834 (archive verification supplied by coordinator). artifact_budget_mb: 0 is setup in the cfg(test) scheduled-late SensorPlan fixture, not a changed production artifact budget. Prefix tests make no artifact-budget adequacy claim; this declaration/fixture probe is outside that behavioral subject. Native limitation documented by ripr-swarm#1054/#1055. This disposition grants no runtime or hosted gate proof credit. Re-verify after semantic edits or tool upgrades; dating remains policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_shared_context_render.rs:field_construction:02d6dd16"
+owner = "ub-review/core"
+reason = "PR #1552; pinned RIPR 0.10.0; own hosted run 40291710437/artifact 12635724834 (archive verification supplied by coordinator). weight: 0 is setup in the cfg(test) scheduled-late SensorPlan fixture, not changed production scheduling policy. The fixture supplies rendering context only; prefix output assertions do not claim scheduler-weight proof. Native limitation documented by ripr-swarm#1054/#1055. This disposition grants no runtime or hosted gate proof credit. Re-verify after semantic edits or tool upgrades; dating remains policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_shared_context_render.rs:field_construction:dfee0ce8"
+owner = "ub-review/core"
+reason = "PR #1552; pinned RIPR 0.10.0; own hosted run 40291710437/artifact 12635724834 (archive verification supplied by coordinator). requires_lease: false is setup in the cfg(test) scheduled-late SensorPlan fixture, not changed production resource admission. No sensor is executed by the fixture and no lease-policy proof is claimed. Native limitation documented by ripr-swarm#1054/#1055. This disposition grants no runtime or hosted gate proof credit. Re-verify after semantic edits or tool upgrades; dating remains policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_shared_context_render.rs:return_value:10c18b6e"
+owner = "ub-review/core"
+reason = "PR #1552; pinned RIPR 0.10.0; own hosted run 40291710437/artifact 12635724834 (archive verification supplied by coordinator). render_shared_context return is forwarded by cfg(test) render_prefix_fixture and observed by its callers. A compiled control that preserved prefix text but discarded returned sections is rejected by the existing shared_prefix_sections_ignore_benign_evidence_headings test; the test helper does not need a second oracle on its own declaration. Native limitation documented by ripr-swarm#1054/#1055. This disposition grants no runtime or hosted gate proof credit. Re-verify after semantic edits or tool upgrades; dating remains policy/allow.toml#non-rust-ripr-suppressions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_shared_context_render.rs:field_construction:bbc2a6cb"
+owner = "ub-review/core"
+reason = "PR #1552; pinned RIPR 0.10.0; own hosted run 40291710437/artifact 12635724834 (archive verification supplied by coordinator). assert_trusted_prefix_sections with_unsafe_review parameter is a declaration in a cfg(test) assertion helper, not production field construction. The helper checks complete section-name sequences and byte-range slices for both optional-section states; no assertion of the helper parameter literal is warranted. Native limitation documented by ripr-swarm#1054/#1055. This disposition grants no runtime or hosted gate proof credit. Re-verify after semantic edits or tool upgrades; dating remains policy/allow.toml#non-rust-ripr-suppressions."
