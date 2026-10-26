@@ -6501,9 +6501,17 @@ def require_resolved_candidate_artifacts(
     resolved = load_json(root / "review/resolved_candidates.json")
     if not isinstance(resolved, list):
         fail("review/resolved_candidates.json is not an array")
+    current_revision = load_revision_binding(root)
+    if current_revision is not None:
+        for index, record in enumerate(resolved):
+            require_joined_revision(
+                record.get("revision") if isinstance(record, dict) else None,
+                f"resolved_candidates.json[{index}]",
+                current_revision,
+            )
     prior_resolved = require_prior_resolved_candidate_artifact(root)
     expected = expected_resolved_candidate_records(
-        candidates, follow_up_results, follow_up_outputs, prior_resolved
+        candidates, follow_up_results, follow_up_outputs, prior_resolved, current_revision
     )
     if resolved != expected:
         fail(
@@ -6541,6 +6549,7 @@ def expected_resolved_candidate_records(
     follow_up_results: list[dict],
     follow_up_outputs: list[dict],
     prior_resolved_candidates: list[dict],
+    current_revision: dict | None = None,
 ) -> list[dict]:
     result_task_ids = {result["task_id"] for result in follow_up_results}
     records = []
@@ -6551,7 +6560,9 @@ def expected_resolved_candidate_records(
             if output["task_id"] in result_task_ids
             and candidate["id"] in output.get("candidate_ids", [])
         ]
-        record = resolved_candidate_record(candidate, linked, prior_resolved_candidates)
+        record = resolved_candidate_record(
+            candidate, linked, prior_resolved_candidates, current_revision
+        )
         records.append(record)
     return records
 
@@ -6560,12 +6571,13 @@ def resolved_candidate_record(
     candidate: dict,
     follow_up_outputs: list[dict],
     prior_resolved_candidates: list[dict] | None = None,
+    current_revision: dict | None = None,
 ) -> dict:
     if prior_resolved_candidates is None:
         prior_resolved_candidates = []
     resolved_status, resolved_disposition, resolution_source, reason, evidence = (
         resolve_candidate_from_follow_ups(
-            candidate, follow_up_outputs, prior_resolved_candidates
+            candidate, follow_up_outputs, prior_resolved_candidates, current_revision
         )
     )
     source_artifacts = [
@@ -6575,7 +6587,7 @@ def resolved_candidate_record(
     ]
     if resolution_source == "prior-resolved-candidates":
         source_artifacts.append("review/prior_resolved_candidates.json")
-    return {
+    record = {
         "schema": "ub-review.resolved_candidate.v1",
         "candidate_id": candidate["id"],
         "lane": candidate["lane"],
@@ -6592,6 +6604,9 @@ def resolved_candidate_record(
         "follow_up_statuses": unique_output_values(follow_up_outputs, "status"),
         "evidence": evidence,
     }
+    if current_revision is not None:
+        record["revision"] = dict(current_revision)
+    return record
 
 
 def unique_output_values(outputs: list[dict], field: str) -> list[str]:
@@ -6607,6 +6622,7 @@ def resolve_candidate_from_follow_ups(
     candidate: dict,
     follow_up_outputs: list[dict],
     prior_resolved_candidates: list[dict],
+    current_revision: dict | None = None,
 ) -> tuple[str, str, str, str, list[str]]:
     signals = resolved_candidate_signals(follow_up_outputs)
     if signals:
@@ -6631,7 +6647,9 @@ def resolve_candidate_from_follow_ups(
             signal["reason"],
             signal["evidence"],
         )
-    prior = prior_resolved_candidate_for_candidate(candidate, prior_resolved_candidates)
+    prior, stale = prior_resolved_candidate_for_candidate(
+        candidate, prior_resolved_candidates, current_revision
+    )
     if prior is not None:
         return (
             "resolved",
@@ -6641,6 +6659,23 @@ def resolve_candidate_from_follow_ups(
             [
                 f"Prior resolved candidate `{prior['candidate_id']}` had disposition `{prior['resolved_disposition']}`",
                 *prior.get("evidence", []),
+            ],
+        )
+    if stale is not None:
+        prior_revision = stale.get("revision")
+        prior_digest = (
+            prior_revision["digest"] if prior_revision is not None else "<legacy-unstamped>"
+        )
+        return (
+            "unchanged",
+            candidate["disposition"],
+            "candidate",
+            "[stale_revision] prior resolved candidate matches the candidate "
+            "fingerprint but was admitted for a different revision; it cannot "
+            "satisfy current-run resolution",
+            [
+                f"[stale_revision] current digest: {current_revision['digest']}",
+                f"[stale_revision] prior digest: {prior_digest}",
             ],
         )
     if not follow_up_outputs:
@@ -6673,11 +6708,19 @@ def resolve_candidate_from_follow_ups(
 
 
 def prior_resolved_candidate_for_candidate(
-    candidate: dict, prior_resolved_candidates: list[dict]
-) -> dict | None:
+    candidate: dict,
+    prior_resolved_candidates: list[dict],
+    current_revision: dict | None = None,
+) -> tuple[dict | None, dict | None]:
+    """Return an exact prior or the last rejected match, as in Rust A1.4.
+
+    Historical rows remain intact; only an exact revision can remove a current
+    review surface. No admitted revision means legacy compatibility inspection.
+    """
     fingerprint = candidate_id_fingerprint(candidate.get("id", ""))
     if fingerprint is None:
-        return None
+        return None, None
+    stale = None
     for prior in prior_resolved_candidates:
         if (
             prior.get("resolved_status") == "resolved"
@@ -6687,8 +6730,17 @@ def prior_resolved_candidate_for_candidate(
             and prior.get("original_status") == candidate.get("status")
             and candidate_id_fingerprint(prior.get("candidate_id", "")) == fingerprint
         ):
-            return prior
-    return None
+            prior_revision = prior.get("revision")
+            if current_revision is None or (
+                prior_revision is not None
+                and all(
+                    prior_revision.get(field) == current_revision[field]
+                    for field in ("digest", "semantics", "reviewed_commit")
+                )
+            ):
+                return prior, None
+            stale = prior
+    return None, stale
 
 
 def candidate_id_fingerprint(candidate_id: str) -> str | None:
@@ -6789,6 +6841,8 @@ def observation_is_parked(observation: dict) -> bool:
 def require_resolved_candidate_schema(record: dict) -> None:
     if record.get("schema") != "ub-review.resolved_candidate.v1":
         fail(f"resolved candidate has wrong schema: {record!r}")
+    if record.get("revision") is not None:
+        _require_revision_ref(record["revision"], "resolved candidate")
     for field in [
         "candidate_id",
         "lane",
@@ -15064,6 +15118,162 @@ def self_test_follow_up_resolved_away_filter_matches_rust_contract() -> None:
         inline_candidate, dict(inline_comment, line=8)
     ):
         fail("inline candidate matcher matched a moved comment")
+    self_test_resolved_candidate_revision_contract()
+
+
+def self_test_resolved_candidate_revision_contract() -> None:
+    """Check persisted producer-shaped rows without using the expected-row builder."""
+    candidate = {
+        "schema": "ub-review.candidate.v1",
+        "id": "candidate-0007-deadbeef1234",
+        "lane": "tests-oracle",
+        "source": "summary-only-finding",
+        "status": "summary-only",
+        "disposition": "summary-only",
+    }
+    canonical = (
+        "ub-review.revision-identity.v1\nsemantics=candidate_head\n"
+        f"base={'1' * 40} {'2' * 40}\n"
+        f"head={'3' * 40} {'4' * 40}\n"
+        f"reviewed={'3' * 40} {'4' * 40}\nmerge=-\n"
+        f"changed_paths={'a' * 64}\ndiff={'a' * 64}\n"
+    )
+    current = {
+        "digest": _recompute_identity_digest(canonical),
+        "semantics": "candidate_head",
+        "reviewed_commit": "3" * 40,
+    }
+    # These fields are emitted by resolved_candidate_record in Rust, including
+    # revision for every admitted row, even when no prior resolution exists.
+    unchanged = {
+        "schema": "ub-review.resolved_candidate.v1",
+        "candidate_id": candidate["id"],
+        "lane": candidate["lane"],
+        "source": candidate["source"],
+        "original_status": candidate["status"],
+        "original_disposition": candidate["disposition"],
+        "resolved_status": "unchanged",
+        "resolved_disposition": candidate["disposition"],
+        "resolution_source": "candidate",
+        "revision": current,
+        "source_artifacts": [
+            "review/candidates.json",
+            "review/follow_up_results.json",
+            "review/follow_up_outputs.json",
+        ],
+        "reason": "no candidate-targeted follow-up output",
+        "follow_up_task_ids": [],
+        "follow_up_stages": [],
+        "follow_up_statuses": [],
+        "evidence": ["Original candidate disposition `summary-only`"],
+    }
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        write_self_test_json(root / "input/revision-admission.json", {
+            "schema": REVISION_ADMISSION_SCHEMA,
+            "identity_canonical": canonical,
+            "identity_digest": current["digest"],
+            "reviewed_commit_oid": current["reviewed_commit"],
+        })
+        write_self_test_json(root / "review/candidates.json", [candidate])
+
+        def check(label: str, record: dict, history: list[dict], error: str | None = None) -> None:
+            history_before = json.dumps(history, sort_keys=True)
+            write_self_test_json(root / "review/prior_resolved_candidates.json", history)
+            history_path = root / "review/prior_resolved_candidates.json"
+            history_bytes = history_path.read_bytes()
+            write_self_test_json(root / "review/resolved_candidates.json", [record])
+            (root / "resolved_candidates.ndjson").write_text(
+                json.dumps(record) + "\n", encoding="utf-8"
+            )
+            if error is None:
+                require_resolved_candidate_artifacts(root, [], [])
+            else:
+                expect_self_test_failure(
+                    label, error, lambda: require_resolved_candidate_artifacts(root, [], [])
+                )
+            if (history_path.read_bytes() != history_bytes
+                    or json.dumps(history, sort_keys=True) != history_before):
+                fail(f"self-test {label} rewrote imported history")
+
+        check("stamped nonempty record without priors", unchanged, [])
+        for field, value, error in [
+            ("digest", "f" * 64, "[stale_revision]"),
+            ("semantics", "merge_result", "[semantics_mismatch]"),
+            ("reviewed_commit", "e" * 40, "[stale_revision]"),
+        ]:
+            forged = dict(unchanged, revision=dict(current, **{field: value}))
+            check(f"forged current {field}", forged, [], error)
+        stripped = {key: value for key, value in unchanged.items() if key != "revision"}
+        check("stripped current revision", stripped, [], "[missing_strong_binding]")
+        check("null current revision", dict(unchanged, revision=None), [], "[missing_strong_binding]")
+        check("malformed current revision", dict(unchanged, revision=[]), [], "revision reference must be an object")
+        check("incomplete current revision", dict(unchanged, revision={}), [], "[stale_revision]")
+
+        for disposition in ["refuted", "dropped"]:
+            prior = dict(
+                unchanged,
+                candidate_id="candidate-0001-deadbeef1234",
+                resolved_status="resolved",
+                resolved_disposition=disposition,
+                reason="prior pass resolved this claim",
+                evidence=["exact revision evidence"],
+            )
+            reused = dict(
+                unchanged,
+                resolved_status="resolved",
+                resolved_disposition=disposition,
+                resolution_source="prior-resolved-candidates",
+                source_artifacts=unchanged["source_artifacts"] + ["review/prior_resolved_candidates.json"],
+                reason="prior pass resolved the same candidate surface",
+                evidence=[
+                    f"Prior resolved candidate `{prior['candidate_id']}` had disposition `{disposition}`",
+                    "exact revision evidence",
+                ],
+            )
+            check(f"exact {disposition} reuse", reused, [prior])
+            stale_history = []
+            for field, value in [
+                ("digest", "f" * 64),
+                ("semantics", "merge_result"),
+                ("reviewed_commit", "e" * 40),
+                ("unstamped", None),
+            ]:
+                stale = dict(prior, evidence=[f"stale {field} evidence"])
+                if field == "unstamped":
+                    stale.pop("revision")
+                else:
+                    stale["revision"] = dict(current, **{field: value})
+                stale_history.append(stale)
+                stale_digest = stale.get("revision", {}).get("digest", "<legacy-unstamped>")
+                rejected = dict(
+                    unchanged,
+                    reason="[stale_revision] prior resolved candidate matches the candidate "
+                           "fingerprint but was admitted for a different revision; it cannot "
+                           "satisfy current-run resolution",
+                    evidence=[
+                        f"[stale_revision] current digest: {current['digest']}",
+                        f"[stale_revision] prior digest: {stale_digest}",
+                    ],
+                )
+                check(f"reject {disposition}/{field} reuse", rejected, [stale])
+                check(f"forged {disposition}/{field} reuse", reused, [stale], "does not match candidates")
+            # Selection must reach the exact row regardless of where history
+            # places stale matches; stale evidence must not leak into the result.
+            check("stale before exact", reused, stale_history + [prior])
+            check("exact before stale", reused, [prior] + stale_history)
+            check("all stale uses last diagnostic", rejected, stale_history)
+            unrelated = dict(prior, candidate_id="candidate-0002-cafebabe1234")
+            check("unrelated prior", unchanged, [unrelated])
+            check("malformed prior revision", unchanged, [dict(prior, revision=[])], "revision reference must be an object")
+            check("incomplete prior revision", unchanged, [dict(prior, revision={})], "revision digest must be 64 lowercase hex chars")
+
+        # Legacy packets still inspect without claiming current-revision reuse.
+        (root / "input/revision-admission.json").unlink()
+        check("legacy nonempty packet", stripped, [])
+        legacy_reused = {key: value for key, value in reused.items() if key != "revision"}
+        legacy_prior = {key: value for key, value in prior.items() if key != "revision"}
+        check("legacy prior inspection", legacy_reused, [legacy_prior])
 
 
 def self_test_sanitize_artifact_name_matches_rust_contract() -> None:
