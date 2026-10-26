@@ -212,9 +212,13 @@ fn failed_gate_survives_missing_or_truncated_metrics_and_restoration() -> Result
     let metrics_bytes = fs::read(&metrics_path)?;
     let original_summary = fixture.summary(&out)?;
     assert_gate(&original_summary, "fail", 1);
-    for mutation in ["missing", "truncated", "null", "scalar"] {
+    for mutation in ["missing", "directory", "truncated", "null", "scalar"] {
         match mutation {
             "missing" => fs::remove_file(&metrics_path)?,
+            "directory" => {
+                fs::remove_file(&metrics_path)?;
+                fs::create_dir(&metrics_path)?;
+            }
             "truncated" => fs::write(&metrics_path, b"{\"wall_clock_seconds\":")?,
             "null" => fs::write(&metrics_path, b"null")?,
             _ => fs::write(&metrics_path, b"42")?,
@@ -226,12 +230,26 @@ fn failed_gate_survives_missing_or_truncated_metrics_and_restoration() -> Result
                 && summary.to_lowercase().contains("unavailable"),
             "{summary}"
         );
+        if mutation == "missing" {
+            assert!(
+                summary.contains("`review/metrics.json` is missing"),
+                "missing telemetry needs a distinct recovery diagnostic: {summary}"
+            );
+        } else if mutation == "directory" {
+            assert!(
+                summary.contains("`review/metrics.json` cannot be read"),
+                "an unreadable telemetry path must not be reported as absent: {summary}"
+            );
+        }
         assert!(
             fixture
                 .gate_check(&out, false)?
                 .contains("gate.target_minutes")
         );
         assert_eq!(digest(&fs::read(&gate_path)?), digest(&gate_bytes));
+        if mutation == "directory" {
+            fs::remove_dir(&metrics_path)?;
+        }
         fs::write(&metrics_path, &metrics_bytes)?;
         assert_eq!(fixture.summary(&out)?, original_summary);
     }
@@ -253,6 +271,7 @@ fn calibration_cannot_turn_invalid_current_gate_into_pass() -> Result<()> {
     assert_gate(&original_summary, "pass", 0);
     for mutation in [
         "missing",
+        "directory",
         "truncated",
         "unsupported-schema",
         "mistyped-reasons",
@@ -265,6 +284,10 @@ fn calibration_cannot_turn_invalid_current_gate_into_pass() -> Result<()> {
     ] {
         match mutation {
             "missing" => fs::remove_file(&gate_path)?,
+            "directory" => {
+                fs::remove_file(&gate_path)?;
+                fs::create_dir(&gate_path)?;
+            }
             "truncated" => fs::write(&gate_path, b"{\"schema\":")?,
             "null" => fs::write(&gate_path, b"null")?,
             "scalar" => fs::write(&gate_path, b"42")?,
@@ -305,9 +328,23 @@ fn calibration_cannot_turn_invalid_current_gate_into_pass() -> Result<()> {
                 && summary.to_lowercase().contains("unavailable"),
             "{mutation}: {summary}"
         );
+        if mutation == "missing" {
+            assert!(
+                summary.contains("`review/gate_outcome.json` is missing"),
+                "missing gate evidence needs a distinct recovery diagnostic: {summary}"
+            );
+        } else if mutation == "directory" {
+            assert!(
+                summary.contains("`review/gate_outcome.json` cannot be read"),
+                "an unreadable gate path must not be reported as absent: {summary}"
+            );
+        }
         let failure = fixture.gate_check(&out, false)?;
         assert!(!failure.is_empty());
         assert_eq!(digest(&fs::read(&calibration_path)?), digest(&calibration));
+        if mutation == "directory" {
+            fs::remove_dir(&gate_path)?;
+        }
         fs::write(&gate_path, &original)?;
         assert_eq!(digest(&fs::read(&gate_path)?), digest(&original));
         fixture.gate_check(&out, true)?;
