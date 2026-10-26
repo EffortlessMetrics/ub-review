@@ -150,6 +150,7 @@ pub(crate) fn model_request_payload_parts_with_cache_control(
                     {"role": "system", "content": "Return strict JSON only. Do not include markdown fences."},
                     {"role": "user", "content": prompt}
                 ],
+                "max_tokens": model_max_tokens(spec),
                 "temperature": 0.1,
                 "stream": false
             })
@@ -481,4 +482,51 @@ pub(crate) fn http_status_from_error(err: &anyhow::Error) -> Option<u16> {
     let start = text.find(needle)? + needle.len();
     let end = text[start..].find(')')? + start;
     text[start..end].parse::<u16>().ok()
+}
+
+#[cfg(test)]
+mod output_budget_tests {
+    use super::*;
+
+    #[test]
+    fn every_provider_endpoint_serializes_the_output_budget() -> Result<()> {
+        for provider in [ModelProvider::MiniMaxDirect, ModelProvider::OpenCodeGo] {
+            for endpoint_kind in [
+                ProviderEndpointKind::OpenAiChat,
+                ProviderEndpointKind::AnthropicMessages,
+            ] {
+                let spec = ProviderSpec {
+                    provider,
+                    model: "budget-fixture".to_owned(),
+                    endpoint_kind,
+                };
+                for prefix in [None, Some("shared prefix")] {
+                    let payload = model_request_payload_parts_with_cache_control(
+                        &spec,
+                        prefix,
+                        "lane task",
+                        true,
+                    );
+                    let serialized = serde_json::to_vec_pretty(&payload)?;
+                    let wire: serde_json::Value = serde_json::from_slice(&serialized)?;
+                    let cap_field = if provider == ModelProvider::MiniMaxDirect
+                        && endpoint_kind == ProviderEndpointKind::OpenAiChat
+                    {
+                        "max_completion_tokens"
+                    } else {
+                        "max_tokens"
+                    };
+                    assert_eq!(wire[cap_field], 4096, "{}", spec.label());
+                    let other_field = if cap_field == "max_tokens" {
+                        "max_completion_tokens"
+                    } else {
+                        "max_tokens"
+                    };
+                    assert!(wire.get(other_field).is_none(), "{}", spec.label());
+                    assert_eq!(wire["model"], "budget-fixture");
+                }
+            }
+        }
+        Ok(())
+    }
 }
