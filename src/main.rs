@@ -12832,6 +12832,194 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn model_lane_deferred_fallback_then_primary_success_has_primary_provenance() -> Result<()> {
+        assert_deferred_model_lane_provider(false)
+    }
+
+    #[test]
+    fn model_lane_deferred_fallback_then_primary_failure_gets_one_retry() -> Result<()> {
+        assert_deferred_model_lane_provider(true)
+    }
+
+    #[test]
+    fn model_lane_missing_key_preserves_selected_fallback_metadata() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let args = test_run_args(temp.path().join("out"));
+        let primary = direct_minimax_spec(&args);
+        let fallback = opencode_canary_spec(&args);
+        let assignments = vec![ModelAssignment {
+            lane: lane_plan("security"),
+            spec: primary.clone(),
+            fallback: Some(fallback.clone()),
+        }];
+        let preflights = vec![preflight_ok_receipt(&fallback)];
+        let mut model_lanes = vec![model_lane_receipt("security", "planned")];
+        let mut missing_or_failed_model_evidence = Vec::new();
+        let line_map = BTreeSet::new();
+
+        let calls = run_available_model_lanes_with_runner(
+            ModelRunContext {
+                root: temp.path(),
+                review_dir: temp.path(),
+                assignments: &assignments,
+                provider_preflights: &preflights,
+                shared_context: "shared context",
+                args: &args,
+                line_map: &line_map,
+                key_present: |_| false,
+                provider_concurrency: ProviderConcurrencyLimits::default(),
+            },
+            &mut model_lanes,
+            &mut missing_or_failed_model_evidence,
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            |_context, _model_dir, _tasks| {
+                anyhow::bail!("a missing-key lane must not reach the runner")
+            },
+        )?;
+
+        assert_eq!(calls, 0);
+        assert_eq!(model_lanes[0].status, "missing_key");
+        assert_eq!(model_lanes[0].provider, fallback.provider.key());
+        assert_eq!(model_lanes[0].model, fallback.model);
+        assert_eq!(model_lanes[0].endpoint_kind, fallback.endpoint_kind.key());
+        assert_eq!(model_lanes[0].fallback_from, Some(primary.label()));
+        assert_eq!(
+            model_lanes[0].reason,
+            format!(
+                "{} not provided; {} lane output unavailable",
+                super::model_api_key_label(fallback.provider),
+                fallback.provider.key()
+            )
+        );
+        assert_eq!(missing_or_failed_model_evidence.len(), 1);
+        assert_eq!(missing_or_failed_model_evidence[0].status, "missing_key");
+        Ok(())
+    }
+
+    fn assert_deferred_model_lane_provider(second_primary_fails: bool) -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut args = test_run_args(temp.path().join("out"));
+        args.max_model_calls = 4;
+        args.model_concurrency = 2;
+        let primary = direct_minimax_spec(&args);
+        let fallback = opencode_canary_spec(&args);
+        let assignments = ["security", "opposition"]
+            .into_iter()
+            .map(|lane| ModelAssignment {
+                lane: lane_plan(lane),
+                spec: primary.clone(),
+                fallback: Some(fallback.clone()),
+            })
+            .collect::<Vec<_>>();
+        let preflights = vec![
+            preflight_ok_receipt(&primary),
+            preflight_ok_receipt(&fallback),
+        ];
+        let mut model_lanes = assignments
+            .iter()
+            .map(|assignment| model_lane_receipt(&assignment.lane.id, "planned"))
+            .collect::<Vec<_>>();
+        let mut missing_or_failed_model_evidence = Vec::new();
+        let line_map = BTreeSet::new();
+        let waves = std::cell::RefCell::new(Vec::new());
+
+        let calls = run_available_model_lanes_with_runner(
+            ModelRunContext {
+                root: temp.path(),
+                review_dir: temp.path(),
+                assignments: &assignments,
+                provider_preflights: &preflights,
+                shared_context: "shared context",
+                args: &args,
+                line_map: &line_map,
+                key_present: |_| true,
+                provider_concurrency: ProviderConcurrencyLimits {
+                    minimax: Some(1),
+                    opencode_go: Some(1),
+                },
+            },
+            &mut model_lanes,
+            &mut missing_or_failed_model_evidence,
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            |_context, _model_dir, tasks| {
+                waves.borrow_mut().push(
+                    tasks
+                        .iter()
+                        .map(|task| (task.index, task.spec.provider))
+                        .collect::<Vec<_>>(),
+                );
+                Ok(tasks
+                    .into_iter()
+                    .map(|task| {
+                        let result = if task.spec.provider == ModelProvider::MiniMaxDirect
+                            && (task.index == 0 || second_primary_fails)
+                        {
+                            Err(anyhow::anyhow!(
+                                "model curl: http status Some(429) too many requests"
+                            ))
+                        } else {
+                            Ok(ModelCallOutcome {
+                                output: empty_lane_output(),
+                                duration_ms: 5,
+                                http_status: Some(200),
+                                response_shape: "anthropic-messages".to_owned(),
+                                cache_usage: ModelCacheUsage::default(),
+                                degraded: false,
+                            })
+                        };
+                        ModelLaneTaskResult {
+                            index: task.index,
+                            result,
+                        }
+                    })
+                    .collect())
+            },
+        )?;
+
+        // A's retry fills the fallback slot in wave two, so B must wait and
+        // then return to primary after the one-wave backpressure expires.
+        let mut expected_waves = vec![
+            vec![(0, ModelProvider::MiniMaxDirect)],
+            vec![(0, ModelProvider::OpenCodeGo)],
+            vec![(1, ModelProvider::MiniMaxDirect)],
+        ];
+        if second_primary_fails {
+            expected_waves.push(vec![(1, ModelProvider::OpenCodeGo)]);
+        }
+        assert_eq!(waves.into_inner(), expected_waves);
+        assert_eq!(calls, if second_primary_fails { 4 } else { 3 });
+        assert!(calls <= args.max_model_calls);
+        assert!(model_lanes.iter().all(|receipt| receipt.status == "ok"));
+        assert_eq!(model_lanes[0].fallback_from, Some(primary.label()));
+        let second = &model_lanes[1];
+        if second_primary_fails {
+            assert_eq!(second.provider, fallback.provider.key());
+            assert_eq!(second.model, fallback.model);
+            assert_eq!(second.fallback_from, Some(primary.label()));
+            assert_eq!(second.reason, "completed after runtime fallback retry");
+            assert!(second.cohort_broken);
+        } else {
+            assert_eq!(second.provider, primary.provider.key());
+            assert_eq!(second.model, primary.model);
+            assert_eq!(second.fallback_from, None);
+            assert_eq!(second.reason, "completed");
+            assert!(!second.cohort_broken);
+        }
+        assert!(missing_or_failed_model_evidence.is_empty());
+        Ok(())
+    }
+
+    #[test]
     fn model_lane_rate_limited_retry_provider_sheds_next_wave_to_fallback() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let mut args = test_run_args(temp.path().join("out"));
