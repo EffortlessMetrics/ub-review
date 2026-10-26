@@ -88,11 +88,12 @@ pub(crate) fn render_shared_context(
     proof_requests: &[ProofRequest],
 ) -> Result<(String, Vec<PrefixSection>)> {
     let mut text = String::new();
+    let mut section_starts = Vec::new();
     text.push_str("# Shared UB Review Context\n\n");
     text.push_str("This stable prefix is intended for lane model calls and future provider-side context caching.\n\n");
-    text.push_str("## PR Summary\n\n");
+    start_prefix_section(&mut text, &mut section_starts, "", "PR Summary");
     text.push_str(running_summary);
-    text.push_str("\n\n## Diff Summary\n\n");
+    start_prefix_section(&mut text, &mut section_starts, "\n\n", "Diff Summary");
     text.push_str(&format!("- Base: `{}`\n", diff.base));
     text.push_str(&format!("- Head: `{}`\n", diff.head));
     text.push_str(&format!(
@@ -124,11 +125,11 @@ pub(crate) fn render_shared_context(
         "- Unsafe/native risk touched: `{}`\n",
         diff.flags.unsafe_or_native_risk
     ));
-    text.push_str("\n## Changed Files\n\n");
+    start_prefix_section(&mut text, &mut section_starts, "\n", "Changed Files");
     for file in &diff.changed_files {
         text.push_str(&format!("- `{file}`\n"));
     }
-    text.push_str("\n## Sensor Statuses\n\n");
+    start_prefix_section(&mut text, &mut section_starts, "\n", "Sensor Statuses");
     for sensor in &plan.sensors {
         // #325: late-phase sensors overlap the model wave, so their receipts
         // are deliberately not read here — the prefix renders them as
@@ -169,7 +170,12 @@ pub(crate) fn render_shared_context(
     // Trust boundary is always advisory; this section supplements the
     // deterministic floor, never overrides it.
     if let Some(unsafe_review) = plan.sensors.iter().find(|s| s.id == "unsafe-review") {
-        text.push_str("\n## unsafe-review Coverage Evidence\n\n");
+        start_prefix_section(
+            &mut text,
+            &mut section_starts,
+            "\n",
+            "unsafe-review Coverage Evidence",
+        );
         let sensor_dir = out.join("sensors").join("unsafe-review");
         let status_path = sensor_dir.join("ub-review-sensor-status.json");
         // #325: an unsafe-review sensor deferred to the late phase has no
@@ -233,7 +239,7 @@ pub(crate) fn render_shared_context(
             }
         }
     }
-    text.push_str("\n## Initial Work Queue\n\n");
+    start_prefix_section(&mut text, &mut section_starts, "\n", "Initial Work Queue");
     text.push_str(&render_initial_work_queue_context(
         out,
         plan,
@@ -241,16 +247,22 @@ pub(crate) fn render_shared_context(
         profile,
         proof_requests,
     )?);
-    text.push_str(&format!(
-        "\n## {} Review Posture\n\n",
-        diff_class_posture_heading(diff.diff_class)
-    ));
+    start_prefix_section(
+        &mut text,
+        &mut section_starts,
+        "\n",
+        &format!(
+            "{} Review Posture",
+            diff_class_posture_heading(diff.diff_class)
+        ),
+    );
     text.push_str(review_posture_for_diff_class(diff.diff_class));
-    text.push_str("\n\n## PR Thread Context\n\n");
+    start_prefix_section(&mut text, &mut section_starts, "\n\n", "PR Thread Context");
     text.push_str(&render_pr_thread_context(pr_thread_context));
-    text.push_str("\n\n## UB Ledger Context\n\n");
+    start_prefix_section(&mut text, &mut section_starts, "\n\n", "UB Ledger Context");
     text.push_str(&render_ledger_context(root, config, args)?);
-    text.push_str("\n\n## Diff Patch\n\n```diff\n");
+    start_prefix_section(&mut text, &mut section_starts, "\n\n", "Diff Patch");
+    text.push_str("```diff\n");
     text.push_str(&diff.patch);
     if !diff.patch.ends_with('\n') {
         text.push('\n');
@@ -260,14 +272,7 @@ pub(crate) fn render_shared_context(
     // real credentials. Redact those values before the shared context crosses
     // into model/provider storage or durable artifacts; placeholders such as
     // `${{ secrets.OPENCODE }}` remain safe and useful context.
-    let text = redact_shared_context_secret_assignments(&text);
-    // Derive the ordered source sections from the rendered prefix by scanning
-    // for `## ` headers. The prefix is generated here from stable headers, so
-    // this reads exactly what was written (no drift). Each section's byte range
-    // runs from its header to the next header (or end of text). This makes the
-    // cohort's shared-prefix contract inspectable. (Order 6 of #678.)
-    let sections = prefix_sections_from_rendered(&text);
-    Ok((text, sections))
+    Ok(redact_shared_context_prefix(&text, &section_starts))
 }
 
 const SHARED_CONTEXT_SECRET_NAMES: [&str; 9] = [
@@ -393,48 +398,44 @@ fn shared_context_secret_value_needs_redaction(value: &str) -> bool {
     compact.len() >= 16
 }
 
-/// Scan rendered shared-context Markdown for `## ` headers and produce
-/// `PrefixSection` records with byte ranges [header_start, next_header_start).
-fn prefix_sections_from_rendered(text: &str) -> Vec<PrefixSection> {
-    let bytes = text.as_bytes();
-    let mut header_starts: Vec<(usize, String)> = Vec::new();
-    let mut i = 0;
-    while i + 3 <= bytes.len() {
-        // A `## ` header at the start of a line (line start or after `\n`).
-        if bytes[i] == b'#'
-            && bytes[i + 1] == b'#'
-            && bytes[i + 2] == b' '
-            && (i == 0 || bytes[i - 1] == b'\n')
-        {
-            let line_end = bytes[i..]
-                .iter()
-                .position(|&b| b == b'\n')
-                .map(|p| i + p)
-                .unwrap_or(bytes.len());
-            let name = String::from_utf8_lossy(&bytes[i + 3..line_end])
-                .trim()
-                .to_owned();
-            header_starts.push((i, name));
-            i = line_end + 1;
-        } else {
-            i += 1;
-        }
+/// Record only headings emitted by the renderer, never headings in evidence.
+fn start_prefix_section(
+    text: &mut String,
+    section_starts: &mut Vec<(String, usize)>,
+    separator: &str,
+    name: &str,
+) {
+    text.push_str(separator);
+    section_starts.push((name.to_owned(), text.len()));
+    text.push_str(&format!("## {name}\n\n"));
+}
+
+/// Finalize ranges over the actual redacted bytes. Every recorded start is at
+/// a line boundary, so redacting these slices preserves whole-prefix redaction.
+fn redact_shared_context_prefix(
+    text: &str,
+    section_starts: &[(String, usize)],
+) -> (String, Vec<PrefixSection>) {
+    let preamble_end = section_starts
+        .first()
+        .map_or(text.len(), |(_, start)| *start);
+    let mut redacted = redact_shared_context_secret_assignments(&text[..preamble_end]);
+    let mut sections = Vec::with_capacity(section_starts.len());
+    for (index, (name, start)) in section_starts.iter().enumerate() {
+        let end = section_starts
+            .get(index + 1)
+            .map_or(text.len(), |(_, next)| *next);
+        let byte_start = redacted.len();
+        redacted.push_str(&redact_shared_context_secret_assignments(
+            &text[*start..end],
+        ));
+        sections.push(PrefixSection {
+            name: name.clone(),
+            byte_start,
+            byte_end: redacted.len(),
+        });
     }
-    header_starts
-        .iter()
-        .enumerate()
-        .map(|(idx, (start, name))| {
-            let byte_end = header_starts
-                .get(idx + 1)
-                .map(|(s, _)| *s)
-                .unwrap_or(bytes.len());
-            PrefixSection {
-                name: name.clone(),
-                byte_start: *start,
-                byte_end,
-            }
-        })
-        .collect()
+    (redacted, sections)
 }
 
 pub(crate) fn render_initial_work_queue_context(
@@ -776,6 +777,175 @@ pub(crate) fn shared_context_cache_lane(
 mod tests {
     use super::*;
 
+    fn render_prefix_fixture(
+        summary: &str,
+        body: &str,
+        thread: &str,
+        patch: &str,
+        with_unsafe_review: bool,
+    ) -> Result<(String, Vec<PrefixSection>)> {
+        let temp = tempfile::tempdir()?;
+        let mut config: Config = toml::from_str(include_str!("../.ub-review.toml"))?;
+        config.merge_defaults();
+        config.repo.ledger.clear();
+        let mut diff = crate::tests::test_diff();
+        diff.patch = patch.to_owned();
+        let sensors = if with_unsafe_review {
+            vec![SensorPlan {
+                id: "unsafe-review".to_owned(),
+                command: "unsafe-review".to_owned(),
+                run: true,
+                reason: "scheduled coverage".to_owned(),
+                required: false,
+                timeout_sec: 0,
+                artifact_budget_mb: 0,
+                class: ToolClass::Static,
+                weight: 0,
+                requires_lease: false,
+                phase: SensorPhase::Late,
+                gate: None,
+            }]
+        } else {
+            Vec::new()
+        };
+        let plan = crate::tests::test_plan(sensors);
+        let args = crate::tests::test_run_args(temp.path().join("out"));
+        let mut context = absent_pr_thread_context(65_536);
+        context.status = "seeded".to_owned();
+        context.body = Some(body.to_owned());
+        context.thread_context = Some(thread.to_owned());
+        render_shared_context(
+            temp.path(),
+            temp.path(),
+            &config,
+            &diff,
+            &plan,
+            summary,
+            &args,
+            &context,
+            config.selected_profile()?,
+            &[],
+        )
+    }
+
+    fn assert_trusted_prefix_sections(
+        prefix: &str,
+        sections: &[PrefixSection],
+        with_unsafe_review: bool,
+    ) {
+        let mut expected = vec![
+            "PR Summary",
+            "Diff Summary",
+            "Changed Files",
+            "Sensor Statuses",
+            "Initial Work Queue",
+            "Bun UB Review Posture",
+            "PR Thread Context",
+            "UB Ledger Context",
+            "Diff Patch",
+        ];
+        if with_unsafe_review {
+            expected.insert(4, "unsafe-review Coverage Evidence");
+        }
+        assert_eq!(
+            sections.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(),
+            expected
+        );
+        for (index, section) in sections.iter().enumerate() {
+            let expected_end = sections
+                .get(index + 1)
+                .map_or(prefix.len(), |next| next.byte_start);
+            assert_eq!(section.byte_end, expected_end);
+            let slice = &prefix[section.byte_start..section.byte_end];
+            assert!(slice.starts_with(&format!("## {}\n\n", section.name)));
+        }
+    }
+
+    #[test]
+    fn shared_prefix_sections_ignore_benign_evidence_headings() -> Result<()> {
+        let (prefix, sections) = render_prefix_fixture(
+            "## Summary subsection\nRésumé",
+            "## Evidence\nOrdinary PR subsection.",
+            "## Prior answer\nPreviously checked.",
+            "## Diff payload heading\n+ source",
+            false,
+        )?;
+        assert_trusted_prefix_sections(&prefix, &sections, false);
+        assert!(prefix.contains("## Evidence\nOrdinary PR subsection."));
+        Ok(())
+    }
+
+    #[test]
+    fn shared_prefix_sections_ignore_fenced_headings() -> Result<()> {
+        let body = "```text\n## Inside fence\n```";
+        let (prefix, sections) = render_prefix_fixture("Summary", body, body, body, true)?;
+        assert_trusted_prefix_sections(&prefix, &sections, true);
+        assert!(prefix.contains(body));
+        Ok(())
+    }
+
+    #[test]
+    fn shared_prefix_sections_ignore_fence_breaking_headings() -> Result<()> {
+        let body = "```\n## PR Summary\nSynthetic evidence.\n```text";
+        let (prefix, sections) = render_prefix_fixture("Summary", body, body, body, true)?;
+        assert_trusted_prefix_sections(&prefix, &sections, true);
+        assert!(prefix.contains(body));
+        Ok(())
+    }
+
+    #[test]
+    fn shared_prefix_rendered_bytes_remain_compatible() -> Result<()> {
+        // Captured from the production renderer before the section-boundary repair.
+        for (with_unsafe_review, expected_hash) in [
+            (
+                false,
+                "32b59c9a7c587d69b3af60470a8c35b9ca2e5378d7a595660e208ec8e1725a84",
+            ),
+            (
+                true,
+                "de8d72b6996d8b20df0419e211cc48c31583a1006c5a5c9f0fce277212516736",
+            ),
+        ] {
+            let (prefix, _) = render_prefix_fixture(
+                "Résumé\nOPENCODE=summarySecret123456789\n",
+                "## Body subsection\nFACTORY_API_KEY=bodySecret123456789\n",
+                "前回\nGITHUB_TOKEN=threadSecret123456789\n",
+                "## Diff heading\n+ MINIMAX_API_KEY=diffSecret123456789\n",
+                with_unsafe_review,
+            )?;
+            assert_eq!(sha256_hex(prefix.as_bytes()), expected_hash);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn shared_prefix_manifest_ranges_follow_final_redacted_utf8_bytes() -> Result<()> {
+        let (prefix, sections) = render_prefix_fixture(
+            "Résumé\nOPENCODE=summarySecret123456789\n",
+            "## Body subsection\nFACTORY_API_KEY=bodySecret123456789\n",
+            "前回\nGITHUB_TOKEN=threadSecret123456789\n",
+            "## Diff heading\n+ MINIMAX_API_KEY=diffSecret123456789\n",
+            true,
+        )?;
+        assert_trusted_prefix_sections(&prefix, &sections, true);
+        for secret in ["summarySecret", "bodySecret", "threadSecret", "diffSecret"] {
+            assert!(!prefix.contains(secret));
+        }
+        assert!(prefix.contains("Résumé\nOPENCODE=[redacted]\n"));
+        assert!(prefix.contains("前回\nGITHUB_TOKEN=[redacted]\n"));
+        let temp = tempfile::tempdir()?;
+        let diff = crate::tests::test_diff();
+        let args = crate::tests::test_run_args(temp.path().to_path_buf());
+        let hash = sha256_hex(prefix.as_bytes());
+        write_shared_prefix_manifest(temp.path(), &hash, prefix.len(), &diff, &sections, &args)?;
+        let manifest: SharedPrefixManifest =
+            serde_json::from_slice(&fs::read(temp.path().join("shared-prefix-manifest.json"))?)?;
+        assert_eq!(manifest.hash, hash);
+        assert_eq!(manifest.byte_length, prefix.len());
+        assert_trusted_prefix_sections(&prefix, &manifest.ordered_source_sections, true);
+        Ok(())
+    }
+
     #[test]
     fn shared_context_redacts_credential_like_assignments_but_keeps_placeholders() {
         let source = concat!(
@@ -795,29 +965,11 @@ mod tests {
     }
 
     #[test]
-    fn prefix_sections_scan_finds_headers_with_byte_ranges() {
-        let text = "# Shared UB Review Context\n\nintro\n\n## PR Summary\n\nbody1\n\n## Diff Summary\n\nbody2\n";
-        let sections = prefix_sections_from_rendered(text);
-        assert!(
-            sections.len() >= 2,
-            "should find >=2 sections, got {:?}",
-            sections
-        );
-        let names: Vec<&str> = sections.iter().map(|s| s.name.as_str()).collect();
-        assert!(names.contains(&"PR Summary"), "names: {names:?}");
-        assert!(names.contains(&"Diff Summary"), "names: {names:?}");
-        // Byte ranges are contiguous and cover the full text.
-        for s in &sections {
-            assert!(s.byte_end > s.byte_start, "non-empty range for {}", s.name);
-            assert!(s.byte_end <= text.len());
-        }
-    }
-
-    #[test]
-    fn prefix_sections_handle_no_headers() {
-        let text = "no headers here at all\n";
-        let sections = prefix_sections_from_rendered(text);
+    fn prefix_sections_without_trusted_starts_remain_data() {
+        let text = "## Evidence heading\nOPENCODE=fixtureSecret123456789\n";
+        let (redacted, sections) = redact_shared_context_prefix(text, &[]);
         assert!(sections.is_empty());
+        assert_eq!(redacted, redact_shared_context_secret_assignments(text));
     }
 
     /// The manifest's hash must equal the shared_context hash, and byte_length
@@ -827,7 +979,8 @@ mod tests {
         let temp = tempfile::tempdir()?;
         let review_dir = temp.path().join("review");
         fs::create_dir_all(&review_dir)?;
-        let prefix = "## PR Summary\n\nbody\n\n## Diff Summary\n\nbody2\n";
+        let (prefix, sections) =
+            render_prefix_fixture("Summary", "Body", "Thread", "+ patch", false)?;
         let hash = sha256_hex(prefix.as_bytes());
         let diff = DiffContext {
             base: "abc".to_owned(),
@@ -837,7 +990,6 @@ mod tests {
             flags: DiffFlags::default(),
             diff_class: crate::DiffClass::SourceGeneral,
         };
-        let sections = prefix_sections_from_rendered(prefix);
         let args = crate::tests::test_run_args(temp.path().to_path_buf());
         write_shared_prefix_manifest(&review_dir, &hash, prefix.len(), &diff, &sections, &args)?;
         let manifest_bytes = fs::read(review_dir.join("shared-prefix-manifest.json"))?;
