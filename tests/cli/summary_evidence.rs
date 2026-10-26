@@ -397,6 +397,240 @@ fn generated_preliminary_plan_does_not_warn_about_missing_terminal_artifacts() -
 }
 
 #[test]
+fn plan_for_new_revision_does_not_relabel_an_old_run_gate_as_current() -> Result<()> {
+    let _guard = cli_subprocess_test_lock()?;
+    let fixture = Fixture::new()?;
+    let out = fixture.packet("replanned", "", false)?;
+    let gate_path = out.join("review/gate_outcome.json");
+    let old_gate_bytes = fs::read(&gate_path)?;
+    let old_gate: Value = serde_json::from_slice(&old_gate_bytes)?;
+    let old_revision = old_gate["revision"]["digest"]
+        .as_str()
+        .context("generated run A revision digest")?;
+    assert_gate(&fixture.summary(&out)?, "pass", 0);
+    fs::remove_file(out.join("review/metrics.json"))?;
+
+    // A real third commit selects a different file and admitted revision.
+    // Preserve all other run A artifacts to exercise normal directory reuse.
+    write_file(&fixture.repo.join("docs/new-plan.md"), "# New revision B\n")?;
+    run(&fixture.repo, "git", &["add", "."])?;
+    run(&fixture.repo, "git", &["commit", "-m", "new plan subject"])?;
+    let current_head =
+        super::run_capture_with_env(&fixture.repo, "git", &["rev-parse", "HEAD"], &[])?;
+    let config = fixture.temp.path().join("replanned.toml");
+    run(
+        fixture.temp.path(),
+        BIN,
+        &[
+            "plan",
+            "--write",
+            "--root",
+            path_str(&fixture.repo)?,
+            "--config",
+            path_str(&config)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+        ],
+    )?;
+    assert_eq!(digest(&fs::read(&gate_path)?), digest(&old_gate_bytes));
+    // Legacy gate-check validates the supplied old receipt, not the plan's
+    // revision. Its unchanged pass cannot establish evidence for revision B.
+    fixture.gate_check(&out, true)?;
+    let planned_summary = fixture.summary(&out)?;
+    assert!(
+        planned_summary.contains("- `docs/new-plan.md`"),
+        "{planned_summary}"
+    );
+    assert!(
+        !planned_summary.contains("- `README.md`"),
+        "{planned_summary}"
+    );
+    for stale_terminal_claim in [
+        "Gate: `pass`",
+        "## Calibration",
+        "## Provider preflights",
+        "## Model lane status",
+    ] {
+        assert!(
+            !planned_summary.contains(stale_terminal_claim),
+            "a written plan for B must not present A's terminal evidence as current: {planned_summary}"
+        );
+    }
+    assert_eq!(digest(&fs::read(&gate_path)?), digest(&old_gate_bytes));
+
+    let regenerated = fixture.packet("replanned", "", false)?;
+    let current_gate = read_json(&regenerated.join("review/gate_outcome.json"))?;
+    let current_revision = current_gate["revision"]["digest"]
+        .as_str()
+        .context("generated run B revision digest")?;
+    assert_ne!(current_revision, old_revision);
+    assert_eq!(
+        current_gate["revision"]["reviewed_commit"],
+        current_head.trim()
+    );
+    assert_gate(&fixture.summary(&regenerated)?, "pass", 0);
+    fixture.gate_check(&regenerated, true)?;
+    Ok(())
+}
+
+#[test]
+fn same_revision_plan_reuse_keeps_existing_terminal_receipts_out_of_plan_summary() -> Result<()> {
+    let _guard = cli_subprocess_test_lock()?;
+    let fixture = Fixture::new()?;
+    let out = fixture.packet("same-revision", "", false)?;
+    let gate_path = out.join("review/gate_outcome.json");
+    let gate_bytes = fs::read(&gate_path)?;
+    let config = fixture.temp.path().join("same-revision.toml");
+    assert_gate(&fixture.summary(&out)?, "pass", 0);
+    run(
+        fixture.temp.path(),
+        BIN,
+        &[
+            "plan",
+            "--write",
+            "--root",
+            path_str(&fixture.repo)?,
+            "--config",
+            path_str(&config)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+        ],
+    )?;
+    let summary = fixture.summary(&out)?;
+    for terminal_claim in [
+        "Gate: `pass`",
+        "## Calibration",
+        "## Provider preflights",
+        "## Model lane status",
+    ] {
+        assert!(
+            !summary.contains(terminal_claim),
+            "planning does not perform a review, even when the old receipt names the same revision: {summary}"
+        );
+    }
+    assert!(summary.contains("- `README.md`"), "{summary}");
+    assert_eq!(digest(&fs::read(&gate_path)?), digest(&gate_bytes));
+    fixture.gate_check(&out, true)?;
+    let regenerated = fixture.packet("same-revision", "", false)?;
+    assert_gate(&fixture.summary(&regenerated)?, "pass", 0);
+    fixture.gate_check(&regenerated, true)?;
+    Ok(())
+}
+
+#[test]
+fn unavailable_or_ambiguous_phase_cannot_overwrite_a_retained_summary() -> Result<()> {
+    let _guard = cli_subprocess_test_lock()?;
+    let fixture = Fixture::new()?;
+    let out = fixture.packet("phase-admission", "", false)?;
+    let phase_path = out.join("resolved-plan.json");
+    let original_phase = fs::read(&phase_path)?;
+    let phase: Value = serde_json::from_slice(&original_phase)?;
+    let summary_path = out.join("running-summary.md");
+    let original_summary = fixture.summary(&out)?;
+    let original_summary_bytes = fs::read(&summary_path)?;
+    let gate_path = out.join("review/gate_outcome.json");
+    let gate_bytes = fs::read(&gate_path)?;
+    for mutation in [
+        "missing",
+        "directory",
+        "malformed",
+        "wrong-schema",
+        "missing-schema",
+        "mistyped-schema",
+        "missing-run-pass",
+        "mistyped-run-pass",
+        "unknown-run-pass",
+        "auto-run-pass",
+        "duplicate-schema",
+        "duplicate-run-pass",
+    ] {
+        match mutation {
+            "missing" => fs::remove_file(&phase_path)?,
+            "directory" => {
+                fs::remove_file(&phase_path)?;
+                fs::create_dir(&phase_path)?;
+            }
+            "malformed" => fs::write(&phase_path, b"{\"run_pass\":")?,
+            "duplicate-schema" | "duplicate-run-pass" => {
+                let prefix = if mutation == "duplicate-schema" {
+                    r#""schema":"untrusted.phase.schema","#
+                } else {
+                    r#""run_pass":"plan-default","#
+                };
+                let remaining = std::str::from_utf8(&original_phase)?
+                    .strip_prefix('{')
+                    .context("generated phase metadata must be an object")?;
+                fs::write(&phase_path, format!("{{{prefix}{remaining}"))?;
+            }
+            _ => {
+                let mut invalid = phase.clone();
+                match mutation {
+                    "missing-schema" => {
+                        invalid
+                            .as_object_mut()
+                            .context("phase object")?
+                            .remove("schema");
+                    }
+                    "missing-run-pass" => {
+                        invalid
+                            .as_object_mut()
+                            .context("phase object")?
+                            .remove("run_pass");
+                    }
+                    "mistyped-schema" => invalid["schema"] = Value::Bool(true),
+                    "mistyped-run-pass" => invalid["run_pass"] = Value::Array(Vec::new()),
+                    "wrong-schema" => {
+                        invalid["schema"] = Value::String("untrusted.phase.schema".to_owned())
+                    }
+                    "auto-run-pass" => invalid["run_pass"] = Value::String("auto".to_owned()),
+                    _ => invalid["run_pass"] = Value::String("unknown".to_owned()),
+                }
+                fs::write(&phase_path, serde_json::to_vec(&invalid)?)?;
+            }
+        }
+        let failure = run_expect_failure(
+            fixture.temp.path(),
+            BIN,
+            &["summary", "--run-dir", path_str(&out)?],
+        )?;
+        assert!(
+            failure.contains("resolved-plan.json"),
+            "{mutation}: {failure}"
+        );
+        let recovery = failure.to_lowercase();
+        assert!(
+            recovery.contains("recover") && recovery.contains("new identified run"),
+            "phase failures need bounded recovery guidance: {mutation}: {failure}"
+        );
+        assert_eq!(
+            fs::read(&summary_path)?,
+            original_summary_bytes,
+            "{mutation} overwrote the retained summary"
+        );
+        assert_eq!(
+            digest(&fs::read(&gate_path)?),
+            digest(&gate_bytes),
+            "{mutation} changed the old gate receipt"
+        );
+        fixture.gate_check(&out, true)?;
+        if mutation == "directory" {
+            fs::remove_dir(&phase_path)?;
+        }
+        fs::write(&phase_path, &original_phase)?;
+        assert_eq!(fixture.summary(&out)?, original_summary);
+    }
+    Ok(())
+}
+
+#[test]
 fn fresh_and_reused_runs_keep_terminal_evidence_out_of_preliminary_model_context() -> Result<()> {
     let _guard = cli_subprocess_test_lock()?;
     let fixture = Fixture::new()?;
