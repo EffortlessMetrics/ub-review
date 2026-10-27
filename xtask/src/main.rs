@@ -1008,42 +1008,54 @@ fn missing_receipt(name: &str) -> CommandReceipt {
 }
 
 fn changed_files(root: &Path, staged: bool) -> Result<Vec<ChangedFile>> {
-    let mut args = if staged {
-        vec!["diff", "--cached", "--name-only", "--diff-filter=ACMRTUXB"]
+    let args = if staged {
+        vec![
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z",
+            "--diff-filter=ACMRTUXB",
+        ]
     } else {
-        vec!["diff", "HEAD", "--name-only", "--diff-filter=ACMRTUXB"]
+        vec![
+            "diff",
+            "HEAD",
+            "--name-only",
+            "-z",
+            "--diff-filter=ACMRTUXB",
+        ]
     };
-    let output = command_output(root, "git", &args)?;
-    if !output.status.success() {
-        bail!(
-            "git changed-file detection failed: {}",
-            output.stderr.trim()
-        );
-    }
-
     let mut files = BTreeMap::new();
-    for line in output.stdout.lines() {
-        let path = line.trim();
-        if !path.is_empty() {
-            files.insert(path.to_owned(), BTreeSet::new());
+    for path in git_nul_paths(root, &args).context("detect changed paths")? {
+        // Git can classify invalid-text Rust as binary and emit no hunks.
+        // Validate admitted Rust explicitly rather than silently losing lines.
+        if path.ends_with(".rs") {
+            read_rust_source(root, &path)?;
         }
+        files.insert(path, BTreeSet::new());
     }
 
     if !staged {
-        args = vec!["ls-files", "--others", "--exclude-standard"];
-        let untracked = command_output(root, "git", &args)?;
-        if untracked.status.success() {
-            for line in untracked.stdout.lines() {
-                let path = line.trim();
-                if !path.is_empty() {
-                    files.insert(path.to_owned(), all_file_lines(root, path)?);
-                }
-            }
+        for path in git_nul_paths(root, &["ls-files", "--others", "--exclude-standard", "-z"])
+            .context("detect untracked paths")?
+        {
+            // Only Rust sources need line text. Binary assets retain their
+            // exact identity without being decoded as source text.
+            let lines = if path.ends_with(".rs") {
+                all_file_lines(root, &path)?
+            } else {
+                BTreeSet::new()
+            };
+            files.insert(path, lines);
         }
     }
 
     for (path, lines) in diff_changed_lines(root, staged)? {
-        files.entry(path).or_default().extend(lines);
+        if let Some(admitted) = files.get_mut(&path) {
+            admitted.extend(lines);
+        } else {
+            bail!("Git patch path {path:?} does not match an admitted changed path");
+        }
     }
 
     Ok(files
@@ -1052,36 +1064,129 @@ fn changed_files(root: &Path, staged: bool) -> Result<Vec<ChangedFile>> {
         .collect())
 }
 
+fn git_nul_paths(root: &Path, args: &[&str]) -> Result<Vec<String>> {
+    git_bytes(root, args)?
+        .split(|byte| *byte == 0)
+        .filter(|record| !record.is_empty())
+        .map(|record| {
+            String::from_utf8(record.to_vec()).with_context(|| format!(
+                "precommit cannot classify non-UTF-8 Git path bytes {record:02x?}; use a UTF-8 path or a path-aware workflow"
+            ))
+        })
+        .collect()
+}
+
 fn diff_changed_lines(root: &Path, staged: bool) -> Result<BTreeMap<String, BTreeSet<u64>>> {
-    let args = if staged {
-        vec!["diff", "--cached", "--unified=0"]
-    } else {
-        vec!["diff", "HEAD", "--unified=0"]
-    };
-    let output = command_output(root, "git", &args)?;
-    if !output.status.success() {
-        bail!(
-            "git changed-line detection failed: {}",
-            output.stderr.trim()
-        );
-    }
+    let mut args = vec!["diff", if staged { "--cached" } else { "HEAD" }];
+    // Make the machine-parsed patch independent of display prefix settings
+    // and text converters. Source payload bytes do not need UTF-8 decoding.
+    args.extend([
+        "--no-ext-diff",
+        "--no-textconv",
+        "--src-prefix=a/",
+        "--dst-prefix=b/",
+        "--unified=0",
+        "--",
+    ]);
+    let output = git_bytes(root, &args).context("detect changed lines")?;
 
     let mut lines_by_file: BTreeMap<String, BTreeSet<u64>> = BTreeMap::new();
     let mut current: Option<String> = None;
-    for line in output.stdout.lines() {
-        if let Some(rest) = line.strip_prefix("+++ b/") {
-            current = Some(rest.to_owned());
-        } else if line.starts_with("@@")
-            && let Some(path) = current.as_ref()
-            && let Some((start, count)) = parse_hunk_added_range(line)
-        {
-            let entry = lines_by_file.entry(path.clone()).or_default();
-            for offset in 0..count {
-                entry.insert(start + offset);
+    let mut headers = false;
+    for line in output.split(|byte| *byte == b'\n') {
+        if line.starts_with(b"diff --git ") {
+            current = None;
+            headers = true;
+        } else if headers && let Some(header) = line.strip_prefix(b"+++ ") {
+            let header = std::str::from_utf8(header).context("decode Git patch path")?;
+            let header = if header.starts_with('"') {
+                header
+            } else {
+                header.strip_suffix('\t').unwrap_or(header)
+            };
+            let path = parse_git_patch_path(header).context("parse changed-file patch path")?;
+            current = if path == "/dev/null" {
+                None
+            } else {
+                Some(
+                    path.strip_prefix("b/")
+                        .context("Git patch path lacks b/ prefix")?
+                        .to_owned(),
+                )
+            };
+        } else if line.starts_with(b"@@") {
+            headers = false;
+            if let Some(path) = current.as_ref()
+                && let Some((start, count)) = parse_hunk_added_range(
+                    std::str::from_utf8(line).context("decode Git hunk header")?,
+                )
+            {
+                let entry = lines_by_file.entry(path.clone()).or_default();
+                for offset in 0..count {
+                    entry.insert(start + offset);
+                }
             }
         }
     }
     Ok(lines_by_file)
+}
+
+fn parse_git_patch_path(path: &str) -> Result<String> {
+    let bytes = path.as_bytes();
+    if bytes.first() != Some(&b'"') {
+        if path.is_empty() {
+            bail!("empty Git patch path");
+        }
+        return Ok(path.to_owned());
+    }
+    if bytes.len() < 2 || bytes.last() != Some(&b'"') {
+        bail!("unterminated quoted Git patch path");
+    }
+    let mut decoded = Vec::new();
+    let mut index = 1;
+    while index < bytes.len() - 1 {
+        let byte = bytes[index];
+        index += 1;
+        if byte == b'"' {
+            bail!("unescaped quote in Git patch path");
+        }
+        if byte != b'\\' {
+            decoded.push(byte);
+            continue;
+        }
+        if index >= bytes.len() - 1 {
+            bail!("Git path escape consumes closing quote");
+        }
+        let escaped = bytes[index];
+        index += 1;
+        decoded.push(match escaped {
+            b'"' | b'\\' => escaped,
+            b'a' => 7,
+            b'b' => 8,
+            b't' => b'\t',
+            b'n' => b'\n',
+            b'v' => 11,
+            b'f' => 12,
+            b'r' => b'\r',
+            b'0'..=b'7' => {
+                let mut value = u16::from(escaped - b'0');
+                for _ in 1..3 {
+                    if index >= bytes.len() - 1 || !(b'0'..=b'7').contains(&bytes[index]) {
+                        break;
+                    }
+                    value = value * 8 + u16::from(bytes[index] - b'0');
+                    index += 1;
+                }
+                u8::try_from(value).context("Git path escape exceeds one byte")?
+            }
+            other => bail!("unsupported Git path escape {other:#x}"),
+        });
+    }
+    if decoded.is_empty() || decoded.contains(&0) {
+        bail!("empty or NUL Git patch path");
+    }
+    String::from_utf8(decoded)
+        .context("Git patch path is not UTF-8; refusing to misattribute changed lines")
 }
 
 fn parse_hunk_added_range(line: &str) -> Option<(u64, u64)> {
@@ -1100,14 +1205,23 @@ fn parse_hunk_added_range(line: &str) -> Option<(u64, u64)> {
 }
 
 fn all_file_lines(root: &Path, relative: &str) -> Result<BTreeSet<u64>> {
-    let text = fs::read_to_string(root.join(relative))
-        .with_context(|| format!("read changed file {relative}"))?;
+    let text = read_rust_source(root, relative)?;
     let mut lines = BTreeSet::new();
     for (index, _) in text.lines().enumerate() {
         let number = u64::try_from(index).context("line number overflow")? + 1;
         lines.insert(number);
     }
     Ok(lines)
+}
+
+fn read_rust_source(root: &Path, relative: &str) -> Result<String> {
+    let bytes = fs::read(root.join(relative))
+        .with_context(|| format!("read changed Rust file {relative:?}"))?;
+    String::from_utf8(bytes).with_context(|| {
+        format!(
+            "changed Rust file {relative} is not valid UTF-8; cannot safely determine changed lines"
+        )
+    })
 }
 
 fn prepare_precommit_out_dir(root: &Path) -> Result<PathBuf> {
@@ -1218,13 +1332,13 @@ fn affected_packages(
         .context("canonicalize repository root")?;
     let mut affected = BTreeSet::new();
     for file in changed {
-        let normalized = normalize_path(&file.path);
+        let normalized = file.path.as_str();
         if normalized == "Cargo.lock" || normalized == "Cargo.toml" {
             affected.extend(packages.iter().map(|package| package.name.clone()));
             continue;
         }
 
-        let absolute = repo_absolute_path(&canonical_root, &normalized);
+        let absolute = repo_absolute_path(&canonical_root, normalized);
         if normalized.ends_with("Cargo.toml") {
             if let Some(package) = packages
                 .iter()
@@ -1293,16 +1407,13 @@ fn write_diff_artifact(root: &Path, out_dir: &Path, staged: bool) -> Result<Path
     } else {
         vec!["diff", "HEAD", "--unified=3"]
     };
-    let output = command_output(root, "git", &args)?;
-    if !output.status.success() {
-        bail!("git diff artifact failed: {}", output.stderr.trim());
-    }
+    let output = git_bytes(root, &args).context("write Git diff artifact")?;
     let path = out_dir.join(if staged {
         "staged.diff"
     } else {
         "working-tree.diff"
     });
-    fs::write(&path, output.stdout).with_context(|| format!("write {}", path.display()))?;
+    fs::write(&path, output).with_context(|| format!("write {}", path.display()))?;
     Ok(path)
 }
 
@@ -1314,7 +1425,7 @@ fn run_clippy_on_diff(
 ) -> Result<(Vec<CommandReceipt>, Vec<ClippyDiagnostic>)> {
     let changed_map = changed
         .iter()
-        .map(|file| (normalize_repo_path(root, &file.path), file.lines.clone()))
+        .map(|file| (file.path.clone(), file.lines.clone()))
         .collect::<BTreeMap<_, _>>();
     let mut receipts = Vec::new();
     let mut all_messages = Vec::new();
@@ -1719,7 +1830,12 @@ fn safe_name(name: &str) -> String {
 }
 
 fn normalize_path(path: &str) -> String {
-    path.trim_start_matches("./").replace('\\', "/")
+    let path = path.strip_prefix("./").unwrap_or(path);
+    if cfg!(windows) {
+        path.replace('\\', "/")
+    } else {
+        path.to_owned()
+    }
 }
 
 fn repo_absolute_path(canonical_root: &Path, path: &str) -> PathBuf {
@@ -1766,7 +1882,12 @@ fn repo_relative_path(root: &Path, candidate: &Path) -> Option<String> {
 }
 
 fn path_to_slash_string(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
+    let text = path.to_string_lossy();
+    if cfg!(windows) {
+        text.replace('\\', "/")
+    } else {
+        text.into_owned()
+    }
 }
 
 #[cfg(test)]
@@ -2460,6 +2581,36 @@ mod tests {
             .into_iter()
             .map(|package| package.name)
             .collect::<Vec<_>>()
+    }
+
+    #[test]
+    fn git_patch_paths_decode_bytes_without_normalizing_identity() -> Result<()> {
+        for (encoded, decoded) in [
+            (r#""b/\303\251.rs""#, "b/é.rs"),
+            (r#""b/a\tb\nc\\d\".rs""#, "b/a\tb\nc\\d\".rs"),
+            (r#""b/\a\b\v\f\r""#, "b/\x07\x08\x0b\x0c\r"),
+            (r#""b/\1\12\1234""#, "b/\x01\nS4"),
+            ("b/ leading and trailing ", "b/ leading and trailing "),
+        ] {
+            assert_eq!(parse_git_patch_path(encoded)?, decoded);
+        }
+        for invalid in [
+            "",
+            "\"",
+            "\"\"",
+            "\"unterminated",
+            "\"a\\\"",
+            "\"a\"b\"",
+            r#""b/\q""#,
+            r#""b/\8""#,
+            r#""b/\400""#,
+            r#""b/\777""#,
+            r#""b/\377""#,
+            r#""b/\0""#,
+        ] {
+            assert!(parse_git_patch_path(invalid).is_err(), "{invalid:?}");
+        }
+        Ok(())
     }
 
     fn write_bun_pin_docs(root: &Path, pin: &str, pr: &str) -> Result<()> {
