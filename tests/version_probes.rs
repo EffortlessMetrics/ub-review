@@ -1,6 +1,7 @@
 //! Real CLI controls owned by #1557; version pins/grammar remain with #1067.
 use anyhow::{Context, Result, ensure};
 use std::{
+    ffi::OsString,
     fs,
     path::PathBuf,
     process::{Command, Output, Stdio},
@@ -14,6 +15,71 @@ use std::path::Path;
 struct Harness {
     temp: tempfile::TempDir,
     fixture: PathBuf,
+}
+
+fn cli_command(mut environment: impl FnMut(&str) -> Option<OsString>) -> Command {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_ub-review"));
+    cmd.env_clear();
+    // Keep coverage output in its owned directory, plus the keys needed for
+    // cache-warm's local git tree lookup and Windows process startup.
+    for key in [
+        "LLVM_PROFILE_FILE",
+        "PATH",
+        "SystemRoot",
+        "SYSTEMROOT",
+        "WINDIR",
+        "TMP",
+        "TEMP",
+    ] {
+        if let Some(value) = environment(key) {
+            cmd.env(key, value);
+        }
+    }
+    cmd
+}
+
+#[test]
+fn cli_environment_preserves_coverage_and_platform_keys_only() {
+    use std::{collections::BTreeMap, ffi::OsStr};
+
+    let preserved = [
+        (
+            "LLVM_PROFILE_FILE",
+            "/owned coverage/ub-review-%p-%m.profraw",
+        ),
+        ("PATH", "/tools/bin"),
+        ("SystemRoot", "C:\\Windows"),
+        ("SYSTEMROOT", "C:\\Windows"),
+        ("WINDIR", "C:\\Windows"),
+        ("TMP", "C:\\Temp"),
+        ("TEMP", "C:\\Temp"),
+    ];
+    let supplied: BTreeMap<_, _> = preserved
+        .into_iter()
+        .chain([
+            ("GITHUB_TOKEN", "synthetic-github-secret"),
+            ("OPENAI_API_KEY", "synthetic-provider-secret"),
+            ("UNRELATED_SECRET", "synthetic-unrelated-secret"),
+        ])
+        .collect();
+    let cmd = cli_command(|key| supplied.get(key).map(|value| OsString::from(*value)));
+    // Windows merges case variants such as SystemRoot and SYSTEMROOT.
+    let normalize_key = |key: &str| {
+        if cfg!(windows) {
+            key.to_ascii_uppercase()
+        } else {
+            key.to_owned()
+        }
+    };
+    let actual: BTreeMap<_, _> = cmd
+        .get_envs()
+        .map(|(key, value)| (normalize_key(&key.to_string_lossy()), value))
+        .collect();
+    let expected: BTreeMap<_, _> = preserved
+        .into_iter()
+        .map(|(key, value)| (normalize_key(key), Some(OsStr::new(value))))
+        .collect();
+    assert_eq!(actual, expected);
 }
 
 impl Harness {
@@ -81,14 +147,8 @@ impl Harness {
         let started = Instant::now();
         let out = self.temp.path().join("cli.out");
         let err = self.temp.path().join("cli.err");
-        let mut cmd = Command::new(env!("CARGO_BIN_EXE_ub-review"));
-        cmd.current_dir(self.temp.path()).env_clear();
-        // Needed only for cache-warm's local git tree lookup and Windows process startup.
-        for key in ["PATH", "SystemRoot", "SYSTEMROOT", "WINDIR", "TMP", "TEMP"] {
-            if let Some(value) = std::env::var_os(key) {
-                cmd.env(key, value);
-            }
-        }
+        let mut cmd = cli_command(|key| std::env::var_os(key));
+        cmd.current_dir(self.temp.path());
         let mut child = cmd
             .args(args)
             .args(["--config", "config.toml"])
