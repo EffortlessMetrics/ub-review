@@ -182,7 +182,10 @@ mod tests {
                 "gate.synchronize_mode",
                 "Remove synchronize_mode; use [gate].post_review_on to select review-posting passes.",
             ),
-            ("gate", "Correct [gate] to a table of supported gate fields."),
+            (
+                "gate",
+                "Correct [gate] to a table of supported gate fields.",
+            ),
             (
                 "providers",
                 "Correct [providers] to a table; set policy to auto, minimax-primary, primary-with-fallback, minimax-only, opencode-go-canary or opencode-go-wide.",

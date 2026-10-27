@@ -499,9 +499,8 @@ fn rejected_tool_identifiers_and_fields_stay_out_of_diagnostic_artifacts() -> Re
                 let artifact = fs::read_to_string(root.join("packet").join(name))?;
                 ensure!(!artifact.contains(CANARY), "rejected identifier in {name}");
             }
-            let effective: serde_json::Value = serde_json::from_slice(&fs::read(
-                root.join("packet/effective-config.json"),
-            )?)?;
+            let effective: serde_json::Value =
+                serde_json::from_slice(&fs::read(root.join("packet/effective-config.json"))?)?;
             ensure!(effective["policy_errors"].as_array().map(Vec::len) == Some(2));
             ensure!(effective["gate"]["hard_timeout_minutes"] == 71);
         }
