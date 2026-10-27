@@ -34,15 +34,37 @@ fn display_projection_never_retains_child_prose_or_controls() {
 }
 
 #[test]
+fn display_projection_rejects_non_numeric_dotted_tokens_on_both_streams() {
+    // These each violate a different part of the existing projection contract.
+    // None changes the separately owned tool-specific pin grammar in #1067.
+    for token in ["123", ".1", "1.secret"] {
+        assert_eq!(version_text("tokmd", token.as_bytes(), &[]), None);
+        assert_eq!(version_text("tokmd", &[], token.as_bytes()), None);
+    }
+    for token in ["1.2", "v1.2"] {
+        let expected = format!("tokmd {token}");
+        assert_eq!(
+            version_text("tokmd", token.as_bytes(), &[]).as_deref(),
+            Some(expected.as_str())
+        );
+        assert_eq!(
+            version_text("tokmd", &[], token.as_bytes()).as_deref(),
+            Some(expected.as_str())
+        );
+    }
+}
+
+#[test]
 fn stream_ceiling_is_enforced_during_capture() -> Result<()> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    for count in [0, STREAM_LIMIT, STREAM_LIMIT + 1, STREAM_LIMIT * 1024] {
+    // Use the public byte ceiling, independently of the production constant.
+    for count in [0, 4096, 4097, 4 * 1024 * 1024] {
         // A generated reader retains no full oversized input, independently of
         // the production capture buffer under test.
         let result = runtime.block_on(capture(tokio::io::repeat(b'x').take(count as u64)));
-        if count <= STREAM_LIMIT {
+        if count <= 4096 {
             ensure!(result.as_ref().is_ok_and(|bytes| bytes.len() == count));
         } else {
             ensure!(result == Err(ProbeState::OutputLimit));
@@ -113,6 +135,13 @@ fn cleanup_failures_remain_explicit_and_all_waits_are_bounded() -> Result<()> {
             false,
             false,
             Cleanup::Reaped,
+        ),
+        (
+            vec![Err(io::Error::other("synthetic check failure")), Ok(true)],
+            true,
+            false,
+            false,
+            Cleanup::CheckFailedReaped,
         ),
         (vec![Ok(false)], false, true, false, Cleanup::ReapFailed),
         (vec![Ok(false)], false, false, true, Cleanup::ReapTimeout),
