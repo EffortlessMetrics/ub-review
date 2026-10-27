@@ -19,35 +19,50 @@ pub(crate) fn prepare_plan(
         args.config.as_deref(),
         runtime_profile_override(args.profile.as_ref(), args.runtime_profile.as_ref()),
     )?;
-    let profile = config.selected_profile()?;
-    let box_state = BoxState::detect()?;
-    let (diff, revision) = if let Some(admission) = trusted_admission {
-        admission
-    } else {
-        let diff = DiffContext::from_git(&args.root, &args.base, &args.head)?;
-        // A1.2 (#949): admit the exact reviewed revision next to the diff so the
-        // digests bind to the same changed-file set and patch. Ambiguity here is
-        // an explicit evidence failure, never a relabeled identity. Hosted
-        // non-PR events render the workflow expression as an empty string, which
-        // means "no metadata" exactly like an unset variable.
-        let pr_head_sha = args
-            .pr_head_sha
-            .as_deref()
-            .map(str::trim)
-            .filter(|sha| !sha.is_empty());
-        let revision = admit_revision(
-            &args.root,
-            &args.base,
-            &args.head,
-            pr_head_sha,
-            &diff.changed_files,
-            &diff.patch,
-        )?;
-        (diff, revision)
-    };
-    revision.validate()?;
-    let mut plan = build_plan(&config, profile, &box_state, &diff, &args.root, allow_heavy);
-    apply_plan_selectors(&mut plan, selectors)?;
+    // Do not lose already-known policy errors when ordinary plan construction
+    // fails later. Trusted admission and config read/parse retain their earlier
+    // ordering, and the original planning error remains in the error chain.
+    let prepared: Result<_> = (|| {
+        let profile = config.selected_profile()?;
+        let box_state = BoxState::detect()?;
+        let (diff, revision) = if let Some(admission) = trusted_admission {
+            admission
+        } else {
+            let diff = DiffContext::from_git(&args.root, &args.base, &args.head)?;
+            // A1.2 (#949): admit the exact reviewed revision next to the diff so the
+            // digests bind to the same changed-file set and patch. Ambiguity here is
+            // an explicit evidence failure, never a relabeled identity. Hosted
+            // non-PR events render the workflow expression as an empty string, which
+            // means "no metadata" exactly like an unset variable.
+            let pr_head_sha = args
+                .pr_head_sha
+                .as_deref()
+                .map(str::trim)
+                .filter(|sha| !sha.is_empty());
+            let revision = admit_revision(
+                &args.root,
+                &args.base,
+                &args.head,
+                pr_head_sha,
+                &diff.changed_files,
+                &diff.patch,
+            )?;
+            (diff, revision)
+        };
+        revision.validate()?;
+        let mut plan = build_plan(&config, profile, &box_state, &diff, &args.root, allow_heavy);
+        apply_plan_selectors(&mut plan, selectors)?;
+        Ok((diff, box_state, plan, revision))
+    })();
+    let (diff, box_state, plan, revision) = prepared.map_err(|error| {
+        if let Some(diagnostic) =
+            crate::preflight_diagnostics::config_diagnostic(&config, args.config.as_deref())
+        {
+            error.context(diagnostic)
+        } else {
+            error
+        }
+    })?;
     Ok((config, diff, box_state, plan, revision))
 }
 

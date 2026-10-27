@@ -384,3 +384,149 @@ fn plan_write_failure_remains_failure_and_keeps_semantic_diagnosis() -> Result<(
     ensure!(!temp.path().join("packet/effective-config.json").exists());
     Ok(())
 }
+
+#[test]
+fn plan_preserves_policy_diagnosis_when_a_later_revision_lookup_fails() -> Result<()> {
+    let temp = fixture()?;
+    let root = temp.path();
+    let config = root.join("invalid.toml");
+    fs::write(&config, "[gatee]\nvalue = 1\n")?;
+    let invoke = |base: &str| -> Result<Output> {
+        Ok(command(root, env!("CARGO_BIN_EXE_ub-review"))
+            .args([
+                "plan",
+                "--root",
+                ".",
+                "--config",
+                "invalid.toml",
+                "--base",
+                base,
+                "--head",
+                "HEAD",
+                "--out",
+                "packet",
+                "--write",
+            ])
+            .output()?)
+    };
+    let missing = "missing-preflight-review-base";
+    let invalid_and_missing = invoke(missing)?;
+    invalid(&invalid_and_missing, "invalid.toml", &["gatee"])?;
+    ensure!(console(&invalid_and_missing).contains(missing));
+    ensure!(!root.join("packet").exists());
+
+    // Correcting policy must not hide the still-invalid revision or invent a
+    // policy error. Correcting both inputs restores an actual written plan.
+    fs::write(&config, "[gate]\ntarget_minutes = 43\n")?;
+    let valid_and_missing = invoke(missing)?;
+    ensure!(valid_and_missing.status.code() == Some(1));
+    ensure!(console(&valid_and_missing).contains(missing));
+    ensure!(!console(&valid_and_missing).contains("invalid configuration"));
+    ensure!(!root.join("packet").exists());
+    let restored = invoke("HEAD^")?;
+    ensure!(restored.status.success(), "{}", console(&restored));
+    ensure!(root.join("packet/input/revision-admission.json").is_file());
+    Ok(())
+}
+
+#[test]
+fn override_only_errors_do_not_claim_a_discovered_file_exists() -> Result<()> {
+    for subcommand in ["doctor", "plan"] {
+        for from_env in [false, true] {
+            let temp = fixture()?;
+            let root = temp.path();
+            ensure!(!root.join(".ub-review.toml").exists());
+            let mut invocation = cli(root, subcommand);
+            if from_env {
+                invocation.env("UB_REVIEW_RUNTIME_PROFILE", "custom");
+            } else {
+                invocation.args(["--runtime-profile", "custom"]);
+            }
+            let output = invocation.output()?;
+            invalid(&output, "optional discovery/defaults", &["profile"])?;
+            let text = console(&output);
+            ensure!(text.contains("runtime-profile override"));
+            ensure!(text.contains("remove a --runtime-profile/--profile"));
+            ensure!(!text.contains("from discovered"));
+            ensure!(!root.join(".ub-review.toml").exists());
+            ensure!(!root.join("packet").exists());
+        }
+    }
+    let temp = fixture()?;
+    let restored = cli(temp.path(), "plan")
+        .args(["--runtime-profile", "gh-runner"])
+        .output()?;
+    ensure!(restored.status.success(), "{}", console(&restored));
+    Ok(())
+}
+
+#[test]
+fn rejected_tool_identifiers_and_fields_stay_out_of_diagnostic_artifacts() -> Result<()> {
+    for subcommand in ["doctor", "plan"] {
+        let temp = fixture()?;
+        let root = temp.path();
+        fs::write(
+            root.join("invalid.toml"),
+            format!(
+                "[gate]\nhard_timeout_minutes = 71\n[tools]\n\"{CANARY}\" = 1\n[tools.tokmd]\n\"{CANARY}\" = 2\n"
+            ),
+        )?;
+        let mut invocation = cli(root, subcommand);
+        invocation.args(["--config", "invalid.toml"]);
+        if subcommand == "plan" {
+            invocation.arg("--write");
+        }
+        let output = invocation.output()?;
+        invalid(
+            &output,
+            "invalid.toml",
+            &["tools.[redacted id]", "tools.tokmd.[redacted field]"],
+        )?;
+        ensure!(
+            console(&output)
+                .lines()
+                .filter(|line| line.starts_with("  - "))
+                .count()
+                == 2
+        );
+        if subcommand == "plan" {
+            for name in [
+                "effective-config.json",
+                "resolved-profile.json",
+                "resolved-plan.json",
+                "plan.json",
+            ] {
+                let artifact = fs::read_to_string(root.join("packet").join(name))?;
+                ensure!(!artifact.contains(CANARY), "rejected identifier in {name}");
+            }
+            let effective: serde_json::Value = serde_json::from_slice(&fs::read(
+                root.join("packet/effective-config.json"),
+            )?)?;
+            ensure!(effective["policy_errors"].as_array().map(Vec::len) == Some(2));
+            ensure!(effective["gate"]["hard_timeout_minutes"] == 71);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn trusted_diff_admission_still_precedes_any_config_diagnostic() -> Result<()> {
+    let temp = fixture()?;
+    fs::write(temp.path().join("broken.toml"), "[gate")?;
+    let output = cli(temp.path(), "plan")
+        .args([
+            "--config",
+            "broken.toml",
+            "--trusted-base-tree",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "--write",
+        ])
+        .output()?;
+    ensure!(output.status.code() == Some(1));
+    let text = console(&output);
+    ensure!(text.contains("trusted-base diff admission requires"));
+    ensure!(!text.contains("parse broken.toml"));
+    ensure!(!text.contains("invalid configuration"));
+    ensure!(!temp.path().join("packet").exists());
+    Ok(())
+}

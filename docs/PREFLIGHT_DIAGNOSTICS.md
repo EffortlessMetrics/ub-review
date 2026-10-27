@@ -21,13 +21,19 @@ Without `--write`, plan creates no packet. With `--write`, plan keeps its
 investigation artifacts, including `effective-config.json` and every policy
 receipt, then exits **1**. A writer failure also exits unsuccessfully; partial
 output is not a complete packet. The preceding semantic diagnostics remain
-visible if writing fails. These commands execute no sensors or model providers.
+visible if writing fails. If a later planning step fails (for example an
+unavailable base revision), already-loaded semantic errors accompany the original
+planning error. No packet is promised when planning cannot finish. Trusted-diff
+admission still precedes any repository-config read. These commands execute no
+sensors or model providers.
 
 Rejected values and raw parser receipt details are omitted from semantic
 diagnostics. Plan's diagnostic copy of the config uses safe correction text in
 each receipt. For an unknown profile, that copy records the loader's actual
 `gh-runner` fallback; the policy receipt still marks the requested profile
-invalid. Proof entry IDs embedded in receipt fields are redacted. Each rendered
+invalid. Proof entry IDs and custom tool IDs embedded in diagnostic receipt
+fields are redacted. Public built-in tool names and supported field names remain
+useful labels; unknown tool field names are redacted too. Each rendered
 path/field is escaped and capped at 256 characters plus a truncation marker;
 every retained error is still reported. Valid config values are not redacted:
 this is protection for rejected payloads, not a general secret scrubber.
@@ -35,7 +41,10 @@ this is protection for rejected payloads, not a general secret scrubber.
 Config selection retains the shared loader's precedence: explicit `--config`
 wins over `UB_REVIEW_CONFIG`; either is required to be readable. With neither,
 `.ub-review.toml` is optionally discovered in the working directory. Diagnostics
-label these as explicit or discovered. An absent discovered config uses defaults.
+name an explicit selection or the optional discovery/defaults route. They do not
+assert that optional discovery found a file: runtime-profile overrides can cause
+policy errors even without a config file. Profile guidance names both the override
+and config-defined profile recovery paths. An absent discovered config uses defaults.
 Runtime profile overrides retain their existing precedence. TOML syntax and read
 errors retain their existing path context and unsuccessful status.
 
