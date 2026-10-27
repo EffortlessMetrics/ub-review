@@ -597,13 +597,13 @@ fn path_intake_mixed_headers_do_not_borrow_previous_file_lines() -> Result<()> {
 #[test]
 fn path_intake_binary_and_clean_controls_preserve_modes() -> Result<()> {
     let root = path_fixture("é.rs")?;
-    let clean = precommit_command(&root).output()?;
+    let clean = capture_path_stage(&root, "clean", ".", false)?;
     ensure!(clean.status.success());
     ensure!(intake_receipt(&root)?["changed_files"] == serde_json::json!([]));
     fs::create_dir_all(root.join("assets"))?;
     fs::write(root.join("assets/logo.png"), b"\x89PNG\r\n\x1a\n")?;
     fs::write(root.join("notes with spaces.txt"), "ordinary text\n")?;
-    let output = precommit_command(&root).output()?;
+    let output = capture_path_stage(&root, "untracked-assets", "assets/logo.png", false)?;
     ensure!(
         output.status.success(),
         "binary asset aborted intake: {}",
@@ -618,19 +618,108 @@ fn path_intake_binary_and_clean_controls_preserve_modes() -> Result<()> {
                 {"path": "notes with spaces.txt", "lines": []}
             ])
     );
-    let output = precommit(&root)?;
+    let output = capture_path_stage(&root, "untracked-custody", "assets/logo.png", true)?;
     ensure!(!output.status.success());
     ensure!(String::from_utf8_lossy(&output.stderr).contains("nonignored untracked inputs"));
     git(&root, &["add", "--all"])?;
-    ensure!(precommit(&root)?.status.success());
-    ensure!(precommit_command(&root).output()?.status.success());
-    for filename in ["new.rs", "é new.rs"] {
+    let output = capture_path_stage(&root, "staged-assets", "assets/logo.png", true)?;
+    ensure!(output.status.success());
+    let output = capture_path_stage(&root, "dirty-assets", "assets/logo.png", false)?;
+    ensure!(output.status.success());
+
+    // Git emits this NUL-free PNG signature as non-UTF-8 patch text. The
+    // installed analyzers require a UTF-8 diff; preserve their explicit failure
+    // instead of mistaking it for a failure to admit the untracked Rust path.
+    fs::write(root.join("src/new.rs"), VALID)?;
+    let output = capture_path_stage(&root, "rust-with-nontext-diff", "src/new.rs", false)?;
+    require_path_lines(&root, "src/new.rs", &[1, 2, 3])?;
+    ensure!(
+        fs::read_to_string(root.join("target/precommit/check-subject-probe.md"))?
+            .contains("- success: true")
+    );
+    let summary = fs::read_to_string(root.join("target/precommit/summary.md"))?;
+    let unsafe_review = fs::read_to_string(root.join("target/precommit/unsafe-review.md"))?;
+    if unsafe_review.contains("- missing: true\n") {
+        ensure!(output.status.success());
+        ensure!(unsafe_review.contains("- success: false\n"));
+        ensure!(summary.contains("- missing: unsafe-review"));
+        eprintln!("nontext-diff analyzer rejection unavailable: unsafe-review is missing");
+    } else {
+        ensure!(output.status.code() == Some(1));
+        ensure!(unsafe_review.contains("- status: 2\n- success: false\n"));
+        ensure!(unsafe_review.contains("unsafe-review: read diff "));
+        ensure!(unsafe_review.contains("stream did not contain valid UTF-8"));
+        ensure!(summary.contains("- fail: unsafe-review\n"));
+        ensure!(summary.contains("- blocking findings: 1\n"));
+    }
+    fs::remove_file(root.join("src/new.rs"))?;
+
+    // The following positives exercise Rust path intake independently of that
+    // analyzer input limitation. The binary bytes stay intact in the baseline.
+    commit_inputs(&root)?;
+    for (stage, filename) in [
+        ("untracked-ascii", "new.rs"),
+        ("untracked-unicode", "é new.rs"),
+    ] {
         fs::write(root.join("src").join(filename), VALID)?;
-        ensure!(precommit_command(&root).output()?.status.success());
+        let output = capture_path_stage(&root, stage, &format!("src/{filename}"), false)?;
+        ensure!(output.status.success(), "{stage}: {filename:?}");
         require_path_lines(&root, &format!("src/{filename}"), &[1, 2, 3])?;
         fs::remove_file(root.join("src").join(filename))?;
     }
     Ok(())
+}
+
+// Keep each invocation's evidence outside precommit's reset directory and
+// inside ignored target/. Execute once: a retry could hide the original failure.
+fn capture_path_stage(root: &Path, stage: &str, path: &str, staged: bool) -> Result<Output> {
+    let mut command = precommit_command(root);
+    if staged {
+        command.arg("--staged");
+    }
+    let output = command
+        .output()
+        .with_context(|| format!("execute stage={stage}, path={path:?}, staged={staged}"))?;
+    let retained = root.join("target/path-intake-stages").join(stage);
+    fs::create_dir_all(&retained)?;
+    fs::write(retained.join("stdout.log"), &output.stdout)?;
+    fs::write(retained.join("stderr.log"), &output.stderr)?;
+    let mut diagnostic = format!(
+        "stage={stage}, path={path:?}, staged={staged}, status={}\nretained: {}\n",
+        output.status,
+        retained.display()
+    );
+    for (name, bytes) in [("stdout", &output.stdout), ("stderr", &output.stderr)] {
+        diagnostic.push_str(&format!("{name}: {}\n", bounded_stage_output(bytes)));
+    }
+    for entry in fs::read_dir(root.join("target/precommit"))? {
+        let entry = entry?;
+        if entry.file_type()?.is_file() {
+            let bytes = fs::read(entry.path())?;
+            fs::write(retained.join(entry.file_name()), &bytes)?;
+            diagnostic.push_str(&format!(
+                "receipt {:?}: {}\n",
+                entry.file_name(),
+                bounded_stage_output(&bytes)
+            ));
+        }
+    }
+    fs::write(retained.join("invocation.log"), &diagnostic)?;
+    println!("{diagnostic}");
+    Ok(output)
+}
+
+fn bounded_stage_output(bytes: &[u8]) -> String {
+    let end = bytes.len().min(4096);
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&bytes[..end]),
+        if end < bytes.len() {
+            "\n[truncated]"
+        } else {
+            ""
+        }
+    )
 }
 
 #[test]
