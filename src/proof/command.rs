@@ -238,7 +238,15 @@ where
     let mut primary_error = observation_error
         .or(missing_spawn_error)
         .map(|error| ("record proof process observation", error));
-    let mut additional_errors = Vec::new();
+    // Secondary reconciliation failures must not replace the process outcome.
+    // This diagnostic is used only if receipt construction cannot complete.
+    let mut additional_errors = vec![match &status {
+        Ok(status) => format!(
+            "original proof command outcome: exit_code={:?}, timed_out={}, success={}, duration_ms={}; reason: {}",
+            status.exit_code, status.timed_out, status.success, status.duration_ms, status.reason
+        ),
+        Err(error) => format!("original proof command failure: {error:#}"),
+    }];
     for (stage, result) in [
         ("record proof process terminal state", terminal_result),
         ("record proof cleanup completion", cleanup_event_result),
@@ -276,7 +284,11 @@ where
         ));
     }
     if let Some(error) = stream_error {
-        return Err(error);
+        return Err(proof_command_error_with_diagnostics(
+            error,
+            "bound proof command streams",
+            &additional_errors,
+        ));
     }
 
     let (command_status, reason, exit_code, timed_out, duration_ms) = match status {
@@ -1454,6 +1466,137 @@ mod tests {
     }
 
     #[test]
+    fn secondary_failures_preserve_original_command_outcome() -> Result<()> {
+        for outcome in ["wait-error", "timeout", "exit", "success"] {
+            for cleanup_fails in [false, true] {
+                for stream_fails in [false, true] {
+                    let temp = tempfile::tempdir()?;
+                    let recorder = TaskLedgerRecorder::new(&revision(), &Instant::now())?;
+                    let ledger = ProofTaskLedger::new(recorder.clone());
+                    let focused = focused_task("proof-command-original-outcome");
+                    let command_task = ProofCommandTask::focused_test(
+                        &focused,
+                        "head",
+                        7,
+                        ProofExecutionPhase::ModelRequest,
+                    );
+                    let spec = ProofCommandSpec {
+                        argv: vec!["proof-command".to_owned()],
+                        env: BTreeMap::new(),
+                    };
+                    let lease = granted_lease("lease-proof-command-original-outcome");
+                    let mut cleanup_called = false;
+                    let mut cleanup = || {
+                        cleanup_called = true;
+                        if cleanup_fails {
+                            anyhow::bail!("physical cleanup failed");
+                        }
+                        Ok(())
+                    };
+                    let result = run_proof_command_receipt(
+                        ProofCommandInvocation {
+                            command_root: temp.path(),
+                            out: temp.path(),
+                            receipt_id: &focused.id,
+                            side: "head",
+                            spec: &spec,
+                            timeout_sec: 7,
+                            lease: &lease,
+                            task_ledger: Some(&ledger),
+                            task: Some(&command_task),
+                            cleanup: Some(&mut cleanup),
+                        },
+                        &mut |_root, _argv, _env, _timeout, stdout, stderr, observe| {
+                            observe(CommandProcessObservation::Spawned);
+                            if stream_fails {
+                                fs::remove_file(stdout)?;
+                                fs::create_dir(stdout)?;
+                            } else {
+                                fs::write(stdout, b"original stdout")?;
+                            }
+                            fs::write(stderr, b"original stderr")?;
+                            if outcome == "wait-error" {
+                                anyhow::bail!(
+                                    "original wait-error outcome; kill request failed; reap confirmed"
+                                );
+                            }
+                            Ok(CommandStatus {
+                                exit_code: if outcome == "timeout" { None } else { Some(23) },
+                                timed_out: outcome == "timeout",
+                                success: outcome == "success",
+                                reason: format!("original {outcome} outcome"),
+                                duration_ms: 42,
+                            })
+                        },
+                    );
+                    ensure!(cleanup_called);
+                    if cleanup_fails || stream_fails {
+                        let error = result.err().context("secondary failure must propagate")?;
+                        let message = format!("{error:#}");
+                        ensure!(
+                            message.contains(&format!("original {outcome}")),
+                            "lost {outcome}: {message}"
+                        );
+                        ensure!(message.contains("physical cleanup failed") == cleanup_fails);
+                        ensure!(message.contains("bound proof command streams") == stream_fails);
+                        if outcome == "wait-error" {
+                            ensure!(message.contains("kill request failed; reap confirmed"));
+                        } else {
+                            let original_outcome = match outcome {
+                                "timeout" => {
+                                    "original proof command outcome: exit_code=None, timed_out=true, success=false, duration_ms=42; reason: original timeout outcome"
+                                }
+                                "exit" => {
+                                    "original proof command outcome: exit_code=Some(23), timed_out=false, success=false, duration_ms=42; reason: original exit outcome"
+                                }
+                                "success" => {
+                                    "original proof command outcome: exit_code=Some(23), timed_out=false, success=true, duration_ms=42; reason: original success outcome"
+                                }
+                                _ => anyhow::bail!("unexpected outcome: {outcome}"),
+                            };
+                            ensure!(
+                                message.contains(original_outcome),
+                                "lost original outcome: {message}"
+                            );
+                        }
+                    } else {
+                        let receipt = result?;
+                        ensure!(
+                            receipt.status
+                                == match outcome {
+                                    "wait-error" => "skipped",
+                                    "timeout" => "timed_out",
+                                    "exit" => "failed",
+                                    _ => "passed",
+                                }
+                        );
+                        ensure!(receipt.reason.contains(&format!("original {outcome}")));
+                        ensure!(fs::read(temp.path().join(&receipt.stdout))? == b"original stdout");
+                        ensure!(fs::read(temp.path().join(&receipt.stderr))? == b"original stderr");
+                    }
+                    let events = recorder.inputs()?;
+                    ensure!(
+                        events
+                            .iter()
+                            .any(|input| matches!(input.event, TaskEvent::ProcessFinished { .. }))
+                    );
+                    ensure!(
+                        events
+                            .iter()
+                            .any(|input| matches!(input.event, TaskEvent::CleanupFinished { .. }))
+                            != cleanup_fails
+                    );
+                    ensure!(!events.iter().any(|input| matches!(
+                        input.event,
+                        TaskEvent::ReceiptCreated { .. } | TaskEvent::ResourcesReleased { .. }
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn cleanup_failure_remains_primary_when_stream_bounding_also_fails() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
@@ -1501,6 +1644,7 @@ mod tests {
         let message = format!("{error:#}");
         ensure!(message.contains("cleanup proof command after confirmed completion"));
         ensure!(message.contains("injected physical cleanup failure"));
+        ensure!(error.root_cause().to_string() == "injected physical cleanup failure");
         ensure!(message.contains("bound proof command streams"));
 
         let task_id = proof_command_task_id(&focused.id, "head")?;
