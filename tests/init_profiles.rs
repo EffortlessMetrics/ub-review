@@ -38,14 +38,12 @@ fn init_custom_profile_refuses_before_creating_or_overwriting_outputs() -> Resul
                     args.push("--force");
                 }
                 let diagnostic = run_expect_failure(temp.path(), bin, &args)?;
-                anyhow::ensure!(
-                    diagnostic.contains("init --profile custom")
-                        && diagnostic.contains("[profiles.custom]"),
-                    "missing actionable rejection: {diagnostic}"
-                );
-                anyhow::ensure!(
-                    !diagnostic.contains("wrote "),
-                    "rejected init reported a write: {diagnostic}"
+                assert_eq!(
+                    diagnostic,
+                    "\nError: `init --profile custom` cannot generate a valid starter without a \
+                     [profiles.custom] definition; use a built-in --profile value or author the \
+                     config manually with [profiles.custom] before running `ub-review doctor`\n",
+                    "custom init must return the specific recovery diagnostic without reporting writes"
                 );
                 if existing {
                     anyhow::ensure!(fs::read(&config)? == b"config sentinel\n");
