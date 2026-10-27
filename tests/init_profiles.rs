@@ -118,17 +118,25 @@ fn init_builtin_profiles_and_config_owned_custom_remain_usable() -> Result<()> {
         .get_mut("profiles")
         .and_then(toml::Value::as_table_mut)
         .context("starter has no profile definitions")?;
-    let definition = profiles
+    let mut definition = profiles
         .get("gh-runner")
         .cloned()
         .context("starter has no gh-runner definition")?;
+    let definition_table = definition
+        .as_table_mut()
+        .context("profile definition is not a table")?;
+    definition_table.insert("name".to_owned(), toml::Value::String("custom".to_owned()));
+    let limits = definition_table
+        .get_mut("limits")
+        .and_then(toml::Value::as_table_mut)
+        .context("profile definition has no limits")?;
+    limits.insert("llm_in_flight".to_owned(), toml::Value::Integer(1));
     profiles.insert("custom".to_owned(), definition);
     let config = temp.path().join("defined-custom.toml");
     write_file(&config, &toml::to_string_pretty(&custom)?)?;
-    run(
-        &repo,
-        bin,
-        &[
+    let out = temp.path().join("custom-plan");
+    let output = isolated_command(bin, &repo)
+        .args([
             "plan",
             "--root",
             path_str(&repo)?,
@@ -140,7 +148,29 @@ fn init_builtin_profiles_and_config_owned_custom_remain_usable() -> Result<()> {
             path_str(&config)?,
             "--runtime-profile",
             "custom",
-        ],
-    )?;
+            "--write",
+            "--out",
+            path_str(&out)?,
+        ])
+        .output()?;
+    anyhow::ensure!(
+        output.status.success(),
+        "custom plan failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout)?;
+    assert!(
+        stdout.lines().any(|line| line == "Profile: custom"),
+        "plan did not select the custom profile: {stdout}"
+    );
+    let effective: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("effective-config.json"))?)?;
+    assert_eq!(effective["profile"], "custom");
+    assert_eq!(effective["policy_errors"], serde_json::json!([]));
+    let resolved: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("resolved-profile.json"))?)?;
+    assert_eq!(resolved["selected_runtime_profile"], "custom");
+    assert_eq!(resolved["profile"]["name"], "custom");
+    assert_eq!(resolved["profile"]["limits"]["llm_in_flight"], 1);
     Ok(())
 }
