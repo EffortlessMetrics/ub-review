@@ -166,7 +166,7 @@ fn init_builtin_profiles_and_config_owned_custom_remain_usable() -> Result<()> {
     let effective: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("effective-config.json"))?)?;
     assert_eq!(effective["profile"], "custom");
-    assert_eq!(effective["policy_errors"], serde_json::json!([]));
+    assert!(effective.get("policy_errors").is_none());
     let resolved: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("resolved-profile.json"))?)?;
     assert_eq!(resolved["selected_runtime_profile"], "custom");
