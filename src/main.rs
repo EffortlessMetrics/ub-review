@@ -158,9 +158,11 @@ mod summary_render;
 pub(crate) use summary_render::*;
 mod post_run_utils;
 pub(crate) use post_run_utils::*;
+mod version_probe;
+use version_probe::command_version;
 mod system_detect;
 use system_detect::{
-    command_path, command_version, detect_disk_free_mb, detect_load_1m, detect_mem_available_mb,
+    command_path, detect_disk_free_mb, detect_load_1m, detect_mem_available_mb,
     doctor_binary_install_status, git_tree_sha, profile_config_hash,
 };
 mod diff_posture;
@@ -1511,6 +1513,8 @@ struct ToolCacheReceipt {
     command: String,
     status: String,
     version: Option<String>,
+    probe_status: String,
+    probe_cleanup: String,
     rule_cache_dir: String,
     base_cache_dir: String,
 }
@@ -4265,11 +4269,8 @@ fn cmd_doctor(args: DoctorArgs) -> Result<()> {
         let command_path = command_path(&tool.command);
         let found = command_path.is_some();
         let status = if found { "found" } else { "missing" };
-        let version = if found {
-            command_version(&tool.command)
-        } else {
-            None
-        };
+        let probe = command_version(&tool.id, &tool.command);
+        let version = probe.version;
         let version_text = version.as_deref().unwrap_or("-");
         let path_text = command_path
             .as_ref()
@@ -4303,14 +4304,16 @@ fn cmd_doctor(args: DoctorArgs) -> Result<()> {
             })
         };
         println!(
-            "  {:<16} {:<8} {:<24} path={} version={} expected={} rule-cache={}",
+            "  {:<16} {:<8} {:<24} path={} version={} expected={} rule-cache={} probe={} cleanup={}",
             tool.id,
             status,
             tool.command,
             path_text,
             version_text,
             expected.unwrap_or("-"),
-            if rule_hit { "hit" } else { "miss" }
+            if rule_hit { "hit" } else { "miss" },
+            probe.state.label(),
+            probe.cleanup.label(),
         );
         if let Some(fix) = fix_entry {
             fixes.push(fix);
@@ -4397,12 +4400,15 @@ fn cmd_cache_warm(args: CacheWarmArgs) -> Result<()> {
         let tool_base_dir = base_dir.join(&tool.id);
         fs::create_dir_all(&rule_dir)?;
         fs::create_dir_all(&tool_base_dir)?;
-        let version = command_version(&tool.command);
+        let probe = command_version(&tool.id, &tool.command);
+        let version = probe.version;
         let tool_manifest = serde_json::json!({
             "schema_version": 1,
             "tool": tool.id,
             "command": tool.command,
             "version": version.clone(),
+            "probe_status": probe.state.label(),
+            "probe_cleanup": probe.cleanup.label(),
             "profile_hash": profile_hash,
             "base_tree_sha": base_tree_sha,
         });
@@ -4423,6 +4429,8 @@ fn cmd_cache_warm(args: CacheWarmArgs) -> Result<()> {
                 "missing".to_owned()
             },
             version,
+            probe_status: probe.state.label().to_owned(),
+            probe_cleanup: probe.cleanup.label().to_owned(),
             rule_cache_dir: rule_dir.display().to_string(),
             base_cache_dir: tool_base_dir.display().to_string(),
         });
