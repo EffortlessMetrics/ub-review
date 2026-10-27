@@ -36951,3 +36951,27 @@ kind = "exposure_gap"
 finding_id = "probe:src_test_parse.rs:match_arm:bcd59099"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1598; probe .is_some_and(|(_, next)| matches!(next, '/' | '*')) =>: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by builtin_gh_runner_profile_matches_default_test_lease, epoch_to_ymd_matches_known_dates, focused_proof_budget_allows_next_enforces_count_file_and_time_caps. Re-verify after any edit to src/test_parse.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_onboarding_readme.rs:error_path:9028b98a.2"
+owner = "ub-review/tests"
+reason = "Cargo manifest fixture write error (L45). The same cc5e8e8 test forces Cargo.toml to a directory before real fs::write and asserts IsADirectory, reached target and TempDir cleanup. The isolated Cargo-write error-swallowing mutant was killed (PR #1354 receipt 6114963055); cc5e8e8 ordinary and coverage onboarding tests pass in gate 38189009420. The lexical discriminator fails to associate the outcome assertion; recheck after source edit or RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_onboarding_readme.rs:error_path:9028b98a.3"
+owner = "ub-review/tests"
+reason = "Fake curl fixture write error (L51). The same cc5e8e8 test forces tools/curl to a directory before real fs::write and asserts IsADirectory, reached target and TempDir cleanup. The isolated curl-write error-swallowing mutant was killed (PR #1354 receipt 6114963055); cc5e8e8 ordinary and coverage onboarding tests pass in gate 38189009420. The lexical discriminator misses the behavioral oracle; recheck on source edit or RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_onboarding_readme.rs:match_arm:5e0285b5"
+owner = "ub-review/tests"
+reason = "wait_timeout Some/None dispatch (L100). cc5e8e8 tests execute_preserves_exit_status_streams_and_clears_credentials and execute_timeout_terminates_reaps_and_cleans_its_owned_child require distinct successful/nonzero (0,7) and one-second timeout outcomes, exact output, and owned-child cleanup; both pass in gate 38189009420 normal and coverage modes. RIPR 0.10.0 associates unrelated compilation-target tests with this private fixture helper (ripr-swarm #7415). Does not cover arbitrary wait I/O failures or process-tree containment; recheck on source edit or RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_onboarding_readme.rs:match_arm:f589f860"
+owner = "ub-review/tests"
+reason = "wait_timeout completed Some(status) arm (L101). cc5e8e8 completed-child test requires exact exit0 and exit7, stdout and stderr markers, cleared environment and restored temporary-file count. A recorded completed-child forced-success mutant was killed (PR #1354 receipt 6114963055); normal and coverage suites pass at gate 38189009420. RIPR 0.10.0 misattributes unrelated compilation targets to this private helper (ripr-swarm #7415); recheck after source edit or RIPR upgrade."
+
