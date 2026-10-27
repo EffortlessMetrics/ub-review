@@ -21,6 +21,38 @@ schema_version = 1
 #   in src/config.rs's own `mod tests`, which fixed every reach-class
 #   false negative (7 gaps -> 4 on the same diff).
 
+# #1476: exact raw records from #1479 run 38869944260, RIPR 0.10.0.
+# These individual dispositions do not renew the #872 umbrella or classify unknowns.
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:return_value:2b840b93"
+owner = "ub-review/core"
+reason = "load_requested result/argument forwarding: explicit_config_paths_fail_before_packet_output and config_discovery_and_explicit_sources_preserve_effective_values discriminate required paths, optional discovery and exact effective values. The nondefault profile oracle kills a compiled dropped-profile-override defect; #1479 retains earlier compiled wrapper-default and optional-flag mutation evidence at its original scope. Raw RIPR reports observation_unverified with unrelated same-file tests (https://github.com/EffortlessMetrics/ripr-swarm/issues/1052). Re-verify after loader or oracle edits and RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:match_arm:d68e9e90"
+owner = "ub-review/core"
+reason = "Successful read/parse arm: config_discovery_and_explicit_sources_preserve_effective_values asserts discovered 43 versus explicit 47, and explicit_config_paths_fail_before_packet_output rejects malformed TOML before output. #1479 retains the compiled parse-result-to-default defect rejected by the effective-value oracle. Raw RIPR marks fixture_opaque/observation_unverified and attributes unrelated rendering tests (https://github.com/EffortlessMetrics/ripr-swarm/issues/1052). This is a bounded parse-result discriminator, not clearance of all configuration semantics. Re-verify after loader or oracle edits and RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:match_arm:ab0bac1c"
+owner = "ub-review/core"
+reason = "Required read-error arm: explicit_config_paths_fail_before_packet_output rejects a compiled Err-to-default defect; requested_config_read_errors_retain_io_cause rejects compiled context removal and previously rejected cause replacement at #1479. These require failure, original NotFound/InvalidData and path/recovery advice. Raw RIPR marks fixture_opaque/observation_unverified with unrelated test attribution (https://github.com/EffortlessMetrics/ripr-swarm/issues/1052). Re-verify after loader or oracle edits and RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:error_path:1216f05b"
+owner = "ub-review/core"
+reason = "Exact source-role inspection: the raw expression '})' closes the Err(error).with_context closure; it is not an additional error variant. requested_config_read_errors_retain_io_cause observes the retained I/O variants and recovery context, rejects compiled context removal, and previously rejected cause replacement at #1479. Raw RIPR instead associates three unrelated tests with no oracle (https://github.com/EffortlessMetrics/ripr-swarm/issues/1052). Scope is this closure and those executed fault models only. Re-verify after loader or oracle edits and RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:return_value:97c634c0"
+owner = "ub-review/core"
+reason = "Exact source-role inspection: raw '})' closes the read-error context, while RIPR assigns its return sink to the following if-let profile override, which has no standalone returned value. requested_config_read_errors_retain_io_cause rejects compiled context removal; config_discovery_and_explicit_sources_preserve_effective_values rejects compiled loss of profile forwarding with a nondefault effective profile. Unrelated same-file oracle attribution persists (https://github.com/EffortlessMetrics/ripr-swarm/issues/1052). This individual ID does not alias the separate error_path record. Re-verify after loader or oracle edits and RIPR upgrades."
+
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_enable.rs:error_path:1e7f4b0d"
