@@ -36,6 +36,13 @@ pub(crate) struct InitPackageScript {
 }
 
 pub(crate) fn cmd_init(args: InitArgs) -> Result<()> {
+    if args.profile.key() == "custom" {
+        bail!(
+            "`init --profile custom` cannot generate a valid starter without a \
+             [profiles.custom] definition; use a built-in --profile value or author the \
+             config manually with [profiles.custom] before running `ub-review doctor`"
+        );
+    }
     if args.path.exists() && !args.force {
         bail!(
             "{} already exists; pass --force to overwrite",
@@ -920,5 +927,109 @@ pub(crate) fn init_join_or_none(values: &[String]) -> String {
         "none detected".to_owned()
     } else {
         values.join(", ")
+    }
+}
+
+#[cfg(test)]
+mod profile_tests {
+    use super::*;
+    use clap::ValueEnum;
+
+    #[test]
+    fn init_custom_profile_rejects_before_creating_or_overwriting_outputs() -> Result<()> {
+        for no_guide in [false, true] {
+            for force in [false, true] {
+                for existing in [false, true] {
+                    let temp = tempfile::tempdir()?;
+                    let path = temp.path().join("custom.toml");
+                    let guide_out = temp.path().join("custom-guide.md");
+                    if existing {
+                        fs::write(&path, "config sentinel\n")?;
+                        fs::write(&guide_out, "guide sentinel\n")?;
+                    }
+                    let result = cmd_init(InitArgs {
+                        path: path.clone(),
+                        root: temp.path().to_path_buf(),
+                        guide_out: guide_out.clone(),
+                        no_guide,
+                        profile: ProfileArg::Custom,
+                        force,
+                    });
+                    let error = result.err().context("custom init unexpectedly succeeded")?;
+                    let diagnostic = error.to_string();
+                    anyhow::ensure!(
+                        diagnostic.contains("init --profile custom")
+                            && diagnostic.contains("[profiles.custom]"),
+                        "missing custom-profile recovery guidance: {diagnostic}"
+                    );
+                    if existing {
+                        anyhow::ensure!(fs::read(&path)? == b"config sentinel\n");
+                        anyhow::ensure!(fs::read(&guide_out)? == b"guide sentinel\n");
+                    } else {
+                        anyhow::ensure!(!path.exists(), "rejected init created its config");
+                        anyhow::ensure!(!guide_out.exists(), "rejected init created its guide");
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn init_accepted_profiles_survive_full_config_loader() -> Result<()> {
+        for profile in ProfileArg::value_variants() {
+            if matches!(profile, ProfileArg::Custom) {
+                continue;
+            }
+            let temp = tempfile::tempdir()?;
+            let path = temp.path().join("config.toml");
+            cmd_init(InitArgs {
+                path: path.clone(),
+                root: temp.path().to_path_buf(),
+                guide_out: temp.path().join("unused-guide.md"),
+                no_guide: true,
+                profile: profile.clone(),
+                force: false,
+            })?;
+            let reloaded = Config::load_or_default(&path, None)?;
+            anyhow::ensure!(
+                reloaded.policy_errors.is_empty(),
+                "generated profile `{}` failed its own loader: {:?}",
+                profile.key(),
+                reloaded.policy_errors
+            );
+            anyhow::ensure!(!temp.path().join("unused-guide.md").exists());
+            let original = fs::read(&path)?;
+            let repeated = cmd_init(InitArgs {
+                path: path.clone(),
+                root: temp.path().to_path_buf(),
+                guide_out: temp.path().join("unused-guide.md"),
+                no_guide: true,
+                profile: profile.clone(),
+                force: false,
+            });
+            anyhow::ensure!(repeated.is_err(), "init unexpectedly overwrote {profile:?}");
+            anyhow::ensure!(fs::read(&path)? == original);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn init_rejection_preserves_config_owned_custom_profile_support() -> Result<()> {
+        let mut config = starter_config("custom");
+        let custom = config
+            .profiles
+            .get("gh-runner")
+            .cloned()
+            .context("missing built-in gh-runner profile")?;
+        config.profiles.insert("custom".to_owned(), custom);
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("custom.toml");
+        fs::write(&path, render_starter_config(&config)?)?;
+        let reloaded = Config::load_or_default(&path, None)?;
+        anyhow::ensure!(reloaded.policy_errors.is_empty());
+        anyhow::ensure!(reloaded.profile == "custom");
+        anyhow::ensure!(reloaded.profiles.contains_key("custom"));
+        Ok(())
     }
 }
