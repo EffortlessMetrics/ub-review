@@ -310,6 +310,11 @@ pub(crate) struct CiAuditArtifacts {
 }
 
 pub(crate) fn cmd_audit_ci(args: AuditCiArgs) -> Result<()> {
+    let since = Utc::now()
+        .checked_sub_signed(chrono::Duration::days(i64::from(args.window_days)))
+        .context("--window-days exceeds the supported date range")?
+        .format("%Y-%m-%d")
+        .to_string();
     let out_dir = args.out.join("ci-audit");
     fs::create_dir_all(&out_dir).with_context(|| format!("create {}", out_dir.display()))?;
     let repo = resolve_ci_audit_repo(&args)?;
@@ -319,7 +324,9 @@ pub(crate) fn cmd_audit_ci(args: AuditCiArgs) -> Result<()> {
         .clone()
         .filter(|value| !value.trim().is_empty());
     let fetch = match token {
-        Some(token) => Some(fetch_ci_audit_history(&args, &repo, &token, &out_dir)?),
+        Some(token) => Some(fetch_ci_audit_history(
+            &args, &repo, &token, &out_dir, &since,
+        )?),
         None => None,
     };
     let artifacts = build_ci_audit_artifacts(
@@ -1346,6 +1353,7 @@ pub(crate) fn fetch_ci_audit_history(
     repo: &str,
     token: &str,
     scratch_dir: &Path,
+    since: &str,
 ) -> Result<CiAuditFetch> {
     let workflows_value = ci_github_get_json(
         args,
@@ -1355,9 +1363,6 @@ pub(crate) fn fetch_ci_audit_history(
     )?;
     let (workflows, mut dropped_items): (Vec<CiApiWorkflow>, usize) =
         parse_ci_api_array(&workflows_value, "workflows");
-    let since = (Utc::now() - chrono::Duration::days(i64::from(args.window_days)))
-        .format("%Y-%m-%d")
-        .to_string();
     let mut runs: Vec<CiApiRun> = Vec::new();
     let mut pages_fetched = 0;
     let mut truncated = false;

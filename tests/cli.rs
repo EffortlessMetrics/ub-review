@@ -7282,3 +7282,25 @@ fn source_runner_requires_committed_regular_lockfile_before_locked_build() {
         "source lockfile fixture failed"
     );
 }
+
+#[test]
+fn audit_ci_rejects_unrepresentable_history_window() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let mut command = isolated_command(env!("CARGO_BIN_EXE_ub-review"), temp.path());
+    let output = command
+        .env_remove("GITHUB_TOKEN")
+        .env_remove("GITHUB_REPOSITORY")
+        .args([
+            "audit-ci",
+            "--repo",
+            "acme/widgets",
+            "--window-days",
+            "4294967295",
+        ])
+        .output()?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "unexpected success");
+    assert!(stderr.contains("window-days"), "unexpected error: {stderr}");
+    assert!(!stderr.contains("panicked"), "unexpected panic: {stderr}");
+    Ok(())
+}
