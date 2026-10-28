@@ -1,5 +1,11 @@
 schema_version = 1
 
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:call_deletion:7384c9b8"
+owner = "ub-review/core"
+reason = "PR #1581 local RIPR 0.10.0 ready-mode preview at f2e069e over base 47c2711: this probe identifies the deleted .unwrap_or(\"\") in parse_reporter_conclusion, not a surviving call. The replacement requires a string distillation before accepting a verdict. unstructured_json_response_survives_reporter_artifact_round_trip checks raw JSON and undecided verdict through write and resolution; isolated compiled controls restoring the empty fallback for JSON objects and assigning clear to the verdict-only fallback failed on lost text and incorrect verdict, respectively. Restored source passed. See PR #1581 for controls and local preview limitations. Recheck after reporter changes or an analyzer upgrade; this does not attest to the inaccessible hosted receipt."
+
 # Durable RIPR suppressions. Suppressed findings stay visible as suppressed;
 # every entry carries owner + reason per the suppression-health contract.
 #
@@ -36001,3 +36007,75 @@ kind = "exposure_gap"
 finding_id = "probe:src_validate.rs:return_value:8b548099"
 owner = "ub-review/core"
 reason = "False weak exposure: claim_identity_tests assert the exact Some span sequence and true-duplicate merging. A compiled mutant returning None for supported spans fails focused tests. Re-evaluate if inline_claim_code_tokens changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_build.rs:call_deletion:843c66bc"
+owner = "ub-review/core"
+reason = "PR #1587 local RIPR 0.10.0 preview on base bc976f2 and head 72f24b7: path diff command syntax fragment at line 255, subject ')'. The enhanced ordinary_diff_includes_gitlink_despite_ignore_configuration test, staged on top of that head, exercises the related-history and no-merge-base paths with ignored gitlinks, validates changed paths and patch, and retains an identical-revision control. In an isolated Rust 1.95.0 --locked lab, removing each of four ignore overrides and each of two fallback calls independently caused the test to fail; restored source passed. RIPR did not confirm an expression-level discriminator for these fragments despite associating related tests and assertions (upstream ripr#1453). Local preview evidence only; inaccessible hosted findings remain unclassified. Reverify on semantic changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_build.rs:call_deletion:6bfa8e51"
+owner = "ub-review/core"
+reason = "PR #1587 local RIPR 0.10.0 preview on base bc976f2 and head 72f24b7: path diff command syntax fragment at line 256, subject '.or_else(|_| {'. The enhanced ordinary_diff_includes_gitlink_despite_ignore_configuration test, staged on top of that head, exercises the related-history and no-merge-base paths with ignored gitlinks, validates changed paths and patch, and retains an identical-revision control. In an isolated Rust 1.95.0 --locked lab, removing each of four ignore overrides and each of two fallback calls independently caused the test to fail; restored source passed. RIPR did not confirm an expression-level discriminator for these fragments despite associating related tests and assertions (upstream ripr#1453). Local preview evidence only; inaccessible hosted findings remain unclassified. Reverify on semantic changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_build.rs:call_deletion:85980fe3"
+owner = "ub-review/core"
+reason = "PR #1587 local RIPR 0.10.0 preview on base bc976f2 and head 72f24b7: path diff command syntax fragment at line 257, subject 'git_lines('. The enhanced ordinary_diff_includes_gitlink_despite_ignore_configuration test, staged on top of that head, exercises the related-history and no-merge-base paths with ignored gitlinks, validates changed paths and patch, and retains an identical-revision control. In an isolated Rust 1.95.0 --locked lab, removing each of four ignore overrides and each of two fallback calls independently caused the test to fail; restored source passed. RIPR did not confirm an expression-level discriminator for these fragments despite associating related tests and assertions (upstream ripr#1453). Local preview evidence only; inaccessible hosted findings remain unclassified. Reverify on semantic changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_build.rs:call_deletion:01184519"
+owner = "ub-review/core"
+reason = "PR #1587 local RIPR 0.10.0 preview on base bc976f2 and head 72f24b7: path diff command syntax fragment at line 259, subject '&['. The enhanced ordinary_diff_includes_gitlink_despite_ignore_configuration test, staged on top of that head, exercises the related-history and no-merge-base paths with ignored gitlinks, validates changed paths and patch, and retains an identical-revision control. In an isolated Rust 1.95.0 --locked lab, removing each of four ignore overrides and each of two fallback calls independently caused the test to fail; restored source passed. RIPR did not confirm an expression-level discriminator for these fragments despite associating related tests and assertions (upstream ripr#1453). Local preview evidence only; inaccessible hosted findings remain unclassified. Reverify on semantic changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_build.rs:call_deletion:37138730"
+owner = "ub-review/core"
+reason = "PR #1587 local RIPR 0.10.0 preview on base bc976f2 and head 72f24b7: path diff command syntax fragment at line 265, subject '],'. The enhanced ordinary_diff_includes_gitlink_despite_ignore_configuration test, staged on top of that head, exercises the related-history and no-merge-base paths with ignored gitlinks, validates changed paths and patch, and retains an identical-revision control. In an isolated Rust 1.95.0 --locked lab, removing each of four ignore overrides and each of two fallback calls independently caused the test to fail; restored source passed. RIPR did not confirm an expression-level discriminator for these fragments despite associating related tests and assertions (upstream ripr#1453). Local preview evidence only; inaccessible hosted findings remain unclassified. Reverify on semantic changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_build.rs:call_deletion:843c66bc.2"
+owner = "ub-review/core"
+reason = "PR #1587 local RIPR 0.10.0 preview on base bc976f2 and head 72f24b7: path diff command syntax fragment at line 266, subject ')'. The enhanced ordinary_diff_includes_gitlink_despite_ignore_configuration test, staged on top of that head, exercises the related-history and no-merge-base paths with ignored gitlinks, validates changed paths and patch, and retains an identical-revision control. In an isolated Rust 1.95.0 --locked lab, removing each of four ignore overrides and each of two fallback calls independently caused the test to fail; restored source passed. RIPR did not confirm an expression-level discriminator for these fragments despite associating related tests and assertions (upstream ripr#1453). Local preview evidence only; inaccessible hosted findings remain unclassified. Reverify on semantic changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_build.rs:call_deletion:24919b42"
+owner = "ub-review/core"
+reason = "PR #1587 local RIPR 0.10.0 preview on base bc976f2 and head 72f24b7: path diff command syntax fragment at line 267, subject '})'. The enhanced ordinary_diff_includes_gitlink_despite_ignore_configuration test, staged on top of that head, exercises the related-history and no-merge-base paths with ignored gitlinks, validates changed paths and patch, and retains an identical-revision control. In an isolated Rust 1.95.0 --locked lab, removing each of four ignore overrides and each of two fallback calls independently caused the test to fail; restored source passed. RIPR did not confirm an expression-level discriminator for these fragments despite associating related tests and assertions (upstream ripr#1453). Local preview evidence only; inaccessible hosted findings remain unclassified. Reverify on semantic changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_build.rs:call_deletion:843c66bc.3"
+owner = "ub-review/core"
+reason = "PR #1587 local RIPR 0.10.0 preview on base bc976f2 and head 72f24b7: patch diff command syntax fragment at line 272, subject ')'. The enhanced ordinary_diff_includes_gitlink_despite_ignore_configuration test, staged on top of that head, exercises the related-history and no-merge-base paths with ignored gitlinks, validates changed paths and patch, and retains an identical-revision control. In an isolated Rust 1.95.0 --locked lab, removing each of four ignore overrides and each of two fallback calls independently caused the test to fail; restored source passed. RIPR did not confirm an expression-level discriminator for these fragments despite associating related tests and assertions (upstream ripr#1453). Local preview evidence only; inaccessible hosted findings remain unclassified. Reverify on semantic changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_build.rs:call_deletion:6bfa8e51.2"
+owner = "ub-review/core"
+reason = "PR #1587 local RIPR 0.10.0 preview on base bc976f2 and head 72f24b7: patch diff command syntax fragment at line 273, subject '.or_else(|_| {'. The enhanced ordinary_diff_includes_gitlink_despite_ignore_configuration test, staged on top of that head, exercises the related-history and no-merge-base paths with ignored gitlinks, validates changed paths and patch, and retains an identical-revision control. In an isolated Rust 1.95.0 --locked lab, removing each of four ignore overrides and each of two fallback calls independently caused the test to fail; restored source passed. RIPR did not confirm an expression-level discriminator for these fragments despite associating related tests and assertions (upstream ripr#1453). Local preview evidence only; inaccessible hosted findings remain unclassified. Reverify on semantic changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_build.rs:call_deletion:e449bed4"
+owner = "ub-review/core"
+reason = "PR #1587 local RIPR 0.10.0 preview on base bc976f2 and head 72f24b7: patch diff command syntax fragment at line 274, subject 'git_text('. The enhanced ordinary_diff_includes_gitlink_despite_ignore_configuration test, staged on top of that head, exercises the related-history and no-merge-base paths with ignored gitlinks, validates changed paths and patch, and retains an identical-revision control. In an isolated Rust 1.95.0 --locked lab, removing each of four ignore overrides and each of two fallback calls independently caused the test to fail; restored source passed. RIPR did not confirm an expression-level discriminator for these fragments despite associating related tests and assertions (upstream ripr#1453). Local preview evidence only; inaccessible hosted findings remain unclassified. Reverify on semantic changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_build.rs:call_deletion:843c66bc.4"
+owner = "ub-review/core"
+reason = "PR #1587 local RIPR 0.10.0 preview on base bc976f2 and head 72f24b7: patch diff command syntax fragment at line 277, subject ')'. The enhanced ordinary_diff_includes_gitlink_despite_ignore_configuration test, staged on top of that head, exercises the related-history and no-merge-base paths with ignored gitlinks, validates changed paths and patch, and retains an identical-revision control. In an isolated Rust 1.95.0 --locked lab, removing each of four ignore overrides and each of two fallback calls independently caused the test to fail; restored source passed. RIPR did not confirm an expression-level discriminator for these fragments despite associating related tests and assertions (upstream ripr#1453). Local preview evidence only; inaccessible hosted findings remain unclassified. Reverify on semantic changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_plan_build.rs:call_deletion:24919b42.2"
+owner = "ub-review/core"
+reason = "PR #1587 local RIPR 0.10.0 preview on base bc976f2 and head 72f24b7: patch diff command syntax fragment at line 278, subject '})'. The enhanced ordinary_diff_includes_gitlink_despite_ignore_configuration test, staged on top of that head, exercises the related-history and no-merge-base paths with ignored gitlinks, validates changed paths and patch, and retains an identical-revision control. In an isolated Rust 1.95.0 --locked lab, removing each of four ignore overrides and each of two fallback calls independently caused the test to fail; restored source passed. RIPR did not confirm an expression-level discriminator for these fragments despite associating related tests and assertions (upstream ripr#1453). Local preview evidence only; inaccessible hosted findings remain unclassified. Reverify on semantic changes."
