@@ -1623,6 +1623,224 @@ mod tests {
     use crate::{CommandStatus, DiffContext, DiffFlags};
 
     #[test]
+    fn request_attribution_reuses_only_the_executed_bun_target() -> Result<()> {
+        let different_file = ["bun", "bd", "test", "test/parser.test.tsx"];
+        let named = [
+            "bun",
+            "bd",
+            "test",
+            "test/parser.test.ts",
+            "-t",
+            "parser regression",
+        ];
+        let whole_file = ["bun", "bd", "test", "test/parser.test.ts"];
+        let cargo_filter = [
+            "cargo",
+            "test",
+            "--locked",
+            "--test",
+            "config_tests",
+            "test/parser.test.ts",
+        ];
+        for (name, command, expected_command) in [
+            (None, "bun test test/parser.test.ts", None),
+            (None, "bun bd test test/parser.test.ts", None),
+            (
+                None,
+                "bun test test/parser.test.tsx",
+                Some(different_file.as_slice()),
+            ),
+            (
+                Some("parser"),
+                "bun test test/parser.test.ts -t 'parser regression'",
+                Some(named.as_slice()),
+            ),
+            (
+                Some("parser regression"),
+                "bun test test/parser.test.ts -t 'parser regression'",
+                None,
+            ),
+            (
+                Some("parser"),
+                "bun test test/parser.test.ts",
+                Some(whole_file.as_slice()),
+            ),
+            (
+                None,
+                "bun test test/parser.test.ts -t 'parser regression'",
+                Some(named.as_slice()),
+            ),
+            (
+                None,
+                "cargo test --locked --test config_tests test/parser.test.ts",
+                Some(cargo_filter.as_slice()),
+            ),
+        ] {
+            let reuse = expected_command.is_none();
+            let temp = tempfile::tempdir()?;
+            let out = temp.path().join("out");
+            let base_root = temp.path().join("base-plus-tests");
+            fs::create_dir_all(&base_root)?;
+            let mut diff = test_diff();
+            diff.changed_files = vec!["test/parser.test.ts".to_owned()];
+            diff.patch = format!(
+                "diff --git a/test/parser.test.ts b/test/parser.test.ts\n\
+                 --- a/test/parser.test.ts\n+++ b/test/parser.test.ts\n\
+                 @@ -0,0 +1 @@\n+{}\n",
+                name.map_or_else(
+                    || "// changed test setup".to_owned(),
+                    |name| { format!("test(\"{name}\", () => {{}});") }
+                )
+            );
+            let mut profile = Profile::default();
+            profile.limits.tests = 2;
+            profile.budgets.proof_max_focused_test_files = 2;
+            profile.budgets.proof_max_focused_tests = 2;
+            profile.budgets.proof_command_timeout_sec = 2;
+            profile.budgets.proof_total_timeout_sec = 20;
+            let args = test_run_args(out.clone());
+            let tasks = focused_test_candidates_from_diff(&diff, &[], None);
+            ensure!(tasks.len() == 1);
+            let mut initial_commands = Vec::new();
+            let mut initial = run_focused_red_green_proof_tasks_with_runner(
+                temp.path(),
+                &out,
+                &diff,
+                &profile,
+                &args,
+                proof_budget(&profile)?,
+                tasks,
+                None,
+                ProofExecutionPhase::InitialImpact,
+                |_root, argv, _env, _timeout, stdout, stderr, _observe| {
+                    initial_commands.push(argv.to_vec());
+                    fs::write(stdout, b"initial target result\n")?;
+                    fs::write(stderr, b"")?;
+                    let success = !stdout.to_string_lossy().contains("base-plus-tests");
+                    Ok(CommandStatus {
+                        exit_code: Some(if success { 0 } else { 1 }),
+                        timed_out: false,
+                        success,
+                        reason: "initial target fixture".to_owned(),
+                        duration_ms: 1,
+                    })
+                },
+                |_root, _out, _diff| Ok(base_root.clone()),
+            )?;
+            ensure!(initial_commands.len() == 2);
+            let mut initial_head = whole_file.to_vec();
+            let mut initial_base = vec!["bun", "test", "test/parser.test.ts"];
+            if let Some(name) = name {
+                initial_head.extend(["-t", name]);
+                initial_base.extend(["-t", name]);
+            }
+            assert_eq!(initial_commands, vec![initial_head, initial_base]);
+            ensure!(initial.proof_receipts.len() == 1);
+            ensure!(initial.proof_receipts[0].result == "discriminating");
+            let request = ProofRequest {
+                schema: PROOF_REQUEST_SCHEMA.to_owned(),
+                id: "required-target".to_owned(),
+                lane: REQUIRED_PROOF_POLICY_LANE.to_owned(),
+                requested_by: vec!["proof-policy:required-target".to_owned()],
+                command: command.to_owned(),
+                reason: "Run the requested target, not a similarly named target.".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 2,
+                required: true,
+                status: "requested".to_owned(),
+            };
+            attach_request_metadata_to_focused_receipts(
+                &diff,
+                std::slice::from_ref(&request),
+                &mut initial.proof_receipts,
+            );
+            let mut requested_commands = Vec::new();
+            let result = run_request_proof_broker_v0_with_runners(
+                temp.path(),
+                &out,
+                &diff,
+                &profile,
+                std::slice::from_ref(&request),
+                &initial.proof_receipts,
+                &initial.resource_leases,
+                &args,
+                &BoxState {
+                    cpus: 4,
+                    free_mem_mb: Some(8_192),
+                    free_disk_mb: Some(20_000),
+                    load_1m: Some(0.25),
+                    github_actions: false,
+                },
+                &Instant::now(),
+                None,
+                |_root, argv, _env, _timeout, stdout, stderr, _observe| {
+                    requested_commands.push(argv.to_vec());
+                    fs::write(stdout, b"requested target fails\n")?;
+                    fs::write(stderr, b"")?;
+                    Ok(CommandStatus {
+                        exit_code: Some(1),
+                        timed_out: false,
+                        success: false,
+                        reason: "requested target fixture".to_owned(),
+                        duration_ms: 1,
+                    })
+                },
+                |_root, _out, _diff| Ok(base_root.clone()),
+                |_root, _argv, _env, _timeout, _stdout, _stderr, _observe| {
+                    anyhow::bail!("test requests must not run a build")
+                },
+            )?;
+            initial.proof_receipts.extend(result.proof_receipts);
+            let receipts: Vec<ProofReceipt> =
+                serde_json::from_slice(&serde_json::to_vec(&initial.proof_receipts)?)?;
+            let terminal =
+                terminalize_proof_requests(&diff.head, std::slice::from_ref(&request), &receipts);
+            let gate = build_gate_outcome(GateOutcomeInput {
+                args: &args,
+                config: &Config::default(),
+                plan: &crate::tests::test_plan(Vec::new()),
+                terminal_state: &crate::tests::test_terminal_state("sufficient"),
+                proof_requests: &terminal,
+                proof_receipts: &receipts,
+                tool_gate_outcomes: &[],
+                missing_or_failed_sensor_evidence: &[],
+                missing_or_failed_model_evidence: &[],
+                reporter_gate: ReporterGateInput::Absent,
+                planner_portfolio: None,
+                revision_digest: None,
+            });
+            let gate = serde_json::to_value(&gate)?;
+            assert_eq!(gate["required_proof"]["matched"], 1);
+            assert_eq!(
+                gate["required_proof"]["passed"],
+                usize::from(reuse),
+                "{command}"
+            );
+            assert_eq!(
+                gate["required_proof"]["failed"],
+                usize::from(!reuse),
+                "{command}"
+            );
+            assert_eq!(
+                terminal[0].status,
+                if reuse { "satisfied" } else { "failed" },
+                "requested {command} after initial filter {name:?}; commands: {requested_commands:?}"
+            );
+            if reuse {
+                assert!(requested_commands.is_empty(), "{command}");
+                assert_eq!(receipts.len(), 1);
+            } else if let Some(expected_command) = expected_command {
+                assert_eq!(requested_commands.len(), 1, "{command}");
+                assert_eq!(requested_commands[0], expected_command);
+                assert!(receipts[0].request_ids.is_empty(), "{command}");
+                assert_eq!(receipts.len(), 2);
+                assert_eq!(receipts[1].result, "head_failed");
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn accounting_matrix_releases_early_commands_before_required_build() -> Result<()> {
         let mut failures = Vec::new();
         for case in [

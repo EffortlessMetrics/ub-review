@@ -626,11 +626,13 @@ fn focused_test_task_with_mode(
     let mut timeout_sec = None;
     let mut required = false;
     for group in request_groups {
-        if group.status == "requested"
-            && group.command.contains(file)
-            && test_name
-                .as_ref()
-                .is_none_or(|name| group.command.contains(name))
+        // Attribution enables later receipt reuse. Resolve the same target as
+        // request admission: a substring match can give an unrelated command
+        // an earlier receipt's authority and prevent that command from running.
+        if let Some(target) = focused_test_request_target(group)
+            && target.command_specs.is_none()
+            && target.file == normalize_repo_path(file)
+            && target.test_name == test_name
         {
             merge_task_timeout(&mut timeout_sec, Some(group.timeout_sec));
             required |= group.required;
