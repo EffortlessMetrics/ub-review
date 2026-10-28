@@ -1218,6 +1218,48 @@ mod tests {
     }
 
     #[test]
+    fn conflict_composition_does_not_confirm_unadjudicated_participants() {
+        for resolution in [
+            ConflictResolution::ResolvedByProof,
+            ConflictResolution::ResolvedByPrecedence,
+            ConflictResolution::Dropped,
+        ] {
+            let dropped = resolution == ConflictResolution::Dropped;
+            let mut graph = ClaimGraph {
+                schema: CLAIM_GRAPH_SCHEMA,
+                head_sha: "current-head".to_owned(),
+                revision: None,
+                claims: vec![
+                    make_claim("winner", "proof", &[EvidenceClass::ProofReceipt]),
+                    make_claim("loser", "model", &[EvidenceClass::ModelInterpretation]),
+                    make_claim("other", "citation", &[EvidenceClass::ExactCitation]),
+                ],
+                topics: Vec::new(),
+                conflicts: vec![ConflictRecord {
+                    claim_ids: vec!["winner".to_owned(), "loser".to_owned(), "other".to_owned()],
+                    winner: (!dropped).then(|| "winner".to_owned()),
+                    loser: (!dropped).then(|| "loser".to_owned()),
+                    description: "retained conflict with three participants".to_owned(),
+                    resolution,
+                }],
+                evidence_gaps: Vec::new(),
+                mode: "active",
+            };
+            graph.claims[2].state = ClaimState::Supported;
+            adjudicate_claim_graph_conflicts(&mut graph, &[]);
+            if dropped {
+                assert_eq!(graph.claims[0].state, ClaimState::NeedsEvidence);
+                assert_eq!(graph.claims[1].state, ClaimState::NeedsEvidence);
+            } else {
+                assert_eq!(graph.claims[0].state, ClaimState::Confirmed);
+                assert_eq!(graph.claims[1].state, ClaimState::Refuted);
+            }
+            assert_eq!(graph.claims[2].state, ClaimState::Supported);
+            assert_eq!(graph.conflicts.len(), 1);
+        }
+    }
+
+    #[test]
     fn conflict_composition_preserves_losses_and_unresolved_evidence() -> anyhow::Result<()> {
         for (classes, expected) in [
             (
