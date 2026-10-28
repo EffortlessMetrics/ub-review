@@ -688,14 +688,20 @@ pub(crate) fn same_inline_claim(left: &ReviewInlineComment, right: &ReviewInline
     if left_text.chars().count() < 32 || right_text.chars().count() < 32 {
         return false;
     }
-    let left_code_tokens = inline_claim_code_tokens(&reviewer_facing_pr_text(&left.body));
-    let right_code_tokens = inline_claim_code_tokens(&reviewer_facing_pr_text(&right.body));
+    let Some(left_code_tokens) = inline_claim_code_tokens(&reviewer_facing_pr_text(&left.body))
+    else {
+        return false;
+    };
+    let Some(right_code_tokens) = inline_claim_code_tokens(&reviewer_facing_pr_text(&right.body))
+    else {
+        return false;
+    };
     if left_text == right_text {
         return left_code_tokens == right_code_tokens;
     }
     // Cross-line merging is a destructive operation.  Similar prose is only
     // a clustering hint; require a shared, recognized failure family and a
-    // shared code token so distinct claims about the same vocabulary (for
+    // identical ordered code spans so distinct claims about the same vocabulary (for
     // example, two declaration forms) remain independently reviewable.
     let Some(left_family) = inline_claim_family(&left_text) else {
         return false;
@@ -703,10 +709,7 @@ pub(crate) fn same_inline_claim(left: &ReviewInlineComment, right: &ReviewInline
     if Some(left_family) != inline_claim_family(&right_text) {
         return false;
     }
-    if left_code_tokens.is_empty()
-        || right_code_tokens.is_empty()
-        || left_code_tokens.is_disjoint(&right_code_tokens)
-    {
+    if left_code_tokens.is_empty() || left_code_tokens != right_code_tokens {
         return false;
     }
     let left_tokens = inline_claim_tokens(&left_text);
@@ -743,16 +746,18 @@ fn inline_claim_family(text: &str) -> Option<&'static str> {
     }
 }
 
-fn inline_claim_code_tokens(text: &str) -> BTreeSet<String> {
-    // Compare whole code spans: splitting an expression into identifiers loses
-    // the index, field, or other syntax that can distinguish two claims.
-    text.split('`')
-        .enumerate()
-        .filter(|(index, _)| index % 2 == 1)
-        .map(|(_, segment)| segment.trim())
-        .filter(|segment| !segment.is_empty())
-        .map(str::to_owned)
-        .collect()
+fn inline_claim_code_tokens(text: &str) -> Option<Vec<String>> {
+    // Reject syntax we cannot parse safely, rather than erasing its identity.
+    if text.contains("``") || text.contains("\\`") || !text.matches('`').count().is_multiple_of(2) {
+        return None;
+    }
+    Some(
+        text.split('`')
+            .enumerate()
+            .filter(|(index, _)| index % 2 == 1)
+            .map(|(_, segment)| segment.trim().to_owned())
+            .collect(),
+    )
 }
 
 pub(crate) fn normalized_inline_claim_text(comment: &ReviewInlineComment) -> String {
@@ -1257,9 +1262,10 @@ mod claim_identity_tests {
         assert_eq!(inline_claim_family("workflow action pin"), Some("workflow"));
         assert_eq!(inline_claim_family("unclassified prose"), None);
 
-        let tokens = inline_claim_code_tokens("use `$x[0]` and `%h`");
-        assert!(tokens.contains("$x[0]"));
-        assert!(tokens.contains("%h"));
+        assert_eq!(
+            inline_claim_code_tokens("use `$x[0]` and `%h`"),
+            Some(vec!["$x[0]".to_owned(), "%h".to_owned()])
+        );
     }
 
     #[test]
@@ -1311,6 +1317,52 @@ mod claim_identity_tests {
     }
 
     #[test]
+    fn distinct_code_subjects_survive_shared_context_and_repeated_passes() {
+        let make = |line, body: &str| ReviewInlineComment {
+            line,
+            body: body.to_owned(),
+            ..comment("source diff")
+        };
+        let x = "The postfix subscript `$x[0]` drops a value; add a focused test for the list behavior. See `i` for context.";
+        let y = "The postfix subscript `$y[1]` drops a value; add a focused test for the list behavior. See `i` for context.";
+        let mut bridge = make(
+            30,
+            "The postfix subscript `$x[0]` and `$y[1]` drops a value; add a focused test for the list behavior. See `i` for context.",
+        );
+        bridge.confidence = "high".to_owned();
+        let mut comments = vec![make(10, x), make(20, y), bridge];
+        let mut summary = Vec::new();
+        dedupe_inline_comments(&mut comments, &mut summary);
+        assert_eq!((comments.len(), summary.len()), (3, 0));
+        dedupe_inline_comments(&mut comments, &mut summary);
+        assert_eq!((comments.len(), summary.len()), (3, 0));
+    }
+
+    #[test]
+    fn code_span_order_repetition_and_delimiters_preserve_identity() {
+        let make = |body: &str| ReviewInlineComment {
+            body: body.to_owned(),
+            ..comment("source diff")
+        };
+        for (left, right) in [
+            (
+                "The index ``$x[0]`` can discard the first value in this branch.",
+                "The index ``$x.0`` can discard the first value in this branch.",
+            ),
+            (
+                "The index `α` must precede `β` before reading the first element.",
+                "The index `β` must precede `α` before reading the first element.",
+            ),
+            (
+                "The index evaluates `α` then `β` then `α` before reading the first element.",
+                "The index evaluates `α` then `β` then `β` before reading the first element.",
+            ),
+        ] {
+            assert!(!same_inline_claim(&make(left), &make(right)));
+        }
+    }
+
+    #[test]
     fn evidence_rank_is_receipt_first_then_source_thread_and_model() {
         assert_eq!(
             inline_evidence_rank(&comment("executed focused test receipt")),
@@ -1341,7 +1393,7 @@ mod claim_identity_tests {
 
         let unclassified = make("The declaration list needs a clearer explanation here.");
         assert!(!same_inline_claim(&exact_left, &unclassified));
-        assert!(inline_claim_code_tokens("plain prose").is_empty());
+        assert_eq!(inline_claim_code_tokens("plain prose"), Some(Vec::new()));
     }
 }
 
