@@ -456,6 +456,12 @@ impl ProofTaskLedger {
         let mut references = BTreeMap::new();
         for (receipt_index, receipt) in receipts.iter().enumerate() {
             ensure!(
+                receipt.schema == crate::PROOF_RECEIPT_SCHEMA,
+                "published proof receipt {} has unsupported schema {}",
+                receipt.id,
+                receipt.schema
+            );
+            ensure!(
                 receipt.revision.as_ref() == Some(self.recorder.revision()),
                 "published proof receipt {} does not bind the admitted revision",
                 receipt.id
@@ -1113,6 +1119,64 @@ mod tests {
             Some(TaskReceiptOutcome::Created { reference })
                 if reference == "review/proof_receipts.json#/0/commands/0"
         ));
+        Ok(())
+    }
+
+    #[test]
+    fn persisted_receipt_roundtrip_preserves_identity_and_outcome_with_optional_fields()
+    -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut input = serde_json::to_value(receipt(revision('a'), &["head"]))?;
+        input["commands"][0]
+            .as_object_mut()
+            .context("command object")?
+            .remove("env");
+        input["future_optional"] = serde_json::json!({"note": "ignored by v1"});
+        input["result"] = serde_json::json!("failed");
+        input["commands"][0]["status"] = serde_json::json!("failed");
+        input["commands"][0]["exit_code"] = serde_json::json!(7);
+        let parsed: ProofReceipt = serde_json::from_value(input)?;
+        ensure!(parsed.commands[0].env.is_empty());
+        write_proof_receipt_artifacts(temp.path(), &[parsed], Some(&revision('a')))?;
+
+        let aggregate: Vec<ProofReceipt> =
+            serde_json::from_slice(&fs::read(temp.path().join("review/proof_receipts.json"))?)?;
+        let ndjson = fs::read_to_string(temp.path().join("proof_receipts.ndjson"))?;
+        let lines: Vec<ProofReceipt> = ndjson
+            .lines()
+            .map(serde_json::from_str)
+            .collect::<std::result::Result<_, _>>()?;
+        ensure!(aggregate.len() == 1 && lines.len() == 1);
+        for row in [&aggregate[0], &lines[0]] {
+            ensure!(row.schema == crate::PROOF_RECEIPT_SCHEMA);
+            ensure!(row.id == "receipt-a" && row.base == "base" && row.head == "head");
+            ensure!(row.revision.as_ref() == Some(&revision('a')));
+            ensure!(row.requested_by == ["tests-oracle"] && row.request_ids == ["request-a"]);
+            ensure!(row.result == "failed" && row.commands[0].status == "failed");
+            ensure!(row.commands[0].exit_code == Some(7) && row.commands[0].env.is_empty());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn unknown_receipt_schema_cannot_satisfy_current_attempt() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let recorder = recorder()?;
+        let ledger = ProofTaskLedger::new(recorder.clone());
+        let command_task = task("receipt-a", "head", &["tests-oracle"], &["request-a"]);
+        execute_side(&ledger, &command_task, &granted_lease("receipt-a"))?;
+        let mut published = receipt(revision('a'), &["head"]);
+        published.schema = "ub-review.proof_receipt.v2".to_owned();
+        write_proof_receipt_artifacts(temp.path(), &[published], Some(&revision('a')))?;
+
+        let error = ledger
+            .reconcile_published_receipts(temp.path())
+            .err()
+            .context("unknown receipt schema must be rejected")?;
+        ensure!(format!("{error:#}").contains("unsupported schema ub-review.proof_receipt.v2"));
+        let snapshot = state_for(&recorder, &command_task.task_id()?)?;
+        ensure!(snapshot.state == TaskState::ReceiptPending(TaskTerminalDisposition::Succeeded));
+        ensure!(snapshot.receipt.is_none() && snapshot.timing.resources_released_at.is_none());
         Ok(())
     }
 
