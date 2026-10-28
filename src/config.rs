@@ -946,7 +946,7 @@ impl Config {
                     if !tool.provided.required {
                         tool.required = default_tool.required;
                     }
-                    if !tool.provided.timeout_sec || tool.timeout_sec == 0 {
+                    if !tool.provided.timeout_sec {
                         tool.timeout_sec = default_tool.timeout_sec;
                     }
                     if !tool.provided.artifact_budget_mb || tool.artifact_budget_mb == 0 {
