@@ -599,6 +599,34 @@ mod tests {
         SAMPLE_FILES.iter().map(|s| (*s).to_owned()).collect()
     }
 
+    #[test]
+    fn ordinary_diff_includes_gitlink_despite_ignore_configuration() -> Result<()> {
+        let repo = init_repo()?;
+        let base = commit_file(&repo, "file", "base\n", "base")?;
+        git(
+            &repo,
+            &[
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                &format!("160000,{base},vendor"),
+            ],
+        )?;
+        git(&repo, &["commit", "-q", "-m", "add gitlink"])?;
+        git(&repo, &["config", "diff.ignoreSubmodules", "all"])?;
+
+        let diff = crate::DiffContext::from_git(repo.root(), &base, "HEAD")?;
+        assert_eq!(diff.changed_files, ["vendor"]);
+        assert!(diff.patch.contains("Subproject commit"));
+        assert_ne!(diff.diff_class, crate::DiffClass::ArtifactOnlySmoke);
+
+        let empty = crate::DiffContext::from_git(repo.root(), "HEAD", "HEAD")?;
+        assert!(empty.changed_files.is_empty());
+        assert!(empty.patch.is_empty());
+        assert_eq!(empty.diff_class, crate::DiffClass::ArtifactOnlySmoke);
+        Ok(())
+    }
+
     struct TrustedFixture {
         base_tree: String,
         head_sha: String,
