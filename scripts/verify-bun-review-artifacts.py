@@ -9319,8 +9319,11 @@ def require_proof_command_receipt_schema(
     duration_ms = command.get("duration_ms")
     if type(duration_ms) is not int or duration_ms < 0:
         fail(f"proof command receipt duration_ms is invalid: {command!r}")
-    if command["status"] == "skipped" and (exit_code is not None or duration_ms != 0):
-        fail("skipped proof command must retain unavailable exit and zero duration")
+    # Runner/setup errors retain measured elapsed time even though no command
+    # result is available. Only unresolved nonexecution requires zero duration
+    # (checked at the containing receipt boundary above).
+    if command["status"] == "skipped" and exit_code is not None:
+        fail("skipped proof command must retain unavailable exit")
     for field in ["stdout", "stderr"]:
         rel = command[field]
         path = pathlib.PurePosixPath(rel.replace("\\", "/"))
@@ -11277,7 +11280,7 @@ def self_test_skipped_unresolved_receipt_contract() -> None:
             ("nonzero completed command", {"status": "failed", "exit_code": 101}, "unresolved proof receipt command roles"),
             ("only successful commands", {"status": "passed", "exit_code": 0}, "unresolved proof receipt command roles"),
             ("skipped zero exit", {"exit_code": 0}, "skipped proof command must retain unavailable exit"),
-            ("skipped duration", {"duration_ms": 1}, "skipped proof command must retain unavailable exit"),
+            ("skipped duration", {"duration_ms": 1}, "unresolved proof receipt contradicts nonexecution"),
             ("skipped timeout", {"timeout_sec": 1}, "unresolved proof receipt contradicts nonexecution"),
             ("skipped timeout flag", {"timed_out": True}, "status/timed_out mismatch"),
         ):
@@ -11506,7 +11509,7 @@ def self_test_proof_command_exit_contract() -> None:
         for updates, expected in (
             ({"status": "failed", "exit_code": 0}, "failed proof command cannot have zero exit_code"),
             ({"status": "skipped", "exit_code": 101}, "skipped proof command must retain unavailable exit"),
-            ({"status": "skipped", "exit_code": None, "duration_ms": 1}, "skipped proof command must retain unavailable exit"),
+            ({"status": "skipped", "exit_code": None, "duration_ms": -1}, "duration_ms is invalid"),
             ({"timed_out": True}, "status/timed_out mismatch"),
             ({"status": "timed_out", "exit_code": None}, "status/timed_out mismatch"),
         ):
@@ -11515,6 +11518,42 @@ def self_test_proof_command_exit_contract() -> None:
                 f"contradictory command {updates!r}", expected,
                 lambda malformed=malformed: verify(malformed),
             )
+
+
+def self_test_unavailable_proof_elapsed_time() -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as temporary:
+        root = pathlib.Path(temporary)
+        (root / "review").mkdir()
+        directory = root / "proof" / "unavailable" / "head"
+        directory.mkdir(parents=True)
+        for stream in ("stdout", "stderr"):
+            (directory / f"{stream}.txt").write_text("", encoding="utf-8")
+        command = {
+            "side": "head", "command": "cargo test controlled_fixture", "env": {},
+            "status": "skipped", "exit_code": None, "timed_out": False,
+            "timeout_sec": 30, "duration_ms": 1,
+            "stdout": "proof/unavailable/head/stdout.txt",
+            "stderr": "proof/unavailable/head/stderr.txt",
+            "reason": "focused proof command unavailable: runner error",
+        }
+        receipt = {
+            "schema": "ub-review.proof_receipt.v1", "id": "unavailable",
+            "kind": "focused-head", "base": "base", "head": "head",
+            "test_patch_mode": "head-only", "requested_by": ["tests-oracle"],
+            "request_ids": ["request-unavailable"], "commands": [command],
+            "result": "skipped_profile", "reason": command["reason"],
+        }
+        # SetupFailed and Cancelled producers retain measured elapsed time;
+        # old receipts use zero for unavailable timing. Neither is a test result.
+        for elapsed in (0, 1, 1001):
+            command["duration_ms"] = elapsed
+            (root / "review/proof_receipts.json").write_text(json.dumps([receipt]), encoding="utf-8")
+            (root / "proof_receipts.ndjson").write_text(json.dumps(receipt) + "\n", encoding="utf-8")
+            require_proof_receipt_ndjson(root, load_json(root / "review/proof_receipts.json"))
+            if routed_status_for_proof_receipt(receipt) != "missing-evidence":
+                fail("unavailable command timing must not confer proof authority")
 
 
 def self_test_absent_resource_lease_contract() -> None:
@@ -16789,6 +16828,7 @@ def run_self_tests() -> None:
     self_test_non_discriminating_routes_as_missing_evidence()
     self_test_skipped_unresolved_receipt_contract()
     self_test_proof_command_exit_contract()
+    self_test_unavailable_proof_elapsed_time()
     self_test_unresolved_side_and_lease_contract()
     self_test_absent_resource_lease_contract()
     self_test_receipt_route_source_anchor_contract()
