@@ -27,6 +27,26 @@ reason = "PR #1581 local RIPR 0.10.0 ready-mode preview at f2e069e over base 47c
 #   in src/config.rs's own `mod tests`, which fixed every reach-class
 #   false negative (7 gaps -> 4 on the same diff).
 
+# PR #1593: exact retained-conflict reducer dispositions. The fallback oracle
+# gap was repaired before these receipts; raw unknowns remain visible.
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:match_arm:4b68a775"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 observation_unverified attribution limit on the retained-conflict resolution match. At source ed538dd4a844eba670fb01c403e21b2a1f4e8d35, conflict_composition_preserves_losses_and_unresolved_evidence asserts 768 order/orientation/batch cases and active_graph_keeps_unresolved_conflict_when_another_lane_lacks_evidence asserts serialized claim/topic truth. Carried from original 2fdbf9f in an isolated Rust 1.95.0 lab: changing Unresolved to Confirmed compiled and failed both tests; production and those two oracles are unchanged at ed538dd. At ed538dd, changing SurfacedAsVerification to Confirmed compiled and failed the all-missing-evidence matrix (Confirmed versus Inconclusive). Restored source passed all nine focused conflict tests. The raw row remains weak, not relabeled exposed. Exact commands, patches, assertion failures and log digests are recorded in https://github.com/EffortlessMetrics/ub-review/pull/1593; upstream discriminator ownership is https://github.com/EffortlessMetrics/ripr/issues/1453. Reverify on reducer, oracle or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:match_arm:3a737ae5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 observation_unverified attribution limit on the recorded-winner guard. At source ed538dd4a844eba670fb01c403e21b2a1f4e8d35, conflict_composition_does_not_confirm_unadjudicated_participants covers the declared multi-party ConflictRecord contract for both proof and precedence resolutions: winner Confirmed, loser Refuted, third participant still Supported. Removing the guard compiled and failed that exact third-participant assertion (Confirmed versus Supported); the separate inverted-guard control at original 2fdbf9f fails the unchanged composition matrix and active proof-precedence test (carried evidence). Restored source passed nine focused conflict tests. These are retained-record reducer controls; the active builder currently emits two-party records, so no multi-party ingestion claim is made. Exact evidence is recorded in https://github.com/EffortlessMetrics/ub-review/pull/1593; upstream discriminator ownership is https://github.com/EffortlessMetrics/ripr/issues/1453. Reverify on reducer, oracle or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:match_arm:2e33cc17"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 observation_unverified attribution limit on the non-adjudicating fallback, after repairing a demonstrated oracle gap. Replacing this None with confirmation compiled and survived the original eight focused tests at 2fdbf9f. Source ed538dd4a844eba670fb01c403e21b2a1f4e8d35 adds conflict_composition_does_not_confirm_unadjudicated_participants: the same mutant now fails the third-participant Supported assertion, while the pristine test also checks that Dropped records preserve all starting states. Actual mutated result: eight passed, one failed; restored source: nine passed. Raw weak classification and all unknowns remain visible; this is not blanket fallback or enum-arm clearance. Exact evidence is recorded in https://github.com/EffortlessMetrics/ub-review/pull/1593; upstream discriminator ownership is https://github.com/EffortlessMetrics/ripr/issues/1453. Reverify on reducer, oracle or analyzer changes."
+
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_enable.rs:error_path:1e7f4b0d"
