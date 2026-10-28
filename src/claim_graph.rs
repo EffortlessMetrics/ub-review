@@ -683,23 +683,37 @@ pub(crate) fn adjudicate_claim_graph_conflicts(
             ),
             resolution: result.resolution.clone(),
         });
+    }
 
-        for claim in &mut graph.claims {
-            if claim.id == left.id {
-                claim.state = if result.winner.as_deref() == Some(left.id.as_str()) {
-                    result.winner_state.clone()
-                } else if result.loser.as_deref() == Some(left.id.as_str()) {
-                    result.loser_state.clone()
-                } else {
-                    result.winner_state.clone()
-                };
-            } else if claim.id == right.id {
-                claim.state = if result.winner.as_deref() == Some(right.id.as_str()) {
-                    result.winner_state.clone()
-                } else {
-                    result.loser_state.clone()
-                };
-            }
+    // Reduce all retained outcomes, including earlier batches. A later win
+    // cannot erase a loss or unresolved evidence. Conflict order is retained
+    // because reconciliation receipts address records by their array index.
+    for claim in &mut graph.claims {
+        let outcome = graph
+            .conflicts
+            .iter()
+            .filter(|conflict| conflict.claim_ids.contains(&claim.id))
+            .filter_map(|conflict| {
+                if conflict.loser.as_deref() == Some(claim.id.as_str()) {
+                    return Some((3, ClaimState::Refuted));
+                }
+                match conflict.resolution {
+                    ConflictResolution::Unresolved => Some((2, ClaimState::Conflicted)),
+                    ConflictResolution::SurfacedAsVerification => {
+                        Some((1, ClaimState::Inconclusive))
+                    }
+                    ConflictResolution::ResolvedByProof
+                    | ConflictResolution::ResolvedByPrecedence
+                        if conflict.winner.as_deref() == Some(claim.id.as_str()) =>
+                    {
+                        Some((0, ClaimState::Confirmed))
+                    }
+                    _ => None,
+                }
+            })
+            .max_by_key(|(priority, _)| *priority);
+        if let Some((_, state)) = outcome {
+            claim.state = state;
         }
     }
 
@@ -1201,5 +1215,110 @@ mod tests {
         let result = adjudicate_conflict(&a, &b);
         assert_eq!(result.winner.as_deref(), Some("a"));
         assert_eq!(result.resolution, ConflictResolution::ResolvedByProof);
+    }
+
+    #[test]
+    fn conflict_composition_preserves_losses_and_unresolved_evidence() -> anyhow::Result<()> {
+        for (classes, expected) in [
+            (
+                [
+                    Some(EvidenceClass::ExactCitation),
+                    Some(EvidenceClass::ProofReceipt),
+                    Some(EvidenceClass::ModelInterpretation),
+                ],
+                [
+                    ClaimState::Refuted,
+                    ClaimState::Confirmed,
+                    ClaimState::Refuted,
+                ],
+            ),
+            (
+                [
+                    Some(EvidenceClass::ExactCitation),
+                    Some(EvidenceClass::ExactCitation),
+                    Some(EvidenceClass::ModelInterpretation),
+                ],
+                [
+                    ClaimState::Conflicted,
+                    ClaimState::Conflicted,
+                    ClaimState::Refuted,
+                ],
+            ),
+            (
+                [None, None, Some(EvidenceClass::ModelInterpretation)],
+                [
+                    ClaimState::Refuted,
+                    ClaimState::Refuted,
+                    ClaimState::Confirmed,
+                ],
+            ),
+            (
+                [None, None, None],
+                [
+                    ClaimState::Inconclusive,
+                    ClaimState::Inconclusive,
+                    ClaimState::Inconclusive,
+                ],
+            ),
+        ] {
+            let original = ClaimGraph {
+                schema: CLAIM_GRAPH_SCHEMA,
+                head_sha: "current-head".to_owned(),
+                revision: None,
+                claims: ["a", "b", "c"]
+                    .into_iter()
+                    .zip(classes)
+                    .map(|(id, class)| make_claim(id, id, &class.into_iter().collect::<Vec<_>>()))
+                    .chain([make_claim("unrelated", "other", &[])])
+                    .collect(),
+                topics: Vec::new(),
+                conflicts: Vec::new(),
+                evidence_gaps: Vec::new(),
+                mode: "active",
+            };
+            let edges = [("a", "b"), ("a", "c"), ("b", "c")];
+            for order in [
+                [0, 1, 2],
+                [0, 2, 1],
+                [1, 0, 2],
+                [1, 2, 0],
+                [2, 0, 1],
+                [2, 1, 0],
+            ] {
+                for reversed in 0..8 {
+                    let pairs = order
+                        .into_iter()
+                        .enumerate()
+                        .map(|(index, edge)| {
+                            let (left, right) = edges[edge];
+                            if reversed & (1 << index) == 0 {
+                                (left.to_owned(), right.to_owned())
+                            } else {
+                                (right.to_owned(), left.to_owned())
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    for split in 0..=pairs.len() {
+                        let mut graph = original.clone();
+                        adjudicate_claim_graph_conflicts(&mut graph, &pairs[..split]);
+                        adjudicate_claim_graph_conflicts(&mut graph, &pairs[split..]);
+                        assert_eq!(
+                            graph.claims[..3]
+                                .iter()
+                                .map(|claim| claim.state.clone())
+                                .collect::<Vec<_>>(),
+                            expected,
+                            "order {order:?}, reversed {reversed}, split {split}"
+                        );
+                        assert_eq!(graph.claims[3].state, ClaimState::NeedsEvidence);
+                        assert_eq!(graph.conflicts.len(), 3);
+                        let before_repeat = serde_json::to_value(&graph)?;
+                        adjudicate_claim_graph_conflicts(&mut graph, &pairs);
+                        assert_eq!(serde_json::to_value(&graph)?, before_repeat);
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
