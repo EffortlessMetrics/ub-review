@@ -55,6 +55,11 @@ pub(crate) fn strip_bracketed_lane_prefix(value: &str) -> Option<&str> {
     if end > 80 {
         return None;
     }
+    // A Markdown link or reference begins with a bracketed label too, but
+    // that label is part of the finding rather than internal lane metadata.
+    if trimmed[end + 1..].starts_with(['(', '[']) {
+        return None;
+    }
     Some(trimmed[end + 1..].trim_start())
 }
 
@@ -986,6 +991,21 @@ pub(crate) fn posted_inline_comment_text(body: &str) -> String {
 mod github_review_serialization_tests {
     use super::*;
     use anyhow::{Result, ensure};
+
+    #[test]
+    fn summary_preserves_leading_markdown_links_and_strips_lane_metadata() {
+        let mut text = String::new();
+        render_pr_model_signal(
+            &mut text,
+            "[contract](https://example.com) contradicts this change",
+        );
+        render_pr_model_signal(&mut text, "[contract][spec] contradicts this change");
+        render_pr_model_signal(&mut text, "[tests] The assertion misses the changed branch");
+        assert_eq!(
+            text,
+            "- [contract](https://example.com) contradicts this change.\n- [contract][spec] contradicts this change.\n- The assertion misses the changed branch.\n"
+        );
+    }
 
     #[test]
     fn github_review_round_trip_preserves_unicode_path_and_stable_post_json() -> Result<()> {
