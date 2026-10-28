@@ -35981,3 +35981,27 @@ kind = "exposure_gap"
 finding_id = "probe:tests_version_probes.rs:return_value:5bdb0b1d"
 owner = "ub-review/diagnostics"
 reason = "#1557 / PR #1571 current gate 40467647166 artifact 12718145144, selected head 97432a6. Original subject '\"{}{}\",'; role integration_test_harness (head side). Oracle: doctor_probe_states_and_recovery; cache_warm_keeps_failed_versions_unavailable; exited_leader_with_held_pipe_is_bounded_for_both_callers. Harness configuration, process launch, elapsed-time/output packaging and text helper feed actual CLI state, exit, manifest-null, leak and completion assertions. Setup errors propagate as failing tests. These rows are test infrastructure, not independent product seams. Author reports compiled controls deadline-held-fixed, failed-cache-fixed rejected defects and restored positives passed in a Rust 1.95.0 --locked Linux lab; that execution transcript was not independently retrieved and is not the basis of this disposition. Pinned RIPR 0.10.0 limitation: integration test helper source-role attribution; upstream https://github.com/EffortlessMetrics/ripr/issues/1453. Disposition basis: the named source-role/oracle judgment reviewed at https://github.com/EffortlessMetrics/ub-review/pull/1573#pullrequestreview-5664588966 and actual hosted positives at https://github.com/EffortlessMetrics/ub-review/actions/runs/40471680492/job/122080017222 (head 157bfdaa2324d7f182eaad27abb529b5c79766f4, Rust 1.95.0 --locked Linux, all 8 adapter unit and 7 CLI tests passed). The twelve-fault campaign and patch/log/count/assertion/restoration claims in coding task /code/tasks/4a8e1903-1c29-4298-9e27-d10119b93c62, qualification-1571 outputs, remain author reports, not independently retrieved evidence; request https://github.com/EffortlessMetrics/ub-review/pull/1571#issuecomment-6437648510 received transcript-unavailable response https://github.com/EffortlessMetrics/ub-review/pull/1571#issuecomment-6437670454. Hosted positives do not establish compiled fault rejection. No Windows/macOS, arbitrary descendant containment or hosted qualification claim. Recheck after semantic edits or analyzer adoption."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:predicate:3a3a8f5b"
+owner = "ub-review/core"
+reason = "The old token length predicate was deleted with token splitting; no corresponding predicate remains in the candidate. Re-evaluate if inline_claim_code_tokens changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:return_value:9ee7de6c"
+owner = "ub-review/core"
+reason = "False weak exposure: claim_identity_tests assert the exact Some span sequence and true-duplicate merging. A compiled mutant returning None for supported spans failed five focused tests. Re-evaluate if inline_claim_code_tokens changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:return_value:d612b731"
+owner = "ub-review/core"
+reason = "False weak exposure: claim_identity_tests verify span order and distinct subjects. A compiled mutant shifting every enumerated index failed four focused tests. Re-evaluate if inline_claim_code_tokens changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:predicate:0c1d6815"
+owner = "ub-review/core"
+reason = "False weak exposure: claim_identity_tests verify code spans and claim identity. A compiled mutant selecting even rather than odd segments failed four focused tests. Re-evaluate if inline_claim_code_tokens changes."
