@@ -602,6 +602,12 @@ mod tests {
     #[test]
     fn ordinary_diff_includes_gitlink_despite_ignore_configuration() -> Result<()> {
         let repo = init_repo()?;
+        commit_file(
+            &repo,
+            ".gitmodules",
+            "[submodule \"vendor\"]\n\tpath = vendor\n\turl = example\n\tignore = all\n",
+            "configure submodule",
+        )?;
         let base = commit_file(&repo, "file", "base\n", "base")?;
         git(
             &repo,
@@ -613,12 +619,19 @@ mod tests {
             ],
         )?;
         git(&repo, &["commit", "-q", "-m", "add gitlink"])?;
-        git(&repo, &["config", "diff.ignoreSubmodules", "all"])?;
 
         let diff = crate::DiffContext::from_git(repo.root(), &base, "HEAD")?;
         assert_eq!(diff.changed_files, ["vendor"]);
-        assert!(diff.patch.contains("Subproject commit"));
+        assert!(diff.patch.contains(&format!("+Subproject commit {base}")));
         assert_ne!(diff.diff_class, crate::DiffClass::ArtifactOnlySmoke);
+
+        git(&repo, &["config", "diff.ignoreSubmodules", "all"])?;
+        let tree = git(&repo, &["rev-parse", &format!("{base}^{{tree}}")])?;
+        let unrelated = git(&repo, &["commit-tree", tree.trim(), "-m", "unrelated"])?;
+        let fallback = crate::DiffContext::from_git(repo.root(), unrelated.trim(), "HEAD")?;
+        assert_eq!(fallback.changed_files, ["vendor"]);
+        assert_eq!(fallback.patch, diff.patch);
+        assert_eq!(fallback.diff_class, diff.diff_class);
 
         let empty = crate::DiffContext::from_git(repo.root(), "HEAD", "HEAD")?;
         assert!(empty.changed_files.is_empty());
