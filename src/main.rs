@@ -18927,6 +18927,33 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn missing_proof_timeout_identifies_the_timed_out_command() {
+        let mut receipt = test_red_green_proof_receipt("timed_out", "timed_out");
+        receipt.commands[1].timed_out = true;
+        let mut text = String::new();
+        super::render_missing_proof_receipt_summary(&mut text, &receipt);
+        assert!(text.contains("USE_SYSTEM_BUN=1 bun test"), "{text}");
+        assert!(!text.contains("bun bd test"), "{text}");
+
+        receipt.commands.truncate(1);
+        receipt.commands[0].status = "timed_out".to_owned();
+        receipt.commands[0].timed_out = true;
+        text.clear();
+        super::render_missing_proof_receipt_summary(&mut text, &receipt);
+        assert!(text.contains("bun bd test"), "{text}");
+
+        receipt.commands[0].timed_out = false;
+        receipt.commands[0].status = "passed".to_owned();
+        text.clear();
+        super::render_missing_proof_receipt_summary(&mut text, &receipt);
+        assert!(
+            text.contains("Focused proof timed out; details are in artifacts"),
+            "{text}"
+        );
+        assert!(!text.contains("bun bd test"), "{text}");
+    }
+
+    #[test]
     fn pr_review_body_collapses_timed_out_proof_to_missing_evidence() {
         let mut receipt = test_proof_receipt("timed_out", "timed_out");
         receipt.request_ids = vec!["markdown-red-green-witness".to_owned()];
