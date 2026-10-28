@@ -1300,6 +1300,17 @@ mod claim_identity_tests {
     }
 
     #[test]
+    fn code_span_identity_trims_surrounding_whitespace() {
+        let make = |body: &str| ReviewInlineComment {
+            body: body.to_owned(),
+            ..comment("source diff")
+        };
+        let left = make("The index `$x[0]` can discard the first value in this branch.");
+        let right = make("The index ` $x[0] ` can discard the first value in this branch.");
+        assert!(same_inline_claim(&left, &right));
+    }
+
+    #[test]
     fn evidence_rank_is_receipt_first_then_source_thread_and_model() {
         assert_eq!(
             inline_evidence_rank(&comment("executed focused test receipt")),
