@@ -51,7 +51,28 @@ pub(crate) fn strip_bracketed_lane_prefix(value: &str) -> Option<&str> {
     if !trimmed.starts_with('[') {
         return None;
     }
-    let end = trimmed.find(']')?;
+    let mut depth = 0usize;
+    let mut escaped = false;
+    let mut end = None;
+    for (index, ch) in trimmed.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match ch {
+            '\\' => escaped = true,
+            '[' => depth += 1,
+            ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    end = Some(index);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let end = end?;
     if end > 80 {
         return None;
     }
@@ -1000,10 +1021,16 @@ mod github_review_serialization_tests {
             "[contract](https://example.com) contradicts this change",
         );
         render_pr_model_signal(&mut text, "[contract][spec] contradicts this change");
+        render_pr_model_signal(
+            &mut text,
+            "[contract [v2]](https://example.com) contradicts this change",
+        );
+        render_pr_model_signal(&mut text, "[contract [v2]][spec] contradicts this change");
+        render_pr_model_signal(&mut text, r"[contract \] v2][spec] contradicts this change");
         render_pr_model_signal(&mut text, "[tests] The assertion misses the changed branch");
         assert_eq!(
             text,
-            "- [contract](https://example.com) contradicts this change.\n- [contract][spec] contradicts this change.\n- The assertion misses the changed branch.\n"
+            "- [contract](https://example.com) contradicts this change.\n- [contract][spec] contradicts this change.\n- [contract [v2]](https://example.com) contradicts this change.\n- [contract [v2]][spec] contradicts this change.\n- [contract \\] v2][spec] contradicts this change.\n- The assertion misses the changed branch.\n"
         );
     }
 
