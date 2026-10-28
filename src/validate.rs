@@ -688,8 +688,10 @@ pub(crate) fn same_inline_claim(left: &ReviewInlineComment, right: &ReviewInline
     if left_text.chars().count() < 32 || right_text.chars().count() < 32 {
         return false;
     }
+    let left_code_tokens = inline_claim_code_tokens(&reviewer_facing_pr_text(&left.body));
+    let right_code_tokens = inline_claim_code_tokens(&reviewer_facing_pr_text(&right.body));
     if left_text == right_text {
-        return true;
+        return left_code_tokens == right_code_tokens;
     }
     // Cross-line merging is a destructive operation.  Similar prose is only
     // a clustering hint; require a shared, recognized failure family and a
@@ -701,8 +703,6 @@ pub(crate) fn same_inline_claim(left: &ReviewInlineComment, right: &ReviewInline
     if Some(left_family) != inline_claim_family(&right_text) {
         return false;
     }
-    let left_code_tokens = inline_claim_code_tokens(&reviewer_facing_pr_text(&left.body));
-    let right_code_tokens = inline_claim_code_tokens(&reviewer_facing_pr_text(&right.body));
     if left_code_tokens.is_empty()
         || right_code_tokens.is_empty()
         || left_code_tokens.is_disjoint(&right_code_tokens)
@@ -744,21 +744,15 @@ fn inline_claim_family(text: &str) -> Option<&'static str> {
 }
 
 fn inline_claim_code_tokens(text: &str) -> BTreeSet<String> {
-    let mut tokens = BTreeSet::new();
-    for (index, segment) in text.split('`').enumerate() {
-        if index % 2 != 1 {
-            continue;
-        }
-        for token in segment.split(|character: char| {
-            !(character.is_ascii_alphanumeric() || matches!(character, '_' | '$' | '%' | '@' | '#'))
-        }) {
-            let token = token.to_ascii_lowercase();
-            if token.len() >= 2 {
-                tokens.insert(token);
-            }
-        }
-    }
-    tokens
+    // Compare whole code spans: splitting an expression into identifiers loses
+    // the index, field, or other syntax that can distinguish two claims.
+    text.split('`')
+        .enumerate()
+        .filter(|(index, _)| index % 2 == 1)
+        .map(|(_, segment)| segment.trim())
+        .filter(|segment| !segment.is_empty())
+        .map(str::to_owned)
+        .collect()
 }
 
 pub(crate) fn normalized_inline_claim_text(comment: &ReviewInlineComment) -> String {
@@ -1264,8 +1258,45 @@ mod claim_identity_tests {
         assert_eq!(inline_claim_family("unclassified prose"), None);
 
         let tokens = inline_claim_code_tokens("use `$x[0]` and `%h`");
-        assert!(tokens.contains("$x"));
+        assert!(tokens.contains("$x[0]"));
         assert!(tokens.contains("%h"));
+    }
+
+    #[test]
+    fn different_indexed_expressions_remain_distinct_claims() {
+        let make = |line, body: &str| ReviewInlineComment {
+            line,
+            body: body.to_owned(),
+            ..comment("source diff")
+        };
+        let mut comments = vec![
+            make(
+                12,
+                "The postfix subscript `$x[0]` drops the first value; add a focused test for the list behavior.",
+            ),
+            make(
+                30,
+                "The postfix subscript `$x[1]` drops the second value; add a focused test for the list behavior.",
+            ),
+        ];
+        let mut summary = Vec::new();
+        dedupe_inline_comments(&mut comments, &mut summary);
+        assert_eq!(comments.len(), 2);
+        assert!(summary.is_empty());
+    }
+
+    #[test]
+    fn normalized_equal_prose_preserves_code_span_identity() {
+        let make = |body: &str| ReviewInlineComment {
+            body: body.to_owned(),
+            ..comment("source diff")
+        };
+        let left = make("The index `$x[0]` can discard the first value in this branch.");
+        let punctuation = make("The index `$x.0` can discard the first value in this branch.");
+        let case = make("The index `$X[0]` can discard the first value in this branch.");
+        assert!(!same_inline_claim(&left, &punctuation));
+        assert!(!same_inline_claim(&left, &case));
+        assert!(same_inline_claim(&left, &left));
     }
 
     #[test]
