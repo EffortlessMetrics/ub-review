@@ -1371,7 +1371,9 @@ fn handle_fake_setup_ci_request(
     write!(
         stream,
         "{status_line}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        response_body.len()
+        // A valid JSON body shorter than its declared length makes curl fail
+        // while retaining HTTP 201, independently exercising process status.
+        response_body.len() + usize::from(status_line.ends_with("Truncated"))
     )?;
     stream.write_all(response_body)?;
     Ok(format!(
@@ -1534,6 +1536,7 @@ fn setup_ci_open_pr_stops_after_unconfirmed_publication() -> Result<()> {
             ("HTTP/1.1 201 Created", "null", "JSON object"),
             ("HTTP/1.1 201 Created", "[]", "JSON object"),
             ("HTTP/1.1 201 Created", "7", "JSON object"),
+            ("HTTP/1.1 201 Truncated", "{}", "http status"),
             ("HTTP/1.1 200 OK", "{}", "http status"),
             ("HTTP/1.1 202 Accepted", "{}", "http status"),
             ("HTTP/1.1 204 No Content", "", "http status"),

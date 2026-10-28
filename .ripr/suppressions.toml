@@ -36615,3 +36615,177 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_text.rs:return_value:a092f4e2"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1591; probe Some(normalized): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by body_budget_drops_topics_and_preserves_inline_fallback_receipt, bracketed_prefix_boundaries, bullet_budget_drops_all_topics_as_inline_only. Re-verify after any edit to src/review_text.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:field_construction:2b35030c"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1303: 'response_override: Option<(&str, &[u8])>,'. Optional override parameter, incorrectly classified as struct-field construction. Oracle/flow: None retains original happy response; Some carries each injected status/body. Failure helper requires request count, diagnostic and terminal receipts. Limit: Runtime override behavior is at 1370, not this declaration. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:field_construction:98124081"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1559: 'failed_request: usize,'. Fault-index parameter, incorrectly classified as struct-field construction. Oracle/flow: Loop supplies indices 3 through 8; exact requests.len()==failed_request+1 at 1609-1613 checks the cutoff. Limit: Signature itself is not field construction. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:error_path:64950d2b"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1576: 'while stopped.try_recv().is_err() {'. Loop continues while no stop message has arrived. is_err is channel polling, not a product error return. Oracle/flow: cmd_setup_ci returns before stop.send; join returns captured requests for exact cutoff and receipt assertions. Limit: Disconnected is treated like Empty; on caller panic server can linger until idle deadline. No channel-disconnect injection exists. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:return_value:d47d86cd"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1576: 'while stopped.try_recv().is_err() {'. Loop continues while no stop message has arrived. is_err is channel polling, not a product error return. Oracle/flow: cmd_setup_ci returns before stop.send; join returns captured requests for exact cutoff and receipt assertions. Limit: Disconnected is treated like Empty; on caller panic server can linger until idle deadline. No channel-disconnect injection exists. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:match_arm:16a5ed2e"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1577: 'match listener.accept() {'. Nonblocking accept dispatch for test-only HTTP listener. Oracle/flow: Successful branch records requests; terminal vector length is compared exactly; server Err propagates via join/result?. Limit: WouldBlock is expected polling. Non-WouldBlock OS errors are not deliberately injected. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:error_path:c8d5c38e"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1578: 'Ok((stream, _)) => {'. Successful accept pattern opens the request-handling block; Ok is a pattern, not an error construction or function return. Oracle/flow: Handler completes response and records request; 1609-1613 checks exact inventory, 1614-1627 checks error/receipt. Limit: The raw error_path and return_value labels do not denote distinct return sites here. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:match_arm:cbf9f3c4"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1578: 'Ok((stream, _)) => {'. Successful accept pattern opens the request-handling block; Ok is a pattern, not an error construction or function return. Oracle/flow: Handler completes response and records request; 1609-1613 checks exact inventory, 1614-1627 checks error/receipt. Limit: The raw error_path and return_value labels do not denote distinct return sites here. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:return_value:1940151a"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1578: 'Ok((stream, _)) => {'. Successful accept pattern opens the request-handling block; Ok is a pattern, not an error construction or function return. Oracle/flow: Handler completes response and records request; 1609-1613 checks exact inventory, 1614-1627 checks error/receipt. Limit: The raw error_path and return_value labels do not denote distinct return sites here. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:error_path:6a346d68"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1579: 'let response ='. Start of response binding; continuation selects override only at exact failed_request index. Oracle/flow: Indices 3..9 and exact count reject earlier/later cutoff; diagnostic and receipt checks reject ignored injection. Limit: The line is neither a standalone error return nor return-value site; predicate is on line 1580. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:return_value:4003ad34"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1579: 'let response ='. Start of response binding; continuation selects override only at exact failed_request index. Oracle/flow: Indices 3..9 and exact count reject earlier/later cutoff; diagnostic and receipt checks reject ignored injection. Limit: The line is neither a standalone error return nor return-value site; predicate is on line 1580. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:error_path:22dc20bd"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1583: '}'. Closing brace of successful accept arm. Oracle/flow: Enclosing arm is constrained by exact request inventory and diagnostics. Limit: Brace itself has no independently executable error/return behavior. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:return_value:530d49ec"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1583: '}'. Closing brace of successful accept arm. Oracle/flow: Enclosing arm is constrained by exact request inventory and diagnostics. Limit: Brace itself has no independently executable error/return behavior. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:match_arm:3a5da700"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1584: 'Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {'. WouldBlock arm permits polling until stop or idle deadline. Oracle/flow: Normal command completion sends stop and joins; unexpected fixture Err fails the outer Result-returning test. Limit: Deadline-expiry and alternate socket errors are not deliberately exercised. No claim that every error branch has runtime discrimination. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:error_path:22dc20bd.2"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1587: '}'. Closing brace of idle-deadline conditional. Oracle/flow: Enclosed bail returns a fixture error via join/result?, not a product success. Limit: No expired-deadline injection or timing-bound assertion is present; brace is not a return/error site. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:return_value:530d49ec.2"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1587: '}'. Closing brace of idle-deadline conditional. Oracle/flow: Enclosed bail returns a fixture error via join/result?, not a product success. Limit: No expired-deadline injection or timing-bound assertion is present; brace is not a return/error site. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:error_path:22dc20bd.3"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1589: '}'. Closing brace of WouldBlock arm. Oracle/flow: Enclosing arm contains bounded polling and sleep; terminal vector checked after join. Limit: No independent brace behavior; polling/timeout limits remain explicit. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:return_value:530d49ec.3"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1589: '}'. Closing brace of WouldBlock arm. Oracle/flow: Enclosing arm contains bounded polling and sleep; terminal vector checked after join. Limit: No independent brace behavior; polling/timeout limits remain explicit. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:match_arm:d07908e8"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1590: 'Err(err) => return Err(err.into()),'. Non-WouldBlock accept error is converted and returned from server thread. Oracle/flow: Ok(result)=>result? propagates server Err as test failure, before publication assertions can pass. Limit: No injected accept OS error proves this arm dynamically; disposition is test-infrastructure scope, not exact-variant coverage. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:error_path:22dc20bd.4"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1591: '}'. Closing brace of accept match. Oracle/flow: Returned request vector is joined and counted exactly. Limit: No standalone error/return behavior; errors in real arms are described separately. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:return_value:530d49ec.4"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1591: '}'. Closing brace of accept match. Oracle/flow: Returned request vector is joined and counted exactly. Limit: No standalone error/return behavior; errors in real arms are described separately. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:error_path:22dc20bd.5"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1592: '}'. Closing brace of stop loop. Oracle/flow: Normal stop leads to Ok(requests), then exact count and terminal assertions. Limit: No independently executable error/return at this brace. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:return_value:530d49ec.5"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1592: '}'. Closing brace of stop loop. Oracle/flow: Normal stop leads to Ok(requests), then exact count and terminal assertions. Limit: No independently executable error/return at this brace. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:error_path:9934e0d6"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1594: '});'. Closing syntax of thread::spawn closure/call. Oracle/flow: Thread returns captured inventory, joined at 1604; no detached successful proof. Limit: Raw return sink points onward to args.repo assignment, showing syntactic attribution drift; not an independent return site. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:return_value:15ea793f"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1594: '});'. Closing syntax of thread::spawn closure/call. Oracle/flow: Thread returns captured inventory, joined at 1604; no detached successful proof. Limit: Raw return sink points onward to args.repo assignment, showing syntactic attribution drift; not an independent return site. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:side_effect:a9135c0a"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1603: 'let stop_result = stop.send(());'. Stop signal sent only after synchronous product invocation returns. Oracle/flow: send result is propagated at 1608; join then supplies exact inventory. No stop can hide a later synchronous product write. Limit: No forced send failure. Without stop signal the server reaches idle deadline and errors; no measured shutdown bound is asserted. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:match_arm:752e39e4"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1604: 'let requests = match handle.join() {'. Join dispatch distinguishes returned Result from thread panic. Oracle/flow: Successful join yields requests for exact cutoff; error Result is propagated and panic is converted to failing Result. Limit: No forced worker panic; join-success path is used by matrix. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:match_arm:378f056e"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1605: 'Ok(result) => result?,'. Successful thread join unwraps its Result with ?. Oracle/flow: A server error exits the Result-returning helper/test; successful inventory is subjected to exact count and receipt checks. Limit: No synthetic server Err injection; this is test infrastructure rather than an unobserved product error. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:match_arm:84619063"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1606: 'Err(_) => bail!(\"fake setup-ci API thread panicked\"),'. Thread-panic branch bails out of Result-returning test helper. Oracle/flow: Cannot produce a passing test through this branch: bail returns Err, propagated by the matrix caller at 1543/1553. Limit: Thread panic is not deliberately injected; do not claim exact panic-diagnostic runtime proof. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:error_path:a747e2fd"
+owner = "ub-review/core"
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1608: 'stop_result?;'. Stop-send failure is propagated to the test Result. Oracle/flow: A failed send prevents a passing helper; matrix caller uses ?. Limit: No deliberate receiver-drop injection. Literal error detail is not a product contract. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+
