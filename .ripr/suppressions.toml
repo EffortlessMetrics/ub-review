@@ -1,5 +1,25 @@
 schema_version = 1
 
+# PR #1401: test-helper attribution limits, calibrated on current-main adoption.
+# Raw classifications and unknowns remain visible; these are exact dispositions.
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_executable_fixture.rs:call_deletion:59f8ebe9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 absolute-root invocation labels the test-only shared RwLock initializer no_static_path/no_changed_rust_line; relative-root analysis of the identical diff labels it exposed. This is a declaration in the CLI integration-test helper, not a production call-deletion seam (ripr-swarm#3213). At source tree 2d282b35efd048e5546949fb8db7572910aa6636 over main eac545ee5ead6026a81b2a9163508ad8a7308072, separate compiled removal of writer exclusion and spawn-reader participation each failed concurrent_children_cannot_inherit_executable_fixture_writers with native OS26/exit101. Each control ran once with a fixed bound of 250 fixtures and 8x250 unrelated launches; restored fixture tests passed. This establishes the shared coordination effects, not arbitrary initializer fault coverage. Preserve raw classifications and the root-dependent analysis limitation; recheck after helper or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_executable_fixture.rs:return_value:3a1394a4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 observation_unverified at fixture_output's .fixture_spawn()? return: the integration-test helper returns Child into wait_with_output, then CLI callers observe Output. Source-role ownership is ripr-swarm#3213; eligible helper/observer attribution remains #6975/#3161. At source tree 2d282b35efd048e5546949fb8db7572910aa6636, removing spawn-reader participation compiled and failed the bounded natural writer-race test with OS26/exit101 on its single run. launch_errors_keep_io_semantics_and_child_lifetime_is_unlocked separately pins native retained-writer error kind/raw OS26 through both capture and expected-failure helpers and verifies release before child wait. Restored fixture tests passed. This exact disposition covers the reviewed test-helper boundary, not arbitrary subprocess identity, production return-value exposure, or a hosted gate waiver; recheck after helper or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_executable_fixture.rs:return_value:f39e97b9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 observation_unverified at fixture_output's .wait_with_output() return: integration-test consumers discriminate Output.stdout and Output.status beyond an opaque helper boundary (ripr-swarm#3213/#3161/#6975). At source tree 2d282b35efd048e5546949fb8db7572910aa6636, one compiled control cleared returned stdout and failed concurrent_children_cannot_inherit_executable_fixture_writers on exact actionlint bytes; another forced returned failure status to success and failed doctor_require_core_tools_fails_stale_actionlint_version as unexpectedly succeeded. Both exited101 on their single runs; restored fixture2 and doctor1 tests passed. Existing retained-writer controls also preserve real I/O causes. These bounded controls do not prove all Output fault models or installed upstream return-observation credit. Preserve raw weak classification and unknowns; recheck after helper/caller or analyzer changes."
+
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_reporter.rs:call_deletion:7384c9b8"
