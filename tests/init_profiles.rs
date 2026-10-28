@@ -175,3 +175,50 @@ fn init_builtin_profiles_and_config_owned_custom_remain_usable() -> Result<()> {
     assert_eq!(resolved["profile"]["limits"]["llm_in_flight"], 1);
     Ok(())
 }
+
+#[test]
+fn plan_preserves_explicit_builtin_sensor_timeout_zero() -> Result<()> {
+    let _guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    for (name, timeout, expected) in [
+        ("profile", "", 720),
+        ("zero", "timeout_sec = 0\n", 1),
+        ("explicit", "timeout_sec = 123\n", 123),
+    ] {
+        let config = temp.path().join(format!("{name}.toml"));
+        write_file(
+            &config,
+            &format!("profile = \"gh-runner\"\n[tools.ripr]\ndefault = \"always\"\n{timeout}"),
+        )?;
+        let out = temp.path().join(name);
+        run(
+            &repo,
+            bin,
+            &[
+                "plan",
+                "--root",
+                path_str(&repo)?,
+                "--base",
+                "HEAD^",
+                "--head",
+                "HEAD",
+                "--config",
+                path_str(&config)?,
+                "--write",
+                "--out",
+                path_str(&out)?,
+            ],
+        )?;
+        let plan: serde_json::Value = serde_json::from_slice(&fs::read(out.join("plan.json"))?)?;
+        let sensors = plan["sensors"].as_array().context("plan sensors missing")?;
+        let ripr = sensors
+            .iter()
+            .find(|sensor| sensor["id"] == "ripr")
+            .context("ripr missing")?;
+        assert_eq!(ripr["timeout_sec"], expected, "case {name}");
+    }
+    Ok(())
+}
