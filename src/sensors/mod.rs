@@ -1150,7 +1150,14 @@ pub(crate) fn write_sensor_status(
 ) -> Result<()> {
     let dir = out.join("sensors").join(&sensor.id);
     fs::create_dir_all(&dir)?;
-    ensure_sensor_text_receipts(&dir)?;
+    if matches!(fields.status, "skipped" | "missing") {
+        for name in ["stdout.txt", "stderr.txt"] {
+            let path = dir.join(name);
+            fs::write(&path, b"").with_context(|| format!("clear stale {}", path.display()))?;
+        }
+    } else {
+        ensure_sensor_text_receipts(&dir)?;
+    }
     let mut value = serde_json::json!({
         "sensor": sensor.id,
         "status": fields.status,

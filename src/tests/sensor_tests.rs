@@ -295,6 +295,52 @@ timeout_sec = 0
 }
 
 #[test]
+fn unexecuted_sensor_receipt_does_not_retain_prior_text_output() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let out = temp.path().join("out");
+    let sensor = sensor_plan("artifact-verifier", "verifier", true);
+    let dir = out.join("sensors/artifact-verifier");
+    fs::create_dir_all(&dir)?;
+    for status in ["skipped", "missing"] {
+        fs::write(dir.join("stdout.txt"), "prior success")?;
+        fs::write(dir.join("stderr.txt"), "prior diagnostic")?;
+        write_sensor_status(
+            &out,
+            &sensor,
+            SensorStatusWrite {
+                status,
+                argv: &["verifier".to_owned()],
+                duration_ms: 0,
+                reason: "sensor not executed",
+                exit_code: None,
+                timed_out: false,
+            },
+        )?;
+        assert!(fs::read(dir.join("stdout.txt"))?.is_empty());
+        assert!(fs::read(dir.join("stderr.txt"))?.is_empty());
+    }
+
+    fs::write(dir.join("stdout.txt"), "current success")?;
+    write_sensor_status(
+        &out,
+        &sensor,
+        SensorStatusWrite {
+            status: "ok",
+            argv: &["verifier".to_owned()],
+            duration_ms: 1,
+            reason: "completed",
+            exit_code: Some(0),
+            timed_out: false,
+        },
+    )?;
+    assert_eq!(
+        fs::read_to_string(dir.join("stdout.txt"))?,
+        "current success"
+    );
+    Ok(())
+}
+
+#[test]
 fn running_summary_reports_planned_skipped_sensor_evidence() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let out = temp.path().join("out");
