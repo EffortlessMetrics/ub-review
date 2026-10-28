@@ -1359,35 +1359,47 @@ fn sanitize_tool_gate_value(
     gate: toml::Value,
     errors: &mut Vec<PolicyError>,
 ) {
-    match gate.try_into::<ToolGatePolicy>() {
-        Err(err) => {
+    let Some(gate_table) = gate.as_table() else {
+        errors.push(PolicyError {
+            section: format!("tools.{id}.gate"),
+            detail: format!(
+                "invalid [tools.{id}.gate]: expected a table, found {}",
+                gate.type_str()
+            ),
+        });
+        tool_table.remove("gate");
+        return;
+    };
+    let mut sanitized = gate_table.clone();
+    for (key, value) in gate_table {
+        let mut probe = toml::value::Table::new();
+        probe.insert(key.clone(), value.clone());
+        if let Err(err) = toml::Value::Table(probe).try_into::<ToolGatePolicy>() {
             errors.push(PolicyError {
                 section: format!("tools.{id}.gate"),
-                detail: format!("invalid [tools.{id}.gate] table: {err}"),
+                detail: format!("invalid [tools.{id}.gate] key `{key}`: {err}"),
             });
-            tool_table.remove("gate");
-        }
-        Ok(policy) => {
-            if let Some(scope) = policy.scope.as_deref()
-                && !KNOWN_TOOL_GATE_SCOPES.contains(&scope)
-            {
-                errors.push(PolicyError {
-                    section: format!("tools.{id}.gate.scope"),
-                    detail: format!(
-                        "unknown [tools.{id}.gate] scope `{scope}`; expected one of: {} \
-                         (repo-wide tool-gate scoping does not exist yet)",
-                        KNOWN_TOOL_GATE_SCOPES.join(", ")
-                    ),
-                });
-                if let Some(gate_table) = tool_table
-                    .get_mut("gate")
-                    .and_then(toml::Value::as_table_mut)
-                {
-                    gate_table.remove("scope");
-                }
-            }
+            sanitized.remove(key);
         }
     }
+    if sanitized.is_empty() && !gate_table.is_empty() {
+        tool_table.remove("gate");
+        return;
+    }
+    if let Some(scope) = sanitized.get("scope").and_then(toml::Value::as_str)
+        && !KNOWN_TOOL_GATE_SCOPES.contains(&scope)
+    {
+        errors.push(PolicyError {
+            section: format!("tools.{id}.gate.scope"),
+            detail: format!(
+                "unknown [tools.{id}.gate] scope `{scope}`; expected one of: {} \
+                 (repo-wide tool-gate scoping does not exist yet)",
+                KNOWN_TOOL_GATE_SCOPES.join(", ")
+            ),
+        });
+        sanitized.remove("scope");
+    }
+    tool_table.insert("gate".to_owned(), toml::Value::Table(sanitized));
 }
 
 /// Per-key validation for `[proof]`: unknown keys (for example a misspelled
@@ -1722,6 +1734,33 @@ phase = "sometime"
     // ripr-swarm#1054, and line-keyed suppressions rot, ripr-swarm#1053).
     // The behavior-level twins (D2 precedence, broker planning, lane
     // merging) stay in main.rs where those functions live.
+
+    #[test]
+    fn tool_gate_unknown_key_preserves_valid_threshold() -> anyhow::Result<()> {
+        let valid = Config::from_toml_with_policy_receipts(
+            "[tools.ripr.gate]\nscope = \"on-diff\"\nmax_new_unsuppressed = 0\n",
+        )?;
+        anyhow::ensure!(valid.policy_errors.is_empty());
+        anyhow::ensure!(
+            valid.tools["ripr"]
+                .gate
+                .as_ref()
+                .and_then(|gate| gate.max_new_unsuppressed)
+                == Some(0)
+        );
+        let invalid = Config::from_toml_with_policy_receipts(
+            "[tools.ripr.gate]\nscope = \"on-diff\"\nmax_new_unsuppressed = 0\nmax_new_unsupressed = 1\n",
+        )?;
+        anyhow::ensure!(invalid.policy_errors.len() == 1);
+        anyhow::ensure!(
+            invalid.tools["ripr"]
+                .gate
+                .as_ref()
+                .and_then(|gate| gate.max_new_unsuppressed)
+                == Some(0)
+        );
+        Ok(())
+    }
 
     #[test]
     fn impact_resolved_mode_defaults_to_shadow_and_clamps_invalid() {
