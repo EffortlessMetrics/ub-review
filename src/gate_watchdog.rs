@@ -50,6 +50,15 @@ impl WatchdogRunObservation {
             .as_deref()
             .is_some_and(|c| c.trim().eq_ignore_ascii_case(expected))
     }
+
+    fn lifecycle_agrees_with(&self, other: &Self) -> bool {
+        self.status.trim().eq_ignore_ascii_case(other.status.trim())
+            && match (self.conclusion.as_deref(), other.conclusion.as_deref()) {
+                (Some(left), Some(right)) => left.trim().eq_ignore_ascii_case(right.trim()),
+                (None, None) => true,
+                _ => false,
+            }
+    }
 }
 
 /// The recorded `gate_outcome.json` observation for the head, if any. `present`
@@ -247,10 +256,20 @@ pub(crate) fn build_gate_watchdog(obs: &WatchdogObservations) -> GateWatchdog {
         .iter()
         .filter(|r| r.sha.trim() == sha)
         .max_by_key(|r| (r.run_id, r.attempt));
+    let conflicting_observations = selected.is_some_and(|latest| {
+        obs.runs.iter().any(|run| {
+            run.sha.trim() == sha
+                && run.run_id == latest.run_id
+                && run.attempt == latest.attempt
+                && !run.lifecycle_agrees_with(latest)
+        })
+    });
 
     // 1. A newer in-progress replacement before the deadline: stay pending and
     //    never serialize pass or fail while the head may still complete.
-    if let Some(latest) = selected.filter(|r| !r.is_completed() && !obs.deadline_passed) {
+    if let Some(latest) =
+        selected.filter(|r| !r.is_completed() && !obs.deadline_passed && !conflicting_observations)
+    {
         let run_id = latest.run_id;
         return GateWatchdog::pending(
             sha,
@@ -310,7 +329,7 @@ pub(crate) fn build_gate_watchdog(obs: &WatchdogObservations) -> GateWatchdog {
     // 4. Only the newest exact-head run/attempt may authorize a verdict. A
     //    retained artifact cannot finish an interrupted or still-running attempt.
     if let Some(selected) = selected {
-        if selected.conclusion_is("cancelled") {
+        if selected.conclusion_is("cancelled") && !conflicting_observations {
             // Step 1 already ruled out an in-progress replacement, so the newest
             // exact-head run is a cancellation with nothing replacing it.
             return GateWatchdog::inconclusive(
@@ -325,16 +344,24 @@ pub(crate) fn build_gate_watchdog(obs: &WatchdogObservations) -> GateWatchdog {
             );
         }
 
-        if !selected.is_completed()
+        if conflicting_observations
+            || !selected.is_completed()
             || !(selected.conclusion_is("success") || selected.conclusion_is("failure"))
         {
             return GateWatchdog::inconclusive(
                 sha,
                 "incomplete-run",
-                format!(
-                    "newest exact-head run {} attempt {} has status {:?} and conclusion {:?}; retained artifacts cannot establish completion",
-                    selected.run_id, selected.attempt, selected.status, selected.conclusion
-                ),
+                if conflicting_observations {
+                    format!(
+                        "newest exact-head run {} attempt {} has conflicting lifecycle observations; retained artifacts cannot establish completion",
+                        selected.run_id, selected.attempt
+                    )
+                } else {
+                    format!(
+                        "newest exact-head run {} attempt {} has status {:?} and conclusion {:?}; retained artifacts cannot establish completion",
+                        selected.run_id, selected.attempt, selected.status, selected.conclusion
+                    )
+                },
                 format!("run:{}", selected.run_id),
                 "re-run the gate for the head and observe a completed evidence-producing attempt",
             );
@@ -599,6 +626,155 @@ mod tests {
             let w = build_gate_watchdog(&obs);
             assert_eq!(w.state, "terminal");
             assert_eq!(w.conclusion.as_deref(), Some(gate_conclusion));
+        }
+    }
+
+    #[test]
+    fn conflicting_same_attempt_receipts_never_authorize_pass() {
+        for reverse in [false, true] {
+            let mut obs = base("head1");
+            obs.runs = vec![
+                run("head1", "completed", Some("failure"), 10, 1),
+                run("head1", "completed", Some("success"), 10, 1),
+            ];
+            if reverse {
+                obs.runs.reverse();
+            }
+            obs.gate_artifact = WatchdogGateArtifact {
+                present: true,
+                conclusion: Some("pass".to_owned()),
+                run_id: Some(10),
+                sha: Some("head1".to_owned()),
+            };
+            let w = build_gate_watchdog(&obs);
+            assert_ne!(
+                w.conclusion.as_deref(),
+                Some("pass"),
+                "reverse={reverse}: {w:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn conflicting_latest_observations_are_order_independent() -> Result<()> {
+        let pairs = [
+            (
+                run("head1", "completed", Some("failure"), 10, 1),
+                run("head1", "completed", Some("success"), 10, 1),
+            ),
+            (
+                run("head1", "completed", None, 10, 1),
+                run("head1", "completed", Some("success"), 10, 1),
+            ),
+            (
+                run("head1", "in_progress", Some("success"), 10, 1),
+                run("head1", "completed", Some("success"), 10, 1),
+            ),
+            (
+                run("head1", "completed", Some("cancelled"), 10, 1),
+                run("head1", "completed", Some("success"), 10, 1),
+            ),
+        ];
+        for (left, right) in pairs {
+            for deadline_passed in [false, true] {
+                let mut outcomes = Vec::new();
+                for runs in [
+                    vec![left.clone(), right.clone()],
+                    vec![right.clone(), left.clone()],
+                ] {
+                    let mut obs = base("head1");
+                    obs.deadline_passed = deadline_passed;
+                    obs.runs = runs;
+                    obs.gate_artifact = WatchdogGateArtifact {
+                        present: true,
+                        conclusion: Some("pass".to_owned()),
+                        run_id: Some(10),
+                        sha: Some("head1".to_owned()),
+                    };
+                    let outcome = serde_json::to_value(build_gate_watchdog(&obs))?;
+                    println!("conflict permutation: {outcome}");
+                    outcomes.push(outcome);
+                }
+                for outcome in &outcomes {
+                    assert_eq!(
+                        outcome,
+                        &serde_json::json!({
+                            "schema": "ub-review.gate_watchdog.v1",
+                            "expected_sha": "head1",
+                            "state": "inconclusive",
+                            "reason": "incomplete-run",
+                            "detail": "newest exact-head run 10 attempt 1 has conflicting lifecycle observations; retained artifacts cannot establish completion",
+                            "receipt_pointer": "run:10",
+                            "retry_action": "re-run the gate for the head and observe a completed evidence-producing attempt"
+                        })
+                    );
+                }
+                assert_eq!(outcomes[0], outcomes[1]);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn agreeing_duplicate_observations_preserve_terminal_results() {
+        for (run_conclusion, gate_conclusion) in [("success", "pass"), ("failure", "fail")] {
+            let mut obs = base("head1");
+            let original = run("head1", "completed", Some(run_conclusion), 10, 1);
+            let normalized_equivalent = run(
+                "head1",
+                " COMPLETED ",
+                Some(&format!(" {} ", run_conclusion.to_ascii_uppercase())),
+                10,
+                1,
+            );
+            obs.runs = vec![original, normalized_equivalent];
+            obs.gate_artifact = WatchdogGateArtifact {
+                present: true,
+                conclusion: Some(gate_conclusion.to_owned()),
+                run_id: Some(10),
+                sha: Some("head1".to_owned()),
+            };
+            let outcome = build_gate_watchdog(&obs);
+            assert_eq!(outcome.state, "terminal");
+            assert_eq!(outcome.conclusion.as_deref(), Some(gate_conclusion));
+        }
+        let mut obs = base("head1");
+        obs.runs = vec![run("head1", "completed", None, 10, 1); 2];
+        let outcome = build_gate_watchdog(&obs);
+        assert_eq!(outcome.state, "inconclusive");
+        assert_eq!(outcome.reason, "incomplete-run");
+        assert_eq!(
+            outcome.detail,
+            "newest exact-head run 10 attempt 1 has status \"completed\" and conclusion None; retained artifacts cannot establish completion"
+        );
+        assert!(outcome.conclusion.is_none());
+
+        obs.deadline_passed = false;
+        obs.runs = vec![run("head1", "in_progress", None, 10, 1); 2];
+        let outcome = build_gate_watchdog(&obs);
+        assert_eq!(outcome.state, "pending");
+        assert_eq!(outcome.reason, "in-progress-replacement");
+        assert!(outcome.conclusion.is_none());
+    }
+
+    #[test]
+    fn superseded_conflicts_do_not_block_a_newer_run_or_attempt() {
+        for (run_id, attempt) in [(10, 2), (11, 1)] {
+            let mut obs = base("head1");
+            obs.runs = vec![
+                run("head1", "completed", Some("failure"), 10, 1),
+                run("head1", "completed", Some("success"), run_id, attempt),
+                run("head1", "completed", Some("success"), 10, 1),
+            ];
+            obs.gate_artifact = WatchdogGateArtifact {
+                present: true,
+                conclusion: Some("pass".to_owned()),
+                run_id: Some(run_id),
+                sha: Some("head1".to_owned()),
+            };
+            let outcome = build_gate_watchdog(&obs);
+            assert_eq!(outcome.state, "terminal");
+            assert_eq!(outcome.conclusion.as_deref(), Some("pass"));
         }
     }
 

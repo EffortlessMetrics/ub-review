@@ -459,6 +459,14 @@ exact-head run/attempt is considered; it must complete with `success` or
 `failure`, and a failed run cannot authorize a retained `pass`. Missing or
 malformed evidence can never serialize `pass`.**
 
+Multiple observations for that same head, run ID and attempt must agree on
+status and conclusion after the existing whitespace/case normalization.
+Conflicting lifecycle observations cannot authorize a conclusion in either
+input order. They yield `inconclusive / incomplete-run` when selected-run
+classification is reached; coordinator/proof failures retain their earlier
+precedence. Agreeing duplicates remain valid;
+conflicts on superseded runs or attempts do not block a newer valid observation.
+
 ```text
 state         reason                          when
 terminal      exact-head-terminal             exact-head run completed and its
@@ -476,6 +484,7 @@ inconclusive  cancelled-without-replacement   newest exact-head run was
 inconclusive  incomplete-run                  newest exact-head run/attempt did
                                               not finish by the deadline, has an
                                               interrupted/unsupported conclusion,
+                                              conflicting lifecycle observations,
                                               or failed while retaining a pass
 inconclusive  stale-success                   only an older-SHA success exists;
                                               it cannot satisfy the current head
