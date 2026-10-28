@@ -36500,3 +36500,93 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_text.rs:match_arm:ac113e32"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1589; probe None => \"Focused proof timed out; details are in artifacts.\".to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_tree_without_a_cargo_workspace_records_no_lockfile_gap, a_workspace_without_a_lockfile_selects_no_cargo_candidate, accounting_timeout_spends_allowance_and_aggregates_red_green_once. Re-verify after any edit to src/review_text.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:8334c761"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 weak discriminator on review patch decoding. Backslash dispatch: review_patch_git_c_escapes_preserve_exact_anchor_paths checks C and octal escapes and review_patch_invalid_quoted_filename_never_reuses_previous_path rejects invalid escapes. Re-verify after decoder, test or RIPR changes; this local finding is not an assertion about a hosted receipt."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:aae13856"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 weak discriminator on review patch decoding. Escape dispatch: review_patch_git_c_escapes_preserve_exact_anchor_paths checks each supported control escape, quote and octal bytes; invalid escapes are rejected by review_patch_invalid_quoted_filename_never_reuses_previous_path. Re-verify after decoder, test or RIPR changes; this local finding is not an assertion about a hosted receipt."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:e3d74080"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 weak discriminator on review patch decoding. Bell escape: review_patch_git_c_escapes_preserve_exact_anchor_paths asserts the exact embedded U+0007 path. Re-verify after decoder, test or RIPR changes; this local finding is not an assertion about a hosted receipt."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:31e691d9"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 weak discriminator on review patch decoding. Backspace escape: review_patch_git_c_escapes_preserve_exact_anchor_paths asserts the exact embedded U+0008 path. Re-verify after decoder, test or RIPR changes; this local finding is not an assertion about a hosted receipt."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:492d9cc1"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 weak discriminator on review patch decoding. Tab escape: review_patch_git_c_escapes_preserve_exact_anchor_paths asserts the exact embedded tab path; replacing its decoded value failed that compiled test. Re-verify after decoder, test or RIPR changes; this local finding is not an assertion about a hosted receipt."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:0301c86e"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 weak discriminator on review patch decoding. Newline escape: review_patch_git_c_escapes_preserve_exact_anchor_paths asserts the exact embedded newline path. Re-verify after decoder, test or RIPR changes; this local finding is not an assertion about a hosted receipt."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:cadb1f43"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 weak discriminator on review patch decoding. Vertical-tab escape: review_patch_git_c_escapes_preserve_exact_anchor_paths asserts the exact embedded U+000B path. Re-verify after decoder, test or RIPR changes; this local finding is not an assertion about a hosted receipt."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:da2b0f62"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 weak discriminator on review patch decoding. Form-feed escape: review_patch_git_c_escapes_preserve_exact_anchor_paths asserts the exact embedded U+000C path. Re-verify after decoder, test or RIPR changes; this local finding is not an assertion about a hosted receipt."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:061512e5"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 weak discriminator on review patch decoding. Carriage-return escape: review_patch_git_c_escapes_preserve_exact_anchor_paths asserts the exact embedded carriage-return path. Re-verify after decoder, test or RIPR changes; this local finding is not an assertion about a hosted receipt."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:91c37ca4"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 weak discriminator on review patch decoding. Quote and backslash escapes: review_patch_git_c_escapes_preserve_exact_anchor_paths asserts the decoded quote; review_patch_invalid_quoted_filename_never_reuses_previous_path asserts an escaped backslash fails closed when normalization would change it. Re-verify after decoder, test or RIPR changes; this local finding is not an assertion about a hosted receipt."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:8e1c33c3"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 weak discriminator on review patch decoding. Octal arm: review_patch_quoted_filename_preserves_anchor_identity and review_patch_git_c_escapes_preserve_exact_anchor_paths assert UTF-8 octal decoding; an incorrect octal multiplier failed both compiled tests. Re-verify after decoder, test or RIPR changes; this local finding is not an assertion about a hosted receipt."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:ba8c3bca"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 weak discriminator on review patch decoding. Octal byte range conversion: review_patch_invalid_quoted_filename_never_reuses_previous_path rejects the out-of-range octal 400 and review_patch_quoted_filename_preserves_anchor_identity accepts valid UTF-8 octets. Re-verify after decoder, test or RIPR changes; this local finding is not an assertion about a hosted receipt."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:03d92fe4"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 weak discriminator on review patch decoding. Unknown escape fallback: review_patch_invalid_quoted_filename_never_reuses_previous_path rejects an unsupported escape without producing an alias. Re-verify after decoder, test or RIPR changes; this local finding is not an assertion about a hosted receipt."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:8a9dfcab"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 weak discriminator on review patch decoding. Literal byte arm: review_patch_git_c_escapes_preserve_exact_anchor_paths asserts surrounding literal bytes alongside decoded escapes. Re-verify after decoder, test or RIPR changes; this local finding is not an assertion about a hosted receipt."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:f631ac58"
+owner = "ub-review/core"
+reason = "Local RIPR 0.10.0 weak discriminator on review patch decoding. Transport prefix check: review_patch_unusable_file_headers_do_not_inherit_prior_file rejects a quoted old-side prefix and review_patch_quoted_filename_preserves_anchor_identity accepts the new-side prefix. Re-verify after decoder, test or RIPR changes; this local finding is not an assertion about a hosted receipt."
+
