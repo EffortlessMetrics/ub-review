@@ -235,10 +235,10 @@ pub(crate) fn parse_reporter_conclusion(
     cohort_id: &str,
     thread_id: &str,
 ) -> ReporterConclusion {
-    // Try to parse as JSON {distillation, proposed_follow_ups}.
-    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(content)
-        && let Some(distillation) = parsed.get("distillation").and_then(|v| v.as_str())
-    {
+    // Retain follow-ups even when the JSON lacks a usable distillation, but
+    // accept a verdict only alongside that explanatory text.
+    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(content) {
+        let distillation = parsed.get("distillation").and_then(|v| v.as_str());
         let proposed_follow_ups = parsed
             .get("proposed_follow_ups")
             .and_then(|v| v.as_array())
@@ -250,16 +250,14 @@ pub(crate) fn parse_reporter_conclusion(
             .unwrap_or_default();
         return ReporterConclusion {
             schema: REPORTER_THREAD_SCHEMA.to_owned(),
-            distillation: distillation.to_owned(),
+            distillation: distillation.unwrap_or(content).to_owned(),
             proposed_follow_ups,
-            verdict: parse_verdict(&parsed),
+            verdict: distillation.map_or(ReporterVerdict::None, |_| parse_verdict(&parsed)),
             cohort_id: cohort_id.to_owned(),
             thread_id: thread_id.to_owned(),
         };
     }
-    // Preserve responses that are not structured reports, including valid JSON
-    // scalars and objects without a string distillation. Their verdict is not
-    // authoritative without the report's explanatory text.
+    // Non-JSON responses are retained as raw, undecided distillations.
     ReporterConclusion {
         schema: REPORTER_THREAD_SCHEMA.to_owned(),
         distillation: content.to_owned(),
@@ -863,6 +861,22 @@ mod tests {
             }
         }
         Ok(())
+    }
+
+    #[test]
+    fn follow_ups_survive_missing_or_non_string_distillation() {
+        for content in [
+            r#"{"proposed_follow_ups":["tests-oracle: inspect the failing test"],"verdict":"clear"}"#,
+            r#"{"distillation":42,"proposed_follow_ups":["tests-oracle: inspect the failing test"],"verdict":"clear"}"#,
+        ] {
+            let conclusion = parse_reporter_conclusion(content, "cid", "tid");
+            assert_eq!(conclusion.distillation, content);
+            assert_eq!(conclusion.verdict, ReporterVerdict::None);
+            assert_eq!(
+                conclusion.proposed_follow_ups,
+                vec!["tests-oracle: inspect the failing test"]
+            );
+        }
     }
 
     #[test]
