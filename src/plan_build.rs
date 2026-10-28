@@ -247,8 +247,8 @@ pub(crate) fn print_plan(plan: &Plan, box_state: &BoxState) {
 impl DiffContext {
     pub(crate) fn from_git(root: &Path, base: &str, head: &str) -> Result<Self> {
         let range = format!("{base}...{head}");
-        let changed_files = git_lines(root, &["diff", "--name-only", &range])
-            .or_else(|_| git_lines(root, &["diff", "--name-only", base, head]))
+        let changed_files = git_lines(root, &["diff", "--name-only", "--no-renames", &range])
+            .or_else(|_| git_lines(root, &["diff", "--name-only", "--no-renames", base, head]))
             .with_context(|| format!("git diff --name-only {range}"))?;
         let patch = git_text(root, &["diff", "--patch", &range])
             .or_else(|_| git_text(root, &["diff", "--patch", base, head]))
@@ -601,5 +601,71 @@ pub(crate) fn skipped(
         requires_lease: tool.requires_lease,
         phase: tool.effective_phase(),
         gate: tool.gate.clone(),
+    }
+}
+
+#[cfg(test)]
+mod rename_impact_regression {
+    use super::*;
+
+    #[test]
+    fn cross_package_move_keeps_both_owners() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path();
+        let git = |args: &[&str]| -> anyhow::Result<String> { git_text(root, args) };
+        git(&["init", "-q"])?;
+        git(&["config", "user.name", "fixture"])?;
+        git(&["config", "user.email", "fixture@example.invalid"])?;
+        git(&["config", "diff.renames", "true"])?;
+        std::fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"alpha\", \"beta\"]\nresolver = \"2\"\n",
+        )?;
+        for name in ["alpha", "beta"] {
+            let dir = root.join(name);
+            std::fs::create_dir_all(dir.join("src"))?;
+            std::fs::write(
+                dir.join("Cargo.toml"),
+                format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n"),
+            )?;
+            std::fs::write(dir.join("src/lib.rs"), "")?;
+        }
+        std::fs::write(root.join("alpha/src/moved.rs"), "pub fn moved() {}\n")?;
+        std::fs::write(root.join("alpha/src/deleted.rs"), "deleted\n")?;
+        std::fs::write(root.join("alpha/binary.dat"), b"\0old")?;
+        std::fs::write(root.join("alpha/src/mode.rs"), "mode\n")?;
+        git(&["add", "."])?;
+        git(&["commit", "-qm", "base"])?;
+        let check = |expected: &[&str], owners: &[&str]| -> anyhow::Result<()> {
+            let diff = DiffContext::from_git(root, "HEAD^", "HEAD")?;
+            assert_eq!(diff.changed_files, expected);
+            let plan = crate::impact_plan::build_impact_plan(root, &diff.changed_files, "active");
+            for name in owners {
+                assert!(plan.changed_packages.iter().any(|p| p.name == *name));
+                assert!(plan.candidate_tasks.iter().any(|t| t.test_package == *name));
+            }
+            Ok(())
+        };
+        git(&["mv", "alpha/src/moved.rs", "beta/src/moved.rs"])?;
+        git(&["commit", "-qm", "move"])?;
+        check(
+            &["alpha/src/moved.rs", "beta/src/moved.rs"],
+            &["alpha", "beta"],
+        )?;
+
+        std::fs::remove_file(root.join("alpha/src/deleted.rs"))?;
+        git(&["add", "-A"])?;
+        git(&["commit", "-qm", "delete"])?;
+        check(&["alpha/src/deleted.rs"], &["alpha"])?;
+
+        std::fs::write(root.join("alpha/binary.dat"), b"\0new")?;
+        git(&["add", "-A"])?;
+        git(&["commit", "-qm", "binary"])?;
+        check(&["alpha/binary.dat"], &["alpha"])?;
+
+        git(&["update-index", "--chmod=+x", "alpha/src/mode.rs"])?;
+        git(&["commit", "-qm", "mode"])?;
+        check(&["alpha/src/mode.rs"], &["alpha"])?;
+        Ok(())
     }
 }

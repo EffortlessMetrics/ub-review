@@ -493,6 +493,7 @@ fn base_plus_tests_diff_args(range: &str, second: Option<&str>, files: &[String]
         "--patch".to_owned(),
         "--no-color".to_owned(),
         "--no-ext-diff".to_owned(),
+        "--no-renames".to_owned(),
         "--src-prefix=a/".to_owned(),
         "--dst-prefix=b/".to_owned(),
         "--unified=3".to_owned(),
@@ -602,6 +603,31 @@ mod tests {
             flags: DiffFlags::default(),
             diff_class: DiffClass::SourceUb,
         }
+    }
+
+    #[test]
+    fn source_rename_to_tests_preserves_production_and_adds_test() -> Result<()> {
+        let repo = tempfile::tempdir()?;
+        let root = repo.path();
+        init_repo(root)?;
+        run_test_command(root, "git", &["config", "diff.renames", "true"])?;
+        fs::create_dir_all(root.join("src"))?;
+        fs::create_dir_all(root.join("tests"))?;
+        let contents = "pub fn prod() {}\n";
+        fs::write(root.join("src/old.rs"), contents)?;
+        let base = commit_all(root, "base")?;
+        run_test_command(root, "git", &["mv", "src/old.rs", "tests/new.rs"])?;
+        let head = commit_all(root, "rename")?;
+        let diff = DiffContext::from_git(root, &base, &head)?;
+        let selection = base_plus_tests_selection(root, &diff)?;
+        assert!(selection.refusal.is_none(), "{selection:?}");
+        let patch = repo.path().join("selected.patch");
+        fs::write(&patch, &selection.patch)?;
+        run_test_command(root, "git", &["checkout", "--detach", &base])?;
+        run_test_command(root, "git", &["apply", "selected.patch"])?;
+        assert_eq!(fs::read_to_string(root.join("src/old.rs"))?, contents);
+        assert_eq!(fs::read_to_string(root.join("tests/new.rs"))?, contents);
+        Ok(())
     }
 
     /// This repository's own shape: the production change and the new unit test
