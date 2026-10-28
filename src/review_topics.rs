@@ -1028,6 +1028,78 @@ mod tests {
     }
 
     #[test]
+    fn active_graph_keeps_unresolved_conflict_when_another_lane_lacks_evidence() -> Result<()> {
+        let head = "dddddddddddddddddddddddddddddddddddddddd";
+        let finding = SummaryOnlyFinding {
+            lane: "finding".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            reason: "Buffer resize preserves active view length".to_owned(),
+            evidence: "model interpretation".to_owned(),
+        };
+        let supported = Observation {
+            schema: "observation".to_owned(),
+            id: "supported-refutation".to_owned(),
+            lane: "supported".to_owned(),
+            question: "does the resize preserve the view?".to_owned(),
+            claim: "Buffer resize loses active view length".to_owned(),
+            kind: "resolved-check".to_owned(),
+            status: "refuted".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium".to_owned(),
+            path: None,
+            line: None,
+            fingerprint: "supported".to_owned(),
+            evidence: vec!["competing model interpretation".to_owned()],
+            dedupe_key: "supported-refutation".to_owned(),
+            source: "model".to_owned(),
+        };
+        let unavailable = Observation {
+            id: "unavailable-refutation".to_owned(),
+            lane: "unavailable".to_owned(),
+            fingerprint: "unavailable".to_owned(),
+            evidence: Vec::new(),
+            dedupe_key: "unavailable-refutation".to_owned(),
+            ..supported.clone()
+        };
+        for observations in [
+            [supported.clone(), unavailable.clone()],
+            [unavailable, supported],
+        ] {
+            let graph = build_active_claim_graph(
+                head,
+                &observations,
+                &[],
+                std::slice::from_ref(&finding),
+                &[],
+                &[],
+                &context(head),
+            );
+            assert_eq!(graph.conflicts.len(), 2);
+            let artifact = serde_json::to_value(&graph)?;
+            let claim_id = topic_claim_id_for_summary(&finding);
+            let claim = artifact["claims"]
+                .as_array()
+                .and_then(|claims| claims.iter().find(|claim| claim["id"] == claim_id))
+                .ok_or_else(|| anyhow::anyhow!("missing serialized finding claim"))?;
+            assert_eq!(claim["state"], "Conflicted");
+            let topic = graph
+                .topics
+                .iter()
+                .find(|topic| topic.claim_id == claim_id)
+                .ok_or_else(|| anyhow::anyhow!("missing finding topic"))?;
+            assert_eq!(topic.status, "conflicted");
+            assert_eq!(topic.delivery, "summary-only");
+            assert!(!topic_is_adjudicated_loser(&graph, topic));
+            assert_eq!(
+                reconcile_summary_only_findings(&graph, std::slice::from_ref(&finding)).len(),
+                1
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn active_graph_resolves_explicit_conflict_using_proof_precedence() -> Result<()> {
         let head = "dddddddddddddddddddddddddddddddddddddddd";
         let candidate = ReviewInlineComment {

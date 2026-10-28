@@ -167,11 +167,10 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
     let fake_bin = temp.path().join("fake-bin");
     fs::create_dir(&fake_bin)?;
     let curl = fake_bin.join("curl");
-    fs::write(
+    write_executable_fixture(
         &curl,
         "#!/bin/sh\nset -eu\nout=\"\"\nurl=\"\"\nwhile [ \"$#\" -gt 0 ]; do\n  case \"$1\" in\n    -o) out=\"$2\"; shift 2 ;;\n    http*) url=\"$1\"; shift ;;\n    *) shift ;;\n  esac\ndone\ncase \"$url\" in\n  *.sha256) cp \"$FIXTURE_CHECKSUM\" \"$out\" ;;\n  *) cp \"$FIXTURE_ARCHIVE\" \"$out\" ;;\nesac\n",
     )?;
-    fs::set_permissions(&curl, fs::Permissions::from_mode(0o755))?;
 
     let cases = [
         (
@@ -396,14 +395,14 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
             fs::write(&archive, b"not a gzip or tar archive")?;
         } else if layout == "truncated" {
             let status = archive_command
-                .status()
+                .fixture_status()
                 .context("create release fixture archive")?;
             anyhow::ensure!(status.success(), "tar failed for fixture {name}");
             let bytes = fs::read(&archive)?;
             fs::write(&archive, &bytes[..bytes.len().min(24)])?;
         } else {
             let archive_status = archive_command
-                .status()
+                .fixture_status()
                 .context("create release fixture archive")?;
             anyhow::ensure!(archive_status.success(), "tar failed for fixture {name}");
         }
@@ -415,7 +414,7 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
                         .to_str()
                         .ok_or_else(|| anyhow::anyhow!("archive path is not UTF-8"))?,
                 ])
-                .output()
+                .fixture_output()
                 .context("list root-directory release fixture archive")?;
             anyhow::ensure!(
                 listing.status.success(),
@@ -430,7 +429,7 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
         let checksum = temp.path().join(format!("{name}.sha256"));
         let checksum_output = Command::new("sha256sum")
             .arg(&archive)
-            .output()
+            .fixture_output()
             .context("hash release fixture archive")?;
         anyhow::ensure!(
             checksum_output.status.success(),
@@ -468,7 +467,7 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
             .env("UB_REVIEW_SERVER_URL", "https://fixture.invalid")
             .env("FIXTURE_ARCHIVE", &archive)
             .env("FIXTURE_CHECKSUM", &checksum)
-            .output()
+            .fixture_output()
             .context("run production release resolver fixture")?;
         let log = format!(
             "{}{}",
@@ -659,7 +658,7 @@ fn quality_github_outcomes_cli_writes_thread_state_receipt() -> Result<()> {
         .arg(&source)
         .arg("--out")
         .arg(&out)
-        .output()?;
+        .fixture_output()?;
     assert!(
         output.status.success(),
         "quality-github-outcomes failed\nstdout:\n{}\nstderr:\n{}",
@@ -804,7 +803,7 @@ jobs:
             "--window-days",
             "45",
         ]);
-    let output = command.output()?;
+    let output = command.fixture_output()?;
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     assert!(
@@ -1416,7 +1415,7 @@ fn quality_backfill_cli_writes_rolling_artifact_with_source_receipts() -> Result
         .arg(&previous)
         .arg("--window-days")
         .arg("30")
-        .output()?;
+        .fixture_output()?;
     assert!(
         output.status.success(),
         "quality-backfill failed\nstdout:\n{}\nstderr:\n{}",
@@ -1488,7 +1487,7 @@ fn quality_backfill_cli_records_missing_trend_without_failing() -> Result<()> {
         .arg(&run)
         .arg("--window-days")
         .arg("30")
-        .output()?;
+        .fixture_output()?;
     assert!(
         output.status.success(),
         "quality-backfill should keep receipt-only historical runs\nstdout:\n{}\nstderr:\n{}",
@@ -3276,8 +3275,6 @@ command = "ub-review-test-missing-tokmd"
 #[cfg(unix)]
 #[test]
 fn doctor_rejects_failed_version_probe_even_when_it_prints_the_pin() -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
     let temp = tempfile::tempdir()?;
     let config = temp.path().join(".ub-review.toml");
     let mut config_text = "profile = \"gh-runner\"\n".to_owned();
@@ -3290,11 +3287,10 @@ fn doctor_rejects_failed_version_probe_even_when_it_prints_the_pin() -> Result<(
         ("actionlint", "1.7.12"),
     ] {
         let executable = temp.path().join(tool);
-        write_file(
+        write_executable_fixture(
             &executable,
             &format!("#!/bin/sh\nprintf '{tool} {version}\\n'\n"),
         )?;
-        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755))?;
         config_text.push_str(&format!(
             "\n[tools.{tool}]\ncommand = {:?}\n",
             path_str(&executable)?
@@ -3312,11 +3308,10 @@ fn doctor_rejects_failed_version_probe_even_when_it_prints_the_pin() -> Result<(
 
     for (label, redirect) in [("stdout", ""), ("stderr", " >&2")] {
         let executable = temp.path().join(format!("failed-probe-{label}"));
-        write_file(
+        write_executable_fixture(
             &executable,
             &format!("#!/bin/sh\nprintf 'tokmd 1.12.0\\n'{redirect}\nexit 2\n"),
         )?;
-        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755))?;
         let failed_config = temp.path().join(format!("failed-{label}.toml"));
         let failed_text = config_text.replace(
             &format!("command = {:?}", path_str(&temp.path().join("tokmd"))?),
@@ -4109,7 +4104,7 @@ fn model_provider_fixture_ignores_ambient_event_body() -> Result<()> {
             "--nocapture",
         ])
         .env("GITHUB_EVENT_PATH", &event)
-        .output()?;
+        .fixture_output()?;
     assert!(
         output.status.success(),
         "ambient-event provider fixture failed\nstdout:\n{}\nstderr:\n{}",
@@ -6716,7 +6711,7 @@ fn isolated_command_scrubs_ambient_profile_env_from_child_runs() -> Result<()> {
         .env("RUNNER_ENVIRONMENT", "github-hosted")
         .env("UB_SCRUB_REPO", &repo)
         .env("UB_SCRUB_OUT", &out)
-        .output()?;
+        .fixture_output()?;
     assert!(
         output.status.success(),
         "scrub driver failed\nstdout:\n{}\nstderr:\n{}",
@@ -7156,15 +7151,7 @@ fn main() {{
                 .find_map(|(name, version)| (*name == tool).then_some(*version))
                 .unwrap_or("0.0.0");
             let script = dir.join(tool);
-            write_file(&script, &format!("#!/bin/sh\necho \"{tool} {version}\"\n"))?;
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-
-                let mut permissions = fs::metadata(&script)?.permissions();
-                permissions.set_mode(0o755);
-                fs::set_permissions(&script, permissions)?;
-            }
+            write_executable_fixture(&script, &format!("#!/bin/sh\necho \"{tool} {version}\"\n"))?;
         }
     }
 
@@ -7277,8 +7264,31 @@ fn source_runner_requires_committed_regular_lockfile_before_locked_build() {
         Command::new("bash")
             .arg("fixtures/action-source-lockfile/contract.sh")
             .arg("action.yml")
-            .status()
+            .fixture_status()
             .is_ok_and(|status| status.success()),
         "source lockfile fixture failed"
     );
+}
+
+#[test]
+fn audit_ci_rejects_unrepresentable_history_window() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let mut command = isolated_command(env!("CARGO_BIN_EXE_ub-review"), temp.path());
+    let output = command
+        .env("GITHUB_TOKEN", "unused-test-token")
+        .env_remove("GITHUB_REPOSITORY")
+        .args([
+            "audit-ci",
+            "--repo",
+            "acme/widgets",
+            "--window-days",
+            "4294967295",
+        ])
+        .fixture_output()?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "unexpected success");
+    assert!(stderr.contains("window-days"), "unexpected error: {stderr}");
+    assert!(!stderr.contains("panicked"), "unexpected panic: {stderr}");
+    assert!(!temp.path().join("target/ub-review").exists());
+    Ok(())
 }

@@ -19588,6 +19588,53 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn cost_tokens_sum_partial_usage_and_saturate() -> Result<()> {
+        let mut review = test_review_artifacts();
+        let mut first = model_lane_receipt("first", "ok");
+        first.cache_usage = super::ModelCacheUsage {
+            input_tokens: Some(10),
+            output_tokens: Some(u64::MAX),
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: Some(4),
+        };
+        let mut second = model_lane_receipt("second", "ok");
+        second.cache_usage = super::ModelCacheUsage {
+            input_tokens: None,
+            output_tokens: Some(1),
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: Some(12),
+        };
+        review.model_lanes = vec![first, second];
+        let totals = super::cost_tokens(&review, &[]);
+        let json = serde_json::to_value(&totals)?;
+        assert_eq!(json["fresh_input"], 6);
+        assert_eq!(json["cached_input"], 16);
+        assert_eq!(json["output"], u64::MAX);
+        review.model_lanes.reverse();
+        assert_eq!(
+            serde_json::to_value(super::cost_tokens(&review, &[]))?,
+            json
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn cost_rate_rejects_nonfinite_values() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        fs::create_dir_all(temp.path().join("policy"))?;
+        for value in ["nan", "inf", "-inf"] {
+            fs::write(
+                temp.path().join("policy/ci-budget.toml"),
+                format!("[budget]\nlinux_minute_rate_usd = {value}\n"),
+            )?;
+            let (rate, missing) = super::linux_minute_rate_usd(temp.path());
+            assert_eq!(rate, None);
+            assert!(missing.is_some());
+        }
+        Ok(())
+    }
+
+    #[test]
     fn floor_trend_records_single_run_without_history_overclaim() {
         let cost = super::CostReceipt {
             schema: super::COST_RECEIPT_SCHEMA,
@@ -19682,7 +19729,57 @@ index 1111111..2222222 100644
         assert!(missing_fields.contains("cache.cargo"));
 
         let serialized = serde_json::to_value(&receipt)?;
+        assert_eq!(
+            serialized["tokens"],
+            serde_json::json!({
+                "fresh_input": 0, "cached_input": 0, "output": 0
+            })
+        );
+        assert!(serialized["estimated_cost_usd"].is_null());
+        assert!(serialized["cost_basis"]["linux_minute_rate_usd"].is_null());
         assert!(serialized.get("suggested_fill_seconds").is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn cost_receipt_marks_overflowed_estimate_missing() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        fs::create_dir_all(temp.path().join("policy"))?;
+        fs::write(
+            temp.path().join("policy/ci-budget.toml"),
+            "[budget]\nlinux_minute_rate_usd = 1e308\n",
+        )?;
+        let review = test_review_artifacts();
+        let metrics = build_review_metrics(ReviewMetricsInput {
+            out: temp.path(),
+            diff: &test_diff(),
+            plan: &test_plan(Vec::new()),
+            review: &review,
+            github_review: None,
+            review_payload_status: "prepared",
+            observations_count: 0,
+            follow_up_results: &[],
+            final_follow_up_tasks: 0,
+            run: test_run_loop_metrics(),
+            elapsed: std::time::Duration::from_secs(1),
+            args: &test_run_args(temp.path().join("out")),
+        });
+        let receipt = build_cost_receipt(
+            temp.path(),
+            temp.path(),
+            &Config::default(),
+            &metrics,
+            &review,
+            &[],
+        );
+        let json = serde_json::to_value(&receipt)?;
+        assert!(json["estimated_cost_usd"].is_null());
+        assert!(
+            receipt
+                .missing
+                .iter()
+                .any(|missing| missing.field == "estimated_cost_usd")
+        );
         Ok(())
     }
 
