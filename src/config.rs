@@ -1335,11 +1335,19 @@ fn sanitize_tools_section(table: &mut toml::value::Table, errors: &mut Vec<Polic
                 continue;
             }
             let mut probe = toml::value::Table::new();
-            probe.insert(key.clone(), entry);
+            probe.insert(key.clone(), entry.clone());
             if let Err(err) = toml::Value::Table(probe).try_into::<ToolPolicyInput>() {
+                let detail = if key == "phase" {
+                    format!(
+                        "invalid [tools.{id}] key `phase`: expected `fast` or `late`, found {}",
+                        entry.type_str()
+                    )
+                } else {
+                    format!("invalid [tools.{id}] key `{key}`: {err}")
+                };
                 errors.push(PolicyError {
                     section: format!("tools.{id}.{key}"),
-                    detail: format!("invalid [tools.{id}] key `{key}`: {err}"),
+                    detail,
                 });
                 tool_table.remove(&key);
             }
@@ -1633,27 +1641,48 @@ class = "test"
 
     #[test]
     fn invalid_tool_phase_value_is_stripped_with_policy_error() -> anyhow::Result<()> {
-        let config = Config::from_toml_with_policy_receipts(
-            r#"
+        for (value, kind) in [
+            ("{ token = \"phase-sentinel\" }", "table"),
+            ("\"phase-sentinel\"", "string"),
+            ("42", "integer"),
+        ] {
+            let config = Config::from_toml_with_policy_receipts(&format!(
+                r#"
 [tools.cargo-fmt]
 enabled = true
 class = "build"
-phase = "sometime"
+phase = {value}
+
+[tools.cargo-test]
+enabled = true
+class = "test"
+phase = "late"
 "#,
-        )?;
-        assert!(
-            config
-                .policy_errors
-                .iter()
-                .any(|error| error.section == "tools.cargo-fmt.phase"),
-            "expected a policy error for the invalid phase value: {:?}",
-            config.policy_errors
-        );
-        let fmt = config
-            .tools
-            .get("cargo-fmt")
-            .ok_or_else(|| anyhow::anyhow!("cargo-fmt tool missing"))?;
-        assert_eq!(fmt.phase, None, "invalid phase value must be stripped");
+            ))?;
+            assert_eq!(config.policy_errors.len(), 1);
+            let error = &config.policy_errors[0];
+            assert_eq!(error.section, "tools.cargo-fmt.phase");
+            assert!(!error.detail.contains("phase-sentinel"));
+            assert_eq!(
+                error.detail,
+                format!(
+                    "invalid [tools.cargo-fmt] key `phase`: expected `fast` or `late`, found {kind}"
+                )
+            );
+            let fmt = config
+                .tools
+                .get("cargo-fmt")
+                .ok_or_else(|| anyhow::anyhow!("cargo-fmt tool missing"))?;
+            assert!(fmt.enabled);
+            assert_eq!(fmt.class, ToolClass::Build);
+            assert_eq!(fmt.phase, None, "invalid phase value must be stripped");
+            assert_eq!(fmt.effective_phase(), SensorPhase::Late);
+            let test = config
+                .tools
+                .get("cargo-test")
+                .ok_or_else(|| anyhow::anyhow!("cargo-test tool missing"))?;
+            assert_eq!(test.phase, Some(SensorPhase::Late));
+        }
         Ok(())
     }
 

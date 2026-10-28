@@ -2549,6 +2549,43 @@ mod tests {
     }
 
     #[test]
+    fn invalid_sensor_phase_fails_gate_with_policy_diagnostic() -> anyhow::Result<()> {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        for value in ["\"phase-sentinel\"", "{ token = \"phase-sentinel\" }"] {
+            let config = Config::from_toml_with_policy_receipts(&format!(
+                "[tools.cargo-fmt]\nclass = \"build\"\nphase = {value}\n",
+            ))?;
+            let terminal_state = test_terminal_state("sufficient");
+            let gate = build_gate_outcome(GateOutcomeInput {
+                args: &args,
+                config: &config,
+                plan: &plan,
+                terminal_state: &terminal_state,
+                proof_requests: &[],
+                proof_receipts: &[],
+                tool_gate_outcomes: &[],
+                missing_or_failed_sensor_evidence: &[],
+                missing_or_failed_model_evidence: &[],
+                reporter_gate: crate::ReporterGateInput::Absent,
+                planner_portfolio: None,
+                revision_digest: None,
+            });
+            anyhow::ensure!(config.policy_errors.len() == 1);
+            anyhow::ensure!(gate.conclusion == "fail");
+            anyhow::ensure!(gate.reasons.len() == 1);
+            let reason = &gate.reasons[0];
+            anyhow::ensure!(reason.kind == "policy");
+            anyhow::ensure!(reason.id == "tools.cargo-fmt.phase");
+            anyhow::ensure!(reason.detail == config.policy_errors[0].detail);
+            anyhow::ensure!(reason.detail.contains("expected `fast` or `late`"));
+            anyhow::ensure!(!reason.detail.contains("phase-sentinel"));
+            anyhow::ensure!(reason.receipt == "effective-config.json");
+        }
+        Ok(())
+    }
+
+    #[test]
     fn gate_outcome_blocks_unproven_required_proof_only_when_policy_opts_in() {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.mode = RunMode::IntelligentCi;
