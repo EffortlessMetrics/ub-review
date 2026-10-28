@@ -247,12 +247,36 @@ pub(crate) fn print_plan(plan: &Plan, box_state: &BoxState) {
 impl DiffContext {
     pub(crate) fn from_git(root: &Path, base: &str, head: &str) -> Result<Self> {
         let range = format!("{base}...{head}");
-        let changed_files = git_lines(root, &["diff", "--name-only", &range])
-            .or_else(|_| git_lines(root, &["diff", "--name-only", base, head]))
-            .with_context(|| format!("git diff --name-only {range}"))?;
-        let patch = git_text(root, &["diff", "--patch", &range])
-            .or_else(|_| git_text(root, &["diff", "--patch", base, head]))
-            .unwrap_or_else(|_| String::new());
+        // Review the committed tree delta even when Git configuration hides
+        // submodule changes from interactive diff output.
+        let changed_files = git_lines(
+            root,
+            &["diff", "--ignore-submodules=none", "--name-only", &range],
+        )
+        .or_else(|_| {
+            git_lines(
+                root,
+                &[
+                    "diff",
+                    "--ignore-submodules=none",
+                    "--name-only",
+                    base,
+                    head,
+                ],
+            )
+        })
+        .with_context(|| format!("git diff --name-only {range}"))?;
+        let patch = git_text(
+            root,
+            &["diff", "--ignore-submodules=none", "--patch", &range],
+        )
+        .or_else(|_| {
+            git_text(
+                root,
+                &["diff", "--ignore-submodules=none", "--patch", base, head],
+            )
+        })
+        .unwrap_or_else(|_| String::new());
         let flags = classify_diff(&changed_files, &patch);
         let diff_class = classify_diff_class(&changed_files, &flags);
         Ok(Self {
