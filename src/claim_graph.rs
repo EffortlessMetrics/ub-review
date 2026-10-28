@@ -1354,6 +1354,16 @@ mod tests {
                         );
                         assert_eq!(graph.claims[3].state, ClaimState::NeedsEvidence);
                         assert_eq!(graph.conflicts.len(), 3);
+                        for (conflict, (left, right)) in graph.conflicts.iter().zip(&pairs) {
+                            let mut stored = conflict.claim_ids.iter().collect::<Vec<_>>();
+                            stored.sort();
+                            let mut expected_pair = vec![left, right];
+                            expected_pair.sort();
+                            assert_eq!(
+                                stored, expected_pair,
+                                "conflict records must retain input order: order {order:?}, reversed {reversed}, split {split}"
+                            );
+                        }
                         let before_repeat = serde_json::to_value(&graph)?;
                         adjudicate_claim_graph_conflicts(&mut graph, &pairs);
                         assert_eq!(serde_json::to_value(&graph)?, before_repeat);
