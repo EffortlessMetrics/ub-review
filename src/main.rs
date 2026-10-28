@@ -15015,9 +15015,30 @@ UB_REVIEW_HTTP_STATUS:429
             Err(err) => err,
         };
 
-        assert!(err.to_string().contains("timed out after 1s"));
+        assert_eq!(
+            err.to_string(),
+            "process timed out after 1s; output omitted from diagnostic"
+        );
+        assert_eq!(super::classify_model_error(&err), "timed_out");
         assert!(!format!("{err:#}").contains("SYNTHETIC_RESPONSE_VALUE_7329"));
         assert!(!format!("{err:#}").contains("SYNTHETIC_DIAGNOSTIC_VALUE_8421"));
+        assert!(!stdout_path.exists());
+        assert!(!stderr_path.exists());
+
+        let stdout = fs::File::create(&stdout_path)?;
+        let stderr = fs::File::create(&stderr_path)?;
+        let child = ProcessCommand::new(program)
+            .args(args)
+            .current_dir(temp.path())
+            .stdout(Stdio::from(stdout))
+            .stderr(Stdio::from(stderr))
+            .spawn()?;
+        fs::write(&stdout_path, "SYNTHETIC_SUCCESS_OUTPUT")?;
+        fs::write(&stderr_path, "SYNTHETIC_SUCCESS_DIAGNOSTIC")?;
+        let output = wait_for_child_output_files(child, &stdout_path, &stderr_path, 5)?;
+        assert!(output.status.success());
+        assert_eq!(output.stdout, b"SYNTHETIC_SUCCESS_OUTPUT");
+        assert_eq!(output.stderr, b"SYNTHETIC_SUCCESS_DIAGNOSTIC");
         assert!(!stdout_path.exists());
         assert!(!stderr_path.exists());
         Ok(())
