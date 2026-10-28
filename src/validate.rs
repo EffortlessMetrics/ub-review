@@ -1363,6 +1363,43 @@ mod claim_identity_tests {
     }
 
     #[test]
+    fn shared_short_spans_do_not_merge_distinct_subjects() {
+        for shared in ["i", "α", "+", "1"] {
+            let make = |line, code: &str| ReviewInlineComment {
+                line,
+                body: format!(
+                    "The postfix subscript `{code}` drops a value; add a focused test for the list behavior. See `{shared}` for the surrounding context."
+                ),
+                ..comment("source diff")
+            };
+            let mut comments = vec![make(12, "$x[0]"), make(30, "$y[1]")];
+            let mut summary = Vec::new();
+            dedupe_inline_comments(&mut comments, &mut summary);
+            assert_eq!((comments.len(), summary.len()), (2, 0), "{shared}");
+        }
+    }
+
+    #[test]
+    fn repeated_true_claim_preserves_both_evidence_and_is_stable() {
+        let make = |line| {
+            ReviewInlineComment {
+            line,
+            body: "The postfix subscript `α[0]` drops a value; add a focused test for the list behavior.".to_owned(),
+            evidence: format!("source diff at line {line}"),
+            ..comment("source diff")
+        }
+        };
+        let mut comments = vec![make(12), make(30)];
+        let mut summary = Vec::new();
+        dedupe_inline_comments(&mut comments, &mut summary);
+        assert_eq!((comments.len(), summary.len()), (1, 1));
+        assert!(comments[0].evidence.contains("line 12"));
+        assert!(comments[0].evidence.contains("line 30"));
+        dedupe_inline_comments(&mut comments, &mut summary);
+        assert_eq!((comments.len(), summary.len()), (1, 1));
+    }
+
+    #[test]
     fn evidence_rank_is_receipt_first_then_source_thread_and_model() {
         assert_eq!(
             inline_evidence_rank(&comment("executed focused test receipt")),
