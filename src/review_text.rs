@@ -873,7 +873,7 @@ pub(crate) fn normalize_repo_path(path: &str) -> String {
 
 pub(crate) fn ensure_lane_prefix(lane: &str, body: &str) -> String {
     let prefix = format!("[{lane}]");
-    if body.starts_with(&prefix) {
+    if body.starts_with(&prefix) && strip_bracketed_lane_prefix(body).is_some() {
         body.to_owned()
     } else {
         format!("{prefix} {body}")
@@ -1036,6 +1036,18 @@ mod github_review_serialization_tests {
         assert_eq!(
             strip_bracketed_lane_prefix(&format!("[{}] text", "x".repeat(80))),
             None
+        );
+    }
+
+    #[test]
+    fn lane_named_link_keeps_provenance_and_public_body() {
+        let link = "[tests](https://example.com) explains the failure";
+        let artifact = ensure_lane_prefix("tests", link);
+        assert_eq!(artifact, format!("[tests] {link}"));
+        assert_eq!(posted_inline_comment_text(&artifact), link);
+        assert_eq!(
+            ensure_lane_prefix("tests", "[tests] finding"),
+            "[tests] finding"
         );
     }
 

@@ -403,8 +403,25 @@ def strip_bracketed_lane_prefix(value: str) -> str:
     text = value.lstrip()
     if not text.startswith("["):
         return value.strip()
-    end = text.find("]")
-    if end < 0 or end > 80:
+    depth = 0
+    escaped = False
+    end = None
+    for index, char in enumerate(text):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+        elif char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+            if depth == 0:
+                end = index
+                break
+    if end is None or len(text[:end].encode("utf-8")) > 80:
+        return value.strip()
+    if text[end + 1 :].startswith(("(", "[")):
         return value.strip()
     return text[end + 1 :].lstrip()
 
