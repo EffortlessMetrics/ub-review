@@ -35988,20 +35988,16 @@ finding_id = "probe:src_validate.rs:predicate:3a3a8f5b"
 owner = "ub-review/core"
 reason = "The old token length predicate was deleted with token splitting; no corresponding predicate remains in the candidate. Re-evaluate if inline_claim_code_tokens changes."
 
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_validate.rs:return_value:9ee7de6c"
-owner = "ub-review/core"
-reason = "False weak exposure: claim_identity_tests assert the exact Some span sequence and true-duplicate merging. A compiled mutant returning None for supported spans failed five focused tests. Re-evaluate if inline_claim_code_tokens changes."
 
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_validate.rs:return_value:d612b731"
-owner = "ub-review/core"
-reason = "False weak exposure: claim_identity_tests verify span order and distinct subjects. A compiled mutant shifting every enumerated index failed four focused tests. Re-evaluate if inline_claim_code_tokens changes."
 
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_validate.rs:predicate:0c1d6815"
 owner = "ub-review/core"
 reason = "False weak exposure: claim_identity_tests verify code spans and claim identity. A compiled mutant selecting even rather than odd segments failed four focused tests. Re-evaluate if inline_claim_code_tokens changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:return_value:8b548099"
+owner = "ub-review/core"
+reason = "False weak exposure: claim_identity_tests assert the exact Some span sequence and true-duplicate merging. A compiled mutant returning None for supported spans fails focused tests. Re-evaluate if inline_claim_code_tokens changes."

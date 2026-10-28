@@ -751,13 +751,16 @@ fn inline_claim_code_tokens(text: &str) -> Option<Vec<String>> {
     if text.contains("``") || text.contains("\\`") || !text.matches('`').count().is_multiple_of(2) {
         return None;
     }
-    Some(
-        text.split('`')
-            .enumerate()
-            .filter(|(index, _)| index % 2 == 1)
-            .map(|(_, segment)| segment.trim().to_owned())
-            .collect(),
-    )
+    let spans: Vec<String> = text
+        .split('`')
+        .enumerate()
+        .filter(|(index, _)| index % 2 == 1)
+        .map(|(_, segment)| segment.trim().to_owned())
+        .collect();
+    if spans.iter().any(String::is_empty) {
+        return None;
+    }
+    Some(spans)
 }
 
 pub(crate) fn normalized_inline_claim_text(comment: &ReviewInlineComment) -> String {
@@ -1397,6 +1400,19 @@ mod claim_identity_tests {
         assert!(comments[0].evidence.contains("line 30"));
         dedupe_inline_comments(&mut comments, &mut summary);
         assert_eq!((comments.len(), summary.len()), (1, 1));
+    }
+
+    #[test]
+    fn empty_code_span_does_not_supply_claim_identity() {
+        let make = |body: &str| ReviewInlineComment {
+            body: body.to_owned(),
+            ..comment("source diff")
+        };
+        let left =
+            make("The index ` ` drops the first value; add a focused test for the list behavior.");
+        let right =
+            make("The index ` ` drops the second value; add a focused test for the list behavior.");
+        assert!(!same_inline_claim(&left, &right));
     }
 
     #[test]
