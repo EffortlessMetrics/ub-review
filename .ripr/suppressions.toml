@@ -36099,3 +36099,44 @@ kind = "exposure_gap"
 finding_id = "probe:src_plan_build.rs:call_deletion:24919b42.2"
 owner = "ub-review/core"
 reason = "PR #1587 local RIPR 0.10.0 preview on base bc976f2 and head 72f24b7: patch diff command syntax fragment at line 278, subject '})'. The enhanced ordinary_diff_includes_gitlink_despite_ignore_configuration test, staged on top of that head, exercises the related-history and no-merge-base paths with ignored gitlinks, validates changed paths and patch, and retains an identical-revision control. In an isolated Rust 1.95.0 --locked lab, removing each of four ignore overrides and each of two fallback calls independently caused the test to fail; restored source passed. RIPR did not confirm an expression-level discriminator for these fragments despite associating related tests and assertions (upstream ripr#1453). Local preview evidence only; inaccessible hosted findings remain unclassified. Reverify on semantic changes."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:error_path:1f3a3b07"
+owner = "ub-review/core"
+reason = "The old whole-table Err arm was removed. tool_gate_receipts_preserve_valid_siblings_and_invalid_only_fallback checks rejected type, unknown-only and scalar diagnostics; a compiled mutant retaining rejected keys and one omitting the scalar receipt both fail that test. Re-evaluate on sanitizer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:match_arm:b359ff7f"
+owner = "ub-review/core"
+reason = "The old whole-table match was replaced by per-key validation. tool_gate_unknown_key_preserves_valid_threshold checks both valid and unknown-sibling paths; retaining rejected keys in a compiled mutant fails it. Re-evaluate on sanitizer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:match_arm:fac64862"
+owner = "ub-review/core"
+reason = "The removed Err arm is replaced by per-key receipts. tool_gate_receipts_preserve_valid_siblings_and_invalid_only_fallback checks rejected type and unknown-only errors; a compiled mutant retaining rejected keys fails it. Re-evaluate on sanitizer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:field_construction:9e2f74ba"
+owner = "ub-review/core"
+reason = "The scalar gate receipt is asserted for its section and expected-table detail by tool_gate_receipts_preserve_valid_siblings_and_invalid_only_fallback; removing the receipt in a compiled mutant fails that test. Re-evaluate on sanitizer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:match_arm:dc10fee8"
+owner = "ub-review/core"
+reason = "The removed Ok arm is replaced by sanitized table handling. tool_gate_unknown_key_preserves_valid_threshold checks a valid table and valid threshold with an unknown sibling; the retain-rejected-key mutant fails it. Re-evaluate on sanitizer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:return_value:372726ee"
+owner = "ub-review/core"
+reason = "The removed nested scope branch is replaced by scope validation. tool_gate_receipts_preserve_valid_siblings_and_invalid_only_fallback asserts unsupported scope is removed and its threshold survives; a compiled retain-scope mutant fails it. Re-evaluate on sanitizer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:field_construction:9e2f74ba.2"
+owner = "ub-review/core"
+reason = "The unsupported scope receipt is checked for section and rejected value by tool_gate_receipts_preserve_valid_siblings_and_invalid_only_fallback; the same test rejects a compiled mutant retaining that scope. Re-evaluate on sanitizer changes."

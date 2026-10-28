@@ -1763,6 +1763,58 @@ phase = "sometime"
     }
 
     #[test]
+    fn tool_gate_receipts_preserve_valid_siblings_and_invalid_only_fallback() -> anyhow::Result<()>
+    {
+        let config = Config::from_toml_with_policy_receipts(
+            r#"
+[tools.scalar]
+gate = 42
+[tools.bad_type.gate]
+scope = 7
+max_new_unsuppressed = 3
+[tools.bad_scope.gate]
+scope = "repo-wide"
+max_new_unsuppressed = 4
+[tools.bad_only.gate]
+unknown = true
+"#,
+        )?;
+        let errors = &config.policy_errors;
+        assert_eq!(errors.len(), 4);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.section == "tools.scalar.gate" && e.detail.contains("expected a table"))
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.section == "tools.bad_type.gate" && e.detail.contains("scope"))
+        );
+        assert!(
+            errors.iter().any(
+                |e| e.section == "tools.bad_scope.gate.scope" && e.detail.contains("repo-wide")
+            )
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.section == "tools.bad_only.gate" && e.detail.contains("unknown"))
+        );
+        assert!(config.tools["scalar"].gate.is_none());
+        assert!(config.tools["bad_only"].gate.is_none());
+        for (id, threshold) in [("bad_type", 3), ("bad_scope", 4)] {
+            let gate = config.tools[id]
+                .gate
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("missing gate {id}"))?;
+            assert_eq!(gate.scope, None);
+            assert_eq!(gate.max_new_unsuppressed, Some(threshold));
+        }
+        Ok(())
+    }
+
+    #[test]
     fn impact_resolved_mode_defaults_to_shadow_and_clamps_invalid() {
         // Default (no [impact] section) -> shadow.
         let default = ImpactConfig::default();
