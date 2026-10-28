@@ -631,7 +631,7 @@ fn focused_test_task_with_mode(
         // an earlier receipt's authority and prevent that command from running.
         if let Some(target) = focused_test_request_target(group)
             && target.command_specs.is_none()
-            && target.file == normalize_repo_path(file)
+            && target.file == file
             && target.test_name == test_name
         {
             merge_task_timeout(&mut timeout_sec, Some(group.timeout_sec));

@@ -1642,38 +1642,60 @@ mod tests {
             "config_tests",
             "test/parser.test.ts",
         ];
-        for (name, command, expected_command) in [
-            (None, "bun test test/parser.test.ts", None),
-            (None, "bun bd test test/parser.test.ts", None),
+        for (file, name, command, expected_command) in [
             (
+                "test/parser.test.ts",
+                None,
+                "bun test test/parser.test.ts",
+                None,
+            ),
+            (
+                "test/parser.test.ts",
+                None,
+                "bun bd test test/parser.test.ts",
+                None,
+            ),
+            (
+                "test/parser.test.ts",
                 None,
                 "bun test test/parser.test.tsx",
                 Some(different_file.as_slice()),
             ),
             (
+                "test/parser.test.ts",
                 Some("parser"),
                 "bun test test/parser.test.ts -t 'parser regression'",
                 Some(named.as_slice()),
             ),
             (
+                "test/parser.test.ts",
                 Some("parser regression"),
                 "bun test test/parser.test.ts -t 'parser regression'",
                 None,
             ),
             (
+                "test/parser.test.ts",
                 Some("parser"),
                 "bun test test/parser.test.ts",
                 Some(whole_file.as_slice()),
             ),
             (
+                "test/parser.test.ts",
                 None,
                 "bun test test/parser.test.ts -t 'parser regression'",
                 Some(named.as_slice()),
             ),
             (
+                "test/parser.test.ts",
                 None,
                 "cargo test --locked --test config_tests test/parser.test.ts",
                 Some(cargo_filter.as_slice()),
+            ),
+            (
+                "b/test/parser.test.ts",
+                None,
+                "bun test test/parser.test.ts",
+                Some(whole_file.as_slice()),
             ),
         ] {
             let reuse = expected_command.is_none();
@@ -1682,10 +1704,10 @@ mod tests {
             let base_root = temp.path().join("base-plus-tests");
             fs::create_dir_all(&base_root)?;
             let mut diff = test_diff();
-            diff.changed_files = vec!["test/parser.test.ts".to_owned()];
+            diff.changed_files = vec![file.to_owned()];
             diff.patch = format!(
-                "diff --git a/test/parser.test.ts b/test/parser.test.ts\n\
-                 --- a/test/parser.test.ts\n+++ b/test/parser.test.ts\n\
+                "diff --git a/{file} b/{file}\n\
+                 --- a/{file}\n+++ b/{file}\n\
                  @@ -0,0 +1 @@\n+{}\n",
                 name.map_or_else(
                     || "// changed test setup".to_owned(),
@@ -1728,8 +1750,8 @@ mod tests {
                 |_root, _out, _diff| Ok(base_root.clone()),
             )?;
             ensure!(initial_commands.len() == 2);
-            let mut initial_head = whole_file.to_vec();
-            let mut initial_base = vec!["bun", "test", "test/parser.test.ts"];
+            let mut initial_head = vec!["bun", "bd", "test", file];
+            let mut initial_base = vec!["bun", "test", file];
             if let Some(name) = name {
                 initial_head.extend(["-t", name]);
                 initial_base.extend(["-t", name]);
