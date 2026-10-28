@@ -125,7 +125,8 @@ fn init_builtin_profiles_and_config_owned_custom_remain_usable() -> Result<()> {
     let definition_table = definition
         .as_table_mut()
         .context("profile definition is not a table")?;
-    definition_table.insert("name".to_owned(), toml::Value::String("custom".to_owned()));
+    // The table key selects the profile even when the embedded name is omitted.
+    definition_table.remove("name");
     let limits = definition_table
         .get_mut("limits")
         .and_then(toml::Value::as_table_mut)

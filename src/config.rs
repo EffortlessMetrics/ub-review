@@ -878,6 +878,12 @@ impl Config {
             config.profile = profile.to_owned();
         }
         config.merge_defaults();
+        // The map key is the selection authority. Keep the embedded name in
+        // sync so diagnostics and name-dependent planning describe the profile
+        // whose settings were actually selected.
+        for (name, profile) in &mut config.profiles {
+            profile.name.clone_from(name);
+        }
         if config.profile == "auto" {
             config.profile = BoxState::detect()?.suggested_profile();
         }
@@ -2148,6 +2154,22 @@ phase = "late"
             detail.contains("gh-runner"),
             "receipt must name the fallback: {detail}"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn profile_table_key_controls_identity_even_with_conflicting_name() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "profile = \"gh-runner\"\n[profiles.custom]\nname = \"gh-runner\"\n[profiles.custom.limits]\nllm_in_flight = 1\n",
+        )?;
+        let config = Config::load_or_default(&path, Some("custom"))?;
+        let selected = config.selected_profile()?;
+        assert_eq!(selected.name, "custom");
+        assert_eq!(selected.limits.llm_in_flight, 1);
+        assert!(config.policy_errors.is_empty());
         Ok(())
     }
 
