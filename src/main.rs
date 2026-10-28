@@ -18929,11 +18929,16 @@ index 1111111..2222222 100644
     #[test]
     fn missing_proof_timeout_identifies_the_timed_out_command() {
         let mut receipt = test_red_green_proof_receipt("timed_out", "timed_out");
-        receipt.commands[1].timed_out = true;
         let mut text = String::new();
-        super::render_missing_proof_receipt_summary(&mut text, &receipt);
-        assert!(text.contains("USE_SYSTEM_BUN=1 bun test"), "{text}");
-        assert!(!text.contains("bun bd test"), "{text}");
+        // The status and flag independently carry timeout provenance.
+        for (status, flag) in [("timed_out", false), ("failed", true)] {
+            receipt.commands[1].status = status.to_owned();
+            receipt.commands[1].timed_out = flag;
+            text.clear();
+            super::render_missing_proof_receipt_summary(&mut text, &receipt);
+            assert!(text.contains("USE_SYSTEM_BUN=1 bun test"), "{text}");
+            assert!(!text.contains("bun bd test"), "{text}");
+        }
 
         receipt.commands.truncate(1);
         receipt.commands[0].status = "timed_out".to_owned();
