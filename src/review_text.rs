@@ -1014,6 +1014,32 @@ mod github_review_serialization_tests {
     use anyhow::{Result, ensure};
 
     #[test]
+    fn bracketed_prefix_boundaries() {
+        assert_eq!(strip_bracketed_lane_prefix("plain"), None);
+        assert_eq!(strip_bracketed_lane_prefix("[unclosed"), None);
+        assert_eq!(strip_bracketed_lane_prefix("[lane [nested]"), None);
+        assert_eq!(strip_bracketed_lane_prefix(r"[lane \] tail"), None);
+        assert_eq!(
+            strip_bracketed_lane_prefix("[lane] finding"),
+            Some("finding")
+        );
+        assert_eq!(
+            strip_bracketed_lane_prefix("[lane [nested]] finding"),
+            Some("finding")
+        );
+        assert_eq!(
+            strip_bracketed_lane_prefix(r"[lane \] nested] finding"),
+            Some("finding")
+        );
+        assert_eq!(strip_bracketed_lane_prefix("[label [inner]](url)"), None);
+        assert_eq!(strip_bracketed_lane_prefix("[label [inner]][ref]"), None);
+        assert_eq!(
+            strip_bracketed_lane_prefix(&format!("[{}] text", "x".repeat(80))),
+            None
+        );
+    }
+
+    #[test]
     fn summary_preserves_leading_markdown_links_and_strips_lane_metadata() {
         let mut text = String::new();
         render_pr_model_signal(

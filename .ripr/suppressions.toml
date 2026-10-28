@@ -36443,3 +36443,15 @@ kind = "exposure_gap"
 finding_id = "probe:src_witness.rs:field_construction:a6d2e94d"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1505; probe }],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_ambiguous_or_unbound_receipts_keep_reservation, accounting_duplicate_reservations_and_overflow_never_create_credit, accounting_matrix_releases_early_commands_before_required_build. Re-verify after any edit to src/witness.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:3c8a72d5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot connect the output oracle to opening-bracket depth (ripr#1453): bracketed_prefix_boundaries asserts nested and unclosed labels; an omitted-depth-increment mutant compiled and failed at the checked depth subtraction. Re-verify after scanner or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:289ddf68"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 cannot connect the output oracle to closing-bracket depth (ripr#1453): bracketed_prefix_boundaries asserts a complete lane returns finding; an omitted-depth-decrement mutant compiled and returned None. Re-verify after scanner or analyzer changes."
+
