@@ -15008,12 +15008,16 @@ UB_REVIEW_HTTP_STATUS:429
             .spawn()
             .with_context(|| "spawn sleeper")?;
 
+        fs::write(&stdout_path, "SYNTHETIC_RESPONSE_VALUE_7329")?;
+        fs::write(&stderr_path, "SYNTHETIC_DIAGNOSTIC_VALUE_8421")?;
         let err = match wait_for_child_output_files(child, &stdout_path, &stderr_path, 1) {
             Ok(_) => return Err(anyhow::anyhow!("sleeper completed before timeout")),
             Err(err) => err,
         };
 
         assert!(err.to_string().contains("timed out after 1s"));
+        assert!(!format!("{err:#}").contains("SYNTHETIC_RESPONSE_VALUE_7329"));
+        assert!(!format!("{err:#}").contains("SYNTHETIC_DIAGNOSTIC_VALUE_8421"));
         assert!(!stdout_path.exists());
         assert!(!stderr_path.exists());
         Ok(())
