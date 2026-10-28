@@ -236,12 +236,9 @@ pub(crate) fn parse_reporter_conclusion(
     thread_id: &str,
 ) -> ReporterConclusion {
     // Try to parse as JSON {distillation, proposed_follow_ups}.
-    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(content) {
-        let distillation = parsed
-            .get("distillation")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_owned();
+    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(content)
+        && let Some(distillation) = parsed.get("distillation").and_then(|v| v.as_str())
+    {
         let proposed_follow_ups = parsed
             .get("proposed_follow_ups")
             .and_then(|v| v.as_array())
@@ -253,14 +250,16 @@ pub(crate) fn parse_reporter_conclusion(
             .unwrap_or_default();
         return ReporterConclusion {
             schema: REPORTER_THREAD_SCHEMA.to_owned(),
-            distillation,
+            distillation: distillation.to_owned(),
             proposed_follow_ups,
             verdict: parse_verdict(&parsed),
             cohort_id: cohort_id.to_owned(),
             thread_id: thread_id.to_owned(),
         };
     }
-    // Fallback: the raw response text is the distillation.
+    // Preserve responses that are not structured reports, including valid JSON
+    // scalars and objects without a string distillation. Their verdict is not
+    // authoritative without the report's explanatory text.
     ReporterConclusion {
         schema: REPORTER_THREAD_SCHEMA.to_owned(),
         distillation: content.to_owned(),
@@ -845,6 +844,25 @@ mod tests {
         let c = parse_reporter_conclusion(content, "cid", "tid");
         assert_eq!(c.distillation, content);
         assert!(c.proposed_follow_ups.is_empty());
+    }
+
+    #[test]
+    fn unstructured_json_response_survives_reporter_artifact_round_trip() -> Result<()> {
+        for content in [r#""A short review""#, r#"{"verdict":"clear"}"#] {
+            let conclusion = parse_reporter_conclusion(content, "cid", "tid");
+            assert_eq!(conclusion.distillation, content);
+            assert_eq!(conclusion.verdict, ReporterVerdict::None);
+            let temp = tempfile::tempdir()?;
+            write_reporter_thread(temp.path(), &conclusion, "head-a")?;
+            match resolve_reporter_turn(temp.path(), "head-a") {
+                ReporterTurnResolution::Current(turn) => {
+                    assert_eq!(turn.distillation, content);
+                    assert_eq!(turn.verdict, ReporterVerdict::None);
+                }
+                other => anyhow::bail!("expected Current, got {other:?}"),
+            }
+        }
+        Ok(())
     }
 
     #[test]
