@@ -31,9 +31,10 @@ profile argument still lists `custom` because runtime consumers support it;
 `init` cannot invent the repository's custom budgets.
 
 To use a custom profile, generate a built-in starter, define `[profiles.custom]`
-with the intended settings, and select `profile = "custom"`. Commands that read
-that configuration, including `run`, `plan`, and `doctor`, retain custom-profile
-support. The rejection applies only to generating an undefined custom starter.
+with the intended settings, and select `profile = "custom"`. The table key is
+the runtime profile's identity; an omitted or different `name` inside the table
+does not change that identity. Commands that read that configuration, including
+`run`, `plan`, and `doctor`, retain custom-profile support. The rejection applies only to generating an undefined custom starter.
 
 Review breadth and local work are separate.
 
