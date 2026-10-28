@@ -7288,7 +7288,7 @@ fn audit_ci_rejects_unrepresentable_history_window() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let mut command = isolated_command(env!("CARGO_BIN_EXE_ub-review"), temp.path());
     let output = command
-        .env_remove("GITHUB_TOKEN")
+        .env("GITHUB_TOKEN", "unused-test-token")
         .env_remove("GITHUB_REPOSITORY")
         .args([
             "audit-ci",
@@ -7302,5 +7302,6 @@ fn audit_ci_rejects_unrepresentable_history_window() -> Result<()> {
     assert!(!output.status.success(), "unexpected success");
     assert!(stderr.contains("window-days"), "unexpected error: {stderr}");
     assert!(!stderr.contains("panicked"), "unexpected panic: {stderr}");
+    assert!(!temp.path().join("target/ub-review").exists());
     Ok(())
 }
