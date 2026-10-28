@@ -72,9 +72,11 @@ cannot suppress its findings.
 7. Before publication, inspect workflow triggers and side effects. Before Ready
    or merge, inspect the current PR's checks, their available contexts and App
    identities, reviews, integration state and applicable holds. Use ordinary PR
-   operations and let GitHub enforce its
-   protections; routine delivery does not require reading branch administration
-   settings. Do not bypass a required check or protection. At handoff name the
+   operations and let GitHub enforce its protections; routine delivery does not
+   require reading branch administration settings. A genuinely required but
+   unavailable validator or review read blocks the dependent decision, not an
+   otherwise independent authorized publication. Do not bypass a required check
+   or protection. At handoff name the
    next owner, remaining evidence and resume condition. Read back every
    authorized publication against the expected SHA.
 
