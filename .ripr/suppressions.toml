@@ -34739,7 +34739,6 @@ finding_id = "probe:src_proof_intent.rs:return_value:b72a971f"
 owner = "ub-review/core"
 reason = "Issue #1507; pinned RIPR0.10.0 local c21b312->4f6aea8 exact raw probe. Same rejection statement classified additionally as return_value; native request/task non-creation is its behavioral oracle. Same native/extracted evidence as row38. Static limitation documented by ripr-swarm#1054/#1055; no runtime proof credit is supplied by this disposition. Re-verify after semantic edits or tool upgrades; dated review/expiry follows policy/allow.toml#non-rust-ripr-suppressions."
 
-<<<<<<< HEAD
 # Exact #1551 cfg(test) dispositions; source and retained evidence identities below.
 
 [[suppressions]]
@@ -35082,57 +35081,23 @@ reason = "PR #1552; pinned RIPR 0.10.0; own hosted run 40291710437/artifact 1263
 # Raw before disposition: 26 unsuppressed, 0 suppressed, 106 unknown.
 # Six compiled behavioral defect controls were rejected; declaration, removed
 # source and Cargo-test evidence roles carry no production mutation claim.
-=======
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:match_arm:a24c275b"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. PR #1528 match dispatch over read_review_summary_receipt in render_model_status_sections: summary_reports_unavailable_review_receipt (tests/cli_run.rs) drives the compiled ub-review run and summary subcommands and asserts both arms, and running_summary_renders_model_receipt_status (src/main.rs test module) reaches the same render in-process. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:match_arm:24f05207"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Ok arm binds the parsed receipt: the cli_run test asserts the intact-receipt summary renders the model-mode line and model lane status, its recovery loop re-renders the intact packet after each damage case, and src/main.rs running_summary_renders_model_receipt_status asserts the same Ok-path output in-process. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:match_arm:d14a548a"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Err arm: the cli_run test damages review/review.json five ways (missing, truncated, invalid-json, wrong-field-type, invalid-utf8) and each case asserts the actionable unavailable-evidence summary plus intact-packet recovery. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:call_deletion:f513ba49"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: no_static_path. Deleting this call removes the Review evidence is incomplete push_str message; tests/cli_run.rs asserts that exact text, the embedded review/review.json diagnostic, the restore guidance, and the summary rerun hint through the compiled binary as a subprocess, so ripr has no static test path to the changed owner. Re-verify after any edit to src/post_run_utils.rs."
->>>>>>> 930b261 (chore(ripr): receipt-suppress cross-module exposure gaps on PR 1528)
 
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_summary_render.rs:field_construction:be7fd40c"
 owner = "ub-review/core"
-<<<<<<< HEAD
 reason = "Reviewed 2026-10-26 for ub-review#1554. The inspected subject is the out: &Path, parameter declaration in render_preliminary_summary, not executable record construction. RIPR 0.10.0 emits field_construction for this signature. Parser-owned parameter repair is tracked at https://github.com/EffortlessMetrics/ripr-swarm/pull/3755 under https://github.com/EffortlessMetrics/ripr/issues/1453; development repair does not imply installed promotion. The generated preliminary/final summary CLI controls exercise the relevant phase behavior. No runtime mutation claim is attached to a declaration. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
-=======
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. render_preliminary_summary is the PR #1528 cmd_run wiring (src/main.rs): every run CLI test executes it and its text is embedded verbatim into review/shared_context.md, which the run tests read and assert on. Re-verify after any edit to src/summary_render.rs."
->>>>>>> 930b261 (chore(ripr): receipt-suppress cross-module exposure gaps on PR 1528)
 
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_summary_render.rs:field_construction:732f0b2e"
 owner = "ub-review/core"
-<<<<<<< HEAD
 reason = "Reviewed 2026-10-26 for ub-review#1554. The inspected subject is the out: &Path, parameter declaration in render_summary_for_phase, not executable record construction. RIPR 0.10.0 emits field_construction for this signature. Parser-owned parameter repair is tracked at https://github.com/EffortlessMetrics/ripr-swarm/pull/3755 under https://github.com/EffortlessMetrics/ripr/issues/1453; development repair does not imply installed promotion. The generated preliminary/final summary CLI controls exercise the relevant phase behavior. No runtime mutation claim is attached to a declaration. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
-=======
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. render_summary_for_phase receives out through render_summary: running_summary_renders_model_receipt_status (src/main.rs test module) calls it in-process with a seeded out tree and asserts the rendered receipt content, and the cli_run and cli run tests do the same through the compiled binary. Re-verify after any edit to src/summary_render.rs."
->>>>>>> 930b261 (chore(ripr): receipt-suppress cross-module exposure gaps on PR 1528)
 
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_summary_render.rs:field_construction:f4b7b831"
 owner = "ub-review/core"
-<<<<<<< HEAD
 reason = "Reviewed 2026-10-26 for ub-review#1554. The inspected subject is the review_evidence_expected: bool, parameter declaration in render_summary_for_phase, not executable record construction. RIPR 0.10.0 emits field_construction for this signature. Parser-owned parameter repair is tracked at https://github.com/EffortlessMetrics/ripr-swarm/pull/3755 under https://github.com/EffortlessMetrics/ripr/issues/1453; development repair does not imply installed promotion. The generated preliminary/final summary CLI controls exercise the relevant phase behavior. No runtime mutation claim is attached to a declaration. Re-verify this exact subject after semantic edits or a RIPR upgrade; file-level review/expiry remain governed by non-rust-ripr-suppressions."
 
 [[suppressions]]
@@ -36175,13 +36140,11 @@ kind = "exposure_gap"
 finding_id = "probe:src_config.rs:field_construction:9e2f74ba.2"
 owner = "ub-review/core"
 reason = "The unsupported scope receipt is checked for section and rejected value by tool_gate_receipts_preserve_valid_siblings_and_invalid_only_fallback; the same test rejects a compiled mutant retaining that scope. Re-evaluate on sanitizer changes."
-<<<<<<< HEAD
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_review_text.rs:call_deletion:9a31cccd"
 owner = "ub-review/core"
 reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. call_deletion probe on topic_text.to_owned() feeding content_key in output_topics (src/review_text.rs:506); discriminator is observation_unverified because no assertion text names the expression, but the value is constrained end-to-end by degradation_preserves_distinct_operator_claims_in_post_json (src/review_text.rs:1044) through degrade_review_body -> output_topics -> github_review_post_payload, asserting operator/case/whitespace-distinct claims stay distinct (final_item_count = 2, third occurrence folded as duplicate_evidence_); reach tests body_budget_drops_topics_and_preserves_inline_fallback_receipt, bullet_budget_drops_all_topics_as_inline_only and degradation_drops_lowest_ranked_topics_deterministically all pass in gate run 39522864539. Re-verify after any edit to src/review_text.rs."
-<<<<<<< HEAD
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_model_exec.rs:field_construction:4579f81a"
@@ -36235,11 +36198,6 @@ kind = "exposure_gap"
 finding_id = "probe:src_model_exec.rs:return_value:de774f6a"
 owner = "ub-review/core"
 reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Return value of the render_proof_planner_model_task_prompt call in the proof_planner_request_contract_tests::prompt helper (src/model_exec.rs:1525): the returned prompt is asserted directly by planner_response_examples_follow_the_operator_command_ceiling (budget propagation in the parsed planner input and response template) and planner_offers_only_resolvable_kinds_and_exact_cargo_target_labels (kind and target-label contains assertions); ripr's assertion linker cannot bind those cross-function assertions to the call line. Re-verify after any edit to the proof-planner request contract tests."
-=======
-=======
-=======
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. review_evidence_expected gates render_model_status_sections: the expected=true call site is asserted by the model-section summary assertions in src/main.rs tests, tests/cli.rs plan_and_dry_run_write_expected_packet_tree, and tests/cli_run.rs summary_reports_unavailable_review_receipt; the expected=false preliminary call site executes in every run test with its output asserted via the shared context. Re-verify after any edit to src/summary_render.rs."
->>>>>>> 930b261 (chore(ripr): receipt-suppress cross-module exposure gaps on PR 1528)
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_post_run_utils.rs:match_arm:a24c275b"
@@ -36257,38 +36215,6 @@ kind = "exposure_gap"
 finding_id = "probe:src_post_run_utils.rs:match_arm:d14a548a"
 owner = "ub-review/core"
 reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Err arm: the cli_run test damages review/review.json five ways (missing, truncated, invalid-json, wrong-field-type, invalid-utf8) and each case asserts the actionable unavailable-evidence summary plus intact-packet recovery. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:call_deletion:f513ba49"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: no_static_path. Deleting this call removes the Review evidence is incomplete push_str message; tests/cli_run.rs asserts that exact text, the embedded review/review.json diagnostic, the restore guidance, and the summary rerun hint through the compiled binary as a subprocess, so ripr has no static test path to the changed owner. Re-verify after any edit to src/post_run_utils.rs."
-
->>>>>>> e15c202 (chore(ripr): receipt-suppress cross-module exposure gaps on PR 1528)
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:match_arm:a24c275b"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. PR #1528 match dispatch over read_review_summary_receipt in render_model_status_sections: summary_reports_unavailable_review_receipt (tests/cli_run.rs) drives the compiled ub-review run and summary subcommands and asserts both arms, and running_summary_renders_model_receipt_status (src/main.rs test module) reaches the same render in-process. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:match_arm:24f05207"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Ok arm binds the parsed receipt: the cli_run test asserts the intact-receipt summary renders the model-mode line and model lane status, its recovery loop re-renders the intact packet after each damage case, and src/main.rs running_summary_renders_model_receipt_status asserts the same Ok-path output in-process. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:match_arm:d14a548a"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Err arm: the cli_run test damages review/review.json five ways (missing, truncated, invalid-json, wrong-field-type, invalid-utf8) and each case asserts the actionable unavailable-evidence summary plus intact-packet recovery. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:call_deletion:f513ba49"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: no_static_path. Deleting this call removes the Review evidence is incomplete push_str message; tests/cli_run.rs asserts that exact text, the embedded review/review.json diagnostic, the restore guidance, and the summary rerun hint through the compiled binary as a subprocess, so ripr has no static test path to the changed owner. Re-verify after any edit to src/post_run_utils.rs."
->>>>>>> 930b261 (chore(ripr): receipt-suppress cross-module exposure gaps on PR 1528)
 
 [[suppressions]]
 kind = "exposure_gap"
@@ -36313,103 +36239,3 @@ kind = "exposure_gap"
 finding_id = "probe:src_post_run_utils.rs:call_deletion:f513ba49"
 owner = "ub-review/core"
 reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: no_static_path. Deleting this call removes the Review evidence is incomplete push_str message; tests/cli_run.rs asserts that exact text, the embedded review/review.json diagnostic, the restore guidance, and the summary rerun hint through the compiled binary as a subprocess, so ripr has no static test path to the changed owner. Re-verify after any edit to src/post_run_utils.rs."
-
->>>>>>> 0e6f9e6 (chore(ripr): receipt-suppress cross-module exposure gaps on PR 1528)
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:match_arm:a24c275b"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. PR #1528 match dispatch over read_review_summary_receipt in render_model_status_sections: summary_reports_unavailable_review_receipt (tests/cli_run.rs) drives the compiled ub-review run and summary subcommands and asserts both arms, and running_summary_renders_model_receipt_status (src/main.rs test module) reaches the same render in-process. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:match_arm:24f05207"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Ok arm binds the parsed receipt: the cli_run test asserts the intact-receipt summary renders the model-mode line and model lane status, its recovery loop re-renders the intact packet after each damage case, and src/main.rs running_summary_renders_model_receipt_status asserts the same Ok-path output in-process. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:match_arm:d14a548a"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Err arm: the cli_run test damages review/review.json five ways (missing, truncated, invalid-json, wrong-field-type, invalid-utf8) and each case asserts the actionable unavailable-evidence summary plus intact-packet recovery. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:call_deletion:f513ba49"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: no_static_path. Deleting this call removes the Review evidence is incomplete push_str message; tests/cli_run.rs asserts that exact text, the embedded review/review.json diagnostic, the restore guidance, and the summary rerun hint through the compiled binary as a subprocess, so ripr has no static test path to the changed owner. Re-verify after any edit to src/post_run_utils.rs."
->>>>>>> 930b261 (chore(ripr): receipt-suppress cross-module exposure gaps on PR 1528)
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:match_arm:a24c275b"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. PR #1528 match dispatch over read_review_summary_receipt in render_model_status_sections: summary_reports_unavailable_review_receipt (tests/cli_run.rs) drives the compiled ub-review run and summary subcommands and asserts both arms, and running_summary_renders_model_receipt_status (src/main.rs test module) reaches the same render in-process. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:match_arm:24f05207"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Ok arm binds the parsed receipt: the cli_run test asserts the intact-receipt summary renders the model-mode line and model lane status, its recovery loop re-renders the intact packet after each damage case, and src/main.rs running_summary_renders_model_receipt_status asserts the same Ok-path output in-process. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:match_arm:d14a548a"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Err arm: the cli_run test damages review/review.json five ways (missing, truncated, invalid-json, wrong-field-type, invalid-utf8) and each case asserts the actionable unavailable-evidence summary plus intact-packet recovery. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:call_deletion:f513ba49"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: no_static_path. Deleting this call removes the Review evidence is incomplete push_str message; tests/cli_run.rs asserts that exact text, the embedded review/review.json diagnostic, the restore guidance, and the summary rerun hint through the compiled binary as a subprocess, so ripr has no static test path to the changed owner. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:match_arm:a24c275b"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. PR #1528 match dispatch over read_review_summary_receipt in render_model_status_sections: summary_reports_unavailable_review_receipt (tests/cli_run.rs) drives the compiled ub-review run and summary subcommands and asserts both arms, and running_summary_renders_model_receipt_status (src/main.rs test module) reaches the same render in-process. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:match_arm:24f05207"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Ok arm binds the parsed receipt: the cli_run test asserts the intact-receipt summary renders the model-mode line and model lane status, its recovery loop re-renders the intact packet after each damage case, and src/main.rs running_summary_renders_model_receipt_status asserts the same Ok-path output in-process. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:match_arm:d14a548a"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Err arm: the cli_run test damages review/review.json five ways (missing, truncated, invalid-json, wrong-field-type, invalid-utf8) and each case asserts the actionable unavailable-evidence summary plus intact-packet recovery. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:call_deletion:f513ba49"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: no_static_path. Deleting this call removes the Review evidence is incomplete push_str message; tests/cli_run.rs asserts that exact text, the embedded review/review.json diagnostic, the restore guidance, and the summary rerun hint through the compiled binary as a subprocess, so ripr has no static test path to the changed owner. Re-verify after any edit to src/post_run_utils.rs."
->>>>>>> 930b261 (chore(ripr): receipt-suppress cross-module exposure gaps on PR 1528)
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:match_arm:a24c275b"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. PR #1528 match dispatch over read_review_summary_receipt in render_model_status_sections: summary_reports_unavailable_review_receipt (tests/cli_run.rs) drives the compiled ub-review run and summary subcommands and asserts both arms, and running_summary_renders_model_receipt_status (src/main.rs test module) reaches the same render in-process. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:match_arm:24f05207"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Ok arm binds the parsed receipt: the cli_run test asserts the intact-receipt summary renders the model-mode line and model lane status, its recovery loop re-renders the intact packet after each damage case, and src/main.rs running_summary_renders_model_receipt_status asserts the same Ok-path output in-process. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:match_arm:d14a548a"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Err arm: the cli_run test damages review/review.json five ways (missing, truncated, invalid-json, wrong-field-type, invalid-utf8) and each case asserts the actionable unavailable-evidence summary plus intact-packet recovery. Re-verify after any edit to src/post_run_utils.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_post_run_utils.rs:call_deletion:f513ba49"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: no_static_path. Deleting this call removes the Review evidence is incomplete push_str message; tests/cli_run.rs asserts that exact text, the embedded review/review.json diagnostic, the restore guidance, and the summary rerun hint through the compiled binary as a subprocess, so ripr has no static test path to the changed owner. Re-verify after any edit to src/post_run_utils.rs."
-
