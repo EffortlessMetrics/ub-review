@@ -34460,3 +34460,15 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_broker.rs:field_construction:b7c7aae0"
 owner = "ub-review/core"
 reason = "RIPR discriminate false-negative on #4271 round-4 the fresh parameter binding in merge_proof_portfolio_candidate_tasks (twin of the round-2b decisions-merge parameter probe 859c91d4): the extended follow_up_write_preserves_required_flag_on_shared_task_id drives both merge arms and asserts the merged candidate record's required flag and request_ids equal the merged decision record exactly, so the construction outcome is pinned; ripr's assertion linker misses parameter bindings. Re-verify after any edit to proof/broker.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:ec72394e"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe targets the `admitted_revision: revision_digest.map(planner_revision)` construction in the gate.rs test helper `planner_gate` (src/gate.rs:2853): all five call sites (src/gate.rs:2869, 2934, 2953, 2986, 3021) pass Some(PLANNER_TEST_DIGEST), and their planner_required_proofs proven/unproven assertions (e.g. required_planner_proof_with_matching_receipt_is_proven) fail on any mutation of this value routed through build_planner_required_proof_accounting; the assertions address accounting outcomes rather than the construction text, which ripr's assertion linker cannot connect. Re-verify after any edit to the planner_gate helper in src/gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:8481ab2a"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Twin of the field_construction probe ec72394e on the same `revision_digest.map(planner_revision)` expression in the gate.rs test helper `planner_gate` (src/gate.rs:2853): the same five tests drive the Some leg and pin the resulting revision-sensitive planner_required_proofs accounting, complemented by the sibling end-to-end planner_currentness_requires_the_complete_admitted_revision production-API/summary run; ripr cannot trace helper return values into outcome assertions. Re-verify after any edit to the planner_gate helper in src/gate.rs."
