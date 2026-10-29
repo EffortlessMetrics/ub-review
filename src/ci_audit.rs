@@ -144,6 +144,8 @@ pub(crate) struct CiJobStats {
     pub(crate) duration_p90_sec: Option<u64>,
     pub(crate) duration_p99_sec: Option<u64>,
     pub(crate) total_duration_sec: u64,
+    pub(crate) missing_duration_count: usize,
+    pub(crate) correlation_ambiguous: bool,
     pub(crate) independent_failures: usize,
     pub(crate) co_failing_jobs: Vec<String>,
     pub(crate) cheaper_jobs_compared: Vec<String>,
@@ -211,7 +213,9 @@ pub(crate) struct CiCostsJob {
     pub(crate) duration_p50_sec: Option<u64>,
     pub(crate) duration_p90_sec: Option<u64>,
     pub(crate) duration_p99_sec: Option<u64>,
+    /// Observed-duration estimate; only a lower bound when samples are missing.
     pub(crate) runner_minutes_per_month: u64,
+    pub(crate) runner_minutes_is_lower_bound: bool,
     pub(crate) matrix_expansion: usize,
 }
 
@@ -229,6 +233,7 @@ pub(crate) struct CiCorrelationJob {
     pub(crate) job: String,
     pub(crate) workflow: String,
     pub(crate) independent_failures: usize,
+    pub(crate) independent_failures_is_lower_bound: bool,
     pub(crate) co_failing_jobs: Vec<String>,
     pub(crate) cheaper_jobs_compared: Vec<String>,
     pub(crate) window_days: u32,
@@ -1087,14 +1092,14 @@ pub(crate) fn ci_github_get_json(
 }
 
 /// Parse the array under `key`, returning the deserialized items and the
-/// count of items that failed to deserialize (dropped items become an
-/// evidence-gap line, never a silent omission).
+/// count of rejected items or envelopes. A missing/mistyped array rejects one
+/// envelope, distinct from a valid empty array. Rejections become evidence gaps.
 pub(crate) fn parse_ci_api_array<T: DeserializeOwned>(
     value: &serde_json::Value,
     key: &str,
 ) -> (Vec<T>, usize) {
     let Some(items) = value.get(key).and_then(serde_json::Value::as_array) else {
-        return (Vec::new(), 0);
+        return (Vec::new(), 1);
     };
     let mut parsed = Vec::with_capacity(items.len());
     let mut dropped = 0usize;
@@ -1378,7 +1383,8 @@ pub(crate) fn fetch_ci_audit_history(
         let (batch, dropped): (Vec<CiApiRun>, usize) = parse_ci_api_array(&value, "workflow_runs");
         dropped_items += dropped;
         pages_fetched = page;
-        let batch_len = batch.len();
+        // Decode failures must not hide subsequent pages of valid history.
+        let batch_len = batch.len() + dropped;
         runs.extend(batch);
         if batch_len < CI_AUDIT_RUNS_PER_PAGE {
             break;
@@ -1430,7 +1436,7 @@ pub(crate) fn fetch_ci_audit_history(
     }
     if dropped_items > 0 {
         evidence_gaps.push(format!(
-            "{dropped_items} API items failed to deserialize and were dropped from history"
+            "{dropped_items} API items or array envelopes failed to deserialize and were dropped from history"
         ));
     }
     let required_checks = fetch_ci_required_checks(args, repo, token, scratch_dir);
@@ -1533,12 +1539,20 @@ pub(crate) fn compute_ci_job_stats(
     let mut independent: BTreeMap<(u64, String), usize> = BTreeMap::new();
     let mut co_failing: BTreeMap<(u64, String), BTreeSet<String>> = BTreeMap::new();
     let mut rerun_then_pass: BTreeMap<u64, usize> = BTreeMap::new();
+    let mut ambiguous_workflows = BTreeSet::new();
     for entry in runs {
         if entry.run.event != "pull_request" {
             continue;
         }
         if entry.run.run_attempt > 1 && entry.run.conclusion.as_deref() == Some("success") {
             *rerun_then_pass.entry(entry.run.workflow_id).or_default() += 1;
+        }
+        // Display names are the public grouping key, not immutable execution IDs.
+        // Refuse correlation for a run whose physical jobs cannot join uniquely.
+        let names: BTreeSet<&str> = entry.jobs.iter().map(|job| job.name.as_str()).collect();
+        if names.len() != entry.jobs.len() {
+            ambiguous_workflows.insert(entry.run.workflow_id);
+            continue;
         }
         let mut conclusion_by_name: BTreeMap<&str, Option<&str>> = BTreeMap::new();
         for job in &entry.jobs {
@@ -1602,6 +1616,8 @@ pub(crate) fn compute_ci_job_stats(
             duration_p90_sec: ci_percentile(&sorted, 90.0),
             duration_p99_sec: ci_percentile(&sorted, 99.0),
             total_duration_sec: sorted.iter().sum(),
+            missing_duration_count: runs_count - sorted.len(),
+            correlation_ambiguous: ambiguous_workflows.contains(workflow_id),
             independent_failures: independent.get(key).copied().unwrap_or(0),
             co_failing_jobs: co_failing
                 .get(key)
@@ -2157,6 +2173,7 @@ pub(crate) fn build_ci_audit_artifacts(
     let mut shared_degradation_gaps: Vec<String> = Vec::new();
     match fetch {
         Some(fetch) => {
+            shared_degradation_gaps.extend(fetch.evidence_gaps.iter().cloned());
             if fetch.truncated {
                 shared_degradation_gaps.push(format!(
                     "run history truncated at {CI_AUDIT_RUN_PAGE_CAP} pages / {} runs",
@@ -2169,9 +2186,22 @@ pub(crate) fn build_ci_audit_artifacts(
     if !history_available {
         inventory_gaps.push(CI_NO_TOKEN_GAP.to_owned());
     }
+    for stat in &stats {
+        if stat.missing_duration_count > 0 {
+            shared_degradation_gaps.push(format!(
+                "{} / {}: {} job durations unavailable; runtime unknown and runner minutes are an observed lower bound",
+                stat.workflow_path, stat.job, stat.missing_duration_count
+            ));
+        }
+        if stat.correlation_ambiguous {
+            shared_degradation_gaps.push(format!(
+                "{} / {}: duplicate job display names make run correlation ambiguous; affected runs excluded from independent-failure credit and rightsizing unavailable",
+                stat.workflow_path, stat.job
+            ));
+        }
+    }
     let mut history_gaps: Vec<String> = Vec::new();
-    if let Some(fetch) = fetch {
-        history_gaps.extend(fetch.evidence_gaps.iter().cloned());
+    if fetch.is_some() {
         history_gaps.push(
             "flake_rate and rerun_then_pass are workflow-level approximations (jobs fetched for the latest attempt only)"
                 .to_owned(),
@@ -2271,12 +2301,16 @@ pub(crate) fn build_ci_audit_artifacts(
                 runner_minutes_per_month: ((stat.total_duration_sec as f64 / 60.0) * 30.0
                     / f64::from(window_days.max(1)))
                 .round() as u64,
+                runner_minutes_is_lower_bound: stat.missing_duration_count > 0
+                    || fetch
+                        .is_some_and(|fetch| fetch.truncated || !fetch.evidence_gaps.is_empty()),
                 matrix_expansion: matrix_size,
             });
             correlation_jobs.push(CiCorrelationJob {
                 job: stat.job.clone(),
                 workflow: stat.workflow_path.clone(),
                 independent_failures: stat.independent_failures,
+                independent_failures_is_lower_bound: stat.correlation_ambiguous,
                 co_failing_jobs: stat.co_failing_jobs.clone(),
                 cheaper_jobs_compared: stat.cheaper_jobs_compared.clone(),
                 window_days,
@@ -2310,11 +2344,26 @@ pub(crate) fn build_ci_audit_artifacts(
                 .unwrap_or(0),
             duration_p50_sec: seed.stats.and_then(|stat| stat.duration_p50_sec),
         };
-        let decision = classify_ci_job_tier(
+        let mut decision = classify_ci_job_tier(
             &evidence,
             workflow_has_independent_signal.contains(seed.workflow_path.as_str()),
         );
-        let has_caught = if history_available {
+        if seed.stats.is_some_and(|stat| stat.correlation_ambiguous)
+            && !(decision.tier == "flag-for-human" && decision.confidence == "high")
+        {
+            decision = CiTierDecision {
+                tier: "flag-for-human",
+                confidence: "low",
+                reason: "duplicate job display names: independent-failure correlation is ambiguous"
+                    .to_owned(),
+                report_note: "ambiguous correlation; never auto-right-sized".to_owned(),
+                proposed_policy: "human decision required; disambiguate job display names"
+                    .to_owned(),
+            };
+        }
+        let has_caught = if seed.stats.is_some_and(|stat| stat.correlation_ambiguous) {
+            "unknown: ambiguous job display names".to_owned()
+        } else if history_available {
             format!(
                 "{} independent failures in {} runs / {window_days} days",
                 evidence.independent_failures, evidence.runs
@@ -2411,14 +2460,14 @@ pub(crate) fn build_ci_audit_artifacts(
         window_days,
         independent_failure_rule: CI_AUDIT_INDEPENDENT_FAILURE_RULE.to_owned(),
         jobs: correlation_jobs,
-        evidence_gaps: shared_degradation_gaps,
+        evidence_gaps: shared_degradation_gaps.clone(),
     };
     let recommendations = CiRecommendationsArtifact {
         schema: CI_RECOMMENDATIONS_SCHEMA.to_owned(),
         repo: repo.to_owned(),
         window_days,
         jobs: recommendations,
-        evidence_gaps: Vec::new(),
+        evidence_gaps: shared_degradation_gaps,
     };
     let mut runner_cancellation_gaps = Vec::new();
     if !history_available {
@@ -2562,21 +2611,37 @@ pub(crate) fn render_ci_audit_report(
                     } else {
                         String::new()
                     };
-                    let independent_failures = correlation
+                    let (independent_failures, incomplete_correlation) = correlation
                         .jobs
                         .iter()
                         .find(|job| {
                             job.job == recommendation.job && job.workflow == recommendation.workflow
                         })
-                        .map(|job| job.independent_failures)
-                        .unwrap_or(0);
+                        .map(|job| {
+                            (
+                                job.independent_failures,
+                                job.independent_failures_is_lower_bound,
+                            )
+                        })
+                        .unwrap_or((0, false));
+                    let independent_signal = if incomplete_correlation {
+                        format!("independent failures unknown ({independent_failures} observed)")
+                    } else {
+                        format!("{independent_failures} independent failures")
+                    };
+                    let runtime = if cost.runner_minutes_is_lower_bound {
+                        format!(
+                            "runtime unknown (observed lower bound ~{} runner-min/mo)",
+                            cost.runner_minutes_per_month
+                        )
+                    } else {
+                        format!("~{} runner-min/mo", cost.runner_minutes_per_month)
+                    };
                     out.push_str(&format!(
-                        "- `{}` ({workflow_file}) [{}]: p50 {p50}, {} runs, {} independent failures, ~{} runner-min/mo{matrix}, receipts: {receipts}{note}\n",
+                        "- `{}` ({workflow_file}) [{}]: p50 {p50}, {} runs, {independent_signal}, {runtime}{matrix}, receipts: {receipts}{note}\n",
                         recommendation.job,
                         recommendation.confidence,
                         history_job.runs,
-                        independent_failures,
-                        cost.runner_minutes_per_month,
                     ));
                 }
                 _ => {
