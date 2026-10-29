@@ -2150,6 +2150,117 @@ mod tests {
     }
 
     #[test]
+    fn public_surface_legacy_fallback_is_graph_wide() -> Result<()> {
+        let review = review_with_comment("src/lib.rs", 12, "exact body");
+        let legacy = graph_for("src/lib.rs", 12, "inline", HEAD);
+        ensure!(build_planned_inline_deliveries(&review, HEAD, Some(&legacy))?.len() == 1);
+        for disposition in [
+            serde_json::json!("inline-candidate"),
+            serde_json::Value::Null,
+        ] {
+            let mut mixed = legacy.clone();
+            let mut marker = mixed["topics"][0].clone();
+            marker["claim_id"] = serde_json::json!("elsewhere");
+            marker["path"] = serde_json::json!("src/other.rs");
+            marker["anchor"] = serde_json::json!(99);
+            marker["delivery"] = disposition;
+            mixed["topics"]
+                .as_array_mut()
+                .context("topics")?
+                .push(marker);
+            let before = mixed.clone();
+            ensure!(
+                build_planned_inline_deliveries(&review, HEAD, Some(&mixed)).is_err(),
+                "a remote disposition marker allowed legacy delivery"
+            );
+            ensure!(mixed == before);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn public_surface_malformed_dispositions_never_authorize_delivery() -> Result<()> {
+        let review = review_with_comment("src/lib.rs", 12, "exact body");
+        for disposition in [
+            serde_json::json!(42),
+            serde_json::json!(true),
+            serde_json::json!({}),
+            serde_json::json!([]),
+            serde_json::Value::Null,
+            serde_json::json!("summary-only"),
+            serde_json::json!("no-human-surface"),
+            serde_json::json!("future-disposition"),
+        ] {
+            let mut graph = graph_for("src/lib.rs", 12, "inline", HEAD);
+            graph["topics"][0]["delivery"] = disposition.clone();
+            ensure!(
+                build_planned_inline_deliveries(&review, HEAD, Some(&graph)).is_err(),
+                "malformed or withheld disposition authorized delivery: {disposition}"
+            );
+            let mut public = graph["topics"][0].clone();
+            public["claim_id"] = serde_json::json!("selected");
+            public["delivery"] = serde_json::json!("inline-candidate");
+            graph["topics"]
+                .as_array_mut()
+                .context("topics")?
+                .push(public);
+            let before = graph.clone();
+            let planned = build_planned_inline_deliveries(&review, HEAD, Some(&graph))?;
+            ensure!(planned.len() == 1);
+            ensure!(serde_json::to_value(&planned[0])?["claim_id"] == "selected");
+            ensure!(graph == before);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn public_surface_selection_preserves_action_and_reply_eligibility() -> Result<()> {
+        let review = review_with_comment("src/lib.rs", 12, "exact body");
+        for action in [Some("none"), Some("unknown"), None] {
+            let mut graph = graph_for("src/lib.rs", 12, "inline", HEAD);
+            graph["topics"][0]["delivery"] = serde_json::json!("inline-candidate");
+            let mut ineligible = graph["topics"][0].clone();
+            ineligible["claim_id"] = serde_json::json!("ineligible");
+            if let Some(action) = action {
+                ineligible["planned_action"] = serde_json::json!(action);
+            } else {
+                ineligible
+                    .as_object_mut()
+                    .context("topic")?
+                    .remove("planned_action");
+            }
+            graph["topics"]
+                .as_array_mut()
+                .context("topics")?
+                .push(ineligible);
+            let planned = build_planned_inline_deliveries(&review, HEAD, Some(&graph))?;
+            ensure!(
+                planned.len() == 1,
+                "ineligible action interfered with valid claim"
+            );
+            ensure!(serde_json::to_value(&planned[0])?["claim_id"] == "claim-1");
+        }
+        let mut reply = graph_for("src/lib.rs", 12, "reply", HEAD);
+        reply["topics"][0]["delivery"] = serde_json::json!("inline-candidate");
+        for thread in [None, Some(""), Some("   ")] {
+            if let Some(thread) = thread {
+                reply["topics"][0]["planned_thread_id"] = serde_json::json!(thread);
+            } else {
+                reply["topics"][0]
+                    .as_object_mut()
+                    .context("topic")?
+                    .remove("planned_thread_id");
+            }
+            ensure!(build_planned_deliveries(&review, HEAD, Some(&reply)).is_err());
+        }
+        reply["topics"][0]["planned_thread_id"] = serde_json::json!("123");
+        let planned = build_planned_deliveries(&review, HEAD, Some(&reply))?;
+        ensure!(planned.len() == 1 && planned[0].action() == DeliveryAction::Reply);
+        ensure!(serde_json::to_value(&planned[0])?["source_thread_id"] == "123");
+        Ok(())
+    }
+
+    #[test]
     fn planned_inline_delivery_rejects_missing_stale_and_ambiguous_plans() -> Result<()> {
         let review = review_with_comment("src/lib.rs", 12, "[tests] exact body");
         ensure!(
