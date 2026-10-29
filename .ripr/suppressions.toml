@@ -36270,30 +36270,6 @@ reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Clas
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_ci_audit.rs:field_construction:11e5cba6"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The missing_duration_count construction in compute_ci_job_stats (src/ci_audit.rs:1614) is pinned end-to-end: ci_repair_counts_every_missing_duration_in_consumer_warnings asserts the exact '19 job durations unavailable' consumer gap (the count is runs_count - sorted.len() across 20 fixture runs with 19 missing completions) in history, costs, correlation and recommendations evidence_gaps plus the report, and ci_repair_mixed_and_inverted_durations_keep_observed_runtime_only pins the 1-missing case; the assertion text references the rendered gap string, not the field construction, so the static discriminator stays unconfirmed. Re-verify after any edit to the CiJobStats construction."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_ci_audit.rs:side_effect:43e03010"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The correlation_ambiguous lookup in compute_ci_job_stats (src/ci_audit.rs:1615) is pinned end-to-end: ci_repair_display_name_ambiguity_is_confined_to_its_workflow asserts the 'duplicate job display names' degradation gap appears for the ambiguous workflow and is absent for the clean one (the gap is pushed only when stat.correlation_ambiguous is true), and ci_repair_ambiguous_correlation_never_earns_adaptive_rightsizing pins lower-bound independent-failure credit for a duplicate-name fixture; assertions address rendered gaps and credit outcomes rather than the field expression. Re-verify after any edit to the CiJobStats construction."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_ci_audit.rs:side_effect:ca21f383"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The missing-duration degradation-gap push in build_ci_audit_artifacts (src/ci_audit.rs:2189) is pinned end-to-end: ci_repair_counts_every_missing_duration_in_consumer_warnings asserts the exact '.github/workflows/ci.yml / test: 19 job durations unavailable; runtime unknown and runner minutes are an observed lower bound' string in all four consumer evidence_gaps and the report, and ci_repair_mixed_and_inverted_durations_keep_observed_runtime_only pins the 1-missing variant; the assertions target the rendered consumer strings rather than the push site text. Re-verify after any edit to the stats-driven gap emission."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_ci_audit.rs:side_effect:ca21f383.2"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The correlation-ambiguity degradation-gap push in build_ci_audit_artifacts (src/ci_audit.rs:2195) is pinned end-to-end: ci_repair_display_name_ambiguity_is_confined_to_its_workflow asserts a.correlation.evidence_gaps contains the 'duplicate job display names' gap for the ambiguous workflow and contains no such gap mentioning other.yml, and ci_repair_ambiguous_correlation_never_earns_adaptive_rightsizing pins the conservative credit outcomes the gap documents; assertions address rendered gaps and outcomes rather than the push site text. Re-verify after any edit to the stats-driven gap emission."
-
-[[suppressions]]
-kind = "exposure_gap"
 finding_id = "probe:src_tests_ci_audit_tests.rs:field_construction:3083d863"
 owner = "ub-review/core"
 reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The required_checks: ci_no_required_checks() construction in the ci_repair_artifacts test helper (src/tests/ci_audit_tests.rs:2530) executes in five ci_repair_* tests (9 call sites) that drive build_ci_audit_artifacts end-to-end; ci_repair_ambiguous_correlation_never_earns_adaptive_rightsizing pins the conservative outcomes of the empty required-checks value per row (tier flag-for-human, has_caught starting 'unknown:', zero independent-failure credit) and the fetch-gaps/duration tests pin consumer-artifact propagation, while no assertion text names the fixture construction so the static discriminator stays unconfirmed. Re-verify after any edit to the ci_repair_artifacts helper."
