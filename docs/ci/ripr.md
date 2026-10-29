@@ -112,7 +112,9 @@ matching badge/raw outcomes and the actual frozen diff digest, known Rust-only
 findings, explicit `candidate_current`/`base_deleted` currentness, and the known
 `include_unknowns=false` policy. It refuses unknown versions, partial outcomes,
 missing currentness, duplicate JSON keys or finding IDs, stale inputs, and
-inconsistent projected identities/classes/locations. Other source contracts need
+inconsistent projected identities/classes/locations. Nonempty `preview_skipped`
+also fails, including with `warn`/`fail` status or zero current gaps: skipped
+languages contradict this complete source contract. Other source contracts need
 their own reviewed acceptance; schema-shaped counts alone are insufficient.
 
 All raw findings and gap entries stay in the audit projection. Only the

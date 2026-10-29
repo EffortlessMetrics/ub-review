@@ -161,7 +161,6 @@ created = "2026-09-05"
 review_after = "2026-12-05"
 expires = "2027-03-05"
 
-
 [[exception]]
 id = "bounded-diagnostic-version-probes"
 kind = "process-spawn"
@@ -180,3 +179,24 @@ reason = "PR #1599 adopts #1401's test-only writer/process-creation coordination
 created = "2026-10-28"
 review_after = "2027-01-28"
 expires = "2027-04-28"
+[[exception]]
+id = "native-premerge-admission-wrapper"
+kind = "non-rust-file"
+glob = "{scripts/{premerge-admission,test-premerge-admission}.py,fixtures/premerge-admission/*.yml}"
+category = "platform-wrapper-test"
+language = "python/yaml"
+owner = "release/ci"
+reason = "Issue #1465 bounded native PR admission: standard-library public metadata validation runs without compiling or checking out candidate code. Digest-bound owner request, complete anchored native history, worker/finalizer currentness and explicit dormant fixture / installed production YAML shell controls preserve the two existing proof populations. The unchanged ephemeral job token is used only by immutable protected-source pre-checkout helpers for the fixed current-permission metadata GET; no candidate-fetched helper, new credential, permission expansion, protected settings, check writer or merge service. Bounded owner-explicit terminal retry generations retain native failure history. Python is already supplied by hosted runners; compiling Rust for cheap admission would allocate avoidable product setup. Replace only after equivalent no-checkout custody/negative controls are established."
+created = "2026-10-18"
+review_after = "2027-01-18"
+expires = "2027-04-18"
+
+[[exception]]
+id = "native-premerge-admission-test-bridge"
+kind = "test-process-spawn"
+path = "tests/premerge_admission_helper.rs"
+owner = "release/ci"
+reason = "Issue #1465 preparatory source installation runs one fixed python3 -B scripts/test-premerge-admission.py command from the repository root under native cargo tests. The explicitly selected dormant/installed YAML lanes exercise the complete 28-control offline helper inventory with bounded fixture subprocesses; no public network, product qualification or token is supplied by this bridge. Captured failure and incomplete control inventory fail the cargo test. This receipt governs the test-only process boundary, not runtime admission or new execution authority."
+created = "2026-10-18"
+review_after = "2027-01-18"
+expires = "2027-04-18"

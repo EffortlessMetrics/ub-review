@@ -501,7 +501,9 @@ fn output_topics(text: &str) -> Vec<OutputTopic> {
             if topic_text.is_empty() {
                 return None;
             }
-            let normalized = normalize_output_topic(topic_text);
+            // Ranking tokens discard syntax, but duplicate identity must retain
+            // operators, case and literal whitespace that can change a claim.
+            let normalized = topic_text.to_owned();
             Some(OutputTopic {
                 id: String::new(),
                 content_key: normalized,
@@ -1037,6 +1039,60 @@ mod github_review_serialization_tests {
 #[cfg(test)]
 mod output_degradation_tests {
     use super::*;
+
+    #[test]
+    fn degradation_preserves_distinct_operator_claims_in_post_json() -> anyhow::Result<()> {
+        for (left, right) in [
+            (
+                "At src/模块.rs:7, reject count < limit.",
+                "At src/模块.rs:7, reject count > limit.",
+            ),
+            (
+                "Return -1 for the missing index.",
+                "Return 1 for the missing index.",
+            ),
+            (
+                "Preserve `Key` in the lookup.",
+                "Preserve `key` in the lookup.",
+            ),
+            (
+                "Preserve `a  b` in the literal.",
+                "Preserve `a b` in the literal.",
+            ),
+        ] {
+            let input = format!("## Confirmed findings\n\n- {left}\n- {right}\n- {left}\n");
+            let (full, _) = degrade_review_body(input.clone(), 6000, 12, "head-operators");
+            assert_eq!(full, input);
+            let (body, receipt) = degrade_review_body(input, 6000, 2, "head-operators");
+            let review = GitHubReview {
+                event: "COMMENT".to_owned(),
+                body,
+                comments: Vec::new(),
+            };
+            let bytes = serde_json::to_vec(&review)?;
+            let restored: GitHubReview = serde_json::from_slice(&bytes)?;
+            let post = serde_json::to_value(github_review_post_payload(&restored)?)?;
+            eprintln!("post={post}; receipt={}", serde_json::to_string(&receipt)?);
+            let posted_body = post["body"].as_str().context("post body missing")?;
+            assert!(
+                posted_body.contains(left),
+                "lost first claim {left}: {post}"
+            );
+            assert!(
+                posted_body.contains(right),
+                "lost second claim {right}: {post}"
+            );
+            assert_eq!(receipt.final_item_count, 2);
+            assert_eq!(receipt.dropped_topics.len(), 1);
+            assert!(
+                receipt.dropped_topics[0]
+                    .reason
+                    .starts_with("duplicate_evidence_")
+            );
+            assert_eq!(post["comments"], serde_json::json!([]));
+        }
+        Ok(())
+    }
 
     #[test]
     fn full_output_receipt_preserves_exact_input() {

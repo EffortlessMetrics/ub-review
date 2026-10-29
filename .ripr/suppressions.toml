@@ -36221,3 +36221,49 @@ last_seen = "2026-10-29"
 review_by = "2026-11-21"
 expires = "2026-12-22"
 reason = "PR #1602: original gate40820143437 artifact12874189381 at head2964e3dc; source binding and full raw12 retained in the PR. Pinned RIPR0.10.0 reports weakly_exposed/observation_unverified with fixture_opaque; raw classification stays weak. Exact source/control map at test tree7b65fe075d314779e34b58fe0360e99780b08377 (production unchanged from16dbdab9), Rust1.95.0 locked/offline Linux, isolated compiled controls. Exact headers: &[&str] token is a test-only RecordingTransport parameter declaration. The expanded adapter matrix asserts complete Accept, Content-Type and API-version header vectors on both writes. Compiled headers control drops creation headers: old28 tests pass and expanded suite fails the new exact request oracle. This closes an actual missing observer while retaining the declaration/source-role limitation. Restored delivery28 passes. Reproducible control definitions, trees and log digests are retained in the PR evidence; this is bounded local discrimination/source-role evidence, not hosted qualification or arbitrary error coverage. Owner: ub-review/core; upstream observer/source-role attribution remains ripr#1453 and ripr-swarm#3213. Reverify after semantic or analyzer changes."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:error_path:1f3a3b07"
+owner = "ub-review/core"
+reason = "The old whole-table Err arm was removed. tool_gate_receipts_preserve_valid_siblings_and_invalid_only_fallback checks rejected type, unknown-only and scalar diagnostics; a compiled mutant retaining rejected keys and one omitting the scalar receipt both fail that test. Re-evaluate on sanitizer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:match_arm:b359ff7f"
+owner = "ub-review/core"
+reason = "The old whole-table match was replaced by per-key validation. tool_gate_unknown_key_preserves_valid_threshold checks both valid and unknown-sibling paths; retaining rejected keys in a compiled mutant fails it. Re-evaluate on sanitizer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:match_arm:fac64862"
+owner = "ub-review/core"
+reason = "The removed Err arm is replaced by per-key receipts. tool_gate_receipts_preserve_valid_siblings_and_invalid_only_fallback checks rejected type and unknown-only errors; a compiled mutant retaining rejected keys fails it. Re-evaluate on sanitizer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:field_construction:9e2f74ba"
+owner = "ub-review/core"
+reason = "The scalar gate receipt is asserted for its section and expected-table detail by tool_gate_receipts_preserve_valid_siblings_and_invalid_only_fallback; removing the receipt in a compiled mutant fails that test. Re-evaluate on sanitizer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:match_arm:dc10fee8"
+owner = "ub-review/core"
+reason = "The removed Ok arm is replaced by sanitized table handling. tool_gate_unknown_key_preserves_valid_threshold checks a valid table and valid threshold with an unknown sibling; the retain-rejected-key mutant fails it. Re-evaluate on sanitizer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:return_value:372726ee"
+owner = "ub-review/core"
+reason = "The removed nested scope branch is replaced by scope validation. tool_gate_receipts_preserve_valid_siblings_and_invalid_only_fallback asserts unsupported scope is removed and its threshold survives; a compiled retain-scope mutant fails it. Re-evaluate on sanitizer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:field_construction:9e2f74ba.2"
+owner = "ub-review/core"
+reason = "The unsupported scope receipt is checked for section and rejected value by tool_gate_receipts_preserve_valid_siblings_and_invalid_only_fallback; the same test rejects a compiled mutant retaining that scope. Re-evaluate on sanitizer changes."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:9a31cccd"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. call_deletion probe on topic_text.to_owned() feeding content_key in output_topics (src/review_text.rs:506); discriminator is observation_unverified because no assertion text names the expression, but the value is constrained end-to-end by degradation_preserves_distinct_operator_claims_in_post_json (src/review_text.rs:1044) through degrade_review_body -> output_topics -> github_review_post_payload, asserting operator/case/whitespace-distinct claims stay distinct (final_item_count = 2, third occurrence folded as duplicate_evidence_); reach tests body_budget_drops_topics_and_preserves_inline_fallback_receipt, bullet_budget_drops_all_topics_as_inline_only and degradation_drops_lowest_ranked_topics_deterministically all pass in gate run 39522864539. Re-verify after any edit to src/review_text.rs."
