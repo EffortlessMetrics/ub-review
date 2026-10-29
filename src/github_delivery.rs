@@ -658,6 +658,7 @@ fn build_planned_deliveries(
         .get("topics")
         .and_then(serde_json::Value::as_array)
         .ok_or_else(|| anyhow::anyhow!("claim graph topics are missing"))?;
+    let has_surface_dispositions = topics.iter().any(|topic| topic.get("delivery").is_some());
     review
         .comments
         .iter()
@@ -666,13 +667,25 @@ fn build_planned_deliveries(
             let matches = topics
                 .iter()
                 .filter(|topic| {
-                    matches!(
-                        topic
-                            .get("planned_action")
-                            .and_then(serde_json::Value::as_str),
-                        Some("inline") | Some("reply")
-                    ) && topic.get("head_sha").and_then(serde_json::Value::as_str)
-                        == Some(exact_head_sha)
+                    // Retained private observations can share a public
+                    // comment's location and provisional action. Only the
+                    // compiler-selected surface authorizes delivery. Legacy
+                    // packets wholly without this field retain the exact,
+                    // unique location check. A missing field in a mixed packet
+                    // or an explicit unknown value is not public authority.
+                    let selected_surface = match topic.get("delivery") {
+                        None => !has_surface_dispositions,
+                        Some(value) => value.as_str() == Some("inline-candidate"),
+                    };
+                    selected_surface
+                        && matches!(
+                            topic
+                                .get("planned_action")
+                                .and_then(serde_json::Value::as_str),
+                            Some("inline") | Some("reply")
+                        )
+                        && topic.get("head_sha").and_then(serde_json::Value::as_str)
+                            == Some(exact_head_sha)
                         && topic
                             .get("path")
                             .and_then(serde_json::Value::as_str)
@@ -2069,6 +2082,69 @@ mod tests {
         ensure!(
             planned_value["source_thread_id"].is_null(),
             "inline has thread id"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn planned_inline_delivery_selects_the_public_surface_without_losing_ambiguity() -> Result<()> {
+        let review = review_with_comment("src/lib.rs", 12, "[tests] exact body");
+        let mut graph = graph_for("src/lib.rs", 12, "inline", HEAD);
+        graph["topics"][0]["delivery"] = serde_json::json!("inline-candidate");
+        let public = graph["topics"][0].clone();
+
+        // Real retained packets keep private observations beside the selected
+        // comment, sometimes with the same location and provisional action.
+        for (id, disposition) in [
+            ("private", serde_json::json!("no-human-surface")),
+            ("summary", serde_json::json!("summary-only")),
+            ("unknown", serde_json::json!("future-disposition")),
+            ("malformed", serde_json::Value::Null),
+        ] {
+            let mut topic = public.clone();
+            topic["claim_id"] = serde_json::json!(id);
+            topic["delivery"] = disposition;
+            graph["topics"]
+                .as_array_mut()
+                .context("fixture topics")?
+                .push(topic);
+        }
+        let mut missing = public.clone();
+        missing["claim_id"] = serde_json::json!("missing-disposition");
+        missing
+            .as_object_mut()
+            .context("fixture topic")?
+            .remove("delivery");
+        graph["topics"]
+            .as_array_mut()
+            .context("fixture topics")?
+            .push(missing);
+        let before = graph.clone();
+        let planned = build_planned_inline_deliveries(&review, HEAD, Some(&graph))?;
+        ensure!(planned.len() == 1);
+        ensure!(serde_json::to_value(&planned[0])?["claim_id"] == "claim-1");
+        ensure!(
+            graph == before,
+            "delivery selection changed retained evidence"
+        );
+
+        let mut withheld = graph.clone();
+        withheld["topics"][0]["delivery"] = serde_json::json!("no-human-surface");
+        ensure!(
+            build_planned_inline_deliveries(&review, HEAD, Some(&withheld)).is_err(),
+            "a withheld claim authorized delivery"
+        );
+
+        let mut competing = graph;
+        let mut second_public = public;
+        second_public["claim_id"] = serde_json::json!("distinct-public-claim");
+        competing["topics"]
+            .as_array_mut()
+            .context("fixture topics")?
+            .push(second_public);
+        ensure!(
+            build_planned_inline_deliveries(&review, HEAD, Some(&competing)).is_err(),
+            "distinct public claims at the same location lost their ambiguity"
         );
         Ok(())
     }
