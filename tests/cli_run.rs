@@ -757,7 +757,7 @@ fn config_discovery_and_explicit_sources_preserve_effective_values() -> Result<(
             "artifact-only",
             "--no-github-summary",
             "--profile",
-            "gh-runner",
+            "gh-runner-full",
             "--out",
             path_str(&out)?,
         ]);
@@ -778,7 +778,8 @@ fn config_discovery_and_explicit_sources_preserve_effective_values() -> Result<(
         let effective: serde_json::Value =
             serde_json::from_slice(&fs::read(out.join("effective-config.json"))?)?;
         assert_eq!(effective["gate"]["target_minutes"], expected, "{source}");
-        assert_eq!(effective["profile"], "gh-runner", "{source}");
+        // Use a nondefault profile so dropping the override cannot pass.
+        assert_eq!(effective["profile"], "gh-runner-full", "{source}");
         assert!(out.join("review/gate_outcome.json").is_file());
     }
     Ok(())
