@@ -2663,6 +2663,14 @@ mod tests {
                 revision_digest: None,
             });
             let invalid = !expected_sections.is_empty();
+            // Keep this a policy-only control: unrelated advisory evidence
+            // must not silently enter the fixture while its verdict stays put.
+            assert_eq!(gate.evidence_gaps_blocking, 0, "{id}: {name}");
+            assert_eq!(gate.evidence_gaps_advisory, 0, "{id}: {name}");
+            assert_eq!(gate.tool_gates.evaluated, 0, "{id}: {name}");
+            assert_eq!(gate.tool_gates.passed, 0, "{id}: {name}");
+            assert_eq!(gate.tool_gates.failed, 0, "{id}: {name}");
+            assert!(gate.planner_required_proofs.is_none(), "{id}: {name}");
             assert_eq!(
                 gate.conclusion,
                 if invalid { "fail" } else { "pass" },
