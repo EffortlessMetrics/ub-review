@@ -9528,6 +9528,8 @@ def require_ripr_source_current_gaps(
 ) -> int:
     """#813 bounded source contract; never selects or qualifies an installed tool."""
     prefix = "RIPR source-comparison"
+    if decision.get("preview_skipped"):
+        fail(f"{prefix} requires empty preview_skipped for complete language coverage")
     policy = decision.get("policy")
     if not isinstance(policy, dict) or policy.get("include_unknowns") is not False:
         fail(f"{prefix} requires the known include_unknowns=false policy")
@@ -12017,6 +12019,11 @@ def self_test_ripr_source_comparison() -> None:
             changed = copy.deepcopy(badge); changed["schema_version"] = version
             write(changed, raw, detail)
             expect_self_test_failure(f"source version {version!r}", "source-comparison", require)
+        for status in ["warn", "fail"]:
+            changed = copy.deepcopy(badge)
+            changed.update(status=status, preview_skipped=["typescript"])
+            write(changed, raw, detail)
+            expect_self_test_failure(f"{status} skipped source language", "preview_skipped", require)
         for name, change, reason in [
             ("stale badge", lambda b, r, d: b["analysis_outcome"]["identity"].update(input_identity="sha256:" + "0" * 64), "input"),
             ("stale raw", lambda b, r, d: r["analysis_outcome"]["outcome"]["identity"].update(input_identity="sha256:" + "0" * 64), "input"),
@@ -12066,6 +12073,11 @@ def self_test_ripr_source_comparison() -> None:
         clean_detail["total_raw_gap_findings"] = 0
         write(clean_badge, clean_raw, clean_detail)
         require()  # Legitimate zero current gaps; no limitation metadata needed.
+        for status in ["warn", "fail"]:
+            changed = copy.deepcopy(clean_badge)
+            changed.update(status=status, preview_skipped=["typescript"])
+            write(changed, clean_raw, clean_detail)
+            expect_self_test_failure(f"{status} zero gaps with skipped language", "preview_skipped", require)
         for name, change in [
             ("missing non-gap probe", lambda r: r["findings"][0].pop("probe")),
             ("blank non-gap file", lambda r: r["findings"][0]["probe"].update(file=" ")),
