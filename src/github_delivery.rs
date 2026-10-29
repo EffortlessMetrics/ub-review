@@ -1623,10 +1623,15 @@ mod tests {
             inner: ScriptedTransport,
             reads: Vec<String>,
             writes: Vec<serde_json::Value>,
+            requests: Vec<(String, String, Vec<String>)>,
+            fail_read: Option<usize>,
         }
         impl DeliveryTransport for RecordingTransport {
             fn fetch_json(&mut self, url: &str, token: &str) -> Result<serde_json::Value> {
                 self.reads.push(url.to_owned());
+                if self.fail_read == Some(self.reads.len()) {
+                    bail!("scripted transport failure");
+                }
                 self.inner.fetch_json(url, token)
             }
             fn send_json(
@@ -1637,6 +1642,11 @@ mod tests {
                 path: &Path,
                 headers: &[&str],
             ) -> Result<HttpPostOutput> {
+                self.requests.push((
+                    method.to_owned(),
+                    url.to_owned(),
+                    headers.iter().map(|h| (*h).to_owned()).collect(),
+                ));
                 self.writes.push(serde_json::from_slice(&fs::read(path)?)?);
                 self.inner.send_json(method, url, token, path, headers)
             }
@@ -1680,6 +1690,10 @@ mod tests {
             "wrong_metadata",
             "wrong_topic",
             "missing_admission",
+            "legacy_stale",
+            "commit_transport_failure",
+            "file_transport_failure",
+            "binding_write_failure",
         ] {
             let temp = tempfile::tempdir()?;
             let review_dir = temp.path().join("review");
@@ -1711,6 +1725,14 @@ mod tests {
                 graph["revision"]["digest"] = serde_json::json!("0".repeat(64));
             }
             if case == "wrong_topic" {
+                graph["topics"][0]["head_sha"] = serde_json::json!(base);
+            }
+            if case == "legacy_stale" {
+                graph
+                    .as_object_mut()
+                    .context("graph object")?
+                    .remove("revision");
+                graph["head_sha"] = serde_json::json!(base);
                 graph["topics"][0]["head_sha"] = serde_json::json!(base);
             }
             let graph_bytes = serde_json::to_vec(&graph)?;
@@ -1752,9 +1774,18 @@ mod tests {
                 inner: scripted,
                 reads: Vec::new(),
                 writes: Vec::new(),
+                requests: Vec::new(),
+                fail_read: match case {
+                    "commit_transport_failure" => Some(2),
+                    "file_transport_failure" => Some(5),
+                    _ => None,
+                },
             };
             let (review, payload) = delivery_review();
             let args = delivery_args(&review_dir, "http://scripted");
+            if case == "binding_write_failure" {
+                fs::create_dir_all(args.out.join("delivery-revision-binding.json"))?;
+            }
             let result = execute_pending_review_delivery_with_transport(
                 &args,
                 &review,
@@ -1765,6 +1796,27 @@ mod tests {
                 let outcome = result.with_context(|| format!("case {case}"))?;
                 ensure!(outcome.response["state"] == "commented");
                 ensure!(transport.writes.len() == 2);
+                let headers = vec![
+                    "Accept: application/vnd.github+json".to_owned(),
+                    "Content-Type: application/json".to_owned(),
+                    "X-GitHub-Api-Version: 2022-11-28".to_owned(),
+                ];
+                ensure!(
+                    transport.requests
+                        == vec![
+                            (
+                                "POST".to_owned(),
+                                "http://scripted/repos/owner/repo/pulls/42/reviews".to_owned(),
+                                headers.clone()
+                            ),
+                            (
+                                "POST".to_owned(),
+                                "http://scripted/repos/owner/repo/pulls/42/reviews/987/events"
+                                    .to_owned(),
+                                headers
+                            ),
+                        ]
+                );
                 ensure!(transport.writes[0]["commit_id"] == HEAD);
                 ensure!(transport.writes[0]["comments"][0]["line"] == 12);
                 ensure!(transport.writes[1]["event"] == "COMMENT");
@@ -1802,7 +1854,34 @@ mod tests {
                 ensure!(binding["merge_object"]["parents"][0]["sha"] == base);
                 ensure!(binding["merge_object"]["parents"][1]["sha"] == HEAD);
             } else {
-                ensure!(result.is_err(), "{case} accepted");
+                let failure = match result {
+                    Err(error) => error,
+                    Ok(_) => bail!("{case} accepted"),
+                };
+                let error = format!("{failure:#}");
+                match case {
+                    "stale" | "legacy_stale" => {
+                        ensure!(
+                            error.contains("GitHub pull head changed"),
+                            "{case}: {error}"
+                        );
+                        ensure!(transport.reads.len() == 1, "{case} continued reads");
+                    }
+                    "commit_transport_failure" | "file_transport_failure" => {
+                        ensure!(
+                            error.contains("scripted transport failure"),
+                            "{case}: {error}"
+                        );
+                        ensure!(Some(transport.reads.len()) == transport.fail_read);
+                    }
+                    "binding_write_failure" => {
+                        ensure!(
+                            failure.downcast_ref::<std::io::Error>().is_some(),
+                            "{error}"
+                        )
+                    }
+                    _ => {}
+                }
                 if case.starts_with("unrelated_graph") {
                     ensure!(
                         !args.out.join("delivery-revision-binding.json").exists(),
