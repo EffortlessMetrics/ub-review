@@ -734,9 +734,15 @@ fn prior_confirmed_deliveries(
     let mut confirmed = Vec::new();
     for item in planned {
         let identity = serde_json::to_value(item)?;
-        let current = items.iter().find(|comment| {
+        let mut matches = items.iter().filter(|comment| {
             comment_matches_delivery(comment, item, exact_head_sha).unwrap_or(false)
         });
+        let current = matches.next();
+        ensure!(
+            matches.next().is_none(),
+            "multiple current GitHub comments match planned delivery {}; reconcile the previous delivery attempt",
+            item.claim_id()
+        );
         let receipt_match = receipts.iter().any(|receipt| {
             receipt.get("exact_head_sha") == identity.get("exact_head_sha")
                 && receipt.get("claim_id") == identity.get("claim_id")
@@ -1830,6 +1836,8 @@ mod tests {
             for change in [
                 "unchanged",
                 "unreserved",
+                "duplicate",
+                "other-comment",
                 "body",
                 "api",
                 "repo",
@@ -1936,15 +1944,33 @@ mod tests {
                 let was_directory = reservation_path.is_dir();
                 let reply_receipt_path = args.out.join("delivery-reply-receipts.json");
                 let saved_reply_receipt = fs::read(&reply_receipt_path).ok();
+                let retained_paths = [
+                    "delivery-reconciliation.json",
+                    "delivery-receipts.json",
+                    "delivery-transaction.json",
+                ];
+                let retained_bytes = retained_paths.map(|path| fs::read(args.out.join(path)).ok());
+                let mut current = if action == "inline" {
+                    serde_json::json!([observed.clone()])
+                } else {
+                    serde_json::json!([source, reply.clone()])
+                };
+                if matches!(change, "duplicate" | "other-comment") {
+                    let mut extra = if action == "inline" { observed } else { reply };
+                    extra["id"] = serde_json::json!(789);
+                    if change == "other-comment" {
+                        extra["body"] = serde_json::json!("unrelated body");
+                    }
+                    current
+                        .as_array_mut()
+                        .ok_or_else(|| anyhow::anyhow!("test comments must be an array"))?
+                        .push(extra);
+                }
                 let mut retry = ScriptedTransport {
                     send_attempts: 0,
                     gets: VecDeque::from([
                         serde_json::json!({"head":{"sha":HEAD}}),
-                        if action == "inline" {
-                            serde_json::json!([observed])
-                        } else {
-                            serde_json::json!([source, reply])
-                        },
+                        current,
                         serde_json::json!({"head":{"sha":HEAD}}),
                     ]),
                     sends: VecDeque::new(),
@@ -1967,13 +1993,21 @@ mod tests {
                     fs::read(&reply_receipt_path).ok() == saved_reply_receipt,
                     "{action}/{change}: reply receipt changed"
                 );
-                if matches!(change, "unchanged" | "unreserved") {
+                if change == "duplicate" {
+                    ensure!(
+                        retained_paths.map(|path| fs::read(args.out.join(path)).ok())
+                            == retained_bytes,
+                        "{action}/{change}: retained receipt or transaction changed"
+                    );
+                }
+                if matches!(change, "unchanged" | "unreserved" | "other-comment") {
                     ensure!(result?.response["state"] == "already_delivered");
                 } else {
                     let error = result.err().ok_or_else(|| {
                         anyhow::anyhow!("{action}/{change}: changed reservation falsely confirmed")
                     })?;
                     let expected_error = match change {
+                        "duplicate" => "multiple current GitHub comments match planned delivery claim-1; reconcile the previous delivery attempt".to_owned(),
                         "unreadable" => format!(
                             "read {}; reconcile the previous delivery attempt",
                             reservation_path.display()
@@ -1989,7 +2023,7 @@ mod tests {
                         "{action}/{change}: wrong rejection: {error:#}"
                     );
                     ensure!(
-                        retry.gets.len() == 2,
+                        retry.gets.len() == if change == "duplicate" { 1 } else { 2 },
                         "{action}/{change}: rejection reached receipt discovery"
                     );
                 }
@@ -3029,15 +3063,31 @@ mod tests {
             observed_deliveries(&unexpected, std::slice::from_ref(&planned), HEAD).is_err(),
             "unexpected returned comment was accepted"
         );
-        let duplicate = serde_json::json!([
-            {"id": 42, "path": "src/lib.rs", "line": 12, "side": "RIGHT", "commit_id": HEAD, "body": "exact body"},
-            {"id": 42, "path": "src/lib.rs", "line": 12, "side": "RIGHT", "commit_id": HEAD, "body": "exact body"}
-        ]);
-        let observed = observed_deliveries(&duplicate, std::slice::from_ref(&planned), HEAD)?;
-        ensure!(
-            reconcile_deliveries(HEAD, "review-1", &[planned], &observed).is_err(),
-            "duplicate returned comment id was accepted"
-        );
+        for (second_id, expected_error) in [
+            (
+                42,
+                "duplicate GitHub comment id in returned delivery set: 42",
+            ),
+            (
+                43,
+                "duplicate planned delivery identity in returned delivery set",
+            ),
+        ] {
+            let duplicate = serde_json::json!([
+                {"id": 42, "path": "src/lib.rs", "line": 12, "side": "RIGHT", "commit_id": HEAD, "body": "exact body"},
+                {"id": second_id, "path": "src/lib.rs", "line": 12, "side": "RIGHT", "commit_id": HEAD, "body": "exact body"}
+            ]);
+            let observed = observed_deliveries(&duplicate, std::slice::from_ref(&planned), HEAD)?;
+            ensure!(observed.len() == 2);
+            let error =
+                reconcile_deliveries(HEAD, "review-1", std::slice::from_ref(&planned), &observed)
+                    .err()
+                    .ok_or_else(|| anyhow::anyhow!("duplicate semantic delivery was accepted"))?;
+            ensure!(
+                error.to_string() == expected_error,
+                "wrong duplicate rejection: {error:#}"
+            );
+        }
         Ok(())
     }
 }
