@@ -6232,7 +6232,7 @@ fn write_review_artifacts(
         missing_or_failed_model_evidence: &review.missing_or_failed_model_evidence,
         reporter_gate,
         planner_portfolio,
-        revision_digest: revision.map(|admitted| admitted.digest.clone()),
+        admitted_revision: revision.cloned(),
     });
     gate_outcome.revision = revision.cloned();
     if (gate_outcome.conclusion == "fail" || gate_outcome.conclusion == "inconclusive")
@@ -16379,7 +16379,7 @@ required_proof_unprooven = true
             missing_or_failed_model_evidence: &[],
             reporter_gate: outcome.resolution.gate_input(),
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
         assert_eq!(gate.conclusion, "inconclusive");
         assert_eq!(gate.reasons.len(), 1);
@@ -16467,7 +16467,7 @@ required_proof_unprooven = true
             missing_or_failed_model_evidence: &[],
             reporter_gate: outcome.resolution.gate_input(),
             planner_portfolio: None,
-            revision_digest: None,
+            admitted_revision: None,
         });
         assert_eq!(gate.conclusion, "inconclusive");
         assert_eq!(gate.reasons.len(), 1);
