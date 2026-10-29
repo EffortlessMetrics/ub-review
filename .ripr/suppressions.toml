@@ -34507,7 +34507,6 @@ finding_id = "probe:src_proof_broker.rs:field_construction:b7c7aae0"
 owner = "ub-review/core"
 reason = "RIPR discriminate false-negative on #4271 round-4 the fresh parameter binding in merge_proof_portfolio_candidate_tasks (twin of the round-2b decisions-merge parameter probe 859c91d4): the extended follow_up_write_preserves_required_flag_on_shared_task_id drives both merge arms and asserts the merged candidate record's required flag and request_ids equal the merged decision record exactly, so the construction outcome is pinned; ripr's assertion linker misses parameter bindings. Re-verify after any edit to proof/broker.rs."
 
-<<<<<<< HEAD
 # #1507 local c21b312 -> 4f6aea8 RIPR0.10.0 exact dispositions, reviewed 2026-10-17.
 # Native gaps were closed before disposition; existing threshold and dating remain unchanged.
 # These are new local raw rows, not attribution or waiver of the inaccessible historical hosted three.
@@ -36141,13 +36140,11 @@ kind = "exposure_gap"
 finding_id = "probe:src_config.rs:field_construction:9e2f74ba.2"
 owner = "ub-review/core"
 reason = "The unsupported scope receipt is checked for section and rejected value by tool_gate_receipts_preserve_valid_siblings_and_invalid_only_fallback; the same test rejects a compiled mutant retaining that scope. Re-evaluate on sanitizer changes."
-<<<<<<< HEAD
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_review_text.rs:call_deletion:9a31cccd"
 owner = "ub-review/core"
 reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. call_deletion probe on topic_text.to_owned() feeding content_key in output_topics (src/review_text.rs:506); discriminator is observation_unverified because no assertion text names the expression, but the value is constrained end-to-end by degradation_preserves_distinct_operator_claims_in_post_json (src/review_text.rs:1044) through degrade_review_body -> output_topics -> github_review_post_payload, asserting operator/case/whitespace-distinct claims stay distinct (final_item_count = 2, third occurrence folded as duplicate_evidence_); reach tests body_budget_drops_topics_and_preserves_inline_fallback_receipt, bullet_budget_drops_all_topics_as_inline_only and degradation_drops_lowest_ranked_topics_deterministically all pass in gate run 39522864539. Re-verify after any edit to src/review_text.rs."
-<<<<<<< HEAD
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_model_exec.rs:field_construction:4579f81a"
@@ -36224,135 +36221,6 @@ kind = "exposure_gap"
 finding_id = "probe:src_post_run_utils.rs:call_deletion:f513ba49"
 owner = "ub-review/core"
 reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: no_static_path. Deleting this call removes the Review evidence is incomplete push_str message; tests/cli_run.rs asserts that exact text, the embedded review/review.json diagnostic, the restore guidance, and the summary rerun hint through the compiled binary as a subprocess, so ripr has no static test path to the changed owner. Re-verify after any edit to src/post_run_utils.rs."
-=======
-=======
-=======
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:81bb34fd"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe sits on the then-arm opening of the receipt_gap if/else in terminalize_proof_requests (planner.rs:677); its value flows into the deferred request reason, which terminalization_does_not_use_receipt_from_another_head pins with the exact stale-head assertion (planner.rs:1793-1800). Re-verify after any edit to proof/planner.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:0a9a1247"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe is the then-arm format! value of receipt_gap in terminalize_proof_requests (planner.rs:678-680, the receipts-only-on-other-heads message); terminalization_does_not_use_receipt_from_another_head asserts that exact string in the deferred reason and its absence on the missing-proof path (planner.rs:1793-1800). Re-verify after any edit to proof/planner.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:ba807faa"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe is the else-arm junction of receipt_gap in terminalize_proof_requests (planner.rs:681); the empty- and unrelated-receipt loop in terminalization_does_not_use_receipt_from_another_head drives both arms and asserts the deferred reason ends_with the missing-proof message without the other-heads text (planner.rs:1808-1825). Re-verify after any edit to proof/planner.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:1ab5f07e"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe is the else-arm value of receipt_gap in terminalize_proof_requests (planner.rs:682-683, the no-proof-receipt-was-produced message); terminalization_does_not_use_receipt_from_another_head asserts that exact message for empty and unrelated receipts (planner.rs:1819-1824). Re-verify after any edit to proof/planner.rs."
->>>>>>> 3470ff7 (chore(ripr): receipt-suppress cross-module exposure gaps on PR 1491)
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:81bb34fd"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe sits on the then-arm opening of the receipt_gap if/else in terminalize_proof_requests (planner.rs:677); its value flows into the deferred request reason, which terminalization_does_not_use_receipt_from_another_head pins with the exact stale-head assertion (planner.rs:1793-1800). Re-verify after any edit to proof/planner.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:0a9a1247"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe is the then-arm format! value of receipt_gap in terminalize_proof_requests (planner.rs:678-680, the receipts-only-on-other-heads message); terminalization_does_not_use_receipt_from_another_head asserts that exact string in the deferred reason and its absence on the missing-proof path (planner.rs:1793-1800). Re-verify after any edit to proof/planner.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:ba807faa"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe is the else-arm junction of receipt_gap in terminalize_proof_requests (planner.rs:681); the empty- and unrelated-receipt loop in terminalization_does_not_use_receipt_from_another_head drives both arms and asserts the deferred reason ends_with the missing-proof message without the other-heads text (planner.rs:1808-1825). Re-verify after any edit to proof/planner.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:1ab5f07e"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe is the else-arm value of receipt_gap in terminalize_proof_requests (planner.rs:682-683, the no-proof-receipt-was-produced message); terminalization_does_not_use_receipt_from_another_head asserts that exact message for empty and unrelated receipts (planner.rs:1819-1824). Re-verify after any edit to proof/planner.rs."
->>>>>>> 3dcbc48 (chore(ripr): receipt-suppress cross-module exposure gaps on PR 1491)
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:81bb34fd"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe sits on the then-arm opening of the receipt_gap if/else in terminalize_proof_requests (planner.rs:677); its value flows into the deferred request reason, which terminalization_does_not_use_receipt_from_another_head pins with the exact stale-head assertion (planner.rs:1793-1800). Re-verify after any edit to proof/planner.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:0a9a1247"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe is the then-arm format! value of receipt_gap in terminalize_proof_requests (planner.rs:678-680, the receipts-only-on-other-heads message); terminalization_does_not_use_receipt_from_another_head asserts that exact string in the deferred reason and its absence on the missing-proof path (planner.rs:1793-1800). Re-verify after any edit to proof/planner.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:ba807faa"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe is the else-arm junction of receipt_gap in terminalize_proof_requests (planner.rs:681); the empty- and unrelated-receipt loop in terminalization_does_not_use_receipt_from_another_head drives both arms and asserts the deferred reason ends_with the missing-proof message without the other-heads text (planner.rs:1808-1825). Re-verify after any edit to proof/planner.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:81bb34fd"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe sits on the then-arm opening of the receipt_gap if/else in terminalize_proof_requests (planner.rs:677); its value flows into the deferred request reason, which terminalization_does_not_use_receipt_from_another_head pins with the exact stale-head assertion (planner.rs:1793-1800). Re-verify after any edit to proof/planner.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:0a9a1247"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe is the then-arm format! value of receipt_gap in terminalize_proof_requests (planner.rs:678-680, the receipts-only-on-other-heads message); terminalization_does_not_use_receipt_from_another_head asserts that exact string in the deferred reason and its absence on the missing-proof path (planner.rs:1793-1800). Re-verify after any edit to proof/planner.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:ba807faa"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe is the else-arm junction of receipt_gap in terminalize_proof_requests (planner.rs:681); the empty- and unrelated-receipt loop in terminalization_does_not_use_receipt_from_another_head drives both arms and asserts the deferred reason ends_with the missing-proof message without the other-heads text (planner.rs:1808-1825). Re-verify after any edit to proof/planner.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:1ab5f07e"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe is the else-arm value of receipt_gap in terminalize_proof_requests (planner.rs:682-683, the no-proof-receipt-was-produced message); terminalization_does_not_use_receipt_from_another_head asserts that exact message for empty and unrelated receipts (planner.rs:1819-1824). Re-verify after any edit to proof/planner.rs."
->>>>>>> 5f46848 (chore(ripr): receipt-suppress cross-module exposure gaps on PR 1491)
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:81bb34fd"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe sits on the then-arm opening of the receipt_gap if/else in terminalize_proof_requests (planner.rs:677); its value flows into the deferred request reason, which terminalization_does_not_use_receipt_from_another_head pins with the exact stale-head assertion (planner.rs:1793-1800). Re-verify after any edit to proof/planner.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:0a9a1247"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe is the then-arm format! value of receipt_gap in terminalize_proof_requests (planner.rs:678-680, the receipts-only-on-other-heads message); terminalization_does_not_use_receipt_from_another_head asserts that exact string in the deferred reason and its absence on the missing-proof path (planner.rs:1793-1800). Re-verify after any edit to proof/planner.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:ba807faa"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe is the else-arm junction of receipt_gap in terminalize_proof_requests (planner.rs:681); the empty- and unrelated-receipt loop in terminalization_does_not_use_receipt_from_another_head drives both arms and asserts the deferred reason ends_with the missing-proof message without the other-heads text (planner.rs:1808-1825). Re-verify after any edit to proof/planner.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:81bb34fd"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe sits on the then-arm opening of the receipt_gap if/else in terminalize_proof_requests (planner.rs:677); its value flows into the deferred request reason, which terminalization_does_not_use_receipt_from_another_head pins with the exact stale-head assertion (planner.rs:1793-1800). Re-verify after any edit to proof/planner.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:0a9a1247"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe is the then-arm format! value of receipt_gap in terminalize_proof_requests (planner.rs:678-680, the receipts-only-on-other-heads message); terminalization_does_not_use_receipt_from_another_head asserts that exact string in the deferred reason and its absence on the missing-proof path (planner.rs:1793-1800). Re-verify after any edit to proof/planner.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_proof_planner.rs:return_value:ba807faa"
-owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe is the else-arm junction of receipt_gap in terminalize_proof_requests (planner.rs:681); the empty- and unrelated-receipt loop in terminalization_does_not_use_receipt_from_another_head drives both arms and asserts the deferred reason ends_with the missing-proof message without the other-heads text (planner.rs:1808-1825). Re-verify after any edit to proof/planner.rs."
-
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_proof_planner.rs:return_value:81bb34fd"
