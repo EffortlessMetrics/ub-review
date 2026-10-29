@@ -36145,3 +36145,56 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_text.rs:call_deletion:9a31cccd"
 owner = "ub-review/core"
 reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. call_deletion probe on topic_text.to_owned() feeding content_key in output_topics (src/review_text.rs:506); discriminator is observation_unverified because no assertion text names the expression, but the value is constrained end-to-end by degradation_preserves_distinct_operator_claims_in_post_json (src/review_text.rs:1044) through degrade_review_body -> output_topics -> github_review_post_payload, asserting operator/case/whitespace-distinct claims stay distinct (final_item_count = 2, third occurrence folded as duplicate_evidence_); reach tests body_budget_drops_topics_and_preserves_inline_fallback_receipt, bullet_budget_drops_all_topics_as_inline_only and degradation_drops_lowest_ranked_topics_deterministically all pass in gate run 39522864539. Re-verify after any edit to src/review_text.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:4579f81a"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The cpus fixture field in the proof_planner_request_contract_tests::prompt helper (src/model_exec.rs:1514) is serialized into box_shape via build_proof_planner_input and lands in the planner-input JSON that planner_response_examples_follow_the_operator_command_ceiling and planner_offers_only_resolvable_kinds_and_exact_cargo_target_labels parse and assert on; ripr's assertion linker cannot bind those cross-function assertions to the helper line. Re-verify after any edit to the proof-planner request contract tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:574ddb31"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The free_mem_mb fixture field in the proof_planner_request_contract_tests::prompt helper (src/model_exec.rs:1515) flows through box_shape into the asserted planner-input JSON; ripr's assertion linker misses the cross-function binding. Re-verify after any edit to the proof-planner request contract tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:898112b8"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Twin return_value probe of the free_mem_mb field_construction above (same expression, src/model_exec.rs:1515); the same two prompt-consuming tests drive and assert the path. Re-verify after any edit to the proof-planner request contract tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:f5ff5fcb"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The free_disk_mb fixture field in the proof_planner_request_contract_tests::prompt helper (src/model_exec.rs:1516) flows through box_shape into the asserted planner-input JSON; ripr's assertion linker misses the cross-function binding. Re-verify after any edit to the proof-planner request contract tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:a7c2de14"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Twin return_value probe of the free_disk_mb field_construction above (same expression, src/model_exec.rs:1516); the same two prompt-consuming tests drive and assert the path. Re-verify after any edit to the proof-planner request contract tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:4ef59474"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The load_1m fixture field in the proof_planner_request_contract_tests::prompt helper (src/model_exec.rs:1517) flows through box_shape into the asserted planner-input JSON; ripr's assertion linker misses the cross-function binding. Re-verify after any edit to the proof-planner request contract tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:e0ef17e9"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Twin return_value probe of the load_1m field_construction above (same expression, src/model_exec.rs:1517); the same two prompt-consuming tests drive and assert the path. Re-verify after any edit to the proof-planner request contract tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:3987ab22"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The github_actions fixture field in the proof_planner_request_contract_tests::prompt helper (src/model_exec.rs:1518) flows through box_shape into the asserted planner-input JSON; ripr's assertion linker misses the cross-function binding. Re-verify after any edit to the proof-planner request contract tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:de774f6a"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Return value of the render_proof_planner_model_task_prompt call in the proof_planner_request_contract_tests::prompt helper (src/model_exec.rs:1525): the returned prompt is asserted directly by planner_response_examples_follow_the_operator_command_ceiling (budget propagation in the parsed planner input and response template) and planner_offers_only_resolvable_kinds_and_exact_cargo_target_labels (kind and target-label contains assertions); ripr's assertion linker cannot bind those cross-function assertions to the call line. Re-verify after any edit to the proof-planner request contract tests."
