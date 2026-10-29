@@ -36140,3 +36140,8 @@ kind = "exposure_gap"
 finding_id = "probe:src_config.rs:field_construction:9e2f74ba.2"
 owner = "ub-review/core"
 reason = "The unsupported scope receipt is checked for section and rejected value by tool_gate_receipts_preserve_valid_siblings_and_invalid_only_fallback; the same test rejects a compiled mutant retaining that scope. Re-evaluate on sanitizer changes."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:9a31cccd"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. call_deletion probe on topic_text.to_owned() feeding content_key in output_topics (src/review_text.rs:506); discriminator is observation_unverified because no assertion text names the expression, but the value is constrained end-to-end by degradation_preserves_distinct_operator_claims_in_post_json (src/review_text.rs:1044) through degrade_review_body -> output_topics -> github_review_post_payload, asserting operator/case/whitespace-distinct claims stay distinct (final_item_count = 2, third occurrence folded as duplicate_evidence_); reach tests body_budget_drops_topics_and_preserves_inline_fallback_receipt, bullet_budget_drops_all_topics_as_inline_only and degradation_drops_lowest_ranked_topics_deterministically all pass in gate run 39522864539. Re-verify after any edit to src/review_text.rs."
