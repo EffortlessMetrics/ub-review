@@ -132,11 +132,20 @@ fn execute_pending_review_delivery_with_transport(
     let api = args.github_api_url.trim_end_matches('/');
     let review_url = format!("{api}/repos/{repo}/pulls/{pull_number}/reviews");
 
-    let claim_graph = (!review.comments.is_empty())
+    let mut claim_graph = (!review.comments.is_empty())
         .then(|| load_claim_graph(args))
         .transpose()?;
-    let expected_head = read_expected_delivery_head(review, claim_graph.as_ref())?;
     let current_head = fetch_pull_head(transport, api, repo, pull_number, token)?;
+    let merge_head =
+        bind_merge_delivery(args, review, claim_graph.as_mut(), &current_head, transport)?;
+    let expected_head = match merge_head {
+        Some(head) => {
+            let live_head = fetch_pull_head(transport, api, repo, pull_number, token)?;
+            ensure_heads_match("after merge delivery binding", &head, &live_head)?;
+            Some(head)
+        }
+        None => read_expected_delivery_head(review, claim_graph.as_ref())?,
+    };
     let expected_head = expected_head.unwrap_or(current_head.clone());
     ensure_heads_match(
         "before pending-review creation",
@@ -436,6 +445,162 @@ fn load_claim_graph(args: &PostArgs) -> Result<serde_json::Value> {
     .with_context(|| format!("parse {}", graph_path.display()))
 }
 
+// Bind a saved merge packet without relabeling its analysis identity. This
+// projection is private to delivery; the source admission and graph stay intact.
+fn bind_merge_delivery(
+    args: &PostArgs,
+    review: &GitHubReview,
+    graph: Option<&mut serde_json::Value>,
+    current_head: &str,
+    transport: &mut impl DeliveryTransport,
+) -> Result<Option<String>> {
+    let Some(graph) = graph else { return Ok(None) };
+    if graph
+        .pointer("/revision/semantics")
+        .and_then(serde_json::Value::as_str)
+        != Some("merge_result")
+    {
+        return Ok(None);
+    }
+    let revision: RevisionRef = serde_json::from_value(graph["revision"].clone())?;
+    revision.validate()?;
+    let packet = args
+        .review_json
+        .parent()
+        .and_then(Path::parent)
+        .ok_or_else(|| anyhow::anyhow!("merge delivery requires a saved review packet"))?;
+    let admission: crate::revision_admission::RevisionAdmission = serde_json::from_slice(
+        &fs::read(packet.join("input/revision-admission.json"))
+            .context("read merge delivery admission")?,
+    )?;
+    admission.validate()?;
+    let identity =
+        crate::revision_identity::RevisionIdentity::from_canonical(&admission.identity_canonical)?;
+    let (base, head, reviewed) = identity.merge_delivery_sides()?;
+    ensure!(
+        revision.digest == identity.identity_digest()
+            && revision.reviewed_commit == reviewed.commit_oid()
+            && admission.semantics == "merge_result"
+            && admission.reviewed_commit_oid == reviewed.commit_oid()
+            && admission.pr_head_commit.as_deref() == Some(head.commit_oid()),
+        "merge delivery admission does not match the reviewed revision"
+    );
+    ensure_heads_match(
+        "before merge delivery binding",
+        head.commit_oid(),
+        current_head,
+    )?;
+    let api = args.github_api_url.trim_end_matches('/');
+    let repo = args
+        .repo
+        .as_deref()
+        .context("merge delivery repository missing")?;
+    let token = args
+        .github_token
+        .as_deref()
+        .context("merge delivery token missing")?;
+    let mut objects = Vec::new();
+    for side in [reviewed, head, base] {
+        let object = transport.fetch_json(
+            &format!("{api}/repos/{repo}/git/commits/{}", side.commit_oid()),
+            token,
+        )?;
+        ensure!(
+            object["sha"].as_str() == Some(side.commit_oid())
+                && object
+                    .pointer("/tree/sha")
+                    .and_then(serde_json::Value::as_str)
+                    == Some(side.tree_oid()),
+            "merge delivery commit/tree mismatch"
+        );
+        objects.push(object);
+    }
+    let merge_object = &objects[0];
+    let parents = merge_object["parents"]
+        .as_array()
+        .context("merge delivery parents missing")?;
+    ensure!(
+        parents.len() == 2
+            && parents[0]["sha"].as_str() == Some(base.commit_oid())
+            && parents[1]["sha"].as_str() == Some(head.commit_oid()),
+        "merge delivery parent relationship mismatch"
+    );
+    let mut paths = std::collections::BTreeSet::new();
+    for comment in &review.comments {
+        ensure!(
+            comment.side == "RIGHT",
+            "merge delivery requires a post-image anchor"
+        );
+        paths.insert(comment.path.as_str());
+    }
+    let mut anchors = Vec::new();
+    for path in paths {
+        // Whole-file blob equality is conservative: if integration changed
+        // this file, no line-number equivalence is inferred.
+        let encoded = path
+            .split('/')
+            .map(percent_encode_query)
+            .collect::<Vec<_>>()
+            .join("/");
+        let mut blobs = Vec::new();
+        for side in [reviewed, head] {
+            let file = transport.fetch_json(
+                &format!(
+                    "{api}/repos/{repo}/contents/{encoded}?ref={}",
+                    side.commit_oid()
+                ),
+                token,
+            )?;
+            ensure!(
+                file["type"] == "file" && file["path"].as_str() == Some(path),
+                "merge delivery anchor is not the requested file"
+            );
+            let sha = file["sha"]
+                .as_str()
+                .context("merge delivery file blob missing")?;
+            crate::revision_identity::CommitTree::new("anchor blob", sha, sha)?;
+            blobs.push(sha.to_owned());
+        }
+        ensure!(
+            blobs[0] == blobs[1],
+            "merge delivery file differs from publication head: {path}"
+        );
+        anchors.push(serde_json::json!({"path": path, "blob": blobs[0]}));
+    }
+    let source_label = graph["head_sha"]
+        .as_str()
+        .context("merge claim graph subject missing")?
+        .to_owned();
+    for topic in graph["topics"]
+        .as_array_mut()
+        .context("merge claim graph topics missing")?
+    {
+        let subject = topic["head_sha"]
+            .as_str()
+            .context("merge topic subject missing")?;
+        ensure!(
+            subject == source_label
+                || subject == reviewed.commit_oid()
+                || subject == head.commit_oid(),
+            "merge topic belongs to another subject"
+        );
+        topic["head_sha"] = serde_json::json!(head.commit_oid());
+    }
+    write_json(
+        &args.out.join("delivery-revision-binding.json"),
+        &serde_json::json!({
+            "schema": "ub-review.delivery_revision_binding.v1",
+            "publication_head": head.commit_oid(),
+            "admission": admission,
+            "merge_object": merge_object,
+            "head_object": objects[1],
+            "base_object": objects[2],
+            "anchors": anchors,
+        }),
+    )?;
+    Ok(Some(head.commit_oid().to_owned()))
+}
+
 fn read_expected_delivery_head(
     review: &GitHubReview,
     claim_graph: Option<&serde_json::Value>,
@@ -443,9 +608,13 @@ fn read_expected_delivery_head(
     if !review.comments.is_empty() {
         let graph = claim_graph.ok_or_else(|| anyhow::anyhow!("claim graph is required"))?;
         // A1.3 (#950): the immutable revision reference is authoritative.
-        // Its reviewed_commit is the exact git object the run admitted, so
-        // delivery binds to that instead of any symbolic label.
+        // Candidate-head runs review their publication head. Merge-result
+        // packets must instead pass the separate admission/object binding.
         if let Some(revision) = graph.get("revision") {
+            ensure!(
+                revision["semantics"] != "merge_result",
+                "merge delivery requires admission binding"
+            );
             let commit = revision
                 .get("reviewed_commit")
                 .and_then(serde_json::Value::as_str)
@@ -1442,6 +1611,189 @@ mod tests {
     }
 
     #[test]
+    fn merge_result_inline_delivery_preserves_analysis_and_rejects_stale_subjects() -> Result<()> {
+        use crate::revision_identity::{CommitTree, ReviewSemantics, RevisionIdentity};
+        struct RecordingTransport {
+            inner: ScriptedTransport,
+            reads: Vec<String>,
+            writes: Vec<serde_json::Value>,
+        }
+        impl DeliveryTransport for RecordingTransport {
+            fn fetch_json(&mut self, url: &str, token: &str) -> Result<serde_json::Value> {
+                self.reads.push(url.to_owned());
+                self.inner.fetch_json(url, token)
+            }
+            fn send_json(
+                &mut self,
+                method: &str,
+                url: &str,
+                token: &str,
+                path: &Path,
+                headers: &[&str],
+            ) -> Result<HttpPostOutput> {
+                self.writes.push(serde_json::from_slice(&fs::read(path)?)?);
+                self.inner.send_json(method, url, token, path, headers)
+            }
+        }
+        let base = "a".repeat(40);
+        let merge = "b".repeat(40);
+        let base_tree = "c".repeat(40);
+        let head_tree = "d".repeat(40);
+        let merge_tree = "e".repeat(40);
+        let blob = "f".repeat(40);
+        let identity = RevisionIdentity::new(
+            CommitTree::new("base", &base, &base_tree)?,
+            CommitTree::new("head", HEAD, &head_tree)?,
+            CommitTree::new("reviewed", &merge, &merge_tree)?,
+            Some(CommitTree::new("merge", &merge, &merge_tree)?),
+            ReviewSemantics::MergeResult,
+            &RevisionIdentity::changed_paths_digest(["src/lib.rs"]),
+            &RevisionIdentity::diff_digest(b"fixture patch"),
+        )?;
+        let admission = crate::revision_admission::RevisionAdmission {
+            schema: crate::revision_admission::REVISION_ADMISSION_SCHEMA.to_owned(),
+            identity_canonical: identity.canonical_form(),
+            identity_digest: identity.identity_digest(),
+            semantics: "merge_result".to_owned(),
+            reviewed_commit_oid: merge.clone(),
+            pr_head_commit: Some(HEAD.to_owned()),
+            worktree_dirty: false,
+        };
+        for case in [
+            "valid",
+            "stale",
+            "late_stale",
+            "wrong_parent",
+            "wrong_tree",
+            "wrong_blob",
+            "wrong_digest",
+            "wrong_metadata",
+            "wrong_topic",
+            "missing_admission",
+        ] {
+            let temp = tempfile::tempdir()?;
+            let review_dir = temp.path().join("review");
+            fs::create_dir_all(&review_dir)?;
+            fs::create_dir_all(temp.path().join("input"))?;
+            let mut graph = graph_for("src/lib.rs", 12, "inline", "HEAD");
+            graph["revision"] = serde_json::to_value(RevisionRef::from_admission(&admission))?;
+            if case == "wrong_digest" {
+                graph["revision"]["digest"] = serde_json::json!("0".repeat(64));
+            }
+            if case == "wrong_topic" {
+                graph["topics"][0]["head_sha"] = serde_json::json!(base);
+            }
+            let graph_bytes = serde_json::to_vec(&graph)?;
+            fs::write(review_dir.join("claim_graph.json"), &graph_bytes)?;
+            let mut saved_admission = admission.clone();
+            if case == "wrong_metadata" {
+                saved_admission.pr_head_commit = Some(merge.clone());
+            }
+            let admission_bytes = serde_json::to_vec(&saved_admission)?;
+            fs::write(
+                temp.path().join("input/revision-admission.json"),
+                &admission_bytes,
+            )?;
+            if case == "missing_admission" {
+                fs::rename(
+                    temp.path().join("input/revision-admission.json"),
+                    temp.path().join("input/retained.json"),
+                )?;
+            }
+            let scripted = ScriptedTransport {
+                gets: VecDeque::from([
+                    serde_json::json!({"head": {"sha": if case == "stale" { &merge } else { HEAD }}}),
+                    serde_json::json!({"sha": merge, "tree": {"sha": if case == "wrong_tree" { &base_tree } else { &merge_tree }},
+                        "parents": [{"sha": base}, {"sha": if case == "wrong_parent" { &base } else { HEAD }}]}),
+                    serde_json::json!({"sha": HEAD, "tree": {"sha": head_tree}}),
+                    serde_json::json!({"sha": base, "tree": {"sha": base_tree}}),
+                    serde_json::json!({"sha": blob, "type": "file", "path": "src/lib.rs"}),
+                    serde_json::json!({"sha": if case == "wrong_blob" { &base } else { &blob }, "type": "file", "path": "src/lib.rs"}),
+                    serde_json::json!({"head": {"sha": if case == "late_stale" { &merge } else { HEAD }}}),
+                    serde_json::json!([{"id":987,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":HEAD,"body":"exact body"}]),
+                    serde_json::json!({"head": {"sha": HEAD}}),
+                ]),
+                sends: VecDeque::from([
+                    scripted_output(r#"{"id":987}"#, true)?,
+                    scripted_output(r#"{"id":987,"state":"commented"}"#, true)?,
+                ]),
+            };
+            let mut transport = RecordingTransport {
+                inner: scripted,
+                reads: Vec::new(),
+                writes: Vec::new(),
+            };
+            let (review, payload) = delivery_review();
+            let args = delivery_args(&review_dir, "http://scripted");
+            let result = execute_pending_review_delivery_with_transport(
+                &args,
+                &review,
+                &payload,
+                &mut transport,
+            );
+            if case == "valid" {
+                let outcome = result.with_context(|| format!("case {case}"))?;
+                ensure!(outcome.response["state"] == "commented");
+                ensure!(transport.writes.len() == 2);
+                ensure!(transport.writes[0]["commit_id"] == HEAD);
+                ensure!(transport.writes[0]["comments"][0]["line"] == 12);
+                ensure!(transport.writes[1]["event"] == "COMMENT");
+                ensure!(
+                    transport.reads
+                        == vec![
+                            "http://scripted/repos/owner/repo/pulls/42".to_owned(),
+                            format!("http://scripted/repos/owner/repo/git/commits/{merge}"),
+                            format!("http://scripted/repos/owner/repo/git/commits/{HEAD}"),
+                            format!("http://scripted/repos/owner/repo/git/commits/{base}"),
+                            format!(
+                                "http://scripted/repos/owner/repo/contents/src/lib.rs?ref={merge}"
+                            ),
+                            format!(
+                                "http://scripted/repos/owner/repo/contents/src/lib.rs?ref={HEAD}"
+                            ),
+                            "http://scripted/repos/owner/repo/pulls/42".to_owned(),
+                            "http://scripted/repos/owner/repo/pulls/42/reviews/987/comments"
+                                .to_owned(),
+                            "http://scripted/repos/owner/repo/pulls/42".to_owned(),
+                        ],
+                    "unexpected GETs: {:?}",
+                    transport.reads
+                );
+                ensure!(transport.inner.gets.is_empty() && transport.inner.sends.is_empty());
+                let transaction: DeliveryTransaction =
+                    serde_json::from_slice(&fs::read(args.out.join("delivery-transaction.json"))?)?;
+                ensure!(transaction.state() == &DeliveryTransactionState::ReceiptsPersisted);
+                let binding: serde_json::Value = serde_json::from_slice(&fs::read(
+                    args.out.join("delivery-revision-binding.json"),
+                )?)?;
+                ensure!(binding["publication_head"] == HEAD);
+                ensure!(binding["admission"]["reviewed_commit_oid"] == merge);
+                ensure!(binding["admission"]["identity_canonical"] == identity.canonical_form());
+                ensure!(binding["merge_object"]["parents"][0]["sha"] == base);
+                ensure!(binding["merge_object"]["parents"][1]["sha"] == HEAD);
+            } else {
+                ensure!(result.is_err(), "{case} accepted");
+                ensure!(
+                    transport.inner.sends.len() == 2 && transport.writes.is_empty(),
+                    "{case} performed a write"
+                );
+                ensure!(
+                    !args.out.join("delivery-transaction.json").exists(),
+                    "{case} began transaction"
+                );
+            }
+            ensure!(fs::read(review_dir.join("claim_graph.json"))? == graph_bytes);
+            let saved = if case == "missing_admission" {
+                "input/retained.json"
+            } else {
+                "input/revision-admission.json"
+            };
+            ensure!(fs::read(temp.path().join(saved))? == admission_bytes);
+        }
+        Ok(())
+    }
+
+    #[test]
     fn generic_transport_path_preserves_receipts_and_payload_boundaries() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let graph = graph_for("src/lib.rs", 12, "inline", HEAD);
@@ -1953,7 +2305,7 @@ mod tests {
             "head_sha": "HEAD",
             "revision": {
                 "digest": "a".repeat(64),
-                "semantics": "merge_result",
+                "semantics": "candidate_head",
                 "reviewed_commit": "b".repeat(40),
             },
             "topics": [],
