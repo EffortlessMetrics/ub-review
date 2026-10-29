@@ -36303,3 +36303,80 @@ finding_id = "probe:src_config.rs:return_value:97c634c0"
 owner = "ub-review/core"
 reason = "Exact source-role inspection: raw '})' closes the read-error context, while RIPR assigns its return sink to the following if-let profile override, which has no standalone returned value. requested_config_read_errors_retain_io_cause rejects compiled context removal; config_discovery_and_explicit_sources_preserve_effective_values rejects compiled loss of profile forwarding with a nondefault effective profile. Unrelated same-file oracle attribution persists (https://github.com/EffortlessMetrics/ripr-swarm/issues/1052). This individual ID does not alias the separate error_path record. Re-verify after loader or oracle edits and RIPR upgrades."
 
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:7a34c59e"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 437 (ripr-swarm#1053): covered end-to-end by delivery_reservation_is_exclusive_and_contains_no_token on this branch, which calls reserve_delivery_attempt, reads back delivery-attempt.json and asserts the reservation api field equals the scripted API base, plus body_only_delivery_retry_and_unwritable_reservation_never_post through the full delivery path. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:be8196b0"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 452 (ripr-swarm#1053): covered end-to-end by delivery_reservation_is_exclusive_and_contains_no_token on this branch, which asserts the exact reservation schema and payload_digest equality with sha256_hex of the serialized payload produced through this reservation-construction expression. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:eb20cfe5"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 464 (ripr-swarm#1053): covered end-to-end by body_only_delivery_retry_and_unwritable_reservation_never_post on this branch, which pre-creates delivery-attempt.json to force the create_new failure through this with_context arm, asserts the reconcile-the-previous-delivery-attempt message, and asserts no second post is sent. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:9abebf6e"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 471 (ripr-swarm#1053): covered end-to-end by delivery_reservation_is_exclusive_and_contains_no_token on this branch, which observes the success return and then asserts a second reservation call errors while the original delivery-attempt.json bytes stay unchanged. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:1d1ef742"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 1532 inside the uncertain_delivery_retry scripted-transport harness (ripr-swarm#1053): covered end-to-end by lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review on this branch, which consume this make_transport return and assert failed delivery, absent delivery-receipts.json and exactly two scripted sends on retry. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:0f2afd77"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 1537 inside the uncertain_delivery_retry scripted-transport harness (ripr-swarm#1053): covered end-to-end by lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review on this branch, which drive the scripted gets through the full delivery pipeline and assert its uncertain-outcome and retry-send-count invariants. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:ce95f93c"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 1537 inside the uncertain_delivery_retry scripted-transport harness (ripr-swarm#1053): covered end-to-end by lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review on this branch, which drive the scripted gets through the full delivery pipeline and assert its uncertain-outcome and retry-send-count invariants. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:ee491a1d"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 1539 inside the uncertain_delivery_retry scripted-transport harness (ripr-swarm#1053): covered end-to-end by lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review on this branch, which observe the scripted sends as accepted submissions whose lost or unwritten responses must not yield a receipt or a duplicate post. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:9095d579"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 1539 inside the uncertain_delivery_retry scripted-transport harness (ripr-swarm#1053): covered end-to-end by lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review on this branch, which observe the scripted sends as accepted submissions whose lost or unwritten responses must not yield a receipt or a duplicate post. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:0f2afd77.2"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 1541 inside the uncertain_delivery_retry scripted-transport harness (ripr-swarm#1053): covered end-to-end by lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review on this branch, which assert the scripted sends are consumed by the failed first attempt and that the retry transport sends exactly two reviews. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:ce95f93c.2"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 1541 inside the uncertain_delivery_retry scripted-transport harness (ripr-swarm#1053): covered end-to-end by lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review on this branch, which assert the scripted sends are consumed by the failed first attempt and that the retry transport sends exactly two reviews. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:21824605"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 1542 inside the uncertain_delivery_retry scripted-transport harness (ripr-swarm#1053): covered end-to-end by lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review on this branch, which close over this make_transport construction and assert its delivery, receipt-absence and retry-send-count invariants. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:099f212b"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 1571, the success return of the uncertain_delivery_retry harness (ripr-swarm#1053): covered end-to-end by lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review on this branch, whose propagated return value this success arm produces. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
