@@ -1,7 +1,7 @@
 name: Action Smoke
 
-# The gate exercises `uses: ./` plus live model lanes on every PR, so this
-# smoke is a manual debugging lane now.
+# The PR gate deliberately runs model-off. These manual jobs exercise the
+# current source Action; live provider use remains an explicit opt-in.
 on:
   workflow_dispatch:
     inputs:
@@ -49,14 +49,40 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Resolve exact smoke revision
+        id: revision
+        shell: bash
+        run: |
+          # smoke-revision-begin
+          set -euo pipefail
+          reviewed="$(git rev-parse --verify 'HEAD^{commit}')"
+          read -r -a parents <<< "$(git show -s --format=%P "$reviewed")"
+          case "${#parents[@]}" in
+            1) pr_head="$reviewed" ;;
+            2) pr_head="${parents[1]}" ;;
+            *)
+              echo "::error::Manual smoke requires a commit with one or two parents" >&2
+              exit 1
+              ;;
+          esac
+          {
+            printf 'base=%s\n' "${parents[0]}"
+            printf 'head=%s\n' "$reviewed"
+            printf 'pr-head-sha=%s\n' "$pr_head"
+          } >> "$GITHUB_OUTPUT"
+          git show -s --format='Smoke reviewed commit=%H tree=%T parents=%P' "$reviewed"
+          # smoke-revision-end
+
       - id: ub-review
         uses: ./
         with:
           preset: bun-ub
           profile: gh-runner
           install-tools: 'false'
-          base: HEAD~1
-          head: HEAD
+          install-mode: source
+          base: ${{ steps.revision.outputs.base }}
+          head: ${{ steps.revision.outputs.head }}
+          pr-head-sha: ${{ steps.revision.outputs.pr-head-sha }}
           out: target/ub-review-smoke
           posting: review
           github-token: ${{ github.token }}
@@ -127,13 +153,39 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Resolve exact smoke revision
+        id: revision
+        shell: bash
+        run: |
+          # smoke-revision-begin
+          set -euo pipefail
+          reviewed="$(git rev-parse --verify 'HEAD^{commit}')"
+          read -r -a parents <<< "$(git show -s --format=%P "$reviewed")"
+          case "${#parents[@]}" in
+            1) pr_head="$reviewed" ;;
+            2) pr_head="${parents[1]}" ;;
+            *)
+              echo "::error::Manual smoke requires a commit with one or two parents" >&2
+              exit 1
+              ;;
+          esac
+          {
+            printf 'base=%s\n' "${parents[0]}"
+            printf 'head=%s\n' "$reviewed"
+            printf 'pr-head-sha=%s\n' "$pr_head"
+          } >> "$GITHUB_OUTPUT"
+          git show -s --format='Smoke reviewed commit=%H tree=%T parents=%P' "$reviewed"
+          # smoke-revision-end
+
       - uses: ./
         with:
           preset: bun-ub
           profile: gh-runner
           install-tools: 'false'
-          base: HEAD~1
-          head: HEAD
+          install-mode: source
+          base: ${{ steps.revision.outputs.base }}
+          head: ${{ steps.revision.outputs.head }}
+          pr-head-sha: ${{ steps.revision.outputs.pr-head-sha }}
           out: target/ub-review-model-smoke
           posting: review
           github-token: ${{ github.token }}

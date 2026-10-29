@@ -609,6 +609,9 @@ pub(crate) fn dedupe_inline_comments(
     summary_only_findings: &mut Vec<SummaryOnlyFinding>,
 ) {
     let mut deduped = BTreeMap::new();
+    // Select and merge equal-ranked candidates in a canonical order before
+    // discarding any of them. Sorting only the survivors is too late.
+    inline_comments.sort_by(compare_inline_comments);
     for comment in std::mem::take(inline_comments) {
         let key = (comment.path.clone(), comment.line);
         if let Some(existing) = deduped.get_mut(&key) {
@@ -832,15 +835,25 @@ pub(crate) fn ranked_inline_comments(
     inline_comments: &[ReviewInlineComment],
 ) -> Vec<ReviewInlineComment> {
     let mut ranked = inline_comments.to_vec();
-    ranked.sort_by(|left, right| {
-        inline_comment_rank(right)
-            .cmp(&inline_comment_rank(left))
-            .then_with(|| left.path.cmp(&right.path))
-            .then_with(|| left.line.cmp(&right.line))
-            .then_with(|| left.lane.cmp(&right.lane))
-            .then_with(|| left.body.cmp(&right.body))
-    });
+    ranked.sort_by(compare_inline_comments);
     ranked
+}
+
+fn compare_inline_comments(
+    left: &ReviewInlineComment,
+    right: &ReviewInlineComment,
+) -> std::cmp::Ordering {
+    inline_comment_rank(right)
+        .cmp(&inline_comment_rank(left))
+        .then_with(|| left.path.cmp(&right.path))
+        .then_with(|| left.line.cmp(&right.line))
+        .then_with(|| left.lane.cmp(&right.lane))
+        .then_with(|| left.body.cmp(&right.body))
+        .then_with(|| left.side.cmp(&right.side))
+        .then_with(|| left.evidence.cmp(&right.evidence))
+        .then_with(|| left.suggestion.cmp(&right.suggestion))
+        .then_with(|| left.severity.cmp(&right.severity))
+        .then_with(|| left.confidence.cmp(&right.confidence))
 }
 
 pub(crate) fn severity_rank(value: &str) -> u8 {
@@ -1243,6 +1256,38 @@ mod claim_identity_tests {
             evidence: evidence.to_owned(),
             suggestion: None,
         }
+    }
+
+    #[test]
+    fn same_location_ties_are_independent_of_arrival_order() -> Result<()> {
+        let mut alpha = comment("source alpha");
+        alpha.lane = "alpha".to_owned();
+        alpha.body = "The first boundary can overflow.".to_owned();
+        let mut beta = comment("source beta");
+        beta.lane = "beta".to_owned();
+        beta.body = "The second boundary can overflow.".to_owned();
+
+        let run = |mut comments: Vec<ReviewInlineComment>| {
+            let mut summary = Vec::new();
+            dedupe_inline_comments(&mut comments, &mut summary);
+            (comments, summary)
+        };
+        let (forward, forward_summary) = run(vec![alpha.clone(), beta.clone()]);
+        let (reverse, reverse_summary) = run(vec![beta.clone(), alpha.clone()]);
+        assert_eq!(
+            serde_json::to_value(&forward)?,
+            serde_json::to_value(&reverse)?
+        );
+        assert_eq!(
+            serde_json::to_value(&forward_summary)?,
+            serde_json::to_value(&reverse_summary)?
+        );
+        assert_eq!(forward[0].lane, "alpha");
+
+        beta.severity = "high".to_owned();
+        let (stronger, _) = run(vec![alpha, beta]);
+        assert_eq!(stronger[0].lane, "beta");
+        Ok(())
     }
 
     #[test]
