@@ -571,6 +571,12 @@ fn bind_merge_delivery(
         .as_str()
         .context("merge claim graph subject missing")?
         .to_owned();
+    ensure!(
+        source_label == "HEAD"
+            || source_label == reviewed.commit_oid()
+            || source_label == head.commit_oid(),
+        "merge claim graph subject belongs to another head"
+    );
     for topic in graph["topics"]
         .as_array_mut()
         .context("merge claim graph topics missing")?
@@ -1661,6 +1667,10 @@ mod tests {
         };
         for case in [
             "valid",
+            "valid_merge_label",
+            "valid_head_label",
+            "unrelated_graph_admitted_topic",
+            "unrelated_graph_and_topic",
             "stale",
             "late_stale",
             "wrong_parent",
@@ -1677,6 +1687,26 @@ mod tests {
             fs::create_dir_all(temp.path().join("input"))?;
             let mut graph = graph_for("src/lib.rs", 12, "inline", "HEAD");
             graph["revision"] = serde_json::to_value(RevisionRef::from_admission(&admission))?;
+            match case {
+                "valid_merge_label" => {
+                    graph["head_sha"] = serde_json::json!(merge);
+                    graph["topics"][0]["head_sha"] = serde_json::json!(merge);
+                }
+                "valid_head_label" => {
+                    graph["head_sha"] = serde_json::json!(HEAD);
+                    graph["topics"][0]["head_sha"] = serde_json::json!(HEAD);
+                }
+                "unrelated_graph_and_topic" => {
+                    graph["head_sha"] = serde_json::json!(base);
+                    graph["topics"][0]["head_sha"] = serde_json::json!(base);
+                }
+                "unrelated_graph_admitted_topic" => {
+                    graph["head_sha"] = serde_json::json!(base);
+                    graph["topics"][0]["head_sha"] = serde_json::json!(HEAD);
+                }
+                _ => {}
+            }
+
             if case == "wrong_digest" {
                 graph["revision"]["digest"] = serde_json::json!("0".repeat(64));
             }
@@ -1731,7 +1761,7 @@ mod tests {
                 &payload,
                 &mut transport,
             );
-            if case == "valid" {
+            if case.starts_with("valid") {
                 let outcome = result.with_context(|| format!("case {case}"))?;
                 ensure!(outcome.response["state"] == "commented");
                 ensure!(transport.writes.len() == 2);
@@ -1773,6 +1803,20 @@ mod tests {
                 ensure!(binding["merge_object"]["parents"][1]["sha"] == HEAD);
             } else {
                 ensure!(result.is_err(), "{case} accepted");
+                if case.starts_with("unrelated_graph") {
+                    ensure!(
+                        !args.out.join("delivery-revision-binding.json").exists(),
+                        "{case} wrote binding"
+                    );
+                    ensure!(
+                        !args
+                            .out
+                            .join("delivery-pending-review-payload.json")
+                            .exists(),
+                        "{case} prepared pending review"
+                    );
+                }
+
                 ensure!(
                     transport.inner.sends.len() == 2 && transport.writes.is_empty(),
                     "{case} performed a write"
