@@ -36303,3 +36303,75 @@ finding_id = "probe:src_config.rs:return_value:97c634c0"
 owner = "ub-review/core"
 reason = "Exact source-role inspection: raw '})' closes the read-error context, while RIPR assigns its return sink to the following if-let profile override, which has no standalone returned value. requested_config_read_errors_retain_io_cause rejects compiled context removal; config_discovery_and_explicit_sources_preserve_effective_values rejects compiled loss of profile forwarding with a nondefault effective profile. Unrelated same-file oracle attribution persists (https://github.com/EffortlessMetrics/ripr-swarm/issues/1052). This individual ID does not alias the separate error_path record. Re-verify after loader or oracle edits and RIPR upgrades."
 
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:09a72c3d"
+owner = "ub-review/core"
+reason = "Line-keyed weak-exposure gap in the github_delivery.rs reservation validator (ripr-swarm#1053): the api parameter binding is exercised end-to-end but no assertion quotes the parameter text. reserved_receipt_reuse_rejects_changed_payload_and_context retries with a changed GitHub API URL and asserts the exact rejection 'reserved delivery payload or target differs; reconcile the previous delivery attempt', while its unchanged case asserts response state already_delivered with the matching API; delivery_reservation_is_exclusive_and_contains_no_token pins the recorded api field of the reservation. ripr's discriminator cannot link those outcome assertions to the expression text. Classification: weakly_exposed. Re-verify after edits to validate_reserved_delivery_attempt or its tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:cf0376f8"
+owner = "ub-review/core"
+reason = "Line-keyed weak-exposure gap in the github_delivery.rs reservation validator (ripr-swarm#1053): the successful-read match arm is exercised end-to-end but no assertion quotes the arm text. reserved_receipt_reuse_rejects_changed_payload_and_context reads the retained reservation on every case that keeps it and asserts already_delivered or the exact payload-or-target rejection; body_only_delivery_retry_and_unwritable_reservation_never_post reads the prior reservation on its prior_success pass and asserts no second review is posted. ripr's discriminator cannot link those outcome assertions to the arm text. Classification: weakly_exposed. Re-verify after edits to validate_reserved_delivery_attempt or its tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:f1230b49"
+owner = "ub-review/core"
+reason = "Line-keyed weak-exposure gap in the github_delivery.rs reservation validator (ripr-swarm#1053): the NotFound early-return arm is exercised end-to-end but no assertion quotes the arm text. reserved_receipt_reuse_rejects_changed_payload_and_context removes the reservation in its unreserved case and asserts the retry succeeds with response state already_delivered; every first delivery pass in body_only_delivery_retry_and_unwritable_reservation_never_post runs without a reservation and posts exactly once. ripr's discriminator cannot link those outcome assertions to the arm text. Classification: weakly_exposed. Re-verify after edits to validate_reserved_delivery_attempt or its tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:8ef925fa"
+owner = "ub-review/core"
+reason = "Line-keyed weak-exposure gap in the github_delivery.rs reservation validator (ripr-swarm#1053): the non-NotFound read-error arm is exercised end-to-end but no assertion quotes the arm text. reserved_receipt_reuse_rejects_changed_payload_and_context replaces the reservation with a directory in its unreadable case and asserts the exact 'read <path>; reconcile the previous delivery attempt' error with zero retry sends; body_only_delivery_retry_and_unwritable_reservation_never_post asserts the same reconcile message on its unwritable pass. ripr's discriminator cannot link those outcome assertions to the arm text. Classification: weakly_exposed. Re-verify after edits to validate_reserved_delivery_attempt or its tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:7e3e34b4"
+owner = "ub-review/core"
+reason = "Line-keyed weak-exposure gap in the github_delivery.rs reservation validator (ripr-swarm#1053): this error-path record is the format! result inside the read-error with_context closure; it is exercised end-to-end but no assertion quotes the expression text. reserved_receipt_reuse_rejects_changed_payload_and_context (unreadable case, reservation replaced by a directory) asserts the exact formatted 'read <path>; reconcile the previous delivery attempt' message. ripr's discriminator cannot link that assertion to the expression text. Classification: weakly_exposed. Re-verify after edits to validate_reserved_delivery_attempt or its tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:1e5b1f74"
+owner = "ub-review/core"
+reason = "Line-keyed weak-exposure gap in the github_delivery.rs reservation validator (ripr-swarm#1053): this return-value record is the return sink of the read-error with_context closure; it is exercised end-to-end but no assertion quotes the expression text. reserved_receipt_reuse_rejects_changed_payload_and_context (unreadable case) asserts the exact reconcile error and that the retry attempted no sends. ripr's discriminator cannot link that assertion to the expression text. Classification: weakly_exposed. Re-verify after edits to validate_reserved_delivery_attempt or its tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:9b4557aa"
+owner = "ub-review/core"
+reason = "Line-keyed weak-exposure gap in the github_delivery.rs reservation validator (ripr-swarm#1053): this error-path record closes the read-error with_context call; it is exercised end-to-end but no assertion quotes the expression text. reserved_receipt_reuse_rejects_changed_payload_and_context (unreadable case) asserts the exact 'read <path>; reconcile the previous delivery attempt' message and that the reservation file was left unchanged by the rejected retry. ripr's discriminator cannot link that assertion to the expression text. Classification: weakly_exposed. Re-verify after edits to validate_reserved_delivery_attempt or its tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:ab6a5bce"
+owner = "ub-review/core"
+reason = "Line-keyed weak-exposure gap in the github_delivery.rs reservation validator (ripr-swarm#1053): this return-value record is the return sink of the read-error with_context call (twin of error_path:9b4557aa); it is exercised end-to-end but no assertion quotes the expression text. reserved_receipt_reuse_rejects_changed_payload_and_context (unreadable case) asserts the exact reconcile error with zero retry sends. ripr's discriminator cannot link that assertion to the expression text. Classification: weakly_exposed. Re-verify after edits to validate_reserved_delivery_attempt or its tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:8e87d00b"
+owner = "ub-review/core"
+reason = "Line-keyed weak-exposure gap in the github_delivery.rs reservation validator (ripr-swarm#1053): this error-path record is the parse ? with its reconcile context over the reservation body; it is exercised end-to-end but no assertion quotes the expression text. reserved_receipt_reuse_rejects_changed_payload_and_context writes malformed reservations (corrupt and shape cases) and asserts the exact 'parse <path>; reconcile the previous delivery attempt' rejection with zero retry sends. ripr's discriminator cannot link that assertion to the expression text. Classification: weakly_exposed. Re-verify after edits to validate_reserved_delivery_attempt or its tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:90aa2c44"
+owner = "ub-review/core"
+reason = "Line-keyed weak-exposure gap in the github_delivery.rs reservation validator (ripr-swarm#1053): the validated success return is exercised end-to-end but no assertion quotes the expression text. reserved_receipt_reuse_rejects_changed_payload_and_context asserts response state already_delivered for its unchanged, unreserved, and other-comment cases, an outcome only this Ok return can produce; body_only_delivery_retry_and_unwritable_reservation_never_post validates on its prior_success pass and then asserts the reconcile error instead of a second post. ripr's discriminator cannot link those outcome assertions to the expression text. Classification: weakly_exposed. Re-verify after edits to validate_reserved_delivery_attempt or its tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:e7afae3c"
+owner = "ub-review/core"
+reason = "Line-keyed weak-exposure gap on the ScriptedTransport construction in the uncertain_delivery_retry harness (ripr-swarm#1053): the zero-initialized send counter is executed by its owning tests lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review, which assert the uncertain first attempt fails without receipts and the retry sends exactly the two scripted sends without claiming success. The zero-start counting semantics of the same field are pinned by scripted_transport_counts_exhausted_send_attempts and the retry.send_attempts == 0 assertion in reserved_receipt_reuse_rejects_changed_payload_and_context. ripr's discriminator cannot link those assertions to the literal. Classification: weakly_exposed. Re-verify after edits to the delivery test harness."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:2dd31fdc"
+owner = "ub-review/core"
+reason = "Line-keyed weak-exposure gap on the ScriptedTransport construction in the uncertain_delivery_retry harness (ripr-swarm#1053): this return-value record is the construction sink twin of field_construction:e7afae3c; the owning tests lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review execute the construction and pin the end-to-end retry behavior (exactly two scripted sends, no delivery success, no receipts), with the counter semantics pinned by scripted_transport_counts_exhausted_send_attempts. ripr's discriminator cannot link those assertions to the literal. Classification: weakly_exposed. Re-verify after edits to the delivery test harness."
+
