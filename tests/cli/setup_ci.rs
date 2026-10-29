@@ -28,7 +28,7 @@ fn setup_ci_print_pr_cli_materializes_accepted_preview_files() -> Result<()> {
             "--action-sha",
             action_sha.as_str(),
         ]);
-    let output = command.output()?;
+    let output = command.fixture_output()?;
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     assert!(
@@ -191,7 +191,7 @@ fn setup_ci_open_pr_cli_creates_payloads_and_terminal_receipt() -> Result<()> {
             "--action-sha",
             action_sha.as_str(),
         ]);
-    let preview_output = preview.output()?;
+    let preview_output = preview.fixture_output()?;
     let preview_stdout = String::from_utf8_lossy(&preview_output.stdout).to_string();
     let preview_stderr = String::from_utf8_lossy(&preview_output.stderr).to_string();
     assert!(
@@ -222,7 +222,7 @@ fn setup_ci_open_pr_cli_creates_payloads_and_terminal_receipt() -> Result<()> {
             "--action-sha",
             action_sha.as_str(),
         ]);
-    let output = command.output()?;
+    let output = command.fixture_output()?;
     let requests = match handle.join() {
         Ok(result) => result?,
         Err(_) => bail!("fake setup-ci API thread panicked"),
@@ -398,6 +398,8 @@ fn setup_ci_print_pr_rejects_malformed_existing_config_before_outputs() -> Resul
         let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
             .current_dir(temp.path())
             .env_clear()
+            // Keep LLVM output outside the fixture without inheriting CLI configuration.
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .args(["setup-ci", "--print-pr", "--out"])
             .arg(&out)
             .arg("--config")
@@ -405,7 +407,7 @@ fn setup_ci_print_pr_rejects_malformed_existing_config_before_outputs() -> Resul
             .args(["--accept", "unit=cargo test --lib --locked"])
             .arg("--action-sha")
             .arg("d".repeat(40))
-            .output()?;
+            .fixture_output()?;
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
             !output.status.success(),
@@ -448,6 +450,8 @@ fn setup_ci_print_pr_rejects_unreadable_existing_config_before_outputs() -> Resu
         let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
             .current_dir(temp.path())
             .env_clear()
+            // Keep LLVM output outside the fixture without inheriting CLI configuration.
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .args(["setup-ci", "--print-pr", "--out"])
             .arg(&out)
             .arg("--config")
@@ -455,7 +459,7 @@ fn setup_ci_print_pr_rejects_unreadable_existing_config_before_outputs() -> Resu
             .args(["--accept", "unit=cargo test --lib --locked"])
             .arg("--action-sha")
             .arg("d".repeat(40))
-            .output()?;
+            .fixture_output()?;
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
             !output.status.success(),
@@ -503,6 +507,8 @@ fn setup_ci_print_pr_preserves_missing_and_valid_config_semantics() -> Result<()
         command
             .current_dir(temp.path())
             .env_clear()
+            // Keep LLVM output outside the fixture without inheriting CLI configuration.
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .args(["setup-ci", "--print-pr", "--out"])
             .arg(&out)
             .arg("--config")
@@ -510,7 +516,7 @@ fn setup_ci_print_pr_preserves_missing_and_valid_config_semantics() -> Result<()
             .args(["--accept", "unit=cargo test --lib --locked"])
             .arg("--action-sha")
             .arg("d".repeat(40));
-        let first = command.output()?;
+        let first = command.fixture_output()?;
         assert!(
             first.status.success(),
             "setup-ci failed for a supported config: {}",
@@ -570,7 +576,7 @@ fn setup_ci_print_pr_preserves_missing_and_valid_config_semantics() -> Result<()
             .iter()
             .map(|relative| fs::read(temp.path().join(relative)))
             .collect::<std::io::Result<Vec<_>>>()?;
-        let second = command.output()?;
+        let second = command.fixture_output()?;
         assert!(
             second.status.success(),
             "repeated setup-ci failed: {}",

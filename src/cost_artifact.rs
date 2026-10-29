@@ -46,11 +46,18 @@ pub(crate) fn build_cost_receipt(
     ));
 
     let runner_minutes = round_f64(metrics.run.elapsed_wall_ms as f64 / 60_000.0, 6);
-    let estimated_cost_usd = linux_minute_rate_usd.map(|rate| round_f64(runner_minutes * rate, 6));
+    let estimated_cost_usd = linux_minute_rate_usd
+        .map(|rate| round_f64(runner_minutes * rate, 6))
+        .filter(|estimate| estimate.is_finite());
     if estimated_cost_usd.is_none() {
+        let reason = if linux_minute_rate_usd.is_some() {
+            "runner cost estimate is not finite"
+        } else {
+            "policy/ci-budget.toml budget.linux_minute_rate_usd is unavailable"
+        };
         missing.push(cost_missing(
             "estimated_cost_usd",
-            "policy/ci-budget.toml budget.linux_minute_rate_usd is unavailable",
+            reason,
             "policy/ci-budget.toml",
         ));
     }

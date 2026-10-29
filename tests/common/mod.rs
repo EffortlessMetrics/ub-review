@@ -14,6 +14,11 @@ use anyhow::{Context, Result, bail};
 mod cli_lock;
 pub use cli_lock::cli_subprocess_test_lock;
 
+mod executable_fixture;
+pub use executable_fixture::FixtureCommandExt;
+#[cfg(unix)]
+pub use executable_fixture::write_executable_fixture;
+
 pub const CARGO_ALLOW_FOREIGN_REASON: &str = "policy/allow.toml is not a cargo-allow-dialect ledger; add \
      policy/cargo-allow.toml (see EffortlessMetrics/cargo-allow#1465)";
 
@@ -591,7 +596,7 @@ pub fn isolated_command(program: &str, cwd: &Path) -> Command {
 }
 
 pub fn run(cwd: &Path, program: &str, args: &[&str]) -> Result<()> {
-    let output = isolated_command(program, cwd).args(args).output()?;
+    let output = isolated_command(program, cwd).args(args).fixture_output()?;
     if output.status.success() {
         return Ok(());
     }
@@ -610,7 +615,7 @@ pub fn run_with_env(cwd: &Path, program: &str, args: &[&str], envs: &[(&str, &st
     for (name, value) in envs {
         command.env(name, value);
     }
-    let output = command.output()?;
+    let output = command.fixture_output()?;
     if output.status.success() {
         return Ok(());
     }
@@ -634,7 +639,7 @@ pub fn run_capture_with_env(
     for (name, value) in envs {
         command.env(name, value);
     }
-    let output = command.output()?;
+    let output = command.fixture_output()?;
     let combined = format!(
         "{}\n{}",
         String::from_utf8_lossy(&output.stdout),
@@ -647,7 +652,7 @@ pub fn run_capture_with_env(
 }
 
 pub fn run_expect_failure(cwd: &Path, program: &str, args: &[&str]) -> Result<String> {
-    let output = isolated_command(program, cwd).args(args).output()?;
+    let output = isolated_command(program, cwd).args(args).fixture_output()?;
     if !output.status.success() {
         return Ok(format!(
             "{}\n{}",
@@ -669,7 +674,7 @@ pub fn run_expect_failure_with_env(
     for (name, value) in envs {
         command.env(name, value);
     }
-    let output = command.output()?;
+    let output = command.fixture_output()?;
     if !output.status.success() {
         return Ok(format!(
             "{}\n{}",
