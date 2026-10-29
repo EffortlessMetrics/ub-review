@@ -31,7 +31,10 @@ fn manual_smoke_revision_selection_reaches_real_cli() -> Result<()> {
         })
         .collect::<Result<Vec<_>>>()?;
     assert_eq!(scripts.len(), 2, "both manual jobs need revision selection");
-    assert_eq!(scripts[0], scripts[1], "manual jobs must select identically");
+    assert_eq!(
+        scripts[0], scripts[1],
+        "manual jobs must select identically"
+    );
     let script = format!("export GITHUB_OUTPUT=\"$1\"\n{}", scripts[0]);
     let (_, jobs) = workflow.split_once("\njobs:\n").context("missing jobs")?;
     let (off, on) = jobs
@@ -179,9 +182,8 @@ fn manual_smoke_revision_selection_reaches_real_cli() -> Result<()> {
                 continue;
             }
             run(&repo, "env", &args)?;
-            let admission: serde_json::Value = serde_json::from_slice(&fs::read(
-                out.join("input/revision-admission.json"),
-            )?)?;
+            let admission: serde_json::Value =
+                serde_json::from_slice(&fs::read(out.join("input/revision-admission.json"))?)?;
             let semantics = if history == "merge" {
                 "merge_result"
             } else {
