@@ -36267,3 +36267,105 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_text.rs:call_deletion:9a31cccd"
 owner = "ub-review/core"
 reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. call_deletion probe on topic_text.to_owned() feeding content_key in output_topics (src/review_text.rs:506); discriminator is observation_unverified because no assertion text names the expression, but the value is constrained end-to-end by degradation_preserves_distinct_operator_claims_in_post_json (src/review_text.rs:1044) through degrade_review_body -> output_topics -> github_review_post_payload, asserting operator/case/whitespace-distinct claims stay distinct (final_item_count = 2, third occurrence folded as duplicate_evidence_); reach tests body_budget_drops_topics_and_preserves_inline_fallback_receipt, bullet_budget_drops_all_topics_as_inline_only and degradation_drops_lowest_ranked_topics_deterministically all pass in gate run 39522864539. Re-verify after any edit to src/review_text.rs."
+
+# PR #1602: ten public-surface projections, four attributed shared controls.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:53adef48"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. Selector dispatch over delivery presence. The graph-wide legacy and malformed-disposition tests call the production planner; exact claim selection and wholly legacy success discriminate the match. Shared selection-bypass control is rejected by both tests. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:0115cb71"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. Missing-field Boolean branch, not a Result/error return. The graph-wide legacy test accepts a wholly legacy graph but rejects a missing disposition beside an explicit string or null marker on another path/anchor. Shared None=>true and None=>false controls distinguish both directions. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:dd808c3d"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. Missing-field match arm. The graph-wide legacy test requires positive wholly legacy behavior and rejection of mixed graphs even when the explicit string/null marker is elsewhere. Shared always-accept and always-reject missing-branch controls each fail that test. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:88e8a5b2"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. Boolean result of the same missing-field branch, not an additional independent fault. The legacy test pins graph-wide presence rather than local-anchor presence with remote string/null markers and legitimate legacy success; shares the two missing-branch controls. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:7ee9bf22"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. Explicit-value arm admits only string inline-candidate. Malformed-disposition test rejects integer, Boolean, object, array, null, summary-only, no-human-surface and unknown string alone; beside the public candidate it requires exactly the selected claim and unchanged graph. Shared selection-bypass control fails this oracle. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:8ce7f0ff"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. Closing expression of the same selector match, not a separate callable return. The malformed-disposition and graph-wide legacy tests observe its returned Boolean through exact selected claim/refusal; shares the selection-bypass and missing-branch controls. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:c1cb354b"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. selected_surface Boolean as first filter conjunct; no error propagation occurs at this token. The malformed-disposition test checks refusal and exact public-claim choice, while the legacy test checks global fallback. Shared selection-bypass control fails both consumers. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:d230a635"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. selected_surface Boolean consumed by the topic filter. Exact public claim and rejection of malformed/withheld-only graphs observe this value; competing distinct public claims retain ambiguity in planned_inline_delivery_selects_the_public_surface_without_losing_ambiguity. Shares selection-bypass control, not an independent mutation claim. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:fec91e5f"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. Closing planned_action predicate inside the conjunction, not a Result/error path. public_surface_selection_preserves_action_and_reply_eligibility places none/unknown/missing-action public topics at the valid claim location and requires exactly claim-1; explicit public replies require nonempty thread identity. Shared action-conjunct removal fails by false ambiguity. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:db949d53"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. Boolean action-eligibility result, sharing the preceding syntax projection. The action/reply test prevents ineligible same-location topics from interfering with exact valid selection and checks missing/empty/blank reply threads plus valid thread123. Shared action-conjunct removal is rejected; no independent tenth mutant is claimed. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
