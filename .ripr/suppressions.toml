@@ -36921,3 +36921,18 @@ kind = "exposure_gap"
 finding_id = "probe:src_gate_watchdog.rs:return_value:ade42607"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1538; probe ),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by agreeing_duplicate_observations_preserve_terminal_results, artifact_bound_to_other_run_is_missing_artifact, cancelled_exact_head_without_replacement_is_inconclusive. Re-verify after any edit to src/gate_watchdog.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_test_parse.rs:return_value:d2ec8728"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1598; probe .strip_prefix(callee): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by focused_proof_tasks_detect_modified_bun_test_callees, only_complete_literal_first_arguments_become_selectors. Re-verify after any edit to src/test_parse.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_test_parse.rs:match_arm:3c34fec9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1598; probe '\"' | '\\'' => quote = Some(ch),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by focused_test_name_arg_strips_matching_quotes_without_promoting_empty_names, only_complete_literal_first_arguments_become_selectors, parsing_rejects_quoted_paths. Re-verify after any edit to src/test_parse.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_test_parse.rs:return_value:617688ee"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1598; probe '\"' | '\\'' => quote = Some(ch),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by focused_test_name_arg_strips_matching_quotes_without_promoting_empty_names, only_complete_literal_first_arguments_become_selectors, parsing_rejects_quoted_paths. Re-verify after any edit to src/test_parse.rs."
