@@ -36794,3 +36794,18 @@ kind = "exposure_gap"
 finding_id = "probe:src_ci_audit.rs:error_path:3734a6b3"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1595; probe })?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by ci_audit_artifacts_carry_schema_fields_and_receipts, ci_audit_artifacts_flag_missing_permissions_as_human_review, ci_audit_artifacts_record_permissions_secrets_and_flag_sensitive_jobs. Re-verify after any edit to src/ci_audit.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:field_construction:4537c488"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1595; probe mut stream: TcpStream,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by ci_audit_artifacts_carry_schema_fields_and_receipts, ci_audit_artifacts_flag_missing_permissions_as_human_review, ci_audit_artifacts_record_permissions_secrets_and_flag_sensitive_jobs. Re-verify after any edit to src/tests/ci_audit_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:field_construction:8f58d9b2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1595; probe config_exists: bool,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by ci_audit_artifacts_carry_schema_fields_and_receipts, ci_audit_artifacts_flag_missing_permissions_as_human_review, ci_audit_artifacts_record_permissions_secrets_and_flag_sensitive_jobs. Re-verify after any edit to src/tests/ci_audit_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:error_path:a747e2fd"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1595; probe stop_result?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by ci_audit_artifacts_carry_schema_fields_and_receipts, ci_audit_artifacts_flag_missing_permissions_as_human_review, ci_audit_artifacts_record_permissions_secrets_and_flag_sensitive_jobs. Re-verify after any edit to src/tests/ci_audit_tests.rs."
