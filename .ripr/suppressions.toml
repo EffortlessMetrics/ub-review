@@ -36451,7 +36451,22 @@ reason = "RIPR 0.10.0 cannot connect the output oracle to opening-bracket depth 
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_review_text.rs:match_arm:289ddf68"
+finding_id = "probe:src_review_text.rs:match_arm:c653df57"
 owner = "ub-review/core"
-reason = "RIPR 0.10.0 cannot connect the output oracle to closing-bracket depth (ripr#1453): bracketed_prefix_boundaries asserts a complete lane returns finding; an omitted-depth-decrement mutant compiled and returned None. Re-verify after scanner or analyzer changes."
+reason = "RIPR 0.10.0 cannot connect the output oracle to ordinary-character handling (ripr#1453): bracketed_prefix_boundaries asserts a complete lane returns finding; an ordinary-character-depth-increment mutant compiled and returned None. Re-verify after scanner or analyzer changes."
 
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:return_value:29471d56"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1576; probe let mut end = None;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_timeout_spends_allowance_and_aggregates_red_green_once, body_budget_drops_topics_and_preserves_inline_fallback_receipt, bracketed_prefix_boundaries. Re-verify after any edit to src/review_text.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:27c3f0b9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1576; probe match ch {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained, artifact_contract_docs_match_ci_audit_verifier_coverage. Re-verify after any edit to src/review_text.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:predicate:f617421f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1576; probe if depth == 0 {: Strong oracle found: exact value or pattern assertion. Reached by body_budget_drops_topics_and_preserves_inline_fallback_receipt, bracketed_prefix_boundaries, bullet_budget_drops_all_topics_as_inline_only. Re-verify after any edit to src/review_text.rs."
