@@ -36975,3 +36975,18 @@ finding_id = "probe:tests_onboarding_readme.rs:match_arm:6f23333f"
 owner = "ub-review/tests"
 reason = "wait_timeout None timeout arm (L102). cc5e8e8 timeout test starts a controlled exec-sleep child, forces a one-second deadline, asserts exact timeout message, captured PID no longer live and temporary-file and TempDir cleanup. Normal and coverage suites pass at gate 38189009420. Earlier timeout mutation controls are recorded in PR #1354 receipt 6114820533; one outer mutant experiment left a zombie, so this is not arbitrary descendant-containment proof. RIPR's assertion linker misses the outcome oracle; recheck after source edit or RIPR upgrade."
 
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_onboarding_readme.rs:error_path:9028b98a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1575; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by execute_preserves_exit_status_streams_and_clears_credentials, execute_reports_missing_executable_and_removes_logs, execute_timeout_terminates_reaps_and_cleans_its_owned_child. Re-verify after any edit to tests/onboarding_readme.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_onboarding_readme.rs:match_arm:f589f860"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1575; probe Some(status) => status,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by candidate_plan_artifacts_preserve_identity_and_budget_status, cmd_status_prints_notable_events, compiler_surface_suppresses_successful_status_tables_without_failing_gate. Re-verify after any edit to tests/onboarding_readme.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_onboarding_readme.rs:return_value:2902e83d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1575; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by execute_preserves_exit_status_streams_and_clears_credentials, execute_reports_missing_executable_and_removes_logs, execute_timeout_terminates_reaps_and_cleans_its_owned_child. Re-verify after any edit to tests/onboarding_readme.rs."
