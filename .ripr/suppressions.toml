@@ -36809,3 +36809,33 @@ kind = "exposure_gap"
 finding_id = "probe:src_tests_ci_audit_tests.rs:error_path:a747e2fd"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1595; probe stop_result?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by ci_audit_artifacts_carry_schema_fields_and_receipts, ci_audit_artifacts_flag_missing_permissions_as_human_review, ci_audit_artifacts_record_permissions_secrets_and_flag_sensitive_jobs. Re-verify after any edit to src/tests/ci_audit_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_patch_split.rs:error_path:566865f4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1596; probe offset_line(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by change_slices_carry_surrounding_context, change_slices_split_at_context_between_runs, hunk_line_numbers_handle_boundaries. Re-verify after any edit to src/proof/patch_split.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_patch_split.rs:error_path:ff6d822e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1596; probe .checked_add(1): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by change_slices_carry_surrounding_context, change_slices_split_at_context_between_runs, hunk_line_numbers_handle_boundaries. Re-verify after any edit to src/proof/patch_split.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_patch_split.rs:return_value:359f1ccc"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1596; probe None,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by change_slices_carry_surrounding_context, change_slices_split_at_context_between_runs, hunk_line_numbers_handle_boundaries. Re-verify after any edit to src/proof/patch_split.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_patch_split.rs:return_value:359f1ccc.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1596; probe None,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by change_slices_carry_surrounding_context, change_slices_split_at_context_between_runs, hunk_line_numbers_handle_boundaries. Re-verify after any edit to src/proof/patch_split.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_patch_split.rs:error_path:14053ede"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1596; probe old_start: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by change_slices_carry_surrounding_context, change_slices_split_at_context_between_runs, hunk_line_numbers_handle_boundaries. Re-verify after any edit to src/proof/patch_split.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_patch_split.rs:error_path:ef22daae"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1596; probe )?: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by change_slices_carry_surrounding_context, change_slices_split_at_context_between_runs, hunk_line_numbers_handle_boundaries. Re-verify after any edit to src/proof/patch_split.rs."
