@@ -4,6 +4,8 @@
 
 use crate::*;
 
+mod completion;
+
 pub(crate) fn run_model_lane_tasks(
     context: &ModelRunContext<'_>,
     model_dir: &Path,
@@ -1955,10 +1957,9 @@ pub(crate) fn call_model_prompt_content(
     }
     let response: serde_json::Value = serde_json::from_slice(&process_output.stdout)
         .with_context(|| format!("parse {}", response_path.display()))?;
+    let content = completion::extract_completed_model_content(&response)?;
     let response_shape = model_response_shape(&response).to_owned();
     let cache_usage = model_cache_usage(&response);
-    let content = extract_model_content(&response)
-        .ok_or_else(|| anyhow::anyhow!("model response did not contain assistant content"))?;
     let content_path = lane_dir.join("content.json");
     fs::write(&content_path, content.as_bytes())?;
     let json_payload = model_json_payload(content);
