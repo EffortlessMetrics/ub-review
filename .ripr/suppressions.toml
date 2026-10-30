@@ -38200,3 +38200,13 @@ kind = "exposure_gap"
 finding_id = "probe:xtask_tests_precommit_subject_binding.rs:return_value:22c795b9"
 owner = "ub-review/core"
 reason = "reachable_unrevealed static-path gap on PR #1568; probe \"\\n[truncated]\": No assertion found on related tests. Reached by cargo_allow_present_and_absent_preserve_real_cargo_and_custody, git_failure_during_staged_admission_keeps_no_success_summary, input_changes_during_real_cargo_check_cannot_leave_success_summary. Re-verify after any edit to xtask/tests/precommit_subject_binding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:655151e6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1568; probe None: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_tests_precommit_subject_binding.rs:return_value:74fcf75c"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1568; probe \"\": No assertion found on related tests. Reached by cargo_allow_present_and_absent_preserve_real_cargo_and_custody, git_failure_during_staged_admission_keeps_no_success_summary, input_changes_during_real_cargo_check_cannot_leave_success_summary. Re-verify after any edit to xtask/tests/precommit_subject_binding.rs."
