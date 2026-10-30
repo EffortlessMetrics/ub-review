@@ -51,8 +51,34 @@ pub(crate) fn strip_bracketed_lane_prefix(value: &str) -> Option<&str> {
     if !trimmed.starts_with('[') {
         return None;
     }
-    let end = trimmed.find(']')?;
+    let mut depth = 0usize;
+    let mut escaped = false;
+    let mut end = None;
+    for (index, ch) in trimmed.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match ch {
+            '\\' => escaped = true,
+            '[' => depth += 1,
+            ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    end = Some(index);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let end = end?;
     if end > 80 {
+        return None;
+    }
+    // A Markdown link or reference begins with a bracketed label too, but
+    // that label is part of the finding rather than internal lane metadata.
+    if trimmed[end + 1..].starts_with(['(', '[']) {
         return None;
     }
     Some(trimmed[end + 1..].trim_start())
@@ -847,7 +873,7 @@ pub(crate) fn normalize_repo_path(path: &str) -> String {
 
 pub(crate) fn ensure_lane_prefix(lane: &str, body: &str) -> String {
     let prefix = format!("[{lane}]");
-    if body.starts_with(&prefix) {
+    if body.starts_with(&prefix) && strip_bracketed_lane_prefix(body).is_some() {
         body.to_owned()
     } else {
         format!("{prefix} {body}")
@@ -986,6 +1012,65 @@ pub(crate) fn posted_inline_comment_text(body: &str) -> String {
 mod github_review_serialization_tests {
     use super::*;
     use anyhow::{Result, ensure};
+
+    #[test]
+    fn bracketed_prefix_boundaries() {
+        assert_eq!(strip_bracketed_lane_prefix("plain"), None);
+        assert_eq!(strip_bracketed_lane_prefix("[unclosed"), None);
+        assert_eq!(strip_bracketed_lane_prefix("[lane [nested]"), None);
+        assert_eq!(strip_bracketed_lane_prefix(r"[lane \] tail"), None);
+        assert_eq!(
+            strip_bracketed_lane_prefix("[lane] finding"),
+            Some("finding")
+        );
+        assert_eq!(
+            strip_bracketed_lane_prefix("[lane [nested]] finding"),
+            Some("finding")
+        );
+        assert_eq!(
+            strip_bracketed_lane_prefix(r"[lane \] nested] finding"),
+            Some("finding")
+        );
+        assert_eq!(strip_bracketed_lane_prefix("[label [inner]](url)"), None);
+        assert_eq!(strip_bracketed_lane_prefix("[label [inner]][ref]"), None);
+        assert_eq!(
+            strip_bracketed_lane_prefix(&format!("[{}] text", "x".repeat(80))),
+            None
+        );
+    }
+
+    #[test]
+    fn lane_named_link_keeps_provenance_and_public_body() {
+        let link = "[tests](https://example.com) explains the failure";
+        let artifact = ensure_lane_prefix("tests", link);
+        assert_eq!(artifact, format!("[tests] {link}"));
+        assert_eq!(posted_inline_comment_text(&artifact), link);
+        assert_eq!(
+            ensure_lane_prefix("tests", "[tests] finding"),
+            "[tests] finding"
+        );
+    }
+
+    #[test]
+    fn summary_preserves_leading_markdown_links_and_strips_lane_metadata() {
+        let mut text = String::new();
+        render_pr_model_signal(
+            &mut text,
+            "[contract](https://example.com) contradicts this change",
+        );
+        render_pr_model_signal(&mut text, "[contract][spec] contradicts this change");
+        render_pr_model_signal(
+            &mut text,
+            "[contract [v2]](https://example.com) contradicts this change",
+        );
+        render_pr_model_signal(&mut text, "[contract [v2]][spec] contradicts this change");
+        render_pr_model_signal(&mut text, r"[contract \] v2][spec] contradicts this change");
+        render_pr_model_signal(&mut text, "[tests] The assertion misses the changed branch");
+        assert_eq!(
+            text,
+            "- [contract](https://example.com) contradicts this change.\n- [contract][spec] contradicts this change.\n- [contract [v2]](https://example.com) contradicts this change.\n- [contract [v2]][spec] contradicts this change.\n- [contract \\] v2][spec] contradicts this change.\n- The assertion misses the changed branch.\n"
+        );
+    }
 
     #[test]
     fn github_review_round_trip_preserves_unicode_path_and_stable_post_json() -> Result<()> {
