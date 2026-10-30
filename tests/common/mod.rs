@@ -534,6 +534,11 @@ fn handle_fake_openai_request_with_status(
     if !response_delay.is_zero() {
         thread::sleep(response_delay);
     }
+    // Status 0 models a transport failure after consuming the request: close
+    // without sending an HTTP response. Existing callers use real HTTP codes.
+    if status == 0 {
+        return Ok(request_text);
+    }
     let response_body = if status >= 400 {
         serde_json::to_vec(&serde_json::json!({
             "error": {"message": content}
