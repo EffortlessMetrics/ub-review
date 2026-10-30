@@ -199,7 +199,17 @@ pub(crate) fn render_missing_proof_receipt_summary(text: &mut String, receipt: &
                 "Focused red/green proof did not discriminate the patch: {head_status} and {base_plus_tests_status} for `{command}`."
             )
         }
-        "timed_out" => format!("Focused proof timed out for `{command}`; logs are in artifacts."),
+        "timed_out" => match receipt
+            .commands
+            .iter()
+            .find(|command| command.timed_out || command.status == "timed_out")
+        {
+            Some(timed_out) => format!(
+                "Focused proof timed out for `{}`; logs are in artifacts.",
+                timed_out.command
+            ),
+            None => "Focused proof timed out; details are in artifacts.".to_owned(),
+        },
         "skipped_budget" => {
             format!(
                 "Focused proof was skipped by budget for `{command}`; plan details are in artifacts."

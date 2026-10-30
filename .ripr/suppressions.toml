@@ -36485,3 +36485,18 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_text.rs:error_path:abfd420b"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1576; probe let end = end?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_timeout_spends_allowance_and_aggregates_red_green_once, body_budget_drops_topics_and_preserves_inline_fallback_receipt, bracketed_prefix_boundaries. Re-verify after any edit to src/review_text.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:fde78f7a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1589; probe Some(timed_out) => format!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by actionlint_sensor_uses_json_template_format, body_budget_drops_topics_and_preserves_inline_fallback_receipt, bullet_budget_drops_all_topics_as_inline_only. Re-verify after any edit to src/review_text.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:f6e7a351"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1589; probe \"timed_out\" => match receipt: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_ambiguous_or_unbound_receipts_keep_reservation, action_release_download_verifies_sha256_receipt, active_graph_does_not_reuse_stale_proof_receipts. Re-verify after any edit to src/review_text.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:ac113e32"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1589; probe None => \"Focused proof timed out; details are in artifacts.\".to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_tree_without_a_cargo_workspace_records_no_lockfile_gap, a_workspace_without_a_lockfile_selects_no_cargo_candidate, accounting_timeout_spends_allowance_and_aggregates_red_green_once. Re-verify after any edit to src/review_text.rs."
