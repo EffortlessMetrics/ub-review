@@ -374,6 +374,8 @@ fn run_command_to_files_inner_with_wait(
         success: status.success(),
         reason: if status.success() {
             "completed".to_owned()
+        } else if status.code().is_none() {
+            format!("process terminated without an exit code: {status}")
         } else {
             format!("exit code {:?}", status.code())
         },
@@ -714,6 +716,31 @@ mod tests {
                 Err(io::Error::new(kind, "injected wait failure"))
             })
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn command_failure_reason_retains_signal_and_numeric_exit() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        for (script, expected_code, expected_reason) in [
+            ("kill -TERM $$", None, "signal: 15"),
+            ("exit 7", Some(7), "exit code Some(7)"),
+        ] {
+            let argv = vec!["sh".to_owned(), "-c".to_owned(), script.to_owned()];
+            let status = super::run_command_to_files_with_spawn_observer(
+                temp.path(),
+                &argv,
+                &BTreeMap::new(),
+                5,
+                &temp.path().join("stdout"),
+                &temp.path().join("stderr"),
+                &mut |_| {},
+            )?;
+            ensure!(!status.success && !status.timed_out);
+            ensure!(status.exit_code == expected_code);
+            ensure!(status.reason.contains(expected_reason), "{}", status.reason);
+        }
+        Ok(())
     }
 
     #[test]
