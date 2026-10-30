@@ -2588,6 +2588,18 @@ mod tests {
                 vec![".scope"],
             ),
             (
+                "zero with unsupported scope",
+                Some("scope = 'repo-wide'\nmax_new_unsuppressed = 0"),
+                Some((None, Some(0))),
+                vec![".scope"],
+            ),
+            (
+                "wholly valid gate",
+                Some("scope = 'on-diff'\nmax_new_unsuppressed = 4"),
+                Some((Some("on-diff"), Some(4))),
+                vec![],
+            ),
+            (
                 "valid scope",
                 Some("scope = 'on-diff'\nmax_new_unsuppressed = 'bad'"),
                 Some((Some("on-diff"), None)),
