@@ -1336,6 +1336,116 @@ fn init_guide_lists_existing_package_scripts_as_proof_candidates() -> Result<()>
 }
 
 #[test]
+fn calibration_guidance_rejects_unsupported_runs_without_changing_thresholds() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let runs = temp.path().join("runs");
+    let supported = serde_json::json!({
+        "schema": "ub-review.calibration.v0",
+        "repo": "test/repo", "base": "base", "head": "head",
+        "run_mode": "intelligent-ci", "gate_policy": "pass",
+        "cohort": {
+            "provider": "test", "model": "test", "cohort_id": "cohort",
+            "shared_prefix_hash": "hash", "cohort_broken": false
+        },
+        "counts": {
+            "lanes_planned": 1, "lanes_executed": 1, "lane_continuations": 1,
+            "reporter_questions": 0, "messages": 0, "proof_requests_model_selected": 1,
+            "proof_requests_executed": 1, "proof_receipts_routed": 1,
+            "lane_conclusions_changed_by_proof": 1,
+            "inline_comments_posted": 1, "summary_comments_posted": 0
+        },
+        "classification": {
+            "run_class": "proof-changed-conclusion",
+            "suggested_class": "proof-changed-conclusion", "infra_excluded": false,
+            "human_classification": "acted-on"
+        }
+    });
+    for i in 0..5 {
+        let dir = runs.join(format!("run-{i}/review"));
+        fs::create_dir_all(&dir)?;
+        fs::write(
+            dir.join("calibration.json"),
+            serde_json::to_vec(&supported)?,
+        )?;
+    }
+    for (command, chosen_mode) in [
+        ("recommend", "Recommended mode: strict (strict)"),
+        ("promote", "Target mode:          strict (strict)"),
+    ] {
+        let output = Command::new(bin)
+            .args([command, "--runs-dir"])
+            .arg(&runs)
+            .output()?;
+        assert!(output.status.success(), "{command}: {:?}", output.stderr);
+        let stdout = String::from_utf8(output.stdout)?;
+        assert!(
+            stdout.lines().any(|line| line == chosen_mode),
+            "{command}: {stdout}"
+        );
+        assert!(stdout.contains("5 runs"), "{command}: {stdout}");
+    }
+
+    let extra_dir = runs.join("nested/incompatible/review");
+    fs::create_dir_all(&extra_dir)?;
+    let extra_path = extra_dir.join("calibration.json");
+    let mut extra = supported;
+    extra["schema"] = serde_json::json!("ub-review.calibration.v999");
+    extra["classification"]["infra_excluded"] = serde_json::json!(true);
+    extra["classification"]["human_classification"] = serde_json::json!("false-positive");
+    fs::write(&extra_path, serde_json::to_vec(&extra)?)?;
+    for command in ["recommend", "promote"] {
+        let output = Command::new(bin)
+            .args([command, "--runs-dir"])
+            .arg(&runs)
+            .output()?;
+        assert!(
+            !output.status.success(),
+            "{command} silently excluded an incompatible run"
+        );
+        assert!(
+            output.stdout.is_empty(),
+            "guidance must not precede admission"
+        );
+        let stderr = String::from_utf8(output.stderr)?;
+        for needle in [
+            extra_path.to_str().context("fixture path must be UTF-8")?,
+            "ub-review.calibration.v999",
+            "expected `ub-review.calibration.v0`",
+            "cannot interpret",
+        ] {
+            assert!(
+                stderr.contains(needle),
+                "{command}: missing {needle}: {stderr}"
+            );
+        }
+    }
+
+    // The same adverse run under the supported schema must remain in the
+    // denominator and prevent a strict recommendation using existing rules.
+    extra["schema"] = serde_json::json!("ub-review.calibration.v0");
+    fs::write(extra_path, serde_json::to_vec(&extra)?)?;
+    for (command, chosen_mode) in [
+        ("recommend", "Recommended mode: advisory (advisory)"),
+        ("promote", "Target mode:          advisory (advisory)"),
+    ] {
+        let output = Command::new(bin)
+            .args([command, "--runs-dir"])
+            .arg(&runs)
+            .output()?;
+        assert!(output.status.success(), "{command}: {:?}", output.stderr);
+        let stdout = String::from_utf8(output.stdout)?;
+        assert!(stdout.contains("6 runs"), "{command}: {stdout}");
+        assert!(stdout.contains("16.7%"), "{command}: {stdout}");
+        assert!(
+            stdout.lines().any(|line| line == chosen_mode),
+            "{command}: {stdout}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn quality_backfill_cli_writes_rolling_artifact_with_source_receipts() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
@@ -4516,6 +4626,276 @@ fn model_auto_run_retries_transient_primary_failure_on_provider_fallback() -> Re
 }
 
 #[test]
+fn model_retry_starvation_retains_attempt_reporting() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let case = model_attempt_reporting_case(
+        vec![200, 429],
+        vec![200],
+        "1",
+        "correctness",
+        "primary-with-fallback",
+    )?;
+    assert_eq!(case["primary_requests"], 2);
+    assert_eq!(case["fallback_requests"], 1);
+    assert_eq!(case["metrics"]["models"]["model_lane_calls_attempted"], 1);
+    let lane = &case["review"]["model_lanes"][0];
+    assert_eq!(lane["lane"], "correctness");
+    assert_eq!(lane["status"], "skipped");
+    assert_eq!(lane["http_status"], 429);
+    assert_eq!(lane["attempt_count"], 1);
+    let reason = lane["reason"].as_str().context("lane reason")?;
+    assert!(
+        reason.contains("budget reached before fallback retry"),
+        "{reason}"
+    );
+    assert!(reason.contains("primary rate_limited"), "{reason}");
+    assert!(!reason.contains("before lane execution"), "{reason}");
+    assert_eq!(
+        case["review"]["missing_or_failed_model_evidence"][0]["reason"],
+        reason
+    );
+    assert_eq!(case["gate"]["model_coverage"]["lanes_usable"], 0);
+    assert_eq!(case["gate"]["model_coverage"]["budget_exhausted_lanes"], 1);
+    assert_eq!(case["gate"]["analysis_result"], "not_proven");
+    assert_eq!(case["gate"]["gate_result"], "not_proven");
+    Ok(())
+}
+
+#[test]
+fn model_partial_retry_starvation_counts_both_attempted_lanes() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let case = model_attempt_reporting_case(
+        vec![200, 200, 429],
+        vec![200],
+        "2",
+        "correctness,architecture",
+        "primary-with-fallback",
+    )?;
+    assert_eq!(case["primary_requests"], 3);
+    assert_eq!(case["fallback_requests"], 1);
+    assert_eq!(case["metrics"]["models"]["model_lane_calls_attempted"], 2);
+    let lanes = case["review"]["model_lanes"]
+        .as_array()
+        .context("lane receipts")?;
+    let first = lanes
+        .iter()
+        .find(|lane| lane["lane"] == "correctness")
+        .context("correctness receipt")?;
+    let second = lanes
+        .iter()
+        .find(|lane| lane["lane"] == "architecture")
+        .context("architecture receipt")?;
+    assert_eq!(first["status"], "ok");
+    assert_eq!(first["attempt_count"], 1);
+    assert_eq!(second["status"], "skipped");
+    assert_eq!(second["http_status"], 429);
+    assert_eq!(second["attempt_count"], 1);
+    let reason = second["reason"].as_str().context("starved reason")?;
+    assert!(
+        reason.contains("budget reached before fallback retry"),
+        "{reason}"
+    );
+    assert!(reason.contains("primary rate_limited"), "{reason}");
+    assert!(!reason.contains("before lane execution"), "{reason}");
+    assert_eq!(case["gate"]["model_coverage"]["lanes_usable"], 1);
+    assert_eq!(case["gate"]["model_coverage"]["budget_exhausted_lanes"], 1);
+    assert_ne!(case["gate"]["analysis_result"], "clean");
+    Ok(())
+}
+
+#[test]
+fn model_attempt_reporting_controls() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    for (
+        name,
+        primary,
+        fallback,
+        budget,
+        policy,
+        expected_status,
+        expected_requests,
+        expected_attempted,
+        expected_calls,
+    ) in [
+        (
+            "healthy",
+            vec![200, 200],
+            vec![200],
+            "1",
+            "primary-with-fallback",
+            "ok",
+            (2, 1),
+            1,
+            1,
+        ),
+        (
+            "never attempted",
+            vec![200],
+            vec![200],
+            "0",
+            "primary-with-fallback",
+            "skipped",
+            (1, 1),
+            0,
+            0,
+        ),
+        (
+            "no fallback",
+            vec![200, 429],
+            vec![],
+            "1",
+            "minimax-only",
+            "rate_limited",
+            (2, 0),
+            1,
+            1,
+        ),
+        (
+            "fallback succeeds",
+            vec![200, 429],
+            vec![200, 200],
+            "2",
+            "primary-with-fallback",
+            "ok",
+            (2, 2),
+            1,
+            2,
+        ),
+        (
+            "fallback fails",
+            vec![200, 429],
+            vec![200, 503],
+            "2",
+            "primary-with-fallback",
+            "failed",
+            (2, 2),
+            1,
+            2,
+        ),
+    ] {
+        let case = model_attempt_reporting_case(primary, fallback, budget, "correctness", policy)?;
+        assert_eq!(case["primary_requests"], expected_requests.0, "{name}");
+        assert_eq!(case["fallback_requests"], expected_requests.1, "{name}");
+        assert_eq!(
+            case["metrics"]["models"]["model_lane_calls_attempted"], expected_attempted,
+            "{name}"
+        );
+        let lane = &case["review"]["model_lanes"][0];
+        assert_eq!(lane["status"], expected_status, "{name}");
+        assert_eq!(lane["attempt_count"], expected_calls, "{name}");
+        let refuter = case["review"]["model_lanes"]
+            .as_array()
+            .context("model lanes")?
+            .iter()
+            .find(|lane| lane["lane"] == "refuter")
+            .context("refuter")?;
+        assert_eq!(refuter["attempt_count"], 0, "{name}");
+        if name == "never attempted" {
+            assert_eq!(
+                lane["reason"],
+                "model call budget reached before lane execution"
+            );
+            assert!(lane["http_status"].is_null());
+        }
+        if name.starts_with("fallback ") {
+            assert_eq!(
+                lane["fallback_from"], "minimax:MiniMax-M3:openai-chat",
+                "{name}"
+            );
+        }
+        assert_eq!(case["gate"]["conclusion"], "pass", "{name}");
+        assert_eq!(case["gate"]["analysis_result"], "not_proven", "{name}");
+        assert_eq!(case["gate"]["gate_result"], "not_proven", "{name}");
+    }
+    Ok(())
+}
+
+fn model_attempt_reporting_case(
+    primary_statuses: Vec<u16>,
+    fallback_statuses: Vec<u16>,
+    budget: &str,
+    lanes: &str,
+    policy: &str,
+) -> Result<serde_json::Value> {
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+    let content = serde_json::json!({
+        "summary": "", "inline_comments": [], "summary_only_findings": [],
+        "internal_audit": {"surfaces_checked": ["src/lib.rs:answer"]}
+    })
+    .to_string();
+    let (primary_url, primary) = spawn_fake_openai_provider_with_responses(
+        primary_statuses
+            .into_iter()
+            .map(|status| (status, content.clone()))
+            .collect(),
+    )?;
+    let (fallback_url, fallback) = spawn_fake_openai_provider_with_responses(
+        fallback_statuses
+            .into_iter()
+            .map(|status| (status, content.clone()))
+            .collect(),
+    )?;
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    run_with_env(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--no-github-summary",
+            "--posting",
+            "artifact-only",
+            "--model-mode",
+            "auto",
+            "--provider-policy",
+            policy,
+            "--minimax-provider-kind",
+            "openai",
+            "--opencode-endpoint-kind",
+            "openai-chat",
+            "--lanes",
+            lanes,
+            "--model-concurrency",
+            "1",
+            "--max-model-calls",
+            budget,
+            "--model-timeout-sec",
+            "3",
+        ],
+        &[
+            ("UB_REVIEW_MINIMAX_API_KEY", "dummy-local-primary"),
+            ("UB_REVIEW_MINIMAX_API_URL", primary_url.as_str()),
+            ("UB_REVIEW_OPENCODE_API_KEY", "dummy-local-fallback"),
+            ("UB_REVIEW_OPENCODE_API_URL", fallback_url.as_str()),
+        ],
+    )?;
+    let primary_requests = join_fake_provider(primary)?.len();
+    let fallback_requests = join_fake_provider(fallback)?.len();
+    let read = |name: &str| -> Result<serde_json::Value> {
+        Ok(serde_json::from_slice(&fs::read(
+            out.join("review").join(name),
+        )?)?)
+    };
+    Ok(serde_json::json!({
+        "primary_requests": primary_requests, "fallback_requests": fallback_requests,
+        "review": read("review.json")?, "metrics": read("metrics.json")?, "gate": read("gate_outcome.json")?
+    }))
+}
+
+#[test]
 fn model_outage_degrades_review_without_reddening_enforced_gate() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
@@ -4615,6 +4995,123 @@ fn model_outage_degrades_review_without_reddening_enforced_gate() -> Result<()> 
         "gate_outcome must name why nothing was proven: {gate}"
     );
     assert_eq!(gate["model_coverage"]["lanes_usable"], 0);
+    Ok(())
+}
+
+/// A successful preflight does not grant credit to a later disconnected lane.
+/// Recovery reuses the same revision/output path so stale failure state cannot
+/// silently poison the next attempt. This is rerun recovery, not checkpointing.
+#[test]
+fn model_transport_failure_after_preflight_remains_incomplete_and_rerunnable() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let args = [
+        "run",
+        "--dry-run",
+        "--config",
+        path_str(&config)?,
+        "--root",
+        path_str(&repo)?,
+        "--base",
+        "HEAD~1",
+        "--head",
+        "HEAD",
+        "--out",
+        path_str(&out)?,
+        "--mode",
+        "intelligent-ci",
+        "--fail-on-gate",
+        "true",
+        "--no-github-summary",
+        "--model-mode",
+        "auto",
+        "--provider-policy",
+        "minimax-only",
+        "--minimax-provider-kind",
+        "openai",
+        "--lanes",
+        "correctness",
+        "--tools",
+        "cargo-allow",
+        "--model-concurrency",
+        "1",
+        "--max-model-calls",
+        "1",
+        "--model-timeout-sec",
+        "10",
+    ];
+    let mut failed_revision = None;
+    for recovering in [false, true] {
+        let (provider_url, provider) = if recovering {
+            spawn_fake_openai_provider(2)?
+        } else {
+            // First request succeeds (preflight), second disconnects (lane).
+            spawn_fake_openai_provider_with_statuses(vec![200, 0])?
+        };
+        run_with_env(
+            temp.path(),
+            bin,
+            &args,
+            &[
+                ("UB_REVIEW_MINIMAX_API_KEY", "dummy-transport-recovery-key"),
+                ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
+            ],
+        )?;
+        assert_eq!(join_fake_provider(provider)?.len(), 2);
+        let read = |path: &str| -> Result<serde_json::Value> {
+            Ok(serde_json::from_slice(&fs::read(out.join(path))?)?)
+        };
+        let preflight = read("review/provider-preflight-status.json")?;
+        assert_eq!(preflight[0]["status"], "ok");
+        let revision = read("input/revision-admission.json")?;
+        let review = read("review/review.json")?;
+        let lane = review["model_lanes"]
+            .as_array()
+            .and_then(|lanes| lanes.iter().find(|lane| lane["lane"] == "correctness"))
+            .ok_or_else(|| anyhow::anyhow!("correctness lane receipt missing"))?;
+        let gate = read("review/gate_outcome.json")?;
+        let terminal = read("review/terminal_state.json")?;
+        let gaps = review["missing_or_failed_model_evidence"]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("model evidence gaps missing"))?;
+        // Legacy advisory enforcement may pass while semantic review is missing.
+        assert_eq!(gate["conclusion"], "pass");
+        if recovering {
+            assert_eq!(failed_revision.as_ref(), Some(&revision));
+            assert_eq!(lane["status"], "ok");
+            assert_eq!(gate["model_coverage"]["lanes_usable"], 1);
+            assert_eq!(terminal["usable_model_lanes"], 1);
+            assert!(gaps.is_empty(), "stale model failure retained: {gaps:?}");
+        } else {
+            failed_revision = Some(revision);
+            assert_eq!(lane["status"], "failed");
+            // curl reports 000 when the peer closes without an HTTP response.
+            assert_eq!(lane["http_status"], 0);
+            assert_eq!(gate["model_coverage"]["lanes_usable"], 0);
+            assert_eq!(terminal["usable_model_lanes"], 0);
+            assert_eq!(gate["analysis_result"], "not_proven");
+            assert_eq!(gate["gate_result"], "not_proven");
+            assert_eq!(terminal["status"], "artifact-only");
+            assert!(
+                gaps.iter()
+                    .any(|gap| gap["lane"] == "correctness" && gap["status"] == "failed")
+            );
+            assert!(
+                gate["not_proven_reasons"]
+                    .as_array()
+                    .is_some_and(|reasons| !reasons.is_empty())
+            );
+            let lane_dir = out.join("review/model/correctness");
+            assert!(lane_dir.join("request.json").is_file());
+            assert!(!lane_dir.join("content.json").exists());
+            assert!(!fs::read_to_string(lane_dir.join("stderr.txt"))?.is_empty());
+        }
+    }
     Ok(())
 }
 

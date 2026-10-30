@@ -84,6 +84,7 @@ pub(crate) fn run_refuter_pass(
         http_status: None,
         response_shape: None,
         fallback_from: None,
+        attempt_count: Some(0),
         cache_usage: ModelCacheUsage::default(),
         cohort_id,
         shared_prefix_hash,
@@ -143,6 +144,7 @@ pub(crate) fn run_refuter_pass(
     let refuter_dir = context.review_dir.join("model").join("refuter");
     fs::create_dir_all(&refuter_dir)?;
     receipt.status = "running".to_owned();
+    receipt.attempt_count = Some(1);
     match call_model_refuter(
         context.root,
         &refuter_dir,
@@ -2540,6 +2542,7 @@ mod receipt_reconsideration_tests {
             http_status: None,
             response_shape: None,
             fallback_from: None,
+            attempt_count: None,
             cache_usage: ModelCacheUsage::default(),
             cohort_id: String::new(),
             shared_prefix_hash: String::new(),

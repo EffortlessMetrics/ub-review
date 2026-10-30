@@ -2603,6 +2603,10 @@ struct ModelLaneReceipt {
     http_status: Option<u16>,
     response_shape: Option<String>,
     fallback_from: Option<String>,
+    /// Calls dispatched for this lane, including runtime retries. Absent on
+    /// older receipts; never infer a known zero from an absent count.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    attempt_count: Option<usize>,
     #[serde(default)]
     cache_usage: ModelCacheUsage,
     /// Run-level cohort identity: one value per strict-cohort run, derived
@@ -2767,6 +2771,7 @@ mod cohort_contract_tests {
             http_status: Some(200),
             response_shape: None,
             fallback_from: None,
+            attempt_count: None,
             cache_usage: ModelCacheUsage::default(),
             cohort_id: "cohort:minimax:MiniMax-M3:abcdef012345".to_owned(),
             shared_prefix_hash: "abcdef0123456789".to_owned(),
@@ -2793,6 +2798,13 @@ mod cohort_contract_tests {
         assert_eq!(legacy.shared_prefix_hash, "");
         assert!(!legacy.cohort_broken);
         assert_eq!(legacy.turn, 0);
+        assert_eq!(legacy.attempt_count, None);
+        assert!(
+            !serde_json::to_value(&legacy)?
+                .as_object()
+                .context("receipt object")?
+                .contains_key("attempt_count")
+        );
         Ok(())
     }
 }
@@ -6607,7 +6619,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
             model_lane_calls_attempted: review
                 .model_lanes
                 .iter()
-                .filter(|receipt| model_call_attempted_status(&receipt.status))
+                .filter(|receipt| model_lane_call_attempted(receipt))
                 .count(),
             model_fallbacks_used: review
                 .model_lanes
@@ -24739,6 +24751,7 @@ index 1111111..2222222 100644
             http_status: None,
             response_shape: None,
             fallback_from: None,
+            attempt_count: None,
             cache_usage: super::ModelCacheUsage::default(),
             cohort_id: String::new(),
             shared_prefix_hash: String::new(),

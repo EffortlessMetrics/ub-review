@@ -295,6 +295,71 @@ timeout_sec = 0
 }
 
 #[test]
+fn running_summary_does_not_promise_absent_late_sensor_receipts() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let mut late = sensor_plan("tokmd", "tokmd", true);
+    late.phase = SensorPhase::Late;
+    let plan = test_plan(vec![late.clone()]);
+    let expected = concat!(
+        "\n## Available evidence\n\n",
+        "- No sensor evidence completed successfully.\n",
+        "\n## Missing evidence\n\n",
+        "- Late-phase sensor receipts are still absent; scheduling does not establish completed evidence.\n",
+        "\n## Scheduled late evidence\n\n",
+        "- tokmd scheduled in the late evidence phase; receipt absent. Check sensors/tokmd/ for completion; scheduling alone is not evidence.\n",
+    );
+    for gate_written in [false, true] {
+        if gate_written {
+            fs::create_dir_all(temp.path().join("review"))?;
+            fs::write(temp.path().join("review/gate_outcome.json"), "{}")?;
+        }
+        let mut text = String::new();
+        render_evidence_sections(&mut text, temp.path(), &plan);
+        assert_eq!(text, expected, "gate artifact present: {gate_written}");
+    }
+
+    for (status, expected) in [
+        (
+            "ok",
+            concat!(
+                "\n## Available evidence\n\n",
+                "- tokmd ran; deterministic repository/diff packet available.\n",
+                "\n## Missing evidence\n\n",
+                "- No planned sensor evidence is currently missing.\n",
+            ),
+        ),
+        (
+            "failed",
+            concat!(
+                "\n## Available evidence\n\n",
+                "- No sensor evidence completed successfully.\n",
+                "\n## Missing evidence\n\n",
+                "- No planned sensor evidence is currently missing.\n",
+                "\n## Failed evidence\n\n",
+                "- tokmd failed; reason: test failure.\n",
+            ),
+        ),
+    ] {
+        write_sensor_status(
+            temp.path(),
+            &late,
+            SensorStatusWrite {
+                status,
+                argv: &[],
+                duration_ms: 0,
+                reason: "test failure",
+                exit_code: None,
+                timed_out: false,
+            },
+        )?;
+        let mut text = String::new();
+        render_evidence_sections(&mut text, temp.path(), &plan);
+        assert_eq!(text, expected);
+    }
+    Ok(())
+}
+
+#[test]
 fn running_summary_reports_planned_skipped_sensor_evidence() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let out = temp.path().join("out");
@@ -482,6 +547,14 @@ fn unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap() -> Result<()>
         issues[0].reason,
         "unsafe-review-gate.json absent; structured evidence unavailable"
     );
+    let summary = render_summary(&out, &plan, &test_diff())?;
+    assert!(summary.contains("unsafe-review artifact-gap;"), "{summary}");
+    assert!(summary.contains(&issues[0].reason), "{summary}");
+    assert!(!summary.contains("unsafe-review ran;"), "{summary}");
+    assert!(
+        !summary.contains("No planned sensor evidence is currently missing."),
+        "{summary}"
+    );
 
     let gate_dir = out
         .join("sensors")
@@ -502,6 +575,113 @@ fn unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap() -> Result<()>
         issues.is_empty(),
         "valid structured unsafe-review evidence should clear the gap: {issues:?}"
     );
+    let summary = render_summary(&out, &plan, &test_diff())?;
+    assert!(summary.contains("unsafe-review ran;"), "{summary}");
+    assert!(
+        summary.contains("No planned sensor evidence is currently missing."),
+        "{summary}"
+    );
+    assert!(!summary.contains("artifact-gap"), "{summary}");
+    Ok(())
+}
+
+#[test]
+fn running_summary_distinguishes_unsafe_review_empty_from_unavailable() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let out = temp.path().join("out");
+    let sensor = sensor_plan("unsafe-review", "unsafe-review", true);
+    let plan = test_plan(vec![sensor.clone()]);
+    let gate_dir = out
+        .join("sensors/unsafe-review")
+        .join(crate::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+    fs::create_dir_all(&gate_dir)?;
+    let healthy_gate = r#"{"schema_version":"unsafe-review-gate/v1","status":"advisory","artifacts":{"comment_plan":"comment-plan.json"}}"#;
+    let empty = r#"{"schema_version":"0.1","comments":[]}"#;
+    let nonempty = r#"{"schema_version":"0.1","comments":[{"card_id":"card-1","path":"src/lib.rs","line":1,"changed_line":true,"operation_family":"raw_pointer_read","trust_boundary":"advisory"}]}"#;
+    write_sensor_status(
+        &out,
+        &sensor,
+        SensorStatusWrite {
+            status: "ok",
+            argv: &["unsafe-review".to_owned()],
+            duration_ms: 10,
+            reason: "completed",
+            exit_code: Some(0),
+            timed_out: false,
+        },
+    )?;
+
+    for (gate, comment_plan, available, reason) in [
+        (healthy_gate, Some(empty), true, ""),
+        (healthy_gate, None, false, "comment-plan.json unreadable"),
+        (
+            healthy_gate,
+            Some("{"),
+            false,
+            "comment-plan.json malformed",
+        ),
+        ("{", Some(empty), false, "unsafe-review-gate.json malformed"),
+        (healthy_gate, Some(nonempty), true, ""),
+        (healthy_gate, Some(empty), true, ""),
+    ] {
+        fs::write(gate_dir.join("unsafe-review-gate.json"), gate)?;
+        match comment_plan {
+            Some(text) => fs::write(gate_dir.join("comment-plan.json"), text)?,
+            None => fs::remove_file(gate_dir.join("comment-plan.json"))?,
+        }
+        let issues = collect_sensor_evidence_issues(&out, &plan);
+        assert_eq!(issues.is_empty(), available, "{reason}");
+        let summary = render_summary(&out, &plan, &test_diff())?;
+        assert_eq!(
+            summary.contains("unsafe-review ran;"),
+            available,
+            "{summary}"
+        );
+        assert_eq!(
+            summary.contains("No planned sensor evidence is currently missing."),
+            available,
+            "{summary}"
+        );
+        if !available {
+            assert_eq!(issues[0].status, "artifact-gap");
+            assert!(summary.contains("unsafe-review artifact-gap;"), "{summary}");
+            assert!(summary.contains(reason), "{summary}");
+        }
+    }
+
+    // Existing valid artifacts cannot hide an unavailable process receipt.
+    for (status, exit_code, timed_out) in [
+        ("failed", Some(1), false),
+        ("timed_out", None, true),
+        ("missing", None, false),
+    ] {
+        write_sensor_status(
+            &out,
+            &sensor,
+            SensorStatusWrite {
+                status,
+                argv: &["unsafe-review".to_owned()],
+                duration_ms: 10,
+                reason: "process unavailable",
+                exit_code,
+                timed_out,
+            },
+        )?;
+        let issues = collect_sensor_evidence_issues(&out, &plan);
+        assert_eq!(issues[0].status, status);
+        let summary = render_summary(&out, &plan, &test_diff())?;
+        assert!(!summary.contains("unsafe-review ran;"), "{summary}");
+        assert!(!summary.contains("artifact-gap"), "{summary}");
+        let rendered_status = if status == "missing" {
+            "not installed"
+        } else {
+            status
+        };
+        assert!(
+            summary.contains(&format!("unsafe-review {rendered_status}")),
+            "{summary}"
+        );
+    }
     Ok(())
 }
 

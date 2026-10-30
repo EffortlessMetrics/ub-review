@@ -228,6 +228,7 @@ pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
                 "- Gate: `{conclusion}` with `{blocking_reasons}` blocking reasons (`review/gate_outcome.json`)\n"
             ));
             render_planner_required_proofs(text, &gate);
+            render_configured_required_proofs(text, &gate);
         }
         Err(reason) => {
             text.push_str(&format!(
@@ -555,6 +556,30 @@ fn sanitize_planner_summary_text(value: &str) -> String {
     out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// Keep configured policy requests separate from planner portfolio obligations.
+/// This reports evidence completeness; the artifact's enforcement conclusion
+/// still follows repository policy (skips are advisory unless opted in).
+fn render_configured_required_proofs(text: &mut String, gate: &serde_json::Value) {
+    let counts = gate.get("required_proof").and_then(|accounting| {
+        let matched = accounting.get("matched")?.as_u64()?;
+        let passed = accounting.get("passed")?.as_u64()?;
+        let failed = accounting.get("failed")?.as_u64()?;
+        let skipped = accounting.get("skipped")?.as_u64()?;
+        (passed.checked_add(failed)?.checked_add(skipped)? == matched)
+            .then_some((matched, passed, failed, skipped))
+    });
+    let Some((matched, passed, failed, skipped)) = counts else {
+        text.push_str("- Configured Required proofs: accounting unavailable (`review/gate_outcome.json`); qualification cannot be inferred.\n");
+        return;
+    };
+    text.push_str(&format!(
+        "- Configured Required proofs: `{passed}/{matched}` passed (`{failed}` failed, `{skipped}` skipped); gate-required `[[proof.required]]` requests, separate from planner obligations (`review/gate_outcome.json`).\n"
+    ));
+    if failed > 0 || skipped > 0 {
+        text.push_str("- Required proof evidence is incomplete. A skipped or missing proof supplies no passing execution evidence; an advisory gate pass does not qualify these obligations. Inspect `review/proof_requests.json` and `review/proof_receipts.json`, resolve failed or unavailable execution, then obtain passing request-bound proof on the candidate revision.\n");
+    }
+}
+
 /// Retained planner-required proof obligations (#4271): the
 /// `planner_required_proofs` accounting from `review/gate_outcome.json`,
 /// rendered right after the Gate line so a deferred required portfolio task
@@ -675,14 +700,13 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
             .join("ub-review-sensor-status.json");
         let Some(receipt) = read_sensor_receipt(&status_path) else {
             if sensor.run {
-                // #325: a late-phase sensor without a receipt is scheduled
-                // work, not missing evidence — its receipt lands before the
-                // reporter/compile/gate. Fast sensors without receipts stay
-                // missing evidence.
+                // #325: keep late-phase scheduling distinct from absent fast
+                // evidence. The phase alone cannot establish completion, so
+                // describe the absent receipt without promising its arrival.
                 if matches!(sensor.phase, SensorPhase::Late) {
                     scheduled_late.push(format!(
-                        "{} scheduled in the late evidence phase; its receipt lands before the gate (late is not missing).",
-                        sensor.id
+                        "{} scheduled in the late evidence phase; receipt absent. Check sensors/{}/ for completion; scheduling alone is not evidence.",
+                        sensor.id, sensor.id
                     ));
                 } else {
                     missing.push(format!(
@@ -695,11 +719,25 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
             continue;
         };
         match receipt.status.as_str() {
-            "ok" => available.push(format!(
-                "{} ran; {} available.",
-                sensor.id,
-                evidence_label(&sensor.id)
-            )),
+            "ok" => {
+                if sensor.id == "unsafe-review"
+                    && let Err(gap) =
+                        read_unsafe_review_artifacts(&out.join("sensors").join(&sensor.id))
+                {
+                    missing.push(format!(
+                        "{} artifact-gap; {} unavailable; reason: {}.",
+                        sensor.id,
+                        evidence_label(&sensor.id),
+                        gap.reason()
+                    ));
+                } else {
+                    available.push(format!(
+                        "{} ran; {} available.",
+                        sensor.id,
+                        evidence_label(&sensor.id)
+                    ));
+                }
+            }
             "missing" => missing.push(format!(
                 "{} not installed; {} unavailable.",
                 sensor.id,
@@ -773,7 +811,9 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
     }
 
     text.push_str("\n## Missing evidence\n\n");
-    if missing.is_empty() {
+    if missing.is_empty() && !scheduled_late.is_empty() {
+        text.push_str("- Late-phase sensor receipts are still absent; scheduling does not establish completed evidence.\n");
+    } else if missing.is_empty() {
         text.push_str("- No planned sensor evidence is currently missing.\n");
     } else {
         for item in missing {
@@ -849,7 +889,254 @@ mod tests {
         let mut summary = String::new();
         render_review_efficiency_section(&mut summary, out);
         assert!(summary.contains("Review metrics: unavailable"), "{summary}");
+
         Ok(())
+    }
+
+    #[test]
+    fn configured_required_proof_summary_retains_gate_accounting() -> Result<()> {
+        use crate::tests::{test_plan, test_proof_receipt, test_run_args, test_terminal_state};
+
+        for (result, command_status, blocking, expected_gate, expected_counts, incomplete) in [
+            (
+                "head_passed",
+                "passed",
+                false,
+                "pass",
+                "`1/1` passed (`0` failed, `0` skipped)",
+                false,
+            ),
+            (
+                "skipped_budget",
+                "skipped",
+                false,
+                "pass",
+                "`0/1` passed (`0` failed, `1` skipped)",
+                true,
+            ),
+            (
+                "skipped_profile",
+                "skipped",
+                true,
+                "fail",
+                "`0/1` passed (`0` failed, `1` skipped)",
+                true,
+            ),
+            (
+                "missing",
+                "skipped",
+                false,
+                "pass",
+                "`0/1` passed (`0` failed, `1` skipped)",
+                true,
+            ),
+            (
+                "head_failed",
+                "failed",
+                false,
+                "fail",
+                "`0/1` passed (`1` failed, `0` skipped)",
+                true,
+            ),
+            (
+                "timed_out",
+                "timed_out",
+                false,
+                "fail",
+                "`0/1` passed (`1` failed, `0` skipped)",
+                true,
+            ),
+        ] {
+            let temp = tempfile::tempdir()?;
+            let out = temp.path();
+            fs::create_dir_all(out.join("review"))?;
+            fs::write(out.join("review/metrics.json"), "{}")?;
+            let mut args = test_run_args(out.to_path_buf());
+            args.mode = RunMode::IntelligentCi;
+            let mut config = Config::default();
+            config.gate.blocking.required_proof_unproven = blocking;
+            let request = ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "configured-check".to_owned(),
+                lane: "intelligent-ci-policy".to_owned(),
+                requested_by: vec!["proof-policy:cargo-check".to_owned()],
+                command: "cargo check --workspace --locked".to_owned(),
+                reason: "Required check".to_owned(),
+                cost: "focused-build".to_owned(),
+                timeout_sec: 300,
+                required: true,
+                status: "requested".to_owned(),
+            };
+            let mut receipt = test_proof_receipt(result, command_status);
+            receipt.request_ids = vec![request.id.clone()];
+            let receipts = if result == "missing" {
+                vec![]
+            } else {
+                vec![receipt]
+            };
+            let gate = crate::gate::build_gate_outcome(crate::gate::GateOutcomeInput {
+                args: &args,
+                config: &config,
+                tool_gate_outcomes: &[],
+                plan: &test_plan(vec![]),
+                terminal_state: &test_terminal_state("sufficient"),
+                proof_requests: &[request],
+                proof_receipts: &receipts,
+                missing_or_failed_sensor_evidence: &[],
+                missing_or_failed_model_evidence: &[],
+                reporter_gate: crate::ReporterGateInput::Absent,
+                planner_portfolio: None,
+                revision_digest: None,
+            });
+            assert_eq!(gate.conclusion, expected_gate, "{result}");
+            fs::write(
+                out.join("review/gate_outcome.json"),
+                serde_json::to_vec(&gate)?,
+            )?;
+            let mut summary = String::new();
+            render_review_efficiency_section(&mut summary, out);
+            assert!(
+                summary.contains(&format!("- Gate: `{expected_gate}`")),
+                "{summary}"
+            );
+            assert!(
+                summary.contains(&format!("Configured Required proofs: {expected_counts}")),
+                "{result}: {summary}"
+            );
+            assert_eq!(
+                summary.contains("Required proof evidence is incomplete"),
+                incomplete,
+                "{summary}"
+            );
+            if incomplete {
+                assert!(
+                    summary.contains(
+                        "A skipped or missing proof supplies no passing execution evidence"
+                    ),
+                    "{summary}"
+                );
+                assert!(summary.contains("review/proof_requests.json"), "{summary}");
+                assert!(summary.contains("review/proof_receipts.json"), "{summary}");
+            }
+            assert!(!summary.contains("Required planner proofs:"), "{summary}");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn unsafe_review_evidence_sections_preserve_exact_availability() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        let sensor = crate::tests::sensor_plan("unsafe-review", "unsafe-review", true);
+        let plan = crate::tests::test_plan(vec![sensor.clone()]);
+        write_sensor_status(
+            out,
+            &sensor,
+            SensorStatusWrite {
+                status: "ok",
+                argv: &["unsafe-review".to_owned()],
+                duration_ms: 10,
+                reason: "completed",
+                exit_code: Some(0),
+                timed_out: false,
+            },
+        )?;
+        let mut missing = String::new();
+        render_evidence_sections(&mut missing, out, &plan);
+        assert_eq!(
+            missing,
+            concat!(
+                "\n## Available evidence\n\n",
+                "- No sensor evidence completed successfully.\n",
+                "\n## Missing evidence\n\n",
+                "- unsafe-review artifact-gap; unsafe/native reviewability packet unavailable; ",
+                "reason: unsafe-review-gate.json absent; structured evidence unavailable.\n"
+            )
+        );
+
+        let structured = out
+            .join("sensors/unsafe-review")
+            .join(UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        fs::create_dir_all(&structured)?;
+        fs::write(
+            structured.join("unsafe-review-gate.json"),
+            r#"{"schema_version":"unsafe-review-gate/v1","status":"advisory","artifacts":{"comment_plan":"comment-plan.json"}}"#,
+        )?;
+        fs::write(
+            structured.join("comment-plan.json"),
+            r#"{"schema_version":"0.1","comments":[]}"#,
+        )?;
+        let mut available = String::new();
+        render_evidence_sections(&mut available, out, &plan);
+        assert_eq!(
+            available,
+            concat!(
+                "\n## Available evidence\n\n",
+                "- unsafe-review ran; unsafe/native reviewability packet available.\n",
+                "\n## Missing evidence\n\n",
+                "- No planned sensor evidence is currently missing.\n"
+            )
+        );
+
+        // An ordinary successful sensor needs no unsafe-review artifacts.
+        let tokmd = crate::tests::sensor_plan("tokmd", "tokmd", true);
+        write_sensor_status(
+            out,
+            &tokmd,
+            SensorStatusWrite {
+                status: "ok",
+                argv: &["tokmd".to_owned()],
+                duration_ms: 10,
+                reason: "completed",
+                exit_code: Some(0),
+                timed_out: false,
+            },
+        )?;
+        let mut ordinary = String::new();
+        render_evidence_sections(&mut ordinary, out, &crate::tests::test_plan(vec![tokmd]));
+        assert_eq!(
+            ordinary,
+            concat!(
+                "\n## Available evidence\n\n",
+                "- tokmd ran; deterministic repository/diff packet available.\n",
+                "\n## Missing evidence\n\n",
+                "- No planned sensor evidence is currently missing.\n"
+            )
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn configured_required_proof_summary_distinguishes_unknown_and_empty() {
+        for accounting in [
+            serde_json::Value::Null,
+            serde_json::json!({}),
+            serde_json::json!({"matched": 1, "passed": 0, "failed": 0}),
+            serde_json::json!({"matched": 1, "passed": "hostile\n[link](url)", "failed": 0, "skipped": 1}),
+            serde_json::json!({"matched": 0, "passed": 1, "failed": 0, "skipped": 0}),
+            serde_json::json!({"matched": 1, "passed": u64::MAX, "failed": 2, "skipped": 0}),
+        ] {
+            let mut summary = String::new();
+            render_configured_required_proofs(
+                &mut summary,
+                &serde_json::json!({"required_proof": accounting}),
+            );
+            assert_eq!(
+                summary,
+                "- Configured Required proofs: accounting unavailable (`review/gate_outcome.json`); qualification cannot be inferred.\n"
+            );
+        }
+        let mut legacy = String::new();
+        render_configured_required_proofs(&mut legacy, &serde_json::json!({}));
+        assert!(legacy.contains("accounting unavailable"));
+        let mut empty = String::new();
+        render_configured_required_proofs(
+            &mut empty,
+            &serde_json::json!({"required_proof": {"matched": 0, "passed": 0, "failed": 0, "skipped": 0}}),
+        );
+        assert!(empty.contains("`0/0` passed (`0` failed, `0` skipped)"));
+        assert!(!empty.contains("evidence is incomplete"));
     }
 
     #[test]
