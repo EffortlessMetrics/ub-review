@@ -2284,24 +2284,44 @@ fn validate_proof_intent(
         });
 
     let rejection_reason = if claim_id.is_empty() {
-        Some("proof intent has empty claim_id")
+        Some((
+            "claim_id",
+            "proof intent has empty claim_id",
+            "Provide the claim identifier this proof should answer",
+        ))
     } else if question.is_empty() {
-        Some("proof intent has empty question")
+        Some((
+            "question",
+            "proof intent has empty question",
+            "State the concrete question this proof should answer",
+        ))
     } else if expected_answer_shape.is_empty() {
-        Some("proof intent has empty expected_answer_shape")
+        Some((
+            "expected_answer_shape",
+            "proof intent has empty expected_answer_shape",
+            "Describe the expected proof answer",
+        ))
     } else if !target_valid {
-        Some("proof intent target is not a safe repository symbol, test, package, or route label")
+        Some((
+            "target",
+            "proof intent target is not a safe repository symbol, test, package, or route label",
+            "Use a repository-owned label without shell syntax or whitespace",
+        ))
     } else {
         None
     };
 
-    if let Some(reason) = rejection_reason {
+    if let Some((field, reason, recovery)) = rejection_reason {
         return Err(Box::new(Observation {
             schema: crate::artifacts::OBSERVATION_SCHEMA.to_owned(),
             id: format!("proof-intent-validation-{}-{observation_ordinal}", lane.id),
             lane: lane.id.clone(),
             question: "proof-intent-validation".to_owned(),
-            claim: "Model proof intent was rejected by deterministic validation.".to_owned(),
+            // Public rendering uses only the claim. Keep its cause/recovery
+            // producer-owned; rejected model fields remain private evidence.
+            claim: format!(
+                "Model proof intent rejected: {reason}. {recovery}; this request did not execute."
+            ),
             kind: "missing-evidence".to_owned(),
             status: "open".to_owned(),
             severity: "low".to_owned(),
@@ -2317,7 +2337,7 @@ fn validate_proof_intent(
                 truncate_chars(claim_id, 80),
                 truncate_chars(target, 120),
             )],
-            dedupe_key: format!("proof-intent-validation-{}", lane.id),
+            dedupe_key: format!("proof-intent-validation-{}:{field}", lane.id),
             source: "proof-intent-validation".to_owned(),
         }));
     }
@@ -2397,6 +2417,195 @@ mod receipt_reconsideration_tests {
                 sanitize_artifact_name(lane)
             )
         );
+    }
+
+    #[test]
+    fn proof_intent_rejection_public_diagnostics_cover_each_cause() -> Result<()> {
+        // Authored expectations are independent of the producer's reason table.
+        let cases = [
+            (
+                "claim_id",
+                "Model proof intent rejected: proof intent has empty claim_id. Provide the claim identifier this proof should answer; this request did not execute.",
+            ),
+            (
+                "question",
+                "Model proof intent rejected: proof intent has empty question. State the concrete question this proof should answer; this request did not execute.",
+            ),
+            (
+                "expected_answer_shape",
+                "Model proof intent rejected: proof intent has empty expected_answer_shape. Describe the expected proof answer; this request did not execute.",
+            ),
+            (
+                "target",
+                "Model proof intent rejected: proof intent target is not a safe repository symbol, test, package, or route label. Use a repository-owned label without shell syntax or whitespace; this request did not execute.",
+            ),
+        ];
+        for (field, expected) in cases {
+            let mut intent = model_proof_intent("cli");
+            match field {
+                "claim_id" => intent.claim_id = " \t".to_owned(),
+                "question" => intent.question = " \n".to_owned(),
+                "expected_answer_shape" => intent.expected_answer_shape.clear(),
+                _ => intent.target = "cli; HOSTILE_TARGET_MARKER".to_owned(),
+            }
+            let observation = match validate_proof_intent(&proof_lane(), intent, 0, 7) {
+                Ok(value) => anyhow::bail!("invalid intent admitted: {}", value.id),
+                Err(observation) => *observation,
+            };
+            let wire = serde_json::to_value(&observation)?;
+            assert_eq!(wire["schema"], "ub-review.observation.v1");
+            assert_eq!(wire["kind"], "missing-evidence");
+            assert_eq!(wire["status"], "open");
+            assert_eq!(wire["claim"], expected);
+            assert_eq!(wire["path"], serde_json::Value::Null);
+            let body = render_review_body(
+                "fixture",
+                &crate::tests::test_plan(Vec::new()),
+                &crate::tests::test_diff(),
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[observation],
+                &[],
+                16_384,
+                ReviewBodyAudience::PullRequest,
+            );
+            assert_eq!(body, format!("## Evidence gaps\n\n- {expected}\n"));
+            assert!(!body.contains("HOSTILE_TARGET_MARKER"));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn proof_intent_rejection_causes_survive_admission_grouping_and_compilation() -> Result<()> {
+        let mut values = Vec::new();
+        for field in [
+            "claim_id",
+            "question",
+            "expected_answer_shape",
+            "target",
+            "claim_id",
+        ] {
+            let mut value = serde_json::json!({
+                "claim_id": "claim-1", "question": "does the proof answer the claim?",
+                "expected_answer_shape": "terminal receipt", "proof_kind": "focused-test",
+                "target": "cli", "estimated_value": "high", "timeout_sec": 180,
+            });
+            value[field] = serde_json::Value::String(String::new());
+            values.push(value);
+        }
+        // A valid request must still be admitted, independently of the rejected ones.
+        values.push(serde_json::json!({
+            "claim_id": "valid-claim", "question": "does the proof answer the claim?",
+            "expected_answer_shape": "terminal receipt", "proof_kind": "focused-test",
+            "target": "cli", "estimated_value": "high", "timeout_sec": 180,
+        }));
+        let output: LaneModelOutput =
+            serde_json::from_value(serde_json::json!({"proof_intents": values}))?;
+        let mut inline = Vec::new();
+        let mut summary = Vec::new();
+        let mut observations = Vec::new();
+        let mut requests = Vec::new();
+        let mut intents = Vec::new();
+        let mut issues = Vec::new();
+        apply_model_output(
+            &proof_lane(),
+            output,
+            &BTreeSet::new(),
+            ModelOutputSinks {
+                inline_comments: &mut inline,
+                summary_only_findings: &mut summary,
+                model_observations: &mut observations,
+                proof_requests: &mut requests,
+                proof_intents: &mut intents,
+                issue_candidates: &mut issues,
+            },
+        );
+        assert!(
+            inline.is_empty() && summary.is_empty() && requests.is_empty() && issues.is_empty()
+        );
+        assert_eq!(intents.len(), 1);
+        assert_eq!(intents[0].claim_id, "valid-claim");
+        assert_eq!(intents[0].target, "cli");
+        assert_eq!(intents[0].status, "requested");
+        assert!(intents[0].resolved_request_ids.is_empty());
+        assert_eq!(observations.len(), 5);
+        let groups = observation_summary_artifacts(&observations);
+        assert_eq!(
+            groups.unique.len(),
+            4,
+            "different rejection causes must remain distinct"
+        );
+        assert_eq!(
+            groups.merged.len(),
+            1,
+            "equivalent causes must still deduplicate"
+        );
+        assert_eq!(groups.dropped.len(), 1);
+        assert_eq!(groups.unique[0].duplicate_count, 1);
+        let temp = tempfile::tempdir()?;
+        write_observation_artifacts(temp.path(), &observations)?;
+        let retained: Vec<Observation> =
+            serde_json::from_slice(&fs::read(temp.path().join("review/observations.json"))?)?;
+        assert_eq!(retained.len(), 5);
+        let retained_groups: serde_json::Value = serde_json::from_slice(&fs::read(
+            temp.path().join("review/unique_observations.json"),
+        )?)?;
+        assert_eq!(retained_groups.as_array().map(Vec::len), Some(4));
+        let args = crate::tests::test_run_args(temp.path().to_path_buf());
+        let plan = crate::tests::test_plan(Vec::new());
+        let diff = crate::tests::test_diff();
+        let policy = ReviewBodyPolicy::default();
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "fixture",
+            review_body_policy: &policy,
+            run_pass: RunPass::Manual,
+            post_review_on: &[],
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &[],
+            summary_only_findings: &[],
+            observations: &retained,
+            proof_receipts: &[],
+            suggested_issues: &[],
+            final_follow_up_tasks: 0,
+            reporter_distillation: None,
+        })?;
+        assert!(surface.should_prepare_github_review);
+        assert_eq!(
+            surface
+                .github_review
+                .body
+                .matches("Model proof intent rejected:")
+                .count(),
+            4
+        );
+        assert_eq!(
+            surface
+                .github_review
+                .body
+                .matches("this request did not execute.")
+                .count(),
+            4
+        );
+        assert!(
+            surface
+                .github_review
+                .body
+                .starts_with("## Evidence gaps\n\n")
+        );
+        assert!(surface.github_review.comments.is_empty());
+        assert!(!surface.github_review.body.contains("## Confirmed findings"));
+        assert!(!surface.github_review.body.contains("## Decision"));
+        assert!(!surface.github_review.body.contains("## Test proof"));
+        assert!(!has_standalone_approval_line(&surface.github_review.body));
+        Ok(())
     }
 
     #[test]
