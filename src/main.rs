@@ -23127,7 +23127,10 @@ index 1111111..2222222 100644
 
         // Fake GitHub API: search for "fresh" finds nothing then accepts the
         // create; search for "existing" returns one hit so no create happens.
-        let (api_url, handle) = spawn_fake_issue_broker_api(3)?;
+        let (api_url, handle) = spawn_fake_issue_broker_api(
+            3,
+            r#"{"html_url":"https://github.com/EffortlessMetrics/ripr-swarm/issues/9001"}"#,
+        )?;
         let args = PostArgs {
             review_json: review_dir.join("github-review.json"),
             diff_patch: None,
@@ -23183,25 +23186,105 @@ index 1111111..2222222 100644
         Ok(())
     }
 
+    #[test]
+    fn issue_broker_does_not_report_unconfirmed_create_responses_as_opened() -> Result<()> {
+        for response in [
+            "not-json",
+            "null",
+            "[]",
+            "{}",
+            r#"{"html_url":null}"#,
+            r#"{"html_url":42}"#,
+            r#"{"html_url":""}"#,
+            r#"{"html_url":"  \t\n"}"#,
+        ] {
+            let temp = tempfile::tempdir()?;
+            let plan_path = temp.path().join("issue_broker_plan.json");
+            fs::write(
+                &plan_path,
+                serde_json::to_vec(&vec![IssueBrokerPlanEntry {
+                    schema: "ub-review.issue_broker_plan.v1".to_owned(),
+                    candidate_id: "unconfirmed-create".to_owned(),
+                    fingerprint: "fresh".to_owned(),
+                    target_repo: "EffortlessMetrics/ripr-swarm".to_owned(),
+                    decision: "attempt".to_owned(),
+                    reason: "test".to_owned(),
+                    title: "Broker response test".to_owned(),
+                    body: "body".to_owned(),
+                    labels: Vec::new(),
+                }])?,
+            )?;
+            let (api_url, handle) = spawn_fake_issue_broker_api(2, response)?;
+            let args = PostArgs {
+                review_json: temp.path().join("github-review.json"),
+                diff_patch: None,
+                out: temp.path().to_owned(),
+                github_token: Some("test-token".to_owned()),
+                repo: Some("EffortlessMetrics/ub-review".to_owned()),
+                pull_number: Some(346),
+                github_api_url: api_url,
+                fail_on_post_error: false,
+            };
+            let results = execute_issue_broker(&args, &plan_path)?;
+            let requests = join_fake_issue_broker_api(handle)?;
+            assert_eq!(requests.len(), 2);
+            assert!(requests[0].starts_with("GET /search/issues"));
+            assert!(requests[1].starts_with("POST /repos/EffortlessMetrics/ripr-swarm/issues"));
+            write_issue_broker_results(&args.out, &results)?;
+            let json: Vec<serde_json::Value> = serde_json::from_slice(&fs::read(
+                args.out.join("review/issue_broker_results.json"),
+            )?)?;
+            let ndjson: serde_json::Value = serde_json::from_str(&fs::read_to_string(
+                args.out.join("issue_broker_results.ndjson"),
+            )?)?;
+            assert_eq!(json, vec![ndjson]);
+            assert_eq!(json[0]["candidate_id"], "unconfirmed-create");
+            assert_eq!(json[0]["action"], "failed_to_open", "response: {response}");
+            assert_eq!(
+                json[0]["reason"],
+                "GitHub issue creation was not confirmed by the response; the issue may have been created"
+            );
+            assert!(json[0].get("url").is_none());
+            if response == "not-json" {
+                assert!(
+                    json[0]["error"].as_str().is_some_and(
+                        |error| error.starts_with("parse GitHub issue create response:")
+                    )
+                );
+            } else {
+                assert_eq!(
+                    json[0]["error"],
+                    "GitHub issue create response omitted a nonempty html_url"
+                );
+            }
+        }
+        Ok(())
+    }
+
     fn spawn_fake_issue_broker_api(
         expected_requests: usize,
+        create_response: &str,
     ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
         let listener = TcpListener::bind("127.0.0.1:0")?;
         listener.set_nonblocking(true)?;
         let url = format!("http://{}", listener.local_addr()?);
+        let create_response = create_response.to_owned();
         let handle = thread::spawn(move || {
             serve_fake_http(
                 listener,
                 expected_requests,
                 "issue broker",
                 FAKE_HTTP_IDLE_DEADLINE,
-                |_idx, stream| handle_fake_issue_broker_request(stream),
+                |_idx, stream| handle_fake_issue_broker_request(stream, &create_response),
             )
         });
         Ok((url, handle))
     }
 
-    fn handle_fake_issue_broker_request(mut stream: TcpStream) -> Result<String> {
+    fn handle_fake_issue_broker_request(
+        mut stream: TcpStream,
+        create_response: &str,
+    ) -> Result<String> {
         stream.set_nonblocking(false)?;
         stream.set_read_timeout(Some(FAKE_HTTP_STREAM_TIMEOUT))?;
         stream.set_write_timeout(Some(FAKE_HTTP_STREAM_TIMEOUT))?;
@@ -23250,12 +23333,7 @@ index 1111111..2222222 100644
                 serde_json::to_vec(&serde_json::json!({"total_count": 0, "items": []}))?,
             )
         } else {
-            (
-                "HTTP/1.1 201 Created",
-                serde_json::to_vec(&serde_json::json!({
-                    "html_url": "https://github.com/EffortlessMetrics/ripr-swarm/issues/9001"
-                }))?,
-            )
+            ("HTTP/1.1 201 Created", create_response.as_bytes().to_vec())
         };
         write!(
             stream,
