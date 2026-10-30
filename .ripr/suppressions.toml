@@ -38967,3 +38967,93 @@ kind = "exposure_gap"
 finding_id = "probe:src_ci_audit.rs:return_value:0b00bced"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1325; probe None: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by ci_audit_artifacts_carry_schema_fields_and_receipts, ci_audit_artifacts_flag_missing_permissions_as_human_review, ci_audit_artifacts_record_permissions_secrets_and_flag_sensitive_jobs. Re-verify after any edit to src/ci_audit.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:match_arm:2f342ee7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1321; probe let suffix = match subcommand {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:match_arm:d644bc58"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1321; probe \"doctor\" => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:match_arm:ee4ebbb7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1321; probe \"audit-ci\" => \"` for read-only CI receipts.\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_internal_audit_retains_no_evidence_semantics, absent_pr_thread_context_omits_reuse_rules, accounting_ambiguous_or_unbound_receipts_keep_reservation. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:match_arm:0581dd63"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1321; probe _ => bail!(\"unexpected guide subcommand\"),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:return_value:589c28a4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1321; probe .strip_suffix(suffix): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:c27ca0bb"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1321; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:predicate:3ce428a3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1321; probe \"record_ub_review() {{ printf '%s\\\\000' \\\"$@\\\" > \\\"$UB_REVIEW_TEST_ARGV\\\"; \\\"$UB_REVIEW_TEST_BINARY\\\" \\\"$@\\\"; }}\\nalias ub-review=record_ub_review\\n{command}\": Strong oracle found: exact value or pattern assertion. Reached by accounting_matrix_releases_early_commands_before_required_build, action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:predicate:6cb73177"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1321; probe anyhow::ensure!(raw_argv.last() == Some(&0), \"argv is not NUL-terminated\");: Strong oracle found: exact value or pattern assertion. Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, active_graph_does_not_reuse_stale_proof_receipts. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:predicate:dc5f2483"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1321; probe for argument in raw_argv[..raw_argv.len() - 1].split(|byte| *byte == 0) {: Strong oracle found: exact value or pattern assertion. Reached by accounting_matrix_releases_early_commands_before_required_build, action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:predicate:a106f8a7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1321; probe let expected = if subcommand == \"doctor\" {: Strong oracle found: exact value or pattern assertion. Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:predicate:2b3c2bca"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1321; probe argv == expected,: Strong oracle found: exact value or pattern assertion. Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:predicate:6dea21ad"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1321; probe if subcommand == \"doctor\" {: Strong oracle found: exact value or pattern assertion. Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:f0a05101"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1321; probe )?)?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:predicate:c590ecae"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1321; probe anyhow::ensure!(inventory[\"repo\"] == \"fixture/path-proof\");: Strong oracle found: exact value or pattern assertion. Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, active_graph_does_not_reuse_stale_proof_receipts. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:predicate:c05730f0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1321; probe .is_some_and(|jobs| jobs.len() == 1): Strong oracle found: exact value or pattern assertion. Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:predicate:f1849ca7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1321; probe anyhow::ensure!(inventory[\"jobs\"][0][\"job\"] == \"path_witness\");: Strong oracle found: exact value or pattern assertion. Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:predicate:6d52fb7b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1321; probe anyhow::ensure!(fs::read(repo.join(\".github/workflows/ci.yml\"))? == workflow_before);: Strong oracle found: exact value or pattern assertion. Reached by absent_pr_thread_context_omits_reuse_rules, action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:return_value:554fa3e1"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1321; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to tests/cli.rs."
