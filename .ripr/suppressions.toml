@@ -39647,3 +39647,13 @@ kind = "exposure_gap"
 finding_id = "probe:src_work_queue.rs:match_arm:a4d15b86"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1306; probe Err(error) => Err(error).with_context(|| {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by child_cleanup_waits_for_confirmed_exit_even_when_kill_reports_an_error, doctor_reports_every_retained_error_with_source_and_correction, fake_setup_ci_listener_survives_handler_error. Re-verify after any edit to src/work_queue.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:field_construction:c5107945"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1319; probe file_count: usize,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cmd_enable_with_resolver_writes_release_workflow_offline, enable_config_is_not_the_bun_dogfood_default, enable_config_round_trips. Re-verify after any edit to src/enable.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:return_value:038f6ee5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1319; probe let contents = if marker_file == Some(ordinal) {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cmd_enable_with_resolver_writes_release_workflow_offline, enable_config_is_not_the_bun_dogfood_default, enable_config_round_trips. Re-verify after any edit to src/enable.rs."
