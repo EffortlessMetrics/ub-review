@@ -36901,3 +36901,23 @@ kind = "exposure_gap"
 finding_id = "probe:src_gate_watchdog.rs:return_value:d667aad9.2"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1538; probe sha,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_release_download_verifies_sha256_receipt, agreeing_duplicate_observations_preserve_terminal_results, artifact_bound_to_other_run_is_missing_artifact. Re-verify after any edit to src/gate_watchdog.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_watchdog.rs:match_arm:6f500ca5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1538; probe _ => false,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by agreeing_duplicate_observations_preserve_terminal_results, artifact_bound_to_other_run_is_missing_artifact, cancelled_exact_head_without_replacement_is_inconclusive. Re-verify after any edit to src/gate_watchdog.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_watchdog.rs:return_value:cf2cfdbd.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1538; probe ): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by agreeing_duplicate_observations_preserve_terminal_results, artifact_bound_to_other_run_is_missing_artifact, cancelled_exact_head_without_replacement_is_inconclusive. Re-verify after any edit to src/gate_watchdog.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_watchdog.rs:return_value:bd3eb949"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1538; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by agreeing_duplicate_observations_preserve_terminal_results, artifact_bound_to_other_run_is_missing_artifact, cancelled_exact_head_without_replacement_is_inconclusive. Re-verify after any edit to src/gate_watchdog.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_watchdog.rs:return_value:ade42607"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1538; probe ),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by agreeing_duplicate_observations_preserve_terminal_results, artifact_bound_to_other_run_is_missing_artifact, cancelled_exact_head_without_replacement_is_inconclusive. Re-verify after any edit to src/gate_watchdog.rs."
