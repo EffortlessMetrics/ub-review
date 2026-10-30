@@ -36415,6 +36415,11 @@ reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Clas
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_witness.rs:field_construction:a6d2e94d"
+finding_id = "probe:src_witness.rs:field_construction:56ae1cc6"
 owner = "ub-review/core"
-reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The single-command element closed at this line in the routed_packet_tests receipt() fixture is load-bearing for every downstream assertion: collapsing it empties the excerpt, failing routed_proof_receipt_excerpt's context(\"excerpt\") in routed_packet_tail_preserves_utf8_and_missing_stream_format and the first[\"proof-1\"] lookups in routed_packet_batch_reuses_only_matching_receipt_excerpts; ripr's reach linker matched same-named receipt helpers in src/main.rs and src/review_topics.rs instead of this module-private fixture. Re-verify after any edit to the witness packet fixtures."
+reason = "weakly_exposed static-path gap on PR #1505; probe env: BTreeMap::new(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_ambiguous_or_unbound_receipts_keep_reservation, accounting_duplicate_reservations_and_overflow_never_create_credit, accounting_matrix_releases_early_commands_before_required_build. Re-verify after any edit to src/witness.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_follow_up_routing.rs:match_arm:b284977b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1505; probe match routed_stream_tail(&out.join(relative), cap) {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_tree_without_a_cargo_workspace_records_no_lockfile_gap, a_workspace_without_a_lockfile_selects_no_cargo_candidate, accounting_timeout_spends_allowance_and_aggregates_red_green_once. Re-verify after any edit to src/follow_up_routing.rs."
