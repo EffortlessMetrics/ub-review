@@ -16,6 +16,7 @@ fn init_rejects_directory_guide_before_replacing_config() -> Result<()> {
     for attempt in 0..2 {
         let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
             .env_clear()
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .current_dir(temp.path())
             .args([
                 "init",
@@ -88,6 +89,7 @@ fn init_fresh_and_forced_file_outputs_preserve_rendered_content() -> Result<()> 
             "--guide-out",
             path_str(&guide)?,
         ]);
+        command.envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)));
         if forced {
             command.arg("--force");
         }
@@ -141,6 +143,7 @@ fn init_no_guide_ignores_directory_destination_and_missing_root() -> Result<()> 
     for _ in 0..2 {
         let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
             .env_clear()
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .current_dir(temp.path())
             .args([
                 "init",
@@ -210,6 +213,7 @@ fn init_rejects_unusable_guide_parents_before_replacing_config() -> Result<()> {
             fs::write(&config, b"existing config sentinel\n")?;
             let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
                 .env_clear()
+                .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
                 .current_dir(temp.path())
                 .args([
                     "init",
@@ -294,6 +298,7 @@ fn init_rejects_unwritable_existing_guide_before_replacing_config() -> Result<()
         fs::write(&config, b"existing config sentinel\n")?;
         let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
             .env_clear()
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .current_dir(temp.path())
             .args([
                 "init",
@@ -362,6 +367,7 @@ fn init_relative_guide_filename_preserves_successful_output_and_replay() -> Resu
             "--guide-out",
             "guide.md",
         ]);
+        command.envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)));
         if forced {
             command.arg("--force");
         }
@@ -410,6 +416,7 @@ fn init_guide_preflight_preserves_writable_guide_when_config_write_fails() -> Re
     for _ in 0..2 {
         let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
             .env_clear()
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .current_dir(temp.path())
             .args([
                 "init",
@@ -469,6 +476,7 @@ fn init_preserves_root_error_precedence_over_unusable_guide() -> Result<()> {
         for _ in 0..2 {
             let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
                 .env_clear()
+                .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
                 .current_dir(temp.path())
                 .args([
                     "init",
@@ -556,6 +564,7 @@ fn init_rejects_guide_metadata_errors_before_replacing_config() -> Result<()> {
     for _ in 0..2 {
         let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
             .env_clear()
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .current_dir(temp.path())
             .args([
                 "init",
@@ -620,6 +629,7 @@ fn init_rejects_existing_guide_symlink_to_config_before_output() -> Result<()> {
         fs::write(&config, b"profile = \"retained-existing-config\"\n")?;
         let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
             .env_clear()
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .current_dir(temp.path())
             .args([
                 "init",
@@ -690,6 +700,7 @@ fn init_no_guide_ignores_existing_guide_symlink_to_config() -> Result<()> {
         fs::write(&config, b"existing config without guide\n")?;
         let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
             .env_clear()
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .current_dir(temp.path())
             .args([
                 "init",
