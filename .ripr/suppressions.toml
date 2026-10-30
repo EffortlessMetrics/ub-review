@@ -38210,3 +38210,80 @@ kind = "exposure_gap"
 finding_id = "probe:xtask_tests_precommit_subject_binding.rs:return_value:74fcf75c"
 owner = "ub-review/core"
 reason = "reachable_unrevealed static-path gap on PR #1568; probe \"\": No assertion found on related tests. Reached by cargo_allow_present_and_absent_preserve_real_cargo_and_custody, git_failure_during_staged_admission_keeps_no_success_summary, input_changes_during_real_cargo_check_cannot_leave_success_summary. Re-verify after any edit to xtask/tests/precommit_subject_binding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:0bd223d9"
+owner = "ub-review/tests"
+reason = "PR #1607, check_loaded_tool_gate_fallback in cfg(test), observed hosted weakly_exposed subject and matching local RIPR 0.10.0 ID. Expected threshold tuple Some((None, Some(4))) is test-oracle data. Changing 4 to 3 fails both wrappers at the exact effective-gate comparison. Native Rust 1.95.0 --locked controls retained with the PR handoff; raw classifications and unknowns remain unchanged. Reverify after semantic helper or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:4f82e311"
+owner = "ub-review/tests"
+reason = "PR #1607, check_loaded_tool_gate_fallback in cfg(test), observed hosted weakly_exposed subject and matching local RIPR 0.10.0 ID. Expected threshold tuple Some((None, Some(5))) is test-oracle data. Changing 5 to 6 fails both wrappers at the exact effective-gate comparison. Native Rust 1.95.0 --locked controls retained with the PR handoff; raw classifications and unknowns remain unchanged. Reverify after semantic helper or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:f7567466"
+owner = "ub-review/tests"
+reason = "PR #1607, check_loaded_tool_gate_fallback in cfg(test), observed hosted weakly_exposed subject and matching local RIPR 0.10.0 ID. Empty tool_gate_outcomes fixture isolates policy enforcement. An injected passing tool result survived the original verdict-only helper; the strengthened zero tool-gate counters reject it in both wrappers. Native Rust 1.95.0 --locked controls retained with the PR handoff; raw classifications and unknowns remain unchanged. Reverify after semantic helper or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:ec03002e"
+owner = "ub-review/tests"
+reason = "PR #1607, check_loaded_tool_gate_fallback in cfg(test), observed hosted weakly_exposed subject and matching local RIPR 0.10.0 ID. This is the same empty tool_gate_outcomes fixture expression, not a production return. An injected passing tool result survived the original helper and fails both wrappers after explicit zero tool-gate counter assertions. Native Rust 1.95.0 --locked controls retained with the PR handoff; raw classifications and unknowns remain unchanged. Reverify after semantic helper or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:73ca709e"
+owner = "ub-review/tests"
+reason = "PR #1607, check_loaded_tool_gate_fallback in cfg(test), observed hosted weakly_exposed subject and matching local RIPR 0.10.0 ID. Empty sensor-evidence fixture isolates policy enforcement. An injected advisory missing sensor survived the original helper; the strengthened zero evidence-gap counter assertions reject it in both wrappers. Native Rust 1.95.0 --locked controls retained with the PR handoff; raw classifications and unknowns remain unchanged. Reverify after semantic helper or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:17f944b7"
+owner = "ub-review/tests"
+reason = "PR #1607, check_loaded_tool_gate_fallback in cfg(test), observed hosted weakly_exposed subject and matching local RIPR 0.10.0 ID. This is the empty sensor-evidence test fixture expression. An injected advisory missing sensor survived the original helper and fails both wrappers after explicit zero evidence-gap counter assertions. Native Rust 1.95.0 --locked controls retained with the PR handoff; raw classifications and unknowns remain unchanged. Reverify after semantic helper or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:07366adc"
+owner = "ub-review/tests"
+reason = "PR #1607, check_loaded_tool_gate_fallback in cfg(test), observed hosted weakly_exposed subject and matching local RIPR 0.10.0 ID. Empty model-evidence fixture isolates policy enforcement. An injected missing model lane survived the original helper; the strengthened zero advisory evidence-gap assertion rejects it in both wrappers. Native Rust 1.95.0 --locked controls retained with the PR handoff; raw classifications and unknowns remain unchanged. Reverify after semantic helper or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:7e2a49a7"
+owner = "ub-review/tests"
+reason = "PR #1607, check_loaded_tool_gate_fallback in cfg(test), observed hosted weakly_exposed subject and matching local RIPR 0.10.0 ID. This is the empty model-evidence test fixture expression. An injected missing model lane survived the original helper and fails both wrappers after explicit zero advisory evidence-gap assertions. Native Rust 1.95.0 --locked controls retained with the PR handoff; raw classifications and unknowns remain unchanged. Reverify after semantic helper or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:74093e4e"
+owner = "ub-review/tests"
+reason = "PR #1607, check_loaded_tool_gate_fallback in cfg(test), observed hosted weakly_exposed subject and matching local RIPR 0.10.0 ID. revision_digest is inert test input because planner_portfolio is None; the builder consults it only inside that optional portfolio mapping. Compiled Some(\"inert-control\") substitution passes both wrappers with planner_required_proofs still asserted absent. This is observed fixture equivalence, not a killed mutant or proof of revision-binding behavior. Native Rust 1.95.0 --locked controls retained with the PR handoff; raw classifications and unknowns remain unchanged. Reverify after semantic helper or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:91a8e1a5"
+owner = "ub-review/tests"
+reason = "PR #1607, check_loaded_tool_gate_fallback in cfg(test), observed hosted weakly_exposed subject and matching local RIPR 0.10.0 ID. This is the same inert revision_digest test-fixture expression with planner_portfolio None. Compiled None-to-Some substitution passes both wrappers while planner_required_proofs remains absent, matching the guarded consumer. No revision-binding coverage or universal mutation rejection is claimed. Native Rust 1.95.0 --locked controls retained with the PR handoff; raw classifications and unknowns remain unchanged. Reverify after semantic helper or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:1cee0c1e"
+owner = "ub-review/tests"
+reason = "PR #1607, check_loaded_tool_gate_fallback in cfg(test), observed hosted weakly_exposed subject and matching local RIPR 0.10.0 ID. Closing token of the test helper build_gate_outcome fixture. A compiled control replacing the returned conclusion with pass is rejected by both wrappers on invalid policy input. Exact reason kinds, sections, details, receipt paths and counts remain checked; this does not claim arbitrary faults are covered. Native Rust 1.95.0 --locked controls retained with the PR handoff; raw classifications and unknowns remain unchanged. Reverify after semantic helper or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:62343866"
+owner = "ub-review/tests"
+reason = "PR #1607, check_loaded_tool_gate_fallback in cfg(test), observed hosted weakly_exposed subject and matching local RIPR 0.10.0 ID. Test RunCompletion fixture sets fail_on_gate true. A compiled true-to-false substitution fails both wrappers at the failure-message presence assertion on invalid policy input. Native Rust 1.95.0 --locked controls retained with the PR handoff; raw classifications and unknowns remain unchanged. Reverify after semantic helper or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:aa471dd4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1607; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by agreeing_duplicate_observations_preserve_terminal_results, artifact_bound_to_other_run_is_missing_artifact, artifact_only_run_with_no_usable_lane_is_not_proven. Re-verify after any edit to src/gate.rs."

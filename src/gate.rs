@@ -2548,6 +2548,165 @@ mod tests {
         Ok(())
     }
 
+    fn check_loaded_tool_gate_fallback(id: &str) -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("config.toml");
+        // Built-in RIPR has no default gate; repository configuration opts
+        // into its threshold. An empty override is still distinct from None.
+        let fallback = None;
+        // Expected gates are literal consumer contracts, not derived from the
+        // sanitizer or from another loaded configuration.
+        let cases = [
+            (
+                "unsupported scope",
+                Some("scope = 'repo-wide'"),
+                fallback,
+                vec![".scope"],
+            ),
+            (
+                "bad scope and threshold",
+                Some("scope = 'repo-wide'\nmax_new_unsuppressed = 'bad'"),
+                fallback,
+                vec!["", ".scope"],
+            ),
+            (
+                "bad scope and unknown key",
+                Some("scope = 'repo-wide'\nunknown = true"),
+                fallback,
+                vec!["", ".scope"],
+            ),
+            (
+                "invalid types",
+                Some("scope = 7\nmax_new_unsuppressed = 'bad'"),
+                fallback,
+                vec!["", ""],
+            ),
+            (
+                "valid threshold",
+                Some("scope = 'repo-wide'\nmax_new_unsuppressed = 4"),
+                Some((None, Some(4))),
+                vec![".scope"],
+            ),
+            (
+                "valid scope",
+                Some("scope = 'on-diff'\nmax_new_unsuppressed = 'bad'"),
+                Some((Some("on-diff"), None)),
+                vec![""],
+            ),
+            ("explicit empty", Some(""), Some((None, None)), vec![]),
+            ("omitted", None, fallback, vec![]),
+            (
+                "zero with unknown sibling",
+                Some("scope = 'on-diff'\nmax_new_unsuppressed = 0\nunknown = true"),
+                Some((Some("on-diff"), Some(0))),
+                vec![""],
+            ),
+            (
+                "nonzero with unknown sibling",
+                Some("max_new_unsuppressed = 5\nunknown = true"),
+                Some((None, Some(5))),
+                vec![""],
+            ),
+        ];
+        for (name, fields, expected_gate, error_suffixes) in cases {
+            let mut text = format!("[tools.{id}]\nenabled = true\n");
+            if let Some(fields) = fields {
+                text.push_str(&format!("[tools.{id}.gate]\n{fields}\n"));
+            }
+            std::fs::write(&path, text)?;
+            let config = Config::load_or_default(&path, Some("gh-runner"))?;
+            let policy = config
+                .tools
+                .get(id)
+                .ok_or_else(|| anyhow::anyhow!("missing {id}"))?;
+            if id == "ripr" {
+                assert_eq!(policy.id, "ripr");
+                assert_eq!(policy.command, "ripr");
+                assert_eq!(policy.timeout_sec, 240);
+                assert_eq!(policy.weight, 3);
+            }
+            assert_eq!(
+                policy
+                    .gate
+                    .as_ref()
+                    .map(|gate| (gate.scope.as_deref(), gate.max_new_unsuppressed)),
+                expected_gate,
+                "{id}: {name}"
+            );
+            let expected_sections = error_suffixes
+                .iter()
+                .map(|suffix| format!("tools.{id}.gate{suffix}"))
+                .collect::<Vec<_>>();
+            let mut actual_sections = config
+                .policy_errors
+                .iter()
+                .map(|error| error.section.clone())
+                .collect::<Vec<_>>();
+            actual_sections.sort();
+            assert_eq!(actual_sections, expected_sections, "{id}: {name}");
+
+            let args = test_run_args(temp.path().join("out"));
+            let plan = test_plan(Vec::new());
+            let terminal_state = test_terminal_state("sufficient");
+            let gate = build_gate_outcome(GateOutcomeInput {
+                args: &args,
+                config: &config,
+                plan: &plan,
+                terminal_state: &terminal_state,
+                proof_requests: &[],
+                proof_receipts: &[],
+                tool_gate_outcomes: &[],
+                missing_or_failed_sensor_evidence: &[],
+                missing_or_failed_model_evidence: &[],
+                reporter_gate: crate::ReporterGateInput::Absent,
+                planner_portfolio: None,
+                revision_digest: None,
+            });
+            let invalid = !expected_sections.is_empty();
+            // Keep this a policy-only control: unrelated advisory evidence
+            // must not silently enter the fixture while its verdict stays put.
+            assert_eq!(gate.evidence_gaps_blocking, 0, "{id}: {name}");
+            assert_eq!(gate.evidence_gaps_advisory, 0, "{id}: {name}");
+            assert_eq!(gate.tool_gates.evaluated, 0, "{id}: {name}");
+            assert_eq!(gate.tool_gates.passed, 0, "{id}: {name}");
+            assert_eq!(gate.tool_gates.failed, 0, "{id}: {name}");
+            assert!(gate.planner_required_proofs.is_none(), "{id}: {name}");
+            assert_eq!(
+                gate.conclusion,
+                if invalid { "fail" } else { "pass" },
+                "{id}: {name}"
+            );
+            assert_eq!(gate.reasons.len(), expected_sections.len(), "{id}: {name}");
+            for (reason, error) in gate.reasons.iter().zip(&config.policy_errors) {
+                assert_eq!(reason.kind, "policy");
+                assert_eq!(reason.id, error.section);
+                assert_eq!(reason.detail, error.detail);
+                assert_eq!(reason.receipt, "effective-config.json");
+            }
+            let completion = RunCompletion {
+                gate_conclusion: gate.conclusion,
+                fail_on_gate: true,
+                run_dir: temp.path().join("out"),
+            };
+            assert_eq!(
+                run_gate_failure_message(&completion).is_some(),
+                invalid,
+                "{id}: {name}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn loaded_tool_gate_fallback_custom() -> Result<()> {
+        check_loaded_tool_gate_fallback("custom")
+    }
+
+    #[test]
+    fn loaded_tool_gate_fallback_ripr() -> Result<()> {
+        check_loaded_tool_gate_fallback("ripr")
+    }
+
     #[test]
     fn gate_outcome_blocks_unproven_required_proof_only_when_policy_opts_in() {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());

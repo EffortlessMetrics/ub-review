@@ -1399,10 +1399,6 @@ fn sanitize_tool_gate_value(
             sanitized.remove(key);
         }
     }
-    if sanitized.is_empty() && !gate_table.is_empty() {
-        tool_table.remove("gate");
-        return;
-    }
     if let Some(scope) = sanitized.get("scope").and_then(toml::Value::as_str)
         && !KNOWN_TOOL_GATE_SCOPES.contains(&scope)
     {
@@ -1415,6 +1411,10 @@ fn sanitize_tool_gate_value(
             ),
         });
         sanitized.remove("scope");
+    }
+    if sanitized.is_empty() && !gate_table.is_empty() {
+        tool_table.remove("gate");
+        return;
     }
     tool_table.insert("gate".to_owned(), toml::Value::Table(sanitized));
 }
