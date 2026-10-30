@@ -284,7 +284,9 @@ pub(crate) fn run_sensor_command_to_files_with_spawn_observer(
     stderr_path: &Path,
     observe_process: &mut dyn FnMut(CommandProcessObservation),
 ) -> Result<CommandStatus> {
-    let ambient = std::env::vars().collect();
+    let ambient = std::env::vars_os()
+        .filter_map(|(key, value)| key.into_string().ok().map(|key| (key, value)))
+        .collect();
     run_command_to_files_inner(CommandRun {
         root,
         argv,
@@ -302,7 +304,7 @@ struct CommandRun<'a> {
     root: &'a Path,
     argv: &'a [String],
     env: &'a BTreeMap<String, String>,
-    ambient: &'a BTreeMap<String, String>,
+    ambient: &'a BTreeMap<String, std::ffi::OsString>,
     timeout_sec: u64,
     stdout_path: &'a Path,
     stderr_path: &'a Path,
@@ -374,6 +376,8 @@ fn run_command_to_files_inner_with_wait(
         success: status.success(),
         reason: if status.success() {
             "completed".to_owned()
+        } else if status.code().is_none() {
+            format!("process terminated without an exit code: {status}")
         } else {
             format!("exit code {:?}", status.code())
         },
@@ -472,9 +476,9 @@ fn terminate_and_reap_child(
 
 /// Keep only the non-secret execution metadata needed by sensor tools.
 fn sensor_child_environment_from(
-    ambient: &BTreeMap<String, String>,
+    ambient: &BTreeMap<String, std::ffi::OsString>,
     overrides: &BTreeMap<String, String>,
-) -> BTreeMap<String, String> {
+) -> BTreeMap<String, std::ffi::OsString> {
     const ALLOWED: [&str; 10] = [
         "PATH",
         "TEMP",
@@ -499,7 +503,7 @@ fn sensor_child_environment_from(
         .collect::<BTreeMap<_, _>>();
     for (key, value) in overrides {
         if is_allowed(key) {
-            result.insert(key.clone(), value.clone());
+            result.insert(key.clone(), value.into());
         }
     }
     result
@@ -714,6 +718,31 @@ mod tests {
                 Err(io::Error::new(kind, "injected wait failure"))
             })
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn command_failure_reason_retains_signal_and_numeric_exit() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        for (script, expected_code, expected_reason) in [
+            ("kill -TERM $$", None, "signal: 15"),
+            ("exit 7", Some(7), "exit code Some(7)"),
+        ] {
+            let argv = vec!["sh".to_owned(), "-c".to_owned(), script.to_owned()];
+            let status = super::run_command_to_files_with_spawn_observer(
+                temp.path(),
+                &argv,
+                &BTreeMap::new(),
+                5,
+                &temp.path().join("stdout"),
+                &temp.path().join("stderr"),
+                &mut |_| {},
+            )?;
+            ensure!(!status.success && !status.timed_out);
+            ensure!(status.exit_code == expected_code);
+            ensure!(status.reason.contains(expected_reason), "{}", status.reason);
+        }
+        Ok(())
     }
 
     #[test]
@@ -1006,6 +1035,92 @@ mod tests {
         fs::write(started, b"started")?;
         thread::sleep(Duration::from_secs(2));
         fs::write(delayed, b"still running")?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sensor_environment_preserves_native_bytes_without_panicking() -> Result<()> {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        for (label, key, value, lang) in [
+            (
+                "unicode",
+                OsString::from("INERT_SECRET"),
+                OsString::from("inert"),
+                OsString::from("C"),
+            ),
+            (
+                "native-value",
+                OsString::from("INERT_SECRET"),
+                OsString::from_vec(vec![0xff]),
+                OsString::from("C"),
+            ),
+            (
+                "native-key",
+                OsString::from_vec(vec![b'X', 0xff]),
+                OsString::from("inert"),
+                OsString::from("C"),
+            ),
+            (
+                "native-allowed-value",
+                OsString::from("INERT_SECRET"),
+                OsString::from("inert"),
+                OsString::from_vec(vec![b'C', 0xff]),
+            ),
+        ] {
+            let output = std::process::Command::new(std::env::current_exe()?)
+                .args([
+                    "--exact",
+                    "lane_packets::tests::fake_sensor_native_environment_child",
+                    "--nocapture",
+                ])
+                .env_clear()
+                .env("UB_REVIEW_NATIVE_ENV_CHILD", "1")
+                .env("LANG", lang)
+                .env(key, value)
+                .output()?;
+            ensure!(
+                output.status.success(),
+                "{label} failed: {} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fake_sensor_native_environment_child() -> Result<()> {
+        use std::os::unix::ffi::OsStrExt;
+
+        if std::env::var_os("UB_REVIEW_NATIVE_ENV_CHILD").is_none() {
+            return Ok(());
+        }
+        let expected = std::env::var_os("LANG").context("native LANG fixture missing")?;
+        let temp = tempfile::tempdir()?;
+        let stdout = temp.path().join("stdout");
+        let stderr = temp.path().join("stderr");
+        let argv = vec!["/usr/bin/env".to_owned()];
+        let mut observations = Vec::new();
+        let status = super::run_sensor_command_to_files_with_spawn_observer(
+            temp.path(),
+            &argv,
+            &BTreeMap::new(),
+            5,
+            &stdout,
+            &stderr,
+            &mut |event| observations.push(event),
+        )?;
+        ensure!(status.success && !status.timed_out && status.exit_code == Some(0));
+        ensure!(observations == [CommandProcessObservation::Spawned]);
+        let mut expected_output = b"LANG=".to_vec();
+        expected_output.extend_from_slice(expected.as_os_str().as_bytes());
+        expected_output.push(b'\n');
+        ensure!(fs::read(stdout)? == expected_output);
+        ensure!(fs::read(stderr)?.is_empty());
         Ok(())
     }
 

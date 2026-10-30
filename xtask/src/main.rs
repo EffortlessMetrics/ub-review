@@ -2415,7 +2415,7 @@ mod tests {
         let files = [
             (
                 "README.md",
-                format!("{action_ref}\nvalidated by `{proof_ref}`\n"),
+                "See [the Bun runner guide](docs/GH_RUNNER_BUN.md).\n".to_owned(),
             ),
             (
                 "REPO_READY.md",
@@ -2476,9 +2476,62 @@ mod tests {
     #[test]
     fn bun_gate_pin_policy_accepts_consistent_docs() -> Result<()> {
         let root = temp_repo_root("bun-pin-consistent")?;
-        write_bun_pin_docs(&root, "217f123e688e42ddfce98eec5795b88bf457dd34", "45")?;
+        let pin = "217f123e688e42ddfce98eec5795b88bf457dd34";
+        write_bun_pin_docs(&root, pin, "45")?;
+
+        let readme = fs::read_to_string(root.join("README.md"))?;
+        assert!(readme.contains("docs/GH_RUNNER_BUN.md"));
+        assert!(!readme.contains(pin));
+        assert!(!readme.contains("EffortlessSteven/bun#45"));
 
         validate_bun_gate_pin(&root)?;
+
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
+    #[test]
+    fn bun_gate_pin_policy_rejects_missing_guide_pin() -> Result<()> {
+        let root = temp_repo_root("bun-pin-missing-guide-pin")?;
+        let pin = "217f123e688e42ddfce98eec5795b88bf457dd34";
+        write_bun_pin_docs(&root, pin, "45")?;
+        let guide = root.join("docs/GH_RUNNER_BUN.md");
+        let text = fs::read_to_string(&guide)?.replace(pin, "not-a-pin");
+        fs::write(&guide, text)?;
+
+        let error = match validate_bun_gate_pin(&root) {
+            Ok(()) => bail!("policy accepted a Bun guide without the current pin"),
+            Err(error) => error,
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("docs/GH_RUNNER_BUN.md must include the current Bun gate SHA pin"),
+            "{error:#}"
+        );
+
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
+    #[test]
+    fn bun_gate_pin_policy_rejects_missing_guide_proof() -> Result<()> {
+        let root = temp_repo_root("bun-pin-missing-guide-proof")?;
+        write_bun_pin_docs(&root, "217f123e688e42ddfce98eec5795b88bf457dd34", "45")?;
+        let guide = root.join("docs/GH_RUNNER_BUN.md");
+        let text = fs::read_to_string(&guide)?.replace("EffortlessSteven/bun#45", "bun proof");
+        fs::write(&guide, text)?;
+
+        let error = match validate_bun_gate_pin(&root) {
+            Ok(()) => bail!("policy accepted a Bun guide without the current proof reference"),
+            Err(error) => error,
+        };
+        assert!(
+            error.to_string().contains(
+                "docs/GH_RUNNER_BUN.md must reference current Bun gate proof EffortlessSteven/bun#45"
+            ),
+            "{error:#}"
+        );
 
         fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
         Ok(())
@@ -3217,7 +3270,6 @@ fn validate_ripr_suppressions(root: &Path) -> Result<()> {
 }
 
 const BUN_GATE_PIN_FILES: &[&str] = &[
-    "README.md",
     "REPO_READY.md",
     "RELEASE_NOTES.md",
     "RELEASE_NOTES_GH_RUNNER.md",
@@ -3309,7 +3361,6 @@ fn validate_current_bun_gate_ledger(root: &Path, pin: &str) -> Result<()> {
         bail!("current Bun gate ledger artifact must name the Bun packet artifact");
     }
 
-    require_current_bun_pr_reference(root, "README.md", pr, "EffortlessSteven/bun#")?;
     require_current_bun_pr_reference(root, "REPO_READY.md", pr, "EffortlessSteven/bun#")?;
     require_current_bun_pr_reference(root, "docs/GH_RUNNER_BUN.md", pr, "EffortlessSteven/bun#")?;
     require_current_bun_pr_reference(root, "docs/GH_RUNNER_SETUP.md", pr, "EffortlessSteven/bun#")?;

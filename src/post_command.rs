@@ -171,13 +171,24 @@ pub(crate) fn execute_issue_broker_attempt(
         60,
     ) {
         Ok(output) if output.status.success() => {
-            let response: serde_json::Value =
-                serde_json::from_slice(&output.stdout).unwrap_or(serde_json::Value::Null);
-            let url = response
-                .get("html_url")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default()
-                .to_owned();
+            let confirmed_url = serde_json::from_slice::<serde_json::Value>(&output.stdout)
+                .context("parse GitHub issue create response")
+                .and_then(|response| {
+                    response
+                        .get("html_url")
+                        .and_then(serde_json::Value::as_str)
+                        .filter(|url| !url.trim().is_empty())
+                        .map(str::to_owned)
+                        .context("GitHub issue create response omitted a nonempty html_url")
+                });
+            let url = match confirmed_url {
+                Ok(url) => url,
+                Err(err) => {
+                    result.reason = "GitHub issue creation was not confirmed by the response; the issue may have been created".to_owned();
+                    result.error = Some(format!("{err:#}"));
+                    return result;
+                }
+            };
             result.action = "opened".to_owned();
             result.reason = "no fingerprint duplicate found; issue opened".to_owned();
             result.url = Some(url);

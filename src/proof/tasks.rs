@@ -326,7 +326,7 @@ pub(crate) fn focused_test_candidates_from_diff(
         .iter()
         .filter(|path| is_bun_focused_test_file(path))
     {
-        let names = focused_test_names_for_file(&diff.patch, file);
+        let names = focused_test_names_for_file(&diff.patch, file).unwrap_or_default();
         if names.is_empty() {
             merge_focused_test_task(
                 &mut tasks,
@@ -829,6 +829,49 @@ fn strip_matching_quotes(value: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mixed_unselectable_tests_require_a_whole_file_candidate() {
+        let file = "test/example.test.ts";
+        for changed in [
+            "test('prefix' + suffix, fn)",
+            r"test('\u0061', fn)",
+            "test('literal' /* comment */, fn)",
+            "test(`dynamic ${name}`, fn)",
+            "test.each([/* )('fake', */ 1])('real', fn)",
+            "test.each([`${f(')')}`])('real', fn)",
+        ] {
+            let diff = DiffContext {
+                base: "base".to_owned(),
+                head: "head".to_owned(),
+                changed_files: vec![file.to_owned()],
+                patch: format!("+++ b/{file}\n+test('known', fn)\n+{changed}\n"),
+                flags: DiffFlags::default(),
+                diff_class: DiffClass::SourceGeneral,
+            };
+            let tasks = focused_test_candidates_from_diff(&diff, &[], None);
+            assert_eq!(tasks.len(), 1, "{changed}");
+            assert_eq!(tasks[0].file, file);
+            assert_eq!(tasks[0].test_name, None, "{changed}");
+        }
+
+        let diff = DiffContext {
+            base: "base".to_owned(),
+            head: "head".to_owned(),
+            changed_files: vec![file.to_owned()],
+            patch: format!("+++ b/{file}\n+test('first', fn)\n+it('second', fn)\n"),
+            flags: DiffFlags::default(),
+            diff_class: DiffClass::SourceGeneral,
+        };
+        let tasks = focused_test_candidates_from_diff(&diff, &[], None);
+        assert_eq!(
+            tasks
+                .iter()
+                .map(|task| task.test_name.as_deref())
+                .collect::<Vec<_>>(),
+            [Some("first"), Some("second")]
+        );
+    }
 
     /// A synthetic impact plan carrying one ranked Cargo test target per
     /// entry, so the Cargo branch can be pinned without shelling out to

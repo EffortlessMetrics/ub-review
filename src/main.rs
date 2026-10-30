@@ -26,6 +26,7 @@ mod config;
 use config::*;
 mod builtin;
 pub mod delivery_transaction;
+mod preflight_diagnostics;
 use builtin::*;
 mod gate;
 use gate::*;
@@ -4226,6 +4227,11 @@ fn cmd_doctor(args: DoctorArgs) -> Result<()> {
         args.config.as_deref(),
         runtime_profile_override(args.profile.as_ref(), args.runtime_profile.as_ref()),
     )?;
+    if let Some(diagnostic) =
+        preflight_diagnostics::config_diagnostic(&config, args.config.as_deref())
+    {
+        bail!("{diagnostic}");
+    }
     let profile = config.selected_profile()?;
     let box_state = BoxState::detect()?;
     let cache_root = cache_root_path(args.cache_dir.as_ref());
@@ -4462,11 +4468,17 @@ fn cmd_cache_warm(args: CacheWarmArgs) -> Result<()> {
 fn cmd_plan(args: PlanArgs) -> Result<()> {
     let (config, diff, box_state, plan, revision) =
         prepare_plan(&args.review, args.allow_heavy, &args.selectors)?;
+    let diagnostic =
+        preflight_diagnostics::config_diagnostic(&config, args.review.config.as_deref());
+    if let Some(diagnostic) = &diagnostic {
+        eprintln!("{diagnostic}");
+    }
     print_plan(&plan, &box_state);
     if args.write {
+        let artifact_config = preflight_diagnostics::diagnostic_artifact_config(&config);
         write_plan_artifacts(
             &args.review.out,
-            &config,
+            &artifact_config,
             &diff,
             &box_state,
             &plan,
@@ -4477,6 +4489,9 @@ fn cmd_plan(args: PlanArgs) -> Result<()> {
                 effective_model_lanes: None,
             },
         )?;
+    }
+    if diagnostic.is_some() {
+        bail!("invalid configuration; correct the reported policy errors and retry");
     }
     Ok(())
 }
@@ -15008,12 +15023,37 @@ UB_REVIEW_HTTP_STATUS:429
             .spawn()
             .with_context(|| "spawn sleeper")?;
 
+        fs::write(&stdout_path, "SYNTHETIC_RESPONSE_VALUE_7329")?;
+        fs::write(&stderr_path, "SYNTHETIC_DIAGNOSTIC_VALUE_8421")?;
         let err = match wait_for_child_output_files(child, &stdout_path, &stderr_path, 1) {
             Ok(_) => return Err(anyhow::anyhow!("sleeper completed before timeout")),
             Err(err) => err,
         };
 
-        assert!(err.to_string().contains("timed out after 1s"));
+        assert_eq!(
+            err.to_string(),
+            "process timed out after 1s; output omitted from diagnostic"
+        );
+        assert_eq!(super::classify_model_error(&err), "timed_out");
+        assert!(!format!("{err:#}").contains("SYNTHETIC_RESPONSE_VALUE_7329"));
+        assert!(!format!("{err:#}").contains("SYNTHETIC_DIAGNOSTIC_VALUE_8421"));
+        assert!(!stdout_path.exists());
+        assert!(!stderr_path.exists());
+
+        let stdout = fs::File::create(&stdout_path)?;
+        let stderr = fs::File::create(&stderr_path)?;
+        let child = ProcessCommand::new(program)
+            .args(args)
+            .current_dir(temp.path())
+            .stdout(Stdio::from(stdout))
+            .stderr(Stdio::from(stderr))
+            .spawn()?;
+        fs::write(&stdout_path, "SYNTHETIC_SUCCESS_OUTPUT")?;
+        fs::write(&stderr_path, "SYNTHETIC_SUCCESS_DIAGNOSTIC")?;
+        let output = wait_for_child_output_files(child, &stdout_path, &stderr_path, 5)?;
+        assert!(output.status.success());
+        assert_eq!(output.stdout, b"SYNTHETIC_SUCCESS_OUTPUT");
+        assert_eq!(output.stderr, b"SYNTHETIC_SUCCESS_DIAGNOSTIC");
         assert!(!stdout_path.exists());
         assert!(!stderr_path.exists());
         Ok(())
@@ -18924,6 +18964,38 @@ index 1111111..2222222 100644
         assert!(!body.contains("stdout.txt"));
         assert!(!body.contains("stderr.txt"));
         assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn missing_proof_timeout_identifies_the_timed_out_command() {
+        let mut receipt = test_red_green_proof_receipt("timed_out", "timed_out");
+        let mut text = String::new();
+        // The status and flag independently carry timeout provenance.
+        for (status, flag) in [("timed_out", false), ("failed", true)] {
+            receipt.commands[1].status = status.to_owned();
+            receipt.commands[1].timed_out = flag;
+            text.clear();
+            super::render_missing_proof_receipt_summary(&mut text, &receipt);
+            assert!(text.contains("USE_SYSTEM_BUN=1 bun test"), "{text}");
+            assert!(!text.contains("bun bd test"), "{text}");
+        }
+
+        receipt.commands.truncate(1);
+        receipt.commands[0].status = "timed_out".to_owned();
+        receipt.commands[0].timed_out = true;
+        text.clear();
+        super::render_missing_proof_receipt_summary(&mut text, &receipt);
+        assert!(text.contains("bun bd test"), "{text}");
+
+        receipt.commands[0].timed_out = false;
+        receipt.commands[0].status = "passed".to_owned();
+        text.clear();
+        super::render_missing_proof_receipt_summary(&mut text, &receipt);
+        assert!(
+            text.contains("Focused proof timed out; details are in artifacts"),
+            "{text}"
+        );
+        assert!(!text.contains("bun bd test"), "{text}");
     }
 
     #[test]
@@ -23070,7 +23142,10 @@ index 1111111..2222222 100644
 
         // Fake GitHub API: search for "fresh" finds nothing then accepts the
         // create; search for "existing" returns one hit so no create happens.
-        let (api_url, handle) = spawn_fake_issue_broker_api(3)?;
+        let (api_url, handle) = spawn_fake_issue_broker_api(
+            3,
+            r#"{"html_url":"https://github.com/EffortlessMetrics/ripr-swarm/issues/9001"}"#,
+        )?;
         let args = PostArgs {
             review_json: review_dir.join("github-review.json"),
             diff_patch: None,
@@ -23126,25 +23201,105 @@ index 1111111..2222222 100644
         Ok(())
     }
 
+    #[test]
+    fn issue_broker_does_not_report_unconfirmed_create_responses_as_opened() -> Result<()> {
+        for response in [
+            "not-json",
+            "null",
+            "[]",
+            "{}",
+            r#"{"html_url":null}"#,
+            r#"{"html_url":42}"#,
+            r#"{"html_url":""}"#,
+            r#"{"html_url":"  \t\n"}"#,
+        ] {
+            let temp = tempfile::tempdir()?;
+            let plan_path = temp.path().join("issue_broker_plan.json");
+            fs::write(
+                &plan_path,
+                serde_json::to_vec(&vec![IssueBrokerPlanEntry {
+                    schema: "ub-review.issue_broker_plan.v1".to_owned(),
+                    candidate_id: "unconfirmed-create".to_owned(),
+                    fingerprint: "fresh".to_owned(),
+                    target_repo: "EffortlessMetrics/ripr-swarm".to_owned(),
+                    decision: "attempt".to_owned(),
+                    reason: "test".to_owned(),
+                    title: "Broker response test".to_owned(),
+                    body: "body".to_owned(),
+                    labels: Vec::new(),
+                }])?,
+            )?;
+            let (api_url, handle) = spawn_fake_issue_broker_api(2, response)?;
+            let args = PostArgs {
+                review_json: temp.path().join("github-review.json"),
+                diff_patch: None,
+                out: temp.path().to_owned(),
+                github_token: Some("test-token".to_owned()),
+                repo: Some("EffortlessMetrics/ub-review".to_owned()),
+                pull_number: Some(346),
+                github_api_url: api_url,
+                fail_on_post_error: false,
+            };
+            let results = execute_issue_broker(&args, &plan_path)?;
+            let requests = join_fake_issue_broker_api(handle)?;
+            assert_eq!(requests.len(), 2);
+            assert!(requests[0].starts_with("GET /search/issues"));
+            assert!(requests[1].starts_with("POST /repos/EffortlessMetrics/ripr-swarm/issues"));
+            write_issue_broker_results(&args.out, &results)?;
+            let json: Vec<serde_json::Value> = serde_json::from_slice(&fs::read(
+                args.out.join("review/issue_broker_results.json"),
+            )?)?;
+            let ndjson: serde_json::Value = serde_json::from_str(&fs::read_to_string(
+                args.out.join("issue_broker_results.ndjson"),
+            )?)?;
+            assert_eq!(json, vec![ndjson]);
+            assert_eq!(json[0]["candidate_id"], "unconfirmed-create");
+            assert_eq!(json[0]["action"], "failed_to_open", "response: {response}");
+            assert_eq!(
+                json[0]["reason"],
+                "GitHub issue creation was not confirmed by the response; the issue may have been created"
+            );
+            assert!(json[0].get("url").is_none());
+            if response == "not-json" {
+                assert!(
+                    json[0]["error"].as_str().is_some_and(
+                        |error| error.starts_with("parse GitHub issue create response:")
+                    )
+                );
+            } else {
+                assert_eq!(
+                    json[0]["error"],
+                    "GitHub issue create response omitted a nonempty html_url"
+                );
+            }
+        }
+        Ok(())
+    }
+
     fn spawn_fake_issue_broker_api(
         expected_requests: usize,
+        create_response: &str,
     ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
         let listener = TcpListener::bind("127.0.0.1:0")?;
         listener.set_nonblocking(true)?;
         let url = format!("http://{}", listener.local_addr()?);
+        let create_response = create_response.to_owned();
         let handle = thread::spawn(move || {
             serve_fake_http(
                 listener,
                 expected_requests,
                 "issue broker",
                 FAKE_HTTP_IDLE_DEADLINE,
-                |_idx, stream| handle_fake_issue_broker_request(stream),
+                |_idx, stream| handle_fake_issue_broker_request(stream, &create_response),
             )
         });
         Ok((url, handle))
     }
 
-    fn handle_fake_issue_broker_request(mut stream: TcpStream) -> Result<String> {
+    fn handle_fake_issue_broker_request(
+        mut stream: TcpStream,
+        create_response: &str,
+    ) -> Result<String> {
         stream.set_nonblocking(false)?;
         stream.set_read_timeout(Some(FAKE_HTTP_STREAM_TIMEOUT))?;
         stream.set_write_timeout(Some(FAKE_HTTP_STREAM_TIMEOUT))?;
@@ -23193,12 +23348,7 @@ index 1111111..2222222 100644
                 serde_json::to_vec(&serde_json::json!({"total_count": 0, "items": []}))?,
             )
         } else {
-            (
-                "HTTP/1.1 201 Created",
-                serde_json::to_vec(&serde_json::json!({
-                    "html_url": "https://github.com/EffortlessMetrics/ripr-swarm/issues/9001"
-                }))?,
-            )
+            ("HTTP/1.1 201 Created", create_response.as_bytes().to_vec())
         };
         write!(
             stream,

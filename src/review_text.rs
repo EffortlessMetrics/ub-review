@@ -51,8 +51,34 @@ pub(crate) fn strip_bracketed_lane_prefix(value: &str) -> Option<&str> {
     if !trimmed.starts_with('[') {
         return None;
     }
-    let end = trimmed.find(']')?;
+    let mut depth = 0usize;
+    let mut escaped = false;
+    let mut end = None;
+    for (index, ch) in trimmed.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match ch {
+            '\\' => escaped = true,
+            '[' => depth += 1,
+            ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    end = Some(index);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let end = end?;
     if end > 80 {
+        return None;
+    }
+    // A Markdown link or reference begins with a bracketed label too, but
+    // that label is part of the finding rather than internal lane metadata.
+    if trimmed[end + 1..].starts_with(['(', '[']) {
         return None;
     }
     Some(trimmed[end + 1..].trim_start())
@@ -173,7 +199,17 @@ pub(crate) fn render_missing_proof_receipt_summary(text: &mut String, receipt: &
                 "Focused red/green proof did not discriminate the patch: {head_status} and {base_plus_tests_status} for `{command}`."
             )
         }
-        "timed_out" => format!("Focused proof timed out for `{command}`; logs are in artifacts."),
+        "timed_out" => match receipt
+            .commands
+            .iter()
+            .find(|command| command.timed_out || command.status == "timed_out")
+        {
+            Some(timed_out) => format!(
+                "Focused proof timed out for `{}`; logs are in artifacts.",
+                timed_out.command
+            ),
+            None => "Focused proof timed out; details are in artifacts.".to_owned(),
+        },
         "skipped_budget" => {
             format!(
                 "Focused proof was skipped by budget for `{command}`; plan details are in artifacts."
@@ -794,8 +830,13 @@ pub(crate) fn right_side_diff_line_text(patch: &str) -> BTreeMap<(String, u32), 
     let mut current_path = String::new();
     let mut new_line: Option<u32> = None;
     for line in patch.lines() {
-        if let Some(path) = line.strip_prefix("+++ b/") {
-            current_path = normalize_repo_path(path);
+        if line.starts_with("diff --git ") {
+            current_path.clear();
+            new_line = None;
+            continue;
+        }
+        if new_line.is_none() && line.starts_with("+++ ") {
+            current_path = review_patch_new_path(line).unwrap_or_default();
             continue;
         }
         if line.starts_with("@@") {
@@ -827,6 +868,68 @@ pub(crate) fn right_side_diff_line_text(patch: &str) -> BTreeMap<(String, u32), 
     lines
 }
 
+// Git quotes unusual path bytes using C escapes and three-digit octal escapes.
+// Reject malformed or non-UTF-8 paths rather than attaching lines to another file.
+fn review_patch_new_path(line: &str) -> Option<String> {
+    let path = line.strip_prefix("+++ ")?;
+    let is_quoted = path.starts_with('"');
+    let decoded = if let Some(quoted) = path.strip_prefix('"') {
+        let bytes = quoted.as_bytes();
+        let mut out = Vec::new();
+        let mut i = 0;
+        loop {
+            let byte = *bytes.get(i)?;
+            i += 1;
+            match byte {
+                b'"' => {
+                    if !bytes[i..].is_empty() && bytes[i] != b'\t' {
+                        return None;
+                    }
+                    break;
+                }
+                b'\\' => {
+                    let escaped = *bytes.get(i)?;
+                    i += 1;
+                    let value = match escaped {
+                        b'a' => 7,
+                        b'b' => 8,
+                        b't' => b'\t',
+                        b'n' => b'\n',
+                        b'v' => 11,
+                        b'f' => 12,
+                        b'r' => b'\r',
+                        b'\\' | b'"' => escaped,
+                        b'0'..=b'7' => {
+                            let second = *bytes.get(i)?;
+                            let third = *bytes.get(i + 1)?;
+                            if !(b'0'..=b'7').contains(&second) || !(b'0'..=b'7').contains(&third) {
+                                return None;
+                            }
+                            i += 2;
+                            let octal = u16::from(escaped - b'0') * 64
+                                + u16::from(second - b'0') * 8
+                                + u16::from(third - b'0');
+                            u8::try_from(octal).ok()?
+                        }
+                        _ => return None,
+                    };
+                    out.push(value);
+                }
+                _ => out.push(byte),
+            }
+        }
+        String::from_utf8(out).ok()?
+    } else {
+        path.split('\t').next()?.to_owned()
+    };
+    let repo_path = decoded.strip_prefix("b/")?;
+    let normalized = normalize_repo_path(repo_path);
+    if is_quoted && normalized != repo_path {
+        return None;
+    }
+    Some(normalized)
+}
+
 pub(crate) fn parse_hunk_new_start(line: &str) -> Option<u32> {
     let plus = line.split_whitespace().find(|part| part.starts_with('+'))?;
     let start = plus
@@ -838,13 +941,16 @@ pub(crate) fn parse_hunk_new_start(line: &str) -> Option<u32> {
     Some(start)
 }
 
+/// Normalize an already repository-relative path. Diff readers remove their
+/// `+++ b/` transport prefix before calling this; a remaining `b/` names a real
+/// directory and must survive candidate, proof and delivery validation.
 pub(crate) fn normalize_repo_path(path: &str) -> String {
-    path.trim().trim_start_matches("b/").replace('\\', "/")
+    path.trim().replace('\\', "/")
 }
 
 pub(crate) fn ensure_lane_prefix(lane: &str, body: &str) -> String {
     let prefix = format!("[{lane}]");
-    if body.starts_with(&prefix) {
+    if body.starts_with(&prefix) && strip_bracketed_lane_prefix(body).is_some() {
         body.to_owned()
     } else {
         format!("{prefix} {body}")
@@ -983,6 +1089,65 @@ pub(crate) fn posted_inline_comment_text(body: &str) -> String {
 mod github_review_serialization_tests {
     use super::*;
     use anyhow::{Result, ensure};
+
+    #[test]
+    fn bracketed_prefix_boundaries() {
+        assert_eq!(strip_bracketed_lane_prefix("plain"), None);
+        assert_eq!(strip_bracketed_lane_prefix("[unclosed"), None);
+        assert_eq!(strip_bracketed_lane_prefix("[lane [nested]"), None);
+        assert_eq!(strip_bracketed_lane_prefix(r"[lane \] tail"), None);
+        assert_eq!(
+            strip_bracketed_lane_prefix("[lane] finding"),
+            Some("finding")
+        );
+        assert_eq!(
+            strip_bracketed_lane_prefix("[lane [nested]] finding"),
+            Some("finding")
+        );
+        assert_eq!(
+            strip_bracketed_lane_prefix(r"[lane \] nested] finding"),
+            Some("finding")
+        );
+        assert_eq!(strip_bracketed_lane_prefix("[label [inner]](url)"), None);
+        assert_eq!(strip_bracketed_lane_prefix("[label [inner]][ref]"), None);
+        assert_eq!(
+            strip_bracketed_lane_prefix(&format!("[{}] text", "x".repeat(80))),
+            None
+        );
+    }
+
+    #[test]
+    fn lane_named_link_keeps_provenance_and_public_body() {
+        let link = "[tests](https://example.com) explains the failure";
+        let artifact = ensure_lane_prefix("tests", link);
+        assert_eq!(artifact, format!("[tests] {link}"));
+        assert_eq!(posted_inline_comment_text(&artifact), link);
+        assert_eq!(
+            ensure_lane_prefix("tests", "[tests] finding"),
+            "[tests] finding"
+        );
+    }
+
+    #[test]
+    fn summary_preserves_leading_markdown_links_and_strips_lane_metadata() {
+        let mut text = String::new();
+        render_pr_model_signal(
+            &mut text,
+            "[contract](https://example.com) contradicts this change",
+        );
+        render_pr_model_signal(&mut text, "[contract][spec] contradicts this change");
+        render_pr_model_signal(
+            &mut text,
+            "[contract [v2]](https://example.com) contradicts this change",
+        );
+        render_pr_model_signal(&mut text, "[contract [v2]][spec] contradicts this change");
+        render_pr_model_signal(&mut text, r"[contract \] v2][spec] contradicts this change");
+        render_pr_model_signal(&mut text, "[tests] The assertion misses the changed branch");
+        assert_eq!(
+            text,
+            "- [contract](https://example.com) contradicts this change.\n- [contract][spec] contradicts this change.\n- [contract [v2]](https://example.com) contradicts this change.\n- [contract [v2]][spec] contradicts this change.\n- [contract \\] v2][spec] contradicts this change.\n- The assertion misses the changed branch.\n"
+        );
+    }
 
     #[test]
     fn github_review_round_trip_preserves_unicode_path_and_stable_post_json() -> Result<()> {

@@ -153,6 +153,13 @@ repository's `.ub-review.toml` makes the five non-tokmd core sensors
 
 ### Run-environment inputs
 
+Sensor children receive only the execution-metadata allowlist in
+`src/lane_packets.rs`; explicit overrides remain subject to that allowlist.
+Native environment bytes are preserved for allowed keys. Unrelated non-Unicode
+keys or values must neither reach the child nor prevent it from launching.
+This quarantine does not establish immutable executable identity or general
+hostile-head containment (see #1062).
+
 - `doctor --require-core-tools` (or `UB_REVIEW_STANDARD_IMAGE`): doctor
   bails when a core tool is missing or a pinned version mismatches
   (src/main.rs `cmd_doctor`). The pin table covers tokmd (`1.12.0`),

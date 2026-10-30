@@ -1291,13 +1291,17 @@ fn spawn_fake_setup_ci_api(
             expected_requests,
             "setup-ci",
             super::FAKE_HTTP_IDLE_DEADLINE,
-            move |_idx, stream| handle_fake_setup_ci_request(stream, config_exists),
+            move |_idx, stream| handle_fake_setup_ci_request(stream, config_exists, None),
         )
     });
     Ok((url, handle))
 }
 
-fn handle_fake_setup_ci_request(mut stream: TcpStream, config_exists: bool) -> Result<String> {
+fn handle_fake_setup_ci_request(
+    mut stream: TcpStream,
+    config_exists: bool,
+    response_override: Option<(&str, &[u8])>,
+) -> Result<String> {
     stream.set_nonblocking(false)?;
     stream.set_read_timeout(Some(super::FAKE_HTTP_STREAM_TIMEOUT))?;
     stream.set_write_timeout(Some(super::FAKE_HTTP_STREAM_TIMEOUT))?;
@@ -1363,12 +1367,15 @@ fn handle_fake_setup_ci_request(mut stream: TcpStream, config_exists: bool) -> R
                 serde_json::to_vec(&serde_json::json!({}))?,
             )
         };
+    let (status_line, response_body) = response_override.unwrap_or((status_line, &response_body));
     write!(
         stream,
         "{status_line}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        response_body.len()
+        // A valid JSON body shorter than its declared length makes curl fail
+        // while retaining HTTP 201, independently exercising process status.
+        response_body.len() + usize::from(status_line.ends_with("Truncated"))
     )?;
-    stream.write_all(&response_body)?;
+    stream.write_all(response_body)?;
     Ok(format!(
         "{request_line}\n{}",
         String::from_utf8_lossy(&body)
@@ -1515,6 +1522,112 @@ fn setup_ci_open_pr_creates_branch_files_and_pr_with_receipts() -> Result<()> {
     assert!(branch_doc.contains("Branch protection remains manual"));
     assert!(branch_doc.contains("old required checks unknown"));
     assert!(branch_doc.contains("one observed red proof"));
+    Ok(())
+}
+
+#[test]
+fn setup_ci_open_pr_stops_after_unconfirmed_publication() -> Result<()> {
+    // Exercise every write in the real command, through the existing curl
+    // transport. The server stays available after the fault so accidental
+    // continuation can complete and is visible in the request inventory.
+    for failed_request in 3..9 {
+        for (status, body, diagnostic) in [
+            ("HTTP/1.1 201 Created", "{", "invalid JSON"),
+            ("HTTP/1.1 201 Created", "null", "JSON object"),
+            ("HTTP/1.1 201 Created", "[]", "JSON object"),
+            ("HTTP/1.1 201 Created", "7", "JSON object"),
+            ("HTTP/1.1 201 Truncated", "{}", "http status"),
+            ("HTTP/1.1 200 OK", "{}", "http status"),
+            ("HTTP/1.1 202 Accepted", "{}", "http status"),
+            ("HTTP/1.1 204 No Content", "", "http status"),
+            ("HTTP/1.1 302 Found", "{}", "http status"),
+            ("HTTP/1.1 503 Service Unavailable", "{}", "http status"),
+        ] {
+            check_setup_ci_publication_failure(failed_request, status, body, diagnostic)?;
+        }
+    }
+    for body in [
+        "{}",
+        r#"{"html_url":null}"#,
+        r#"{"html_url":7}"#,
+        r#"{"html_url":""}"#,
+        r#"{"html_url":"   "}"#,
+    ] {
+        check_setup_ci_publication_failure(8, "HTTP/1.1 201 Created", body, "html_url")?;
+    }
+    Ok(())
+}
+
+fn check_setup_ci_publication_failure(
+    failed_request: usize,
+    status: &'static str,
+    body: &'static str,
+    diagnostic: &str,
+) -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let out = temp.path().join("run");
+    let audit = out.join("ci-audit");
+    write_setup_ci_fixture(&audit)?;
+    fs::write(audit.join("setup-pr-result.json"), "stale success")?;
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    listener.set_nonblocking(true)?;
+    let api_url = format!("http://{}", listener.local_addr()?);
+    let (stop, stopped) = std::sync::mpsc::channel();
+    let handle = thread::spawn(move || -> Result<Vec<String>> {
+        let mut deadline = Instant::now() + super::FAKE_HTTP_IDLE_DEADLINE;
+        let mut requests = Vec::new();
+        while stopped.try_recv().is_err() {
+            match listener.accept() {
+                Ok((stream, _)) => {
+                    let response =
+                        (requests.len() == failed_request).then_some((status, body.as_bytes()));
+                    requests.push(handle_fake_setup_ci_request(stream, false, response)?);
+                    deadline = Instant::now() + super::FAKE_HTTP_IDLE_DEADLINE;
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                    if Instant::now() >= deadline {
+                        bail!("setup-ci publication fixture deadline exceeded");
+                    }
+                    thread::sleep(Duration::from_millis(1));
+                }
+                Err(err) => return Err(err.into()),
+            }
+        }
+        Ok(requests)
+    });
+    let mut args = setup_ci_args(&out, vec!["integration=cargo test --locked".to_owned()]);
+    args.print_pr = false;
+    args.open_pr = true;
+    args.repo = Some("acme/widgets".to_owned());
+    args.github_token = Some("test-token".to_owned());
+    args.github_api_url = api_url;
+    args.action_sha = Some("a".repeat(40));
+    let result = crate::cmd_setup_ci(args);
+    let stop_result = stop.send(());
+    let requests = match handle.join() {
+        Ok(result) => result?,
+        Err(_) => bail!("fake setup-ci API thread panicked"),
+    };
+    stop_result?;
+    assert_eq!(
+        requests.len(),
+        failed_request + 1,
+        "write {failed_request}, {status}, {body}: continued after unconfirmed publication"
+    );
+    let error = result
+        .err()
+        .context("unconfirmed publication returned success")?;
+    assert!(format!("{error:#}").contains(diagnostic), "{error:#}");
+    assert!(!audit.join("setup-pr-result.json").exists());
+    let receipt: serde_json::Value =
+        serde_json::from_slice(&fs::read(audit.join("setup-pr-error.json"))?)?;
+    assert_eq!(receipt["status"], "failed");
+    assert!(
+        receipt["reason"]
+            .as_str()
+            .context("error reason")?
+            .contains(diagnostic)
+    );
     Ok(())
 }
 

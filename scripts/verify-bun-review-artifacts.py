@@ -2032,6 +2032,9 @@ def load_revision_binding(root: pathlib.Path) -> "dict | None":
     commit = admission.get("reviewed_commit_oid")
     if not isinstance(commit, str) or len(commit) not in (40, 64):
         fail("[missing_strong_binding] reviewed_commit_oid must be a git object id")
+    reviewed_lines = [line for line in canonical.splitlines() if line.startswith("reviewed=")]
+    if len(reviewed_lines) != 1 or reviewed_lines[0].split()[0] != "reviewed=" + commit:
+        fail("[stale_revision] revision-admission reviewed_commit_oid differs from canonical reviewed commit")
     return {
         "digest": claimed,
         "semantics": semantics_line,
@@ -7535,6 +7538,7 @@ GATE_WATCHDOG_REASON_STATES = {
     "coordinator-crash": "inconclusive",
     "orphaned-proof": "inconclusive",
     "cancelled-without-replacement": "inconclusive",
+    "incomplete-run": "inconclusive",
     "missing-artifact": "inconclusive",
     "stale-success": "inconclusive",
     "missing-run": "inconclusive",
@@ -15604,7 +15608,7 @@ def self_test_revision_binding_enforcement() -> None:
     tokens, while legacy packets stay inspectable."""
     digest_a = "a" * 64
     digest_f = "f" * 64
-    commit = "b" * 40
+    commit = "3" * 40
 
     def canonical(semantics: str = "candidate_head") -> str:
         return (
@@ -15679,6 +15683,22 @@ def self_test_revision_binding_enforcement() -> None:
 
     # Positive: a well-formed admission joins every stamped surface.
     require_claim_graph(base_root(claimed=_recompute_identity_digest(canonical())))
+
+    # The digest authenticates the canonical reviewed commit, so a different
+    # metadata commit must not become the join key for every artifact.
+    contradiction = base_root(claimed=_recompute_identity_digest(canonical()))
+    admission_path = contradiction / "input/revision-admission.json"
+    admission = json.loads(admission_path.read_text())
+    admission["reviewed_commit_oid"] = "b" * 40
+    write_self_test_json(admission_path, admission)
+    expect_self_test_failure(
+        "canonical reviewed commit contradiction",
+        "[stale_revision] revision-admission reviewed_commit_oid",
+        lambda: load_revision_binding(contradiction),
+    )
+    admission["reviewed_commit_oid"] = commit
+    write_self_test_json(admission_path, admission)
+    require_claim_graph(contradiction)
 
     # Forged: the claimed digest does not match recomputation.
     expect_self_test_failure(
@@ -15926,6 +15946,7 @@ def self_test_gate_watchdog_contract() -> None:
 
     require_gate_watchdog(write_root(terminal()))
     require_gate_watchdog(write_root(inconclusive()))
+    require_gate_watchdog(write_root(inconclusive(reason="incomplete-run")))
 
     cases = [
         ("wrong schema", terminal(schema="ub-review.gate_watchdog.v2"), "wrong schema"),
@@ -15941,6 +15962,16 @@ def self_test_gate_watchdog_contract() -> None:
             "non-terminal serializes a pass",
             inconclusive(conclusion="pass"),
             "must not serialize a conclusion",
+        ),
+        (
+            "incomplete run serializes a pass",
+            inconclusive(reason="incomplete-run", conclusion="pass"),
+            "must not serialize a conclusion",
+        ),
+        (
+            "incomplete run is marked terminal",
+            terminal(reason="incomplete-run"),
+            "does not belong to state",
         ),
         (
             "terminal carries retry_action",
