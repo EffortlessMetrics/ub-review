@@ -132,9 +132,18 @@ fn execute_pending_review_delivery_with_transport(
     let api = args.github_api_url.trim_end_matches('/');
     let review_url = format!("{api}/repos/{repo}/pulls/{pull_number}/reviews");
 
-    let claim_graph = load_claim_graph(args, !review.comments.is_empty())?;
-    let expected_head = read_expected_delivery_head(review, claim_graph.as_ref())?;
+    let mut claim_graph = load_claim_graph(args, !review.comments.is_empty())?;
     let current_head = fetch_pull_head(transport, api, repo, pull_number, token)?;
+    let merge_head =
+        bind_merge_delivery(args, review, claim_graph.as_mut(), &current_head, transport)?;
+    let expected_head = match merge_head {
+        Some(head) => {
+            let live_head = fetch_pull_head(transport, api, repo, pull_number, token)?;
+            ensure_heads_match("after merge delivery binding", &head, &live_head)?;
+            Some(head)
+        }
+        None => read_expected_delivery_head(review, claim_graph.as_ref())?,
+    };
     let expected_head = expected_head.unwrap_or(current_head.clone());
     ensure_heads_match(
         "before pending-review creation",
@@ -489,6 +498,168 @@ fn load_claim_graph(args: &PostArgs, required: bool) -> Result<Option<serde_json
         .map(Some)
 }
 
+// Bind a saved merge packet without relabeling its analysis identity. This
+// projection is private to delivery; the source admission and graph stay intact.
+fn bind_merge_delivery(
+    args: &PostArgs,
+    review: &GitHubReview,
+    graph: Option<&mut serde_json::Value>,
+    current_head: &str,
+    transport: &mut impl DeliveryTransport,
+) -> Result<Option<String>> {
+    let Some(graph) = graph else { return Ok(None) };
+    if graph
+        .pointer("/revision/semantics")
+        .and_then(serde_json::Value::as_str)
+        != Some("merge_result")
+    {
+        return Ok(None);
+    }
+    let revision: RevisionRef = serde_json::from_value(graph["revision"].clone())?;
+    revision.validate()?;
+    let packet = args
+        .review_json
+        .parent()
+        .and_then(Path::parent)
+        .ok_or_else(|| anyhow::anyhow!("merge delivery requires a saved review packet"))?;
+    let admission: crate::revision_admission::RevisionAdmission = serde_json::from_slice(
+        &fs::read(packet.join("input/revision-admission.json"))
+            .context("read merge delivery admission")?,
+    )?;
+    admission.validate()?;
+    let identity =
+        crate::revision_identity::RevisionIdentity::from_canonical(&admission.identity_canonical)?;
+    let (base, head, reviewed) = identity.merge_delivery_sides()?;
+    ensure!(
+        revision.digest == identity.identity_digest()
+            && revision.reviewed_commit == reviewed.commit_oid()
+            && admission.semantics == "merge_result"
+            && admission.reviewed_commit_oid == reviewed.commit_oid()
+            && admission.pr_head_commit.as_deref() == Some(head.commit_oid()),
+        "merge delivery admission does not match the reviewed revision"
+    );
+    ensure_heads_match(
+        "before merge delivery binding",
+        head.commit_oid(),
+        current_head,
+    )?;
+    let api = args.github_api_url.trim_end_matches('/');
+    let repo = args
+        .repo
+        .as_deref()
+        .context("merge delivery repository missing")?;
+    let token = args
+        .github_token
+        .as_deref()
+        .context("merge delivery token missing")?;
+    let mut objects = Vec::new();
+    for side in [reviewed, head, base] {
+        let object = transport.fetch_json(
+            &format!("{api}/repos/{repo}/git/commits/{}", side.commit_oid()),
+            token,
+        )?;
+        ensure!(
+            object["sha"].as_str() == Some(side.commit_oid())
+                && object
+                    .pointer("/tree/sha")
+                    .and_then(serde_json::Value::as_str)
+                    == Some(side.tree_oid()),
+            "merge delivery commit/tree mismatch"
+        );
+        objects.push(object);
+    }
+    let merge_object = &objects[0];
+    let parents = merge_object["parents"]
+        .as_array()
+        .context("merge delivery parents missing")?;
+    ensure!(
+        parents.len() == 2
+            && parents[0]["sha"].as_str() == Some(base.commit_oid())
+            && parents[1]["sha"].as_str() == Some(head.commit_oid()),
+        "merge delivery parent relationship mismatch"
+    );
+    let mut paths = std::collections::BTreeSet::new();
+    for comment in &review.comments {
+        ensure!(
+            comment.side == "RIGHT",
+            "merge delivery requires a post-image anchor"
+        );
+        paths.insert(comment.path.as_str());
+    }
+    let mut anchors = Vec::new();
+    for path in paths {
+        // Whole-file blob equality is conservative: if integration changed
+        // this file, no line-number equivalence is inferred.
+        let encoded = path
+            .split('/')
+            .map(percent_encode_query)
+            .collect::<Vec<_>>()
+            .join("/");
+        let mut blobs = Vec::new();
+        for side in [reviewed, head] {
+            let file = transport.fetch_json(
+                &format!(
+                    "{api}/repos/{repo}/contents/{encoded}?ref={}",
+                    side.commit_oid()
+                ),
+                token,
+            )?;
+            ensure!(
+                file["type"] == "file" && file["path"].as_str() == Some(path),
+                "merge delivery anchor is not the requested file"
+            );
+            let sha = file["sha"]
+                .as_str()
+                .context("merge delivery file blob missing")?;
+            crate::revision_identity::CommitTree::new("anchor blob", sha, sha)?;
+            blobs.push(sha.to_owned());
+        }
+        ensure!(
+            blobs[0] == blobs[1],
+            "merge delivery file differs from publication head: {path}"
+        );
+        anchors.push(serde_json::json!({"path": path, "blob": blobs[0]}));
+    }
+    let source_label = graph["head_sha"]
+        .as_str()
+        .context("merge claim graph subject missing")?
+        .to_owned();
+    ensure!(
+        source_label == "HEAD"
+            || source_label == reviewed.commit_oid()
+            || source_label == head.commit_oid(),
+        "merge claim graph subject belongs to another head"
+    );
+    for topic in graph["topics"]
+        .as_array_mut()
+        .context("merge claim graph topics missing")?
+    {
+        let subject = topic["head_sha"]
+            .as_str()
+            .context("merge topic subject missing")?;
+        ensure!(
+            subject == source_label
+                || subject == reviewed.commit_oid()
+                || subject == head.commit_oid(),
+            "merge topic belongs to another subject"
+        );
+        topic["head_sha"] = serde_json::json!(head.commit_oid());
+    }
+    write_json(
+        &args.out.join("delivery-revision-binding.json"),
+        &serde_json::json!({
+            "schema": "ub-review.delivery_revision_binding.v1",
+            "publication_head": head.commit_oid(),
+            "admission": admission,
+            "merge_object": merge_object,
+            "head_object": objects[1],
+            "base_object": objects[2],
+            "anchors": anchors,
+        }),
+    )?;
+    Ok(Some(head.commit_oid().to_owned()))
+}
+
 fn read_expected_delivery_head(
     review: &GitHubReview,
     claim_graph: Option<&serde_json::Value>,
@@ -496,9 +667,13 @@ fn read_expected_delivery_head(
     if !review.comments.is_empty() || claim_graph.is_some() {
         let graph = claim_graph.ok_or_else(|| anyhow::anyhow!("claim graph is required"))?;
         // A1.3 (#950): the immutable revision reference is authoritative.
-        // Its reviewed_commit is the exact git object the run admitted, so
-        // delivery binds to that instead of any symbolic label.
+        // Candidate-head runs review their publication head. Merge-result
+        // packets must instead pass the separate admission/object binding.
         if let Some(revision) = graph.get("revision") {
+            ensure!(
+                revision["semantics"] != "merge_result",
+                "merge delivery requires admission binding"
+            );
             let commit = revision
                 .get("reviewed_commit")
                 .and_then(serde_json::Value::as_str)
@@ -536,6 +711,7 @@ fn build_planned_deliveries(
         .get("topics")
         .and_then(serde_json::Value::as_array)
         .ok_or_else(|| anyhow::anyhow!("claim graph topics are missing"))?;
+    let has_surface_dispositions = topics.iter().any(|topic| topic.get("delivery").is_some());
     review
         .comments
         .iter()
@@ -544,13 +720,25 @@ fn build_planned_deliveries(
             let matches = topics
                 .iter()
                 .filter(|topic| {
-                    matches!(
-                        topic
-                            .get("planned_action")
-                            .and_then(serde_json::Value::as_str),
-                        Some("inline") | Some("reply")
-                    ) && topic.get("head_sha").and_then(serde_json::Value::as_str)
-                        == Some(exact_head_sha)
+                    // Retained private observations can share a public
+                    // comment's location and provisional action. Only the
+                    // compiler-selected surface authorizes delivery. Legacy
+                    // packets wholly without this field retain the exact,
+                    // unique location check. A missing field in a mixed packet
+                    // or an explicit unknown value is not public authority.
+                    let selected_surface = match topic.get("delivery") {
+                        None => !has_surface_dispositions,
+                        Some(value) => value.as_str() == Some("inline-candidate"),
+                    };
+                    selected_surface
+                        && matches!(
+                            topic
+                                .get("planned_action")
+                                .and_then(serde_json::Value::as_str),
+                            Some("inline") | Some("reply")
+                        )
+                        && topic.get("head_sha").and_then(serde_json::Value::as_str)
+                            == Some(exact_head_sha)
                         && topic
                             .get("path")
                             .and_then(serde_json::Value::as_str)
@@ -1513,6 +1701,332 @@ mod tests {
     }
 
     #[test]
+    fn merge_result_inline_delivery_preserves_analysis_and_rejects_stale_subjects() -> Result<()> {
+        use crate::revision_identity::{CommitTree, ReviewSemantics, RevisionIdentity};
+        struct RecordingTransport {
+            inner: ScriptedTransport,
+            reads: Vec<String>,
+            writes: Vec<serde_json::Value>,
+            requests: Vec<(String, String, Vec<String>)>,
+            fail_read: Option<usize>,
+        }
+        impl DeliveryTransport for RecordingTransport {
+            fn fetch_json(&mut self, url: &str, token: &str) -> Result<serde_json::Value> {
+                self.reads.push(url.to_owned());
+                if self.fail_read == Some(self.reads.len()) {
+                    bail!("scripted transport failure");
+                }
+                self.inner.fetch_json(url, token)
+            }
+            fn send_json(
+                &mut self,
+                method: &str,
+                url: &str,
+                token: &str,
+                path: &Path,
+                headers: &[&str],
+            ) -> Result<HttpPostOutput> {
+                self.requests.push((
+                    method.to_owned(),
+                    url.to_owned(),
+                    headers.iter().map(|h| (*h).to_owned()).collect(),
+                ));
+                self.writes.push(serde_json::from_slice(&fs::read(path)?)?);
+                self.inner.send_json(method, url, token, path, headers)
+            }
+        }
+        let base = "a".repeat(40);
+        let merge = "b".repeat(40);
+        let base_tree = "c".repeat(40);
+        let head_tree = "d".repeat(40);
+        let merge_tree = "e".repeat(40);
+        let blob = "f".repeat(40);
+        let identity = RevisionIdentity::new(
+            CommitTree::new("base", &base, &base_tree)?,
+            CommitTree::new("head", HEAD, &head_tree)?,
+            CommitTree::new("reviewed", &merge, &merge_tree)?,
+            Some(CommitTree::new("merge", &merge, &merge_tree)?),
+            ReviewSemantics::MergeResult,
+            &RevisionIdentity::changed_paths_digest(["src/lib.rs"]),
+            &RevisionIdentity::diff_digest(b"fixture patch"),
+        )?;
+        let admission = crate::revision_admission::RevisionAdmission {
+            schema: crate::revision_admission::REVISION_ADMISSION_SCHEMA.to_owned(),
+            identity_canonical: identity.canonical_form(),
+            identity_digest: identity.identity_digest(),
+            semantics: "merge_result".to_owned(),
+            reviewed_commit_oid: merge.clone(),
+            pr_head_commit: Some(HEAD.to_owned()),
+            worktree_dirty: false,
+        };
+        for case in [
+            "valid",
+            "valid_summary",
+            "summary_stale",
+            "summary_late_stale",
+            "valid_merge_label",
+            "valid_head_label",
+            "unrelated_graph_admitted_topic",
+            "unrelated_graph_and_topic",
+            "stale",
+            "late_stale",
+            "wrong_parent",
+            "wrong_tree",
+            "wrong_blob",
+            "wrong_digest",
+            "wrong_metadata",
+            "wrong_topic",
+            "missing_admission",
+            "legacy_stale",
+            "commit_transport_failure",
+            "file_transport_failure",
+            "binding_write_failure",
+        ] {
+            let summary_only = case.contains("summary");
+            let temp = tempfile::tempdir()?;
+            let review_dir = temp.path().join("review");
+            fs::create_dir_all(&review_dir)?;
+            fs::create_dir_all(temp.path().join("input"))?;
+            let mut graph = graph_for("src/lib.rs", 12, "inline", "HEAD");
+            graph["revision"] = serde_json::to_value(RevisionRef::from_admission(&admission))?;
+            match case {
+                "valid_merge_label" => {
+                    graph["head_sha"] = serde_json::json!(merge);
+                    graph["topics"][0]["head_sha"] = serde_json::json!(merge);
+                }
+                "valid_head_label" => {
+                    graph["head_sha"] = serde_json::json!(HEAD);
+                    graph["topics"][0]["head_sha"] = serde_json::json!(HEAD);
+                }
+                "unrelated_graph_and_topic" => {
+                    graph["head_sha"] = serde_json::json!(base);
+                    graph["topics"][0]["head_sha"] = serde_json::json!(base);
+                }
+                "unrelated_graph_admitted_topic" => {
+                    graph["head_sha"] = serde_json::json!(base);
+                    graph["topics"][0]["head_sha"] = serde_json::json!(HEAD);
+                }
+                _ => {}
+            }
+
+            if case == "wrong_digest" {
+                graph["revision"]["digest"] = serde_json::json!("0".repeat(64));
+            }
+            if case == "wrong_topic" {
+                graph["topics"][0]["head_sha"] = serde_json::json!(base);
+            }
+            if case == "legacy_stale" {
+                graph
+                    .as_object_mut()
+                    .context("graph object")?
+                    .remove("revision");
+                graph["head_sha"] = serde_json::json!(base);
+                graph["topics"][0]["head_sha"] = serde_json::json!(base);
+            }
+            let graph_bytes = serde_json::to_vec(&graph)?;
+            fs::write(review_dir.join("claim_graph.json"), &graph_bytes)?;
+            let mut saved_admission = admission.clone();
+            if case == "wrong_metadata" {
+                saved_admission.pr_head_commit = Some(merge.clone());
+            }
+            let admission_bytes = serde_json::to_vec(&saved_admission)?;
+            fs::write(
+                temp.path().join("input/revision-admission.json"),
+                &admission_bytes,
+            )?;
+            if case == "missing_admission" {
+                fs::rename(
+                    temp.path().join("input/revision-admission.json"),
+                    temp.path().join("input/retained.json"),
+                )?;
+            }
+            let mut scripted = ScriptedTransport {
+                gets: VecDeque::from([
+                    serde_json::json!({"head": {"sha": if matches!(case, "stale" | "summary_stale") { &merge } else { HEAD }}}),
+                    serde_json::json!({"sha": merge, "tree": {"sha": if case == "wrong_tree" { &base_tree } else { &merge_tree }},
+                        "parents": [{"sha": base}, {"sha": if case == "wrong_parent" { &base } else { HEAD }}]}),
+                    serde_json::json!({"sha": HEAD, "tree": {"sha": head_tree}}),
+                    serde_json::json!({"sha": base, "tree": {"sha": base_tree}}),
+                    serde_json::json!({"sha": blob, "type": "file", "path": "src/lib.rs"}),
+                    serde_json::json!({"sha": if case == "wrong_blob" { &base } else { &blob }, "type": "file", "path": "src/lib.rs"}),
+                    serde_json::json!({"head": {"sha": if matches!(case, "late_stale" | "summary_late_stale") { &merge } else { HEAD }}}),
+                    serde_json::json!([{"id":987,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":HEAD,"body":"exact body"}]),
+                    serde_json::json!({"head": {"sha": HEAD}}),
+                ]),
+                sends: VecDeque::from([
+                    scripted_output(r#"{"id":987}"#, true)?,
+                    scripted_output(r#"{"id":987,"state":"commented"}"#, true)?,
+                ]),
+            };
+            if summary_only {
+                // Summary-only merge binding verifies commit identity without
+                // querying inline anchor blobs. Response reconciliation still runs.
+                scripted.gets[7] = serde_json::json!([]);
+                scripted.gets.remove(5);
+                scripted.gets.remove(4);
+            }
+            let mut transport = RecordingTransport {
+                inner: scripted,
+                reads: Vec::new(),
+                writes: Vec::new(),
+                requests: Vec::new(),
+                fail_read: match case {
+                    "commit_transport_failure" => Some(2),
+                    "file_transport_failure" => Some(5),
+                    _ => None,
+                },
+            };
+            let (mut review, mut payload) = delivery_review();
+            if summary_only {
+                review.comments.clear();
+                payload.comments.clear();
+            }
+            let args = delivery_args(&review_dir, "http://scripted");
+            if case == "binding_write_failure" {
+                fs::create_dir_all(args.out.join("delivery-revision-binding.json"))?;
+            }
+            let result = execute_pending_review_delivery_with_transport(
+                &args,
+                &review,
+                &payload,
+                &mut transport,
+            );
+            if case.starts_with("valid") {
+                let outcome = result.with_context(|| format!("case {case}"))?;
+                ensure!(outcome.response["state"] == "commented");
+                ensure!(transport.writes.len() == 2);
+                let headers = vec![
+                    "Accept: application/vnd.github+json".to_owned(),
+                    "Content-Type: application/json".to_owned(),
+                    "X-GitHub-Api-Version: 2022-11-28".to_owned(),
+                ];
+                ensure!(
+                    transport.requests
+                        == vec![
+                            (
+                                "POST".to_owned(),
+                                "http://scripted/repos/owner/repo/pulls/42/reviews".to_owned(),
+                                headers.clone()
+                            ),
+                            (
+                                "POST".to_owned(),
+                                "http://scripted/repos/owner/repo/pulls/42/reviews/987/events"
+                                    .to_owned(),
+                                headers
+                            ),
+                        ]
+                );
+                ensure!(transport.writes[0]["commit_id"] == HEAD);
+                if summary_only {
+                    ensure!(
+                        transport.writes[0]["comments"]
+                            .as_array()
+                            .is_none_or(Vec::is_empty)
+                    );
+                } else {
+                    ensure!(transport.writes[0]["comments"][0]["line"] == 12);
+                }
+                ensure!(transport.writes[1]["event"] == "COMMENT");
+                ensure!(
+                    transport.reads
+                        == vec![
+                            "http://scripted/repos/owner/repo/pulls/42".to_owned(),
+                            format!("http://scripted/repos/owner/repo/git/commits/{merge}"),
+                            format!("http://scripted/repos/owner/repo/git/commits/{HEAD}"),
+                            format!("http://scripted/repos/owner/repo/git/commits/{base}"),
+                            format!(
+                                "http://scripted/repos/owner/repo/contents/src/lib.rs?ref={merge}"
+                            ),
+                            format!(
+                                "http://scripted/repos/owner/repo/contents/src/lib.rs?ref={HEAD}"
+                            ),
+                            "http://scripted/repos/owner/repo/pulls/42".to_owned(),
+                            "http://scripted/repos/owner/repo/pulls/42/reviews/987/comments"
+                                .to_owned(),
+                            "http://scripted/repos/owner/repo/pulls/42".to_owned(),
+                        ]
+                        .into_iter()
+                        .filter(|url| !summary_only || !url.contains("/contents/"))
+                        .collect::<Vec<_>>(),
+                    "unexpected GETs: {:?}",
+                    transport.reads
+                );
+                ensure!(transport.inner.gets.is_empty() && transport.inner.sends.is_empty());
+                let transaction: DeliveryTransaction =
+                    serde_json::from_slice(&fs::read(args.out.join("delivery-transaction.json"))?)?;
+                ensure!(transaction.state() == &DeliveryTransactionState::ReceiptsPersisted);
+                let binding: serde_json::Value = serde_json::from_slice(&fs::read(
+                    args.out.join("delivery-revision-binding.json"),
+                )?)?;
+                ensure!(binding["publication_head"] == HEAD);
+                ensure!(binding["admission"]["reviewed_commit_oid"] == merge);
+                ensure!(binding["admission"]["identity_canonical"] == identity.canonical_form());
+                ensure!(binding["merge_object"]["parents"][0]["sha"] == base);
+                ensure!(binding["merge_object"]["parents"][1]["sha"] == HEAD);
+            } else {
+                let failure = match result {
+                    Err(error) => error,
+                    Ok(_) => bail!("{case} accepted"),
+                };
+                let error = format!("{failure:#}");
+                match case {
+                    "stale" | "legacy_stale" | "summary_stale" => {
+                        ensure!(
+                            error.contains("GitHub pull head changed"),
+                            "{case}: {error}"
+                        );
+                        ensure!(transport.reads.len() == 1, "{case} continued reads");
+                    }
+                    "commit_transport_failure" | "file_transport_failure" => {
+                        ensure!(
+                            error.contains("scripted transport failure"),
+                            "{case}: {error}"
+                        );
+                        ensure!(Some(transport.reads.len()) == transport.fail_read);
+                    }
+                    "binding_write_failure" => {
+                        ensure!(
+                            failure.downcast_ref::<std::io::Error>().is_some(),
+                            "{error}"
+                        )
+                    }
+                    _ => {}
+                }
+                if case.starts_with("unrelated_graph") {
+                    ensure!(
+                        !args.out.join("delivery-revision-binding.json").exists(),
+                        "{case} wrote binding"
+                    );
+                    ensure!(
+                        !args
+                            .out
+                            .join("delivery-pending-review-payload.json")
+                            .exists(),
+                        "{case} prepared pending review"
+                    );
+                }
+
+                ensure!(
+                    transport.inner.sends.len() == 2 && transport.writes.is_empty(),
+                    "{case} performed a write"
+                );
+                ensure!(
+                    !args.out.join("delivery-transaction.json").exists(),
+                    "{case} began transaction"
+                );
+            }
+            ensure!(fs::read(review_dir.join("claim_graph.json"))? == graph_bytes);
+            let saved = if case == "missing_admission" {
+                "input/retained.json"
+            } else {
+                "input/revision-admission.json"
+            };
+            ensure!(fs::read(temp.path().join(saved))? == admission_bytes);
+        }
+        Ok(())
+    }
+
+    #[test]
     fn load_claim_graph_preserves_value_and_errors() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let args = delivery_args(temp.path(), "http://scripted");
@@ -2113,6 +2627,180 @@ mod tests {
     }
 
     #[test]
+    fn planned_inline_delivery_selects_the_public_surface_without_losing_ambiguity() -> Result<()> {
+        let review = review_with_comment("src/lib.rs", 12, "[tests] exact body");
+        let mut graph = graph_for("src/lib.rs", 12, "inline", HEAD);
+        graph["topics"][0]["delivery"] = serde_json::json!("inline-candidate");
+        let public = graph["topics"][0].clone();
+
+        // Real retained packets keep private observations beside the selected
+        // comment, sometimes with the same location and provisional action.
+        for (id, disposition) in [
+            ("private", serde_json::json!("no-human-surface")),
+            ("summary", serde_json::json!("summary-only")),
+            ("unknown", serde_json::json!("future-disposition")),
+            ("malformed", serde_json::Value::Null),
+        ] {
+            let mut topic = public.clone();
+            topic["claim_id"] = serde_json::json!(id);
+            topic["delivery"] = disposition;
+            graph["topics"]
+                .as_array_mut()
+                .context("fixture topics")?
+                .push(topic);
+        }
+        let mut missing = public.clone();
+        missing["claim_id"] = serde_json::json!("missing-disposition");
+        missing
+            .as_object_mut()
+            .context("fixture topic")?
+            .remove("delivery");
+        graph["topics"]
+            .as_array_mut()
+            .context("fixture topics")?
+            .push(missing);
+        let before = graph.clone();
+        let planned = build_planned_inline_deliveries(&review, HEAD, Some(&graph))?;
+        ensure!(planned.len() == 1);
+        ensure!(serde_json::to_value(&planned[0])?["claim_id"] == "claim-1");
+        ensure!(
+            graph == before,
+            "delivery selection changed retained evidence"
+        );
+
+        let mut withheld = graph.clone();
+        withheld["topics"][0]["delivery"] = serde_json::json!("no-human-surface");
+        ensure!(
+            build_planned_inline_deliveries(&review, HEAD, Some(&withheld)).is_err(),
+            "a withheld claim authorized delivery"
+        );
+
+        let mut competing = graph;
+        let mut second_public = public;
+        second_public["claim_id"] = serde_json::json!("distinct-public-claim");
+        competing["topics"]
+            .as_array_mut()
+            .context("fixture topics")?
+            .push(second_public);
+        ensure!(
+            build_planned_inline_deliveries(&review, HEAD, Some(&competing)).is_err(),
+            "distinct public claims at the same location lost their ambiguity"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn public_surface_legacy_fallback_is_graph_wide() -> Result<()> {
+        let review = review_with_comment("src/lib.rs", 12, "exact body");
+        let legacy = graph_for("src/lib.rs", 12, "inline", HEAD);
+        ensure!(build_planned_inline_deliveries(&review, HEAD, Some(&legacy))?.len() == 1);
+        for disposition in [
+            serde_json::json!("inline-candidate"),
+            serde_json::Value::Null,
+        ] {
+            let mut mixed = legacy.clone();
+            let mut marker = mixed["topics"][0].clone();
+            marker["claim_id"] = serde_json::json!("elsewhere");
+            marker["path"] = serde_json::json!("src/other.rs");
+            marker["anchor"] = serde_json::json!(99);
+            marker["delivery"] = disposition;
+            mixed["topics"]
+                .as_array_mut()
+                .context("topics")?
+                .push(marker);
+            let before = mixed.clone();
+            ensure!(
+                build_planned_inline_deliveries(&review, HEAD, Some(&mixed)).is_err(),
+                "a remote disposition marker allowed legacy delivery"
+            );
+            ensure!(mixed == before);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn public_surface_malformed_dispositions_never_authorize_delivery() -> Result<()> {
+        let review = review_with_comment("src/lib.rs", 12, "exact body");
+        for disposition in [
+            serde_json::json!(42),
+            serde_json::json!(true),
+            serde_json::json!({}),
+            serde_json::json!([]),
+            serde_json::Value::Null,
+            serde_json::json!("summary-only"),
+            serde_json::json!("no-human-surface"),
+            serde_json::json!("future-disposition"),
+        ] {
+            let mut graph = graph_for("src/lib.rs", 12, "inline", HEAD);
+            graph["topics"][0]["delivery"] = disposition.clone();
+            ensure!(
+                build_planned_inline_deliveries(&review, HEAD, Some(&graph)).is_err(),
+                "malformed or withheld disposition authorized delivery: {disposition}"
+            );
+            let mut public = graph["topics"][0].clone();
+            public["claim_id"] = serde_json::json!("selected");
+            public["delivery"] = serde_json::json!("inline-candidate");
+            graph["topics"]
+                .as_array_mut()
+                .context("topics")?
+                .push(public);
+            let before = graph.clone();
+            let planned = build_planned_inline_deliveries(&review, HEAD, Some(&graph))?;
+            ensure!(planned.len() == 1);
+            ensure!(serde_json::to_value(&planned[0])?["claim_id"] == "selected");
+            ensure!(graph == before);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn public_surface_selection_preserves_action_and_reply_eligibility() -> Result<()> {
+        let review = review_with_comment("src/lib.rs", 12, "exact body");
+        for action in [Some("none"), Some("unknown"), None] {
+            let mut graph = graph_for("src/lib.rs", 12, "inline", HEAD);
+            graph["topics"][0]["delivery"] = serde_json::json!("inline-candidate");
+            let mut ineligible = graph["topics"][0].clone();
+            ineligible["claim_id"] = serde_json::json!("ineligible");
+            if let Some(action) = action {
+                ineligible["planned_action"] = serde_json::json!(action);
+            } else {
+                ineligible
+                    .as_object_mut()
+                    .context("topic")?
+                    .remove("planned_action");
+            }
+            graph["topics"]
+                .as_array_mut()
+                .context("topics")?
+                .push(ineligible);
+            let planned = build_planned_inline_deliveries(&review, HEAD, Some(&graph))?;
+            ensure!(
+                planned.len() == 1,
+                "ineligible action interfered with valid claim"
+            );
+            ensure!(serde_json::to_value(&planned[0])?["claim_id"] == "claim-1");
+        }
+        let mut reply = graph_for("src/lib.rs", 12, "reply", HEAD);
+        reply["topics"][0]["delivery"] = serde_json::json!("inline-candidate");
+        for thread in [None, Some(""), Some("   ")] {
+            if let Some(thread) = thread {
+                reply["topics"][0]["planned_thread_id"] = serde_json::json!(thread);
+            } else {
+                reply["topics"][0]
+                    .as_object_mut()
+                    .context("topic")?
+                    .remove("planned_thread_id");
+            }
+            ensure!(build_planned_deliveries(&review, HEAD, Some(&reply)).is_err());
+        }
+        reply["topics"][0]["planned_thread_id"] = serde_json::json!("123");
+        let planned = build_planned_deliveries(&review, HEAD, Some(&reply))?;
+        ensure!(planned.len() == 1 && planned[0].action() == DeliveryAction::Reply);
+        ensure!(serde_json::to_value(&planned[0])?["source_thread_id"] == "123");
+        Ok(())
+    }
+
+    #[test]
     fn planned_inline_delivery_rejects_missing_stale_and_ambiguous_plans() -> Result<()> {
         let review = review_with_comment("src/lib.rs", 12, "[tests] exact body");
         ensure!(
@@ -2467,7 +3155,7 @@ mod tests {
             "head_sha": "HEAD",
             "revision": {
                 "digest": "a".repeat(64),
-                "semantics": "merge_result",
+                "semantics": "candidate_head",
                 "reviewed_commit": "b".repeat(40),
             },
             "topics": [],

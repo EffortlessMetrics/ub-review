@@ -36099,6 +36099,128 @@ kind = "exposure_gap"
 finding_id = "probe:src_plan_build.rs:call_deletion:24919b42.2"
 owner = "ub-review/core"
 reason = "PR #1587 local RIPR 0.10.0 preview on base bc976f2 and head 72f24b7: patch diff command syntax fragment at line 278, subject '})'. The enhanced ordinary_diff_includes_gitlink_despite_ignore_configuration test, staged on top of that head, exercises the related-history and no-merge-base paths with ignored gitlinks, validates changed paths and patch, and retains an identical-revision control. In an isolated Rust 1.95.0 --locked lab, removing each of four ignore overrides and each of two fallback calls independently caused the test to fail; restored source passed. RIPR did not confirm an expression-level discriminator for these fragments despite associating related tests and assertions (upstream ripr#1453). Local preview evidence only; inaccessible hosted findings remain unclassified. Reverify on semantic changes."
+
+# PR #1602: twelve exact source-bound dispositions after compiled oracle controls.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:5e62d35d"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602: original gate40820143437 artifact12874189381 at head2964e3dc; source binding and full raw12 retained in the PR. Pinned RIPR0.10.0 reports weakly_exposed/observation_unverified with fixture_opaque; raw classification stays weak. Exact source/control map at test tree7b65fe075d314779e34b58fe0360e99780b08377 (production unchanged from16dbdab9), Rust1.95.0 locked/offline Linux, isolated compiled controls. Subject is the expected-head match. The merge_result_inline_delivery_preserves_analysis_and_rejects_stale_subjects matrix requires outgoing commit_id to equal admitted PR head and preserves reviewed merge separately. Compiled some-head control substitutes the reviewed merge in the Some arm and fails the normal merge case. Existing nonmerge production delivery also passes. Weak token-substring associations to unrelated documentation/stream tests are not the decision basis. Restored delivery28 passes. Reproducible control definitions, trees and log digests are retained in the PR evidence; this is bounded local discrimination/source-role evidence, not hosted qualification or arbitrary error coverage. Owner: ub-review/core; upstream observer/source-role attribution remains ripr#1453 and ripr-swarm#3213. Reverify after semantic or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:617c4b9a"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602: original gate40820143437 artifact12874189381 at head2964e3dc; source binding and full raw12 retained in the PR. Pinned RIPR0.10.0 reports weakly_exposed/observation_unverified with fixture_opaque; raw classification stays weak. Exact source/control map at test tree7b65fe075d314779e34b58fe0360e99780b08377 (production unchanged from16dbdab9), Rust1.95.0 locked/offline Linux, isolated compiled controls. Subject is the admitted merge Some arm. The valid and late_stale cases require correct PR-head output and rejection of a head change after object binding before any send. Compiled some-head control returns the reviewed merge and fails the normal merge case. The matched test is the actual production adapter, despite emitted weak_token_substring links. Restored delivery28 passes. Reproducible control definitions, trees and log digests are retained in the PR evidence; this is bounded local discrimination/source-role evidence, not hosted qualification or arbitrary error coverage. Owner: ub-review/core; upstream observer/source-role attribution remains ripr#1453 and ripr-swarm#3213. Reverify after semantic or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:a6978d31"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602: original gate40820143437 artifact12874189381 at head2964e3dc; source binding and full raw12 retained in the PR. Pinned RIPR0.10.0 reports weakly_exposed/observation_unverified with fixture_opaque; raw classification stays weak. Exact source/control map at test tree7b65fe075d314779e34b58fe0360e99780b08377 (production unchanged from16dbdab9), Rust1.95.0 locked/offline Linux, isolated compiled controls. Subject is the nonmerge expected-head fallback. The legacy_stale case requires the original head-change diagnostic and one read, zero sends; ordinary legacy delivery remains positive. Compiled legacy-fallback control replaces the reader with None, and fails that exact diagnostic oracle. The emitted weak_token_substring links do not represent this consumer. Restored delivery28 passes. Reproducible control definitions, trees and log digests are retained in the PR evidence; this is bounded local discrimination/source-role evidence, not hosted qualification or arbitrary error coverage. Owner: ub-review/core; upstream observer/source-role attribution remains ripr#1453 and ripr-swarm#3213. Reverify after semantic or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:e53ee25c"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602: original gate40820143437 artifact12874189381 at head2964e3dc; source binding and full raw12 retained in the PR. Pinned RIPR0.10.0 reports weakly_exposed/observation_unverified with fixture_opaque; raw classification stays weak. Exact source/control map at test tree7b65fe075d314779e34b58fe0360e99780b08377 (production unchanged from16dbdab9), Rust1.95.0 locked/offline Linux, isolated compiled controls. Exact token transport: &mut impl DeliveryTransport is a function parameter declaration in bind_merge_delivery, not executable field construction. The actual supplied transport is exercised by the merge matrix: exact immutable GET URLs, order, object values, and original error propagation. Compiled commit-error and file-error controls lose the scripted transport cause and are rejected by the expanded tests. This disposition is a source-role judgment on the declaration, not a claim to have mutated a non-existent field constructor. Restored delivery28 passes. Reproducible control definitions, trees and log digests are retained in the PR evidence; this is bounded local discrimination/source-role evidence, not hosted qualification or arbitrary error coverage. Owner: ub-review/core; upstream observer/source-role attribution remains ripr#1453 and ripr-swarm#3213. Reverify after semantic or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:6b06b1ac"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602: original gate40820143437 artifact12874189381 at head2964e3dc; source binding and full raw12 retained in the PR. Pinned RIPR0.10.0 reports weakly_exposed/observation_unverified with fixture_opaque; raw classification stays weak. Exact source/control map at test tree7b65fe075d314779e34b58fe0360e99780b08377 (production unchanged from16dbdab9), Rust1.95.0 locked/offline Linux, isolated compiled controls. Exact subject != Some(merge_result) is the semantics routing guard. Normal merge publication and ordinary legacy publication are positive controls. Compiled semantics control reverses the predicate and fails the valid merge case because the admission path is skipped; no ambiguous symbolic fallback is granted authority. Restored delivery28 passes. Reproducible control definitions, trees and log digests are retained in the PR evidence; this is bounded local discrimination/source-role evidence, not hosted qualification or arbitrary error coverage. Owner: ub-review/core; upstream observer/source-role attribution remains ripr#1453 and ripr-swarm#3213. Reverify after semantic or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:7aada74d"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602: original gate40820143437 artifact12874189381 at head2964e3dc; source binding and full raw12 retained in the PR. Pinned RIPR0.10.0 reports weakly_exposed/observation_unverified with fixture_opaque; raw classification stays weak. Exact source/control map at test tree7b65fe075d314779e34b58fe0360e99780b08377 (production unchanged from16dbdab9), Rust1.95.0 locked/offline Linux, isolated compiled controls. Exact subject is propagation of the initial ensure_heads_match error, not a generic question-mark exemption. Compiled early-head control ignores that result: old28 tests pass, expanded suite fails stale continued reads. The added stale oracle requires the head-change cause, exactly one GET and zero sends before object probing. This repaired an actual observer gap before disposition. Restored delivery28 passes. Reproducible control definitions, trees and log digests are retained in the PR evidence; this is bounded local discrimination/source-role evidence, not hosted qualification or arbitrary error coverage. Owner: ub-review/core; upstream observer/source-role attribution remains ripr#1453 and ripr-swarm#3213. Reverify after semantic or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:7aada74d.2"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602: original gate40820143437 artifact12874189381 at head2964e3dc; source binding and full raw12 retained in the PR. Pinned RIPR0.10.0 reports weakly_exposed/observation_unverified with fixture_opaque; raw classification stays weak. Exact source/control map at test tree7b65fe075d314779e34b58fe0360e99780b08377 (production unchanged from16dbdab9), Rust1.95.0 locked/offline Linux, isolated compiled controls. Exact subject is commit-object fetch error propagation. New commit_transport_failure injects a transport error at GET2 and requires the original cause, no subsequent reads and zero writes. Compiled commit-error control replaces fetch failure with empty JSON: old28 tests pass; expanded suite fails because cause is replaced by commit/tree mismatch. This repaired an actual diagnostic oracle gap. Restored delivery28 passes. Reproducible control definitions, trees and log digests are retained in the PR evidence; this is bounded local discrimination/source-role evidence, not hosted qualification or arbitrary error coverage. Owner: ub-review/core; upstream observer/source-role attribution remains ripr#1453 and ripr-swarm#3213. Reverify after semantic or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:7aada74d.3"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602: original gate40820143437 artifact12874189381 at head2964e3dc; source binding and full raw12 retained in the PR. Pinned RIPR0.10.0 reports weakly_exposed/observation_unverified with fixture_opaque; raw classification stays weak. Exact source/control map at test tree7b65fe075d314779e34b58fe0360e99780b08377 (production unchanged from16dbdab9), Rust1.95.0 locked/offline Linux, isolated compiled controls. Exact subject is file-content fetch error propagation. New file_transport_failure injects failure at GET5 and requires its original cause, no further reads and zero writes. Compiled file-error control substitutes empty JSON: old28 tests pass; expanded suite rejects changed cause. This repaired a missing transport-error observer rather than changing production. Restored delivery28 passes. Reproducible control definitions, trees and log digests are retained in the PR evidence; this is bounded local discrimination/source-role evidence, not hosted qualification or arbitrary error coverage. Owner: ub-review/core; upstream observer/source-role attribution remains ripr#1453 and ripr-swarm#3213. Reverify after semantic or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:7aada74d.4"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602: original gate40820143437 artifact12874189381 at head2964e3dc; source binding and full raw12 retained in the PR. Pinned RIPR0.10.0 reports weakly_exposed/observation_unverified with fixture_opaque; raw classification stays weak. Exact source/control map at test tree7b65fe075d314779e34b58fe0360e99780b08377 (production unchanged from16dbdab9), Rust1.95.0 locked/offline Linux, isolated compiled controls. Exact subject is propagation of delivery-revision-binding.json write failure. The new binding_write_failure makes that destination a directory and requires a typed I/O cause with no sends or transaction. Compiled binding-write control discards the write result: old28 tests pass; expanded suite fails because delivery proceeds. Existing successful binding bytes and saved analysis identity remain positive controls. Restored delivery28 passes. Reproducible control definitions, trees and log digests are retained in the PR evidence; this is bounded local discrimination/source-role evidence, not hosted qualification or arbitrary error coverage. Owner: ub-review/core; upstream observer/source-role attribution remains ripr#1453 and ripr-swarm#3213. Reverify after semantic or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:da35b7dc"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602: original gate40820143437 artifact12874189381 at head2964e3dc; source binding and full raw12 retained in the PR. Pinned RIPR0.10.0 reports weakly_exposed/observation_unverified with fixture_opaque; raw classification stays weak. Exact source/control map at test tree7b65fe075d314779e34b58fe0360e99780b08377 (production unchanged from16dbdab9), Rust1.95.0 locked/offline Linux, isolated compiled controls. Exact method: &str token is a parameter declaration in the test-only RecordingTransport implementation, not production field construction. The expanded real-adapter matrix records and asserts both outgoing POST methods. A compiled production-method control sends PATCH and fails the exact request oracle. This is declaration source-role evidence plus a concrete associated consumer control, not mutation of a fictitious constructor. Restored delivery28 passes. Reproducible control definitions, trees and log digests are retained in the PR evidence; this is bounded local discrimination/source-role evidence, not hosted qualification or arbitrary error coverage. Owner: ub-review/core; upstream observer/source-role attribution remains ripr#1453 and ripr-swarm#3213. Reverify after semantic or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:3dec4ddf"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602: original gate40820143437 artifact12874189381 at head2964e3dc; source binding and full raw12 retained in the PR. Pinned RIPR0.10.0 reports weakly_exposed/observation_unverified with fixture_opaque; raw classification stays weak. Exact source/control map at test tree7b65fe075d314779e34b58fe0360e99780b08377 (production unchanged from16dbdab9), Rust1.95.0 locked/offline Linux, isolated compiled controls. Exact url: &str token is a parameter declaration in the test-only RecordingTransport implementation. The expanded adapter matrix checks creation and submission URLs as well as all immutable GET URLs. A compiled production-url control changes the creation URL and fails the exact request oracle. This is source-role correction for the declaration, not general URL correctness or live-service proof. Restored delivery28 passes. Reproducible control definitions, trees and log digests are retained in the PR evidence; this is bounded local discrimination/source-role evidence, not hosted qualification or arbitrary error coverage. Owner: ub-review/core; upstream observer/source-role attribution remains ripr#1453 and ripr-swarm#3213. Reverify after semantic or analyzer changes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:30bf1a0d"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602: original gate40820143437 artifact12874189381 at head2964e3dc; source binding and full raw12 retained in the PR. Pinned RIPR0.10.0 reports weakly_exposed/observation_unverified with fixture_opaque; raw classification stays weak. Exact source/control map at test tree7b65fe075d314779e34b58fe0360e99780b08377 (production unchanged from16dbdab9), Rust1.95.0 locked/offline Linux, isolated compiled controls. Exact headers: &[&str] token is a test-only RecordingTransport parameter declaration. The expanded adapter matrix asserts complete Accept, Content-Type and API-version header vectors on both writes. Compiled headers control drops creation headers: old28 tests pass and expanded suite fails the new exact request oracle. This closes an actual missing observer while retaining the declaration/source-role limitation. Restored delivery28 passes. Reproducible control definitions, trees and log digests are retained in the PR evidence; this is bounded local discrimination/source-role evidence, not hosted qualification or arbitrary error coverage. Owner: ub-review/core; upstream observer/source-role attribution remains ripr#1453 and ripr-swarm#3213. Reverify after semantic or analyzer changes."
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_config.rs:error_path:1f3a3b07"
@@ -36145,6 +36267,108 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_text.rs:call_deletion:9a31cccd"
 owner = "ub-review/core"
 reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. call_deletion probe on topic_text.to_owned() feeding content_key in output_topics (src/review_text.rs:506); discriminator is observation_unverified because no assertion text names the expression, but the value is constrained end-to-end by degradation_preserves_distinct_operator_claims_in_post_json (src/review_text.rs:1044) through degrade_review_body -> output_topics -> github_review_post_payload, asserting operator/case/whitespace-distinct claims stay distinct (final_item_count = 2, third occurrence folded as duplicate_evidence_); reach tests body_budget_drops_topics_and_preserves_inline_fallback_receipt, bullet_budget_drops_all_topics_as_inline_only and degradation_drops_lowest_ranked_topics_deterministically all pass in gate run 39522864539. Re-verify after any edit to src/review_text.rs."
+
+# PR #1602: ten public-surface projections, four attributed shared controls.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:53adef48"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. Selector dispatch over delivery presence. The graph-wide legacy and malformed-disposition tests call the production planner; exact claim selection and wholly legacy success discriminate the match. Shared selection-bypass control is rejected by both tests. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:0115cb71"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. Missing-field Boolean branch, not a Result/error return. The graph-wide legacy test accepts a wholly legacy graph but rejects a missing disposition beside an explicit string or null marker on another path/anchor. Shared None=>true and None=>false controls distinguish both directions. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:dd808c3d"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. Missing-field match arm. The graph-wide legacy test requires positive wholly legacy behavior and rejection of mixed graphs even when the explicit string/null marker is elsewhere. Shared always-accept and always-reject missing-branch controls each fail that test. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:88e8a5b2"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. Boolean result of the same missing-field branch, not an additional independent fault. The legacy test pins graph-wide presence rather than local-anchor presence with remote string/null markers and legitimate legacy success; shares the two missing-branch controls. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:7ee9bf22"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. Explicit-value arm admits only string inline-candidate. Malformed-disposition test rejects integer, Boolean, object, array, null, summary-only, no-human-surface and unknown string alone; beside the public candidate it requires exactly the selected claim and unchanged graph. Shared selection-bypass control fails this oracle. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:8ce7f0ff"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. Closing expression of the same selector match, not a separate callable return. The malformed-disposition and graph-wide legacy tests observe its returned Boolean through exact selected claim/refusal; shares the selection-bypass and missing-branch controls. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:c1cb354b"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. selected_surface Boolean as first filter conjunct; no error propagation occurs at this token. The malformed-disposition test checks refusal and exact public-claim choice, while the legacy test checks global fallback. Shared selection-bypass control fails both consumers. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:d230a635"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. selected_surface Boolean consumed by the topic filter. Exact public claim and rejection of malformed/withheld-only graphs observe this value; competing distinct public claims retain ambiguity in planned_inline_delivery_selects_the_public_surface_without_losing_ambiguity. Shares selection-bypass control, not an independent mutation claim. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:fec91e5f"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. Closing planned_action predicate inside the conjunction, not a Result/error path. public_surface_selection_preserves_action_and_reply_eligibility places none/unknown/missing-action public topics at the valid claim location and requires exactly claim-1; explicit public replies require nonempty thread identity. Shared action-conjunct removal fails by false ambiguity. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:db949d53"
+owner = "ub-review/core"
+created_at = "2026-10-29"
+last_seen = "2026-10-29"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. Boolean action-eligibility result, sharing the preceding syntax projection. The action/reply test prevents ineligible same-location topics from interfering with exact valid selection and checks missing/empty/blank reply threads plus valid thread123. Shared action-conjunct removal is rejected; no independent tenth mutant is claimed. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_model_exec.rs:field_construction:4579f81a"
