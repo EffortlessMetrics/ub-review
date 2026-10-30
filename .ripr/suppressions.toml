@@ -39847,3 +39847,13 @@ kind = "exposure_gap"
 finding_id = "probe:src_model_exec.rs:return_value:e91687dd"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1361; probe ),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by continuation_prompt_and_receipt_references_share_encoded_lane_root, continuation_receipt_reference_encodes_hostile_lane_id, literal_planner_requests_preserve_exact_resolution_and_rejection. Re-verify after any edit to src/model_exec.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:predicate:e5b4c061"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1359; probe .split(|byte| *byte == b'\\0'): Strong oracle found: exact value or pattern assertion. Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:ea6526e8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1359; probe .collect(): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
