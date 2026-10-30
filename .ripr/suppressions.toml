@@ -36877,7 +36877,27 @@ reason = "Issue #1534 Oct28 same-identity conflict repair over8fe9305; exact RIP
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_gate_watchdog.rs:match_arm:6f500ca5"
+finding_id = "probe:src_gate_watchdog.rs:return_value:7f00f031"
 owner = "ub-review/core"
-reason = "Issue #1534 Oct28 same-identity conflict repair over8fe9305; exact RIPR0.10.0 row: Real mixed missing/present disagreement. Both input orders of completed None versus success produce the complete literal conflict receipt. Compiled missing-value-agrees is rejected; this is not an inert match arm. Native controls and full raw reports retained in the conflict evidence archive; no runtime proof credit is created by this static disposition. Related helper-return/owner evidence limitations: https://github.com/EffortlessMetrics/ripr-swarm/issues/3161 and https://github.com/EffortlessMetrics/ripr-swarm/pull/1525. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions and strict-zero threshold remains unchanged."
+reason = "Issue #1534 Oct28 same-identity conflict repair over8fe9305; exact RIPR0.10.0 row: Real enclosing conflict-versus-ordinary detail selection, not a standalone return of the if header. Complete literal receipts distinguish both branches. Compiled conflict-detail-hidden is rejected; original ordinary receipt test remains exact. Native controls and full raw reports retained in the conflict evidence archive; no runtime proof credit is created by this static disposition. Related helper-return/owner evidence limitations: https://github.com/EffortlessMetrics/ripr-swarm/issues/3161 and https://github.com/EffortlessMetrics/ripr-swarm/pull/1525. Re-verify after semantic edits or tool upgrades; dates follow policy/allow.toml#non-rust-ripr-suppressions and strict-zero threshold remains unchanged."
 
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_watchdog.rs:return_value:d667aad9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1538; probe sha,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_release_download_verifies_sha256_receipt, agreeing_duplicate_observations_preserve_terminal_results, artifact_bound_to_other_run_is_missing_artifact. Re-verify after any edit to src/gate_watchdog.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_watchdog.rs:return_value:cf2cfdbd"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1538; probe ): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by agreeing_duplicate_observations_preserve_terminal_results, artifact_bound_to_other_run_is_missing_artifact, cancelled_exact_head_without_replacement_is_inconclusive. Re-verify after any edit to src/gate_watchdog.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_watchdog.rs:return_value:01ab697f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1538; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by agreeing_duplicate_observations_preserve_terminal_results, artifact_bound_to_other_run_is_missing_artifact, cancelled_exact_head_without_replacement_is_inconclusive. Re-verify after any edit to src/gate_watchdog.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate_watchdog.rs:return_value:d667aad9.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1538; probe sha,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_release_download_verifies_sha256_receipt, agreeing_duplicate_observations_preserve_terminal_results, artifact_bound_to_other_run_is_missing_artifact. Re-verify after any edit to src/gate_watchdog.rs."
