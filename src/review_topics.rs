@@ -1269,12 +1269,23 @@ mod tests {
             ensure!(reconcile_inline_comments(&graph, std::slice::from_ref(&candidate)).len() == 1);
         }
         eprintln!("controls no-receipt/unlinked/stale-head: unresolved; inline retained");
-        let mut incorrect = Vec::new();
+        let summary = SummaryOnlyFinding {
+            lane: candidate.lane.clone(),
+            severity: candidate.severity.clone(),
+            confidence: candidate.confidence.clone(),
+            reason: candidate.body.clone(),
+            evidence: candidate.evidence.clone(),
+        };
         for result in [
             "timed_out",
             "skipped_budget",
             "skipped_profile",
             "skipped_unresolved",
+            "skipped_nightly",
+            "skipped",
+            "failed",
+            "sanitizer_ub_detected",
+            "unknown-result",
             "base_patch_failed",
             "non_discriminating",
         ] {
@@ -1289,22 +1300,59 @@ mod tests {
                 std::slice::from_ref(&receipt),
                 &context(head),
             );
-            let remaining = reconcile_inline_comments(&graph, std::slice::from_ref(&candidate));
-            eprintln!(
-                "result={result}; resolution={:?}; remaining_inline={}",
+            assert_eq!(graph.conflicts.len(), 1, "{result}");
+            assert_eq!(
                 graph.conflicts[0].resolution,
-                remaining.len()
+                ConflictResolution::Unresolved,
+                "{result}"
             );
-            if graph.conflicts[0].resolution != ConflictResolution::Unresolved
-                || remaining.len() != 1
-            {
-                incorrect.push(result);
-            }
+            assert_eq!(
+                reconcile_inline_comments(&graph, std::slice::from_ref(&candidate)).len(),
+                1,
+                "{result} must retain the inline finding"
+            );
+            assert_eq!(
+                reconcile_summary_only_findings(&graph, std::slice::from_ref(&summary)).len(),
+                1,
+                "{result} must retain the summary finding"
+            );
+            let linked = graph
+                .topics
+                .iter()
+                .find(|topic| topic.source_lane == refutation.lane)
+                .ok_or_else(|| anyhow::anyhow!("missing linked refutation for {result}"))?;
+            assert_eq!(linked.proof_receipts, vec![receipt.id.clone()], "{result}");
+            ensure!(
+                graph.claims.iter().all(|claim| claim
+                    .supporting_evidence
+                    .iter()
+                    .all(|evidence| evidence.class != EvidenceClass::ProofReceipt)),
+                "{result} must remain an audit link without causal precedence"
+            );
         }
-        ensure!(
-            incorrect.is_empty(),
-            "Unavailable receipts resolved conflict/suppressed finding: {incorrect:?}"
-        );
+        // The rejection matrix must not accidentally disable decisive proof.
+        for result in ["discriminating", "head_passed", "head_failed"] {
+            let mut receipt = receipt.clone();
+            receipt.result = result.to_owned();
+            let graph = build_active_claim_graph(
+                head,
+                std::slice::from_ref(&refutation),
+                std::slice::from_ref(&candidate),
+                &[],
+                &[],
+                &[receipt],
+                &context(head),
+            );
+            assert_eq!(
+                graph.conflicts[0].resolution,
+                ConflictResolution::ResolvedByProof,
+                "{result}"
+            );
+            ensure!(reconcile_inline_comments(&graph, std::slice::from_ref(&candidate)).is_empty());
+            ensure!(
+                reconcile_summary_only_findings(&graph, std::slice::from_ref(&summary)).is_empty()
+            );
+        }
         Ok(())
     }
 
