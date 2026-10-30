@@ -36385,3 +36385,13 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_command_parse.rs:predicate:d00265b4"
 owner = "ub-review/core"
 reason = "Cross-module static-path gap on the nested test-directory predicate in is_bun_focused_test_file (PR #1608): exact expected-value assertions in bun_focused_test_file_classifier_requires_repo_relative_test_suffixes pin each accepted and rejected path form, and the broker candidate suite exercises the classifier through candidate discovery. Re-verify after any edit to src/proof/command_parse.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:predicate:61c55907"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1524; probe .filter(|number| latest_id == format!('turn-{number:03}')): Strong oracle found: whole-object equality assertion. Reached by actionlint_sensor_uses_json_template_format, cargo_workspace_graph_returns_none_on_missing_cargo, current_head_receipt_ids_drive_both_unreceipted_task_filters. Re-verify after any edit to src/reporter.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_reporter.rs:return_value:3bcce1fc"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1524; probe };: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by invalid_model_verdict_stays_explicitly_undecided, lane_continuation_prompt_includes_proof_evidence_when_present, lane_continuation_prompt_includes_question_and_prior_conclusion. Re-verify after any edit to src/reporter.rs."
