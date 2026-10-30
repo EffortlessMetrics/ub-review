@@ -36380,3 +36380,8 @@ kind = "exposure_gap"
 finding_id = "probe:src_github_delivery.rs:return_value:099f212b"
 owner = "ub-review/core"
 reason = "Line-keyed probe on github_delivery.rs line 1571, the success return of the uncertain_delivery_retry harness (ripr-swarm#1053): covered end-to-end by lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review on this branch, whose propagated return value this success arm produces. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_command_parse.rs:predicate:d00265b4"
+owner = "ub-review/core"
+reason = "Cross-module static-path gap on the nested test-directory predicate in is_bun_focused_test_file (PR #1608): exact expected-value assertions in bun_focused_test_file_classifier_requires_repo_relative_test_suffixes pin each accepted and rejected path form, and the broker candidate suite exercises the classifier through candidate discovery. Re-verify after any edit to src/proof/command_parse.rs."
