@@ -36470,3 +36470,18 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_text.rs:predicate:f617421f"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1576; probe if depth == 0 {: Strong oracle found: exact value or pattern assertion. Reached by body_budget_drops_topics_and_preserves_inline_fallback_receipt, bracketed_prefix_boundaries, bullet_budget_drops_all_topics_as_inline_only. Re-verify after any edit to src/review_text.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:138adefa"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1576; probe '\\\\' => escaped = true,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by body_budget_drops_topics_and_preserves_inline_fallback_receipt, bracketed_prefix_boundaries, bullet_budget_drops_all_topics_as_inline_only. Re-verify after any edit to src/review_text.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:289ddf68"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1576; probe ']' => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by body_budget_drops_topics_and_preserves_inline_fallback_receipt, bracketed_prefix_boundaries, bullet_budget_drops_all_topics_as_inline_only. Re-verify after any edit to src/review_text.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:error_path:abfd420b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1576; probe let end = end?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_timeout_spends_allowance_and_aggregates_red_green_once, body_budget_drops_topics_and_preserves_inline_fallback_receipt, bracketed_prefix_boundaries. Re-verify after any edit to src/review_text.rs."
