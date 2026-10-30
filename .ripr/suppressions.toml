@@ -36369,3 +36369,238 @@ last_seen = "2026-10-29"
 review_by = "2026-11-21"
 expires = "2026-12-22"
 reason = "PR #1602 public-surface residual: exact source blob402754dfd191a9d1ec29c5e5b01a5db424441756 retained from contribution79d2360 through composition935e4f8. Actual gate40852160800/artifact12888580011 fails10/max0; current pinned0.10.0 local scan reproduces320raw/27weak/104unknown with17existing matches and these10residuals. Raw classification remains weakly_exposed/observation_unverified; unrelated token associations are not clearance. Boolean action-eligibility result, sharing the preceding syntax projection. The action/reply test prevents ineligible same-location topics from interfering with exact valid selection and checks missing/empty/blank reply threads plus valid thread123. Shared action-conjunct removal is rejected; no independent tenth mutant is claimed. Evidence: source-role review5694850882 and completed contribution6492024466 (https://github.com/EffortlessMetrics/ub-review/pull/1602#issuecomment-6492024466). Four separately compiled shared controls and32 pristine/restored positives were executed by that contributor; their exact definitions/log digests are attributed, not independently rerun here. Current finishing owner inspected unchanged production and all three durable tests and ran focused positives on the current-main composition. This is bounded static attribution/consumer-oracle disposition, not universal mutation adequacy, live posting or whole-review usefulness. Owner ub-review/core; upstream discriminator/source-role attribution ripr#1453 and ripr-swarm#3213. Reverify on selector/test/analyzer change."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:4579f81a"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The cpus fixture field in the proof_planner_request_contract_tests::prompt helper (src/model_exec.rs:1514) is serialized into box_shape via build_proof_planner_input and lands in the planner-input JSON that planner_response_examples_follow_the_operator_command_ceiling and planner_offers_only_resolvable_kinds_and_exact_cargo_target_labels parse and assert on; ripr's assertion linker cannot bind those cross-function assertions to the helper line. Re-verify after any edit to the proof-planner request contract tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:574ddb31"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The free_mem_mb fixture field in the proof_planner_request_contract_tests::prompt helper (src/model_exec.rs:1515) flows through box_shape into the asserted planner-input JSON; ripr's assertion linker misses the cross-function binding. Re-verify after any edit to the proof-planner request contract tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:898112b8"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Twin return_value probe of the free_mem_mb field_construction above (same expression, src/model_exec.rs:1515); the same two prompt-consuming tests drive and assert the path. Re-verify after any edit to the proof-planner request contract tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:f5ff5fcb"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The free_disk_mb fixture field in the proof_planner_request_contract_tests::prompt helper (src/model_exec.rs:1516) flows through box_shape into the asserted planner-input JSON; ripr's assertion linker misses the cross-function binding. Re-verify after any edit to the proof-planner request contract tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:a7c2de14"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Twin return_value probe of the free_disk_mb field_construction above (same expression, src/model_exec.rs:1516); the same two prompt-consuming tests drive and assert the path. Re-verify after any edit to the proof-planner request contract tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:4ef59474"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The load_1m fixture field in the proof_planner_request_contract_tests::prompt helper (src/model_exec.rs:1517) flows through box_shape into the asserted planner-input JSON; ripr's assertion linker misses the cross-function binding. Re-verify after any edit to the proof-planner request contract tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:e0ef17e9"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Twin return_value probe of the load_1m field_construction above (same expression, src/model_exec.rs:1517); the same two prompt-consuming tests drive and assert the path. Re-verify after any edit to the proof-planner request contract tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:3987ab22"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The github_actions fixture field in the proof_planner_request_contract_tests::prompt helper (src/model_exec.rs:1518) flows through box_shape into the asserted planner-input JSON; ripr's assertion linker misses the cross-function binding. Re-verify after any edit to the proof-planner request contract tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:de774f6a"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Return value of the render_proof_planner_model_task_prompt call in the proof_planner_request_contract_tests::prompt helper (src/model_exec.rs:1525): the returned prompt is asserted directly by planner_response_examples_follow_the_operator_command_ceiling (budget propagation in the parsed planner input and response template) and planner_offers_only_resolvable_kinds_and_exact_cargo_target_labels (kind and target-label contains assertions); ripr's assertion linker cannot bind those cross-function assertions to the call line. Re-verify after any edit to the proof-planner request contract tests."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_post_run_utils.rs:match_arm:a24c275b"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. PR #1528 match dispatch over read_review_summary_receipt in render_model_status_sections: summary_reports_unavailable_review_receipt (tests/cli_run.rs) drives the compiled ub-review run and summary subcommands and asserts both arms, and running_summary_renders_model_receipt_status (src/main.rs test module) reaches the same render in-process. Re-verify after any edit to src/post_run_utils.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_post_run_utils.rs:match_arm:24f05207"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Ok arm binds the parsed receipt: the cli_run test asserts the intact-receipt summary renders the model-mode line and model lane status, its recovery loop re-renders the intact packet after each damage case, and src/main.rs running_summary_renders_model_receipt_status asserts the same Ok-path output in-process. Re-verify after any edit to src/post_run_utils.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_post_run_utils.rs:match_arm:d14a548a"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. Err arm: the cli_run test damages review/review.json five ways (missing, truncated, invalid-json, wrong-field-type, invalid-utf8) and each case asserts the actionable unavailable-evidence summary plus intact-packet recovery. Re-verify after any edit to src/post_run_utils.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_post_run_utils.rs:call_deletion:f513ba49"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: no_static_path. Deleting this call removes the Review evidence is incomplete push_str message; tests/cli_run.rs asserts that exact text, the embedded review/review.json diagnostic, the restore guidance, and the summary rerun hint through the compiled binary as a subprocess, so ripr has no static test path to the changed owner. Re-verify after any edit to src/post_run_utils.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:return_value:81bb34fd"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe sits on the then-arm opening of the receipt_gap if/else in terminalize_proof_requests (planner.rs:677); its value flows into the deferred request reason, which terminalization_does_not_use_receipt_from_another_head pins with the exact stale-head assertion (planner.rs:1793-1800). Re-verify after any edit to proof/planner.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:return_value:0a9a1247"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe is the then-arm format! value of receipt_gap in terminalize_proof_requests (planner.rs:678-680, the receipts-only-on-other-heads message); terminalization_does_not_use_receipt_from_another_head asserts that exact string in the deferred reason and its absence on the missing-proof path (planner.rs:1793-1800). Re-verify after any edit to proof/planner.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:return_value:ba807faa"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe is the else-arm junction of receipt_gap in terminalize_proof_requests (planner.rs:681); the empty- and unrelated-receipt loop in terminalization_does_not_use_receipt_from_another_head drives both arms and asserts the deferred reason ends_with the missing-proof message without the other-heads text (planner.rs:1808-1825). Re-verify after any edit to proof/planner.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:return_value:1ab5f07e"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe is the else-arm value of receipt_gap in terminalize_proof_requests (planner.rs:682-683, the no-proof-receipt-was-produced message); terminalization_does_not_use_receipt_from_another_head asserts that exact message for empty and unrelated receipts (planner.rs:1819-1824). Re-verify after any edit to proof/planner.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_ci_audit.rs:field_construction:11e5cba6"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The missing_duration_count construction in compute_ci_job_stats (src/ci_audit.rs:1614) is pinned end-to-end: ci_repair_counts_every_missing_duration_in_consumer_warnings asserts the exact '19 job durations unavailable' consumer gap (the count is runs_count - sorted.len() across 20 fixture runs with 19 missing completions) in history, costs, correlation and recommendations evidence_gaps plus the report, and ci_repair_mixed_and_inverted_durations_keep_observed_runtime_only pins the 1-missing case; the assertion text references the rendered gap string, not the field construction, so the static discriminator stays unconfirmed. Re-verify after any edit to the CiJobStats construction."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_ci_audit.rs:side_effect:43e03010"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The correlation_ambiguous lookup in compute_ci_job_stats (src/ci_audit.rs:1615) is pinned end-to-end: ci_repair_display_name_ambiguity_is_confined_to_its_workflow asserts the 'duplicate job display names' degradation gap appears for the ambiguous workflow and is absent for the clean one (the gap is pushed only when stat.correlation_ambiguous is true), and ci_repair_ambiguous_correlation_never_earns_adaptive_rightsizing pins lower-bound independent-failure credit for a duplicate-name fixture; assertions address rendered gaps and credit outcomes rather than the field expression. Re-verify after any edit to the CiJobStats construction."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_ci_audit.rs:side_effect:ca21f383"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The missing-duration degradation-gap push in build_ci_audit_artifacts (src/ci_audit.rs:2189) is pinned end-to-end: ci_repair_counts_every_missing_duration_in_consumer_warnings asserts the exact '.github/workflows/ci.yml / test: 19 job durations unavailable; runtime unknown and runner minutes are an observed lower bound' string in all four consumer evidence_gaps and the report, and ci_repair_mixed_and_inverted_durations_keep_observed_runtime_only pins the 1-missing variant; the assertions target the rendered consumer strings rather than the push site text. Re-verify after any edit to the stats-driven gap emission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_ci_audit.rs:side_effect:ca21f383.2"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The correlation-ambiguity degradation-gap push in build_ci_audit_artifacts (src/ci_audit.rs:2195) is pinned end-to-end: ci_repair_display_name_ambiguity_is_confined_to_its_workflow asserts a.correlation.evidence_gaps contains the 'duplicate job display names' gap for the ambiguous workflow and contains no such gap mentioning other.yml, and ci_repair_ambiguous_correlation_never_earns_adaptive_rightsizing pins the conservative credit outcomes the gap documents; assertions address rendered gaps and outcomes rather than the push site text. Re-verify after any edit to the stats-driven gap emission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_ci_audit_tests.rs:field_construction:3083d863"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The required_checks: ci_no_required_checks() construction in the ci_repair_artifacts test helper (src/tests/ci_audit_tests.rs:2530) executes in five ci_repair_* tests (9 call sites) that drive build_ci_audit_artifacts end-to-end; ci_repair_ambiguous_correlation_never_earns_adaptive_rightsizing pins the conservative outcomes of the empty required-checks value per row (tier flag-for-human, has_caught starting 'unknown:', zero independent-failure credit) and the fetch-gaps/duration tests pin consumer-artifact propagation, while no assertion text names the fixture construction so the static discriminator stays unconfirmed. Re-verify after any edit to the ci_repair_artifacts helper."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:return_value:2b840b93"
+owner = "ub-review/core"
+reason = "load_requested result/argument forwarding: explicit_config_paths_fail_before_packet_output and config_discovery_and_explicit_sources_preserve_effective_values discriminate required paths, optional discovery and exact effective values. The nondefault profile oracle kills a compiled dropped-profile-override defect; #1479 retains earlier compiled wrapper-default and optional-flag mutation evidence at its original scope. Raw RIPR reports observation_unverified with unrelated same-file tests (https://github.com/EffortlessMetrics/ripr-swarm/issues/1052). Re-verify after loader or oracle edits and RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:match_arm:d68e9e90"
+owner = "ub-review/core"
+reason = "Successful read/parse arm: config_discovery_and_explicit_sources_preserve_effective_values asserts discovered 43 versus explicit 47, and explicit_config_paths_fail_before_packet_output rejects malformed TOML before output. #1479 retains the compiled parse-result-to-default defect rejected by the effective-value oracle. Raw RIPR marks fixture_opaque/observation_unverified and attributes unrelated rendering tests (https://github.com/EffortlessMetrics/ripr-swarm/issues/1052). This is a bounded parse-result discriminator, not clearance of all configuration semantics. Re-verify after loader or oracle edits and RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:match_arm:ab0bac1c"
+owner = "ub-review/core"
+reason = "Required read-error arm: explicit_config_paths_fail_before_packet_output rejects a compiled Err-to-default defect; requested_config_read_errors_retain_io_cause rejects compiled context removal and previously rejected cause replacement at #1479. These require failure, original NotFound/InvalidData and path/recovery advice. Raw RIPR marks fixture_opaque/observation_unverified with unrelated test attribution (https://github.com/EffortlessMetrics/ripr-swarm/issues/1052). Re-verify after loader or oracle edits and RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:error_path:1216f05b"
+owner = "ub-review/core"
+reason = "Exact source-role inspection: the raw expression '})' closes the Err(error).with_context closure; it is not an additional error variant. requested_config_read_errors_retain_io_cause observes the retained I/O variants and recovery context, rejects compiled context removal, and previously rejected cause replacement at #1479. Raw RIPR instead associates three unrelated tests with no oracle (https://github.com/EffortlessMetrics/ripr-swarm/issues/1052). Scope is this closure and those executed fault models only. Re-verify after loader or oracle edits and RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:return_value:97c634c0"
+owner = "ub-review/core"
+reason = "Exact source-role inspection: raw '})' closes the read-error context, while RIPR assigns its return sink to the following if-let profile override, which has no standalone returned value. requested_config_read_errors_retain_io_cause rejects compiled context removal; config_discovery_and_explicit_sources_preserve_effective_values rejects compiled loss of profile forwarding with a nondefault effective profile. Unrelated same-file oracle attribution persists (https://github.com/EffortlessMetrics/ripr-swarm/issues/1052). This individual ID does not alias the separate error_path record. Re-verify after loader or oracle edits and RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:7a34c59e"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 437 (ripr-swarm#1053): covered end-to-end by delivery_reservation_is_exclusive_and_contains_no_token on this branch, which calls reserve_delivery_attempt, reads back delivery-attempt.json and asserts the reservation api field equals the scripted API base, plus body_only_delivery_retry_and_unwritable_reservation_never_post through the full delivery path. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:be8196b0"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 452 (ripr-swarm#1053): covered end-to-end by delivery_reservation_is_exclusive_and_contains_no_token on this branch, which asserts the exact reservation schema and payload_digest equality with sha256_hex of the serialized payload produced through this reservation-construction expression. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:eb20cfe5"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 464 (ripr-swarm#1053): covered end-to-end by body_only_delivery_retry_and_unwritable_reservation_never_post on this branch, which pre-creates delivery-attempt.json to force the create_new failure through this with_context arm, asserts the reconcile-the-previous-delivery-attempt message, and asserts no second post is sent. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:9abebf6e"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 471 (ripr-swarm#1053): covered end-to-end by delivery_reservation_is_exclusive_and_contains_no_token on this branch, which observes the success return and then asserts a second reservation call errors while the original delivery-attempt.json bytes stay unchanged. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:1d1ef742"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 1532 inside the uncertain_delivery_retry scripted-transport harness (ripr-swarm#1053): covered end-to-end by lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review on this branch, which consume this make_transport return and assert failed delivery, absent delivery-receipts.json and exactly two scripted sends on retry. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:0f2afd77"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 1537 inside the uncertain_delivery_retry scripted-transport harness (ripr-swarm#1053): covered end-to-end by lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review on this branch, which drive the scripted gets through the full delivery pipeline and assert its uncertain-outcome and retry-send-count invariants. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:ce95f93c"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 1537 inside the uncertain_delivery_retry scripted-transport harness (ripr-swarm#1053): covered end-to-end by lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review on this branch, which drive the scripted gets through the full delivery pipeline and assert its uncertain-outcome and retry-send-count invariants. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:ee491a1d"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 1539 inside the uncertain_delivery_retry scripted-transport harness (ripr-swarm#1053): covered end-to-end by lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review on this branch, which observe the scripted sends as accepted submissions whose lost or unwritten responses must not yield a receipt or a duplicate post. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:9095d579"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 1539 inside the uncertain_delivery_retry scripted-transport harness (ripr-swarm#1053): covered end-to-end by lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review on this branch, which observe the scripted sends as accepted submissions whose lost or unwritten responses must not yield a receipt or a duplicate post. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:0f2afd77.2"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 1541 inside the uncertain_delivery_retry scripted-transport harness (ripr-swarm#1053): covered end-to-end by lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review on this branch, which assert the scripted sends are consumed by the failed first attempt and that the retry transport sends exactly two reviews. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:ce95f93c.2"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 1541 inside the uncertain_delivery_retry scripted-transport harness (ripr-swarm#1053): covered end-to-end by lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review on this branch, which assert the scripted sends are consumed by the failed first attempt and that the retry transport sends exactly two reviews. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:21824605"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 1542 inside the uncertain_delivery_retry scripted-transport harness (ripr-swarm#1053): covered end-to-end by lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review on this branch, which close over this make_transport construction and assert its delivery, receipt-absence and retry-send-count invariants. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:099f212b"
+owner = "ub-review/core"
+reason = "Line-keyed probe on github_delivery.rs line 1571, the success return of the uncertain_delivery_retry harness (ripr-swarm#1053): covered end-to-end by lost_submission_response_retry_never_sends_another_review and receipt_write_failure_retry_never_sends_another_review on this branch, whose propagated return value this success arm produces. Coverage verified by test-content inspection. Classification: weakly_exposed. Re-verify after edits."

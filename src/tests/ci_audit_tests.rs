@@ -613,7 +613,7 @@ fn ci_parse_api_array_counts_dropped_items() {
     let (parsed, dropped): (Vec<crate::CiApiWorkflow>, usize) =
         crate::parse_ci_api_array(&serde_json::json!({}), "workflows");
     assert!(parsed.is_empty());
-    assert_eq!(dropped, 0);
+    assert_eq!(dropped, 1);
 }
 
 #[test]
@@ -1091,7 +1091,7 @@ fn setup_ci_args(out: &Path, accept: Vec<String>) -> crate::SetupCiArgs {
         out: out.to_path_buf(),
         print_pr: true,
         accept,
-        config: out.join("no-such-config.toml"),
+        config: None,
         open_pr: false,
         repo: None,
         github_token: None,
@@ -2518,5 +2518,344 @@ fn ci_audit_repo_empty_override_falls_back_to_git_origin() -> Result<()> {
         "acme/explicit"
     );
     assert!(crate::resolve_ci_audit_repo(&args(Some("not a slug"))).is_err());
+    Ok(())
+}
+
+fn ci_repair_artifacts(runs: Vec<CiRunWithJobs>, gaps: Vec<String>) -> CiAuditArtifacts {
+    let fetch = CiAuditFetch {
+        workflows: ci_fixture_workflows(),
+        runs,
+        pages_fetched: 1,
+        truncated: false,
+        required_checks: ci_no_required_checks(),
+        evidence_gaps: gaps,
+    };
+    let scan = scan_workflow_text(
+        ".github/workflows/ci.yml",
+        "on: [pull_request]\npermissions: read-all\n",
+    );
+    build_ci_audit_artifacts("acme/widgets", 30, &[scan], Some(&fetch), None, Utc::now())
+}
+
+#[test]
+fn ci_repair_invalid_envelopes_are_not_complete_empty_arrays() {
+    for value in [
+        serde_json::json!({}),
+        serde_json::json!({"jobs":null}),
+        serde_json::json!({"jobs":{}}),
+        serde_json::json!({"jobs":42}),
+        serde_json::json!([]),
+    ] {
+        let (jobs, rejected): (Vec<CiApiJob>, usize) = parse_ci_api_array(&value, "jobs");
+        assert!(jobs.is_empty());
+        assert!(rejected > 0, "invalid envelope silently accepted: {value}");
+    }
+    let (jobs, rejected): (Vec<CiApiJob>, usize) =
+        parse_ci_api_array(&serde_json::json!({"jobs":[]}), "jobs");
+    assert!(jobs.is_empty());
+    assert_eq!(rejected, 0);
+}
+
+#[test]
+fn ci_repair_fetch_gaps_survive_in_all_consumer_artifacts() -> Result<()> {
+    let gap = "jobs unavailable for run 999: injected read failure";
+    let a = ci_repair_artifacts(
+        ci_fixture_runs(&[(1, vec![("test", "success", 60)])])?,
+        vec![gap.to_owned()],
+    );
+    for gaps in [
+        &a.history.evidence_gaps,
+        &a.costs.evidence_gaps,
+        &a.correlation.evidence_gaps,
+        &a.recommendations.evidence_gaps,
+    ] {
+        assert!(
+            gaps.iter().any(|g| g == gap),
+            "lost partial-population warning: {gaps:?}"
+        );
+    }
+    assert!(a.report.contains(gap));
+    assert!(a.costs.jobs[0].runner_minutes_is_lower_bound);
+    Ok(())
+}
+
+#[test]
+fn ci_repair_missing_duration_is_explicit_lower_bound_not_zero_cost() -> Result<()> {
+    let mut runs = ci_fixture_runs(&[(1, vec![("test", "timed_out", 60)])])?;
+    runs[0].jobs[0].completed_at = None;
+    let a = ci_repair_artifacts(runs, Vec::new());
+    let costs = serde_json::to_value(&a.costs)?;
+    let row = &costs["jobs"][0];
+    assert_eq!(row["duration_p50_sec"], serde_json::Value::Null);
+    assert_eq!(row["runner_minutes_is_lower_bound"], true);
+    assert!(!a.costs.evidence_gaps.is_empty());
+    assert!(a.report.contains("runtime unknown"), "{}", a.report);
+    assert!(!a.report.contains(", ~0 runner-min/mo"));
+    // A measured zero remains a known zero; timeouts with measured termination
+    // retain actual occupied duration, never the configured ceiling.
+    let a = ci_repair_artifacts(
+        ci_fixture_runs(&[(1, vec![("test", "success", 0)])])?,
+        Vec::new(),
+    );
+    let costs = serde_json::to_value(&a.costs)?;
+    assert_eq!(costs["jobs"][0]["runner_minutes_is_lower_bound"], false);
+    assert!(a.report.contains(", ~0 runner-min/mo"));
+    let a = ci_repair_artifacts(
+        ci_fixture_runs(&[(1, vec![("test", "timed_out", 120)])])?,
+        Vec::new(),
+    );
+    assert_eq!(a.costs.jobs[0].runner_minutes_per_month, 2);
+    assert_eq!(a.costs.jobs[0].duration_p50_sec, Some(120));
+    Ok(())
+}
+
+#[test]
+fn ci_repair_duplicate_display_names_cannot_choose_independent_credit() -> Result<()> {
+    let runs = ci_fixture_runs(&[(1, vec![("same", "failure", 60), ("same", "success", 120)])])?;
+    let a = ci_repair_artifacts(runs.clone(), Vec::new());
+    let mut reversed = runs;
+    reversed[0].jobs.reverse();
+    let b = ci_repair_artifacts(reversed, Vec::new());
+    assert_eq!(
+        serde_json::to_value(&a.correlation)?,
+        serde_json::to_value(&b.correlation)?
+    );
+    assert_eq!(a.correlation.jobs[0].independent_failures, 0);
+    assert!(!a.correlation.evidence_gaps.is_empty());
+    assert_eq!(a.history.jobs[0].runs, 2);
+    assert_eq!(a.history.jobs[0].failure_rate, 0.5);
+    assert_eq!(a.costs.jobs[0].runner_minutes_per_month, 3);
+    Ok(())
+}
+
+#[test]
+fn ci_repair_pagination_uses_raw_page_not_decoded_population() -> Result<()> {
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    listener.set_nonblocking(true)?;
+    let api_url = format!("http://{}", listener.local_addr()?);
+    let handle = thread::spawn(move || {
+        serve_fake_http(
+            listener,
+            8,
+            "ci repair pagination",
+            Duration::from_secs(2),
+            |_idx, mut stream| {
+                stream.set_nonblocking(false)?;
+                stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+                stream.set_write_timeout(Some(Duration::from_secs(2)))?;
+                let mut reader = BufReader::new(stream.try_clone()?);
+                let mut headers = String::new();
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line)? == 0 {
+                        bail!("request ended before headers");
+                    }
+                    headers.push_str(&line);
+                    if line == "\r\n" {
+                        break;
+                    }
+                }
+                let request = headers.lines().next().context("request line")?;
+                let run = |id| serde_json::json!({"id":id,"workflow_id":1,"event":"pull_request"});
+                let body = if request.contains("/actions/workflows?") {
+                    serde_json::json!({"workflows":[{"id":1,"name":"CI","path":"ci.yml"}]})
+                } else if request.contains("/actions/runs?") {
+                    if request.contains("&page=1&") {
+                        let mut rows = vec![serde_json::json!({"id":"invalid"}); 99];
+                        rows.push(run(1));
+                        serde_json::json!({"workflow_runs":rows})
+                    } else if request.contains("&page=2&") {
+                        serde_json::json!({"workflow_runs":[run(2)]})
+                    } else {
+                        bail!("unexpected page: {request}");
+                    }
+                } else if request.contains("/jobs?") {
+                    serde_json::json!({"jobs":[], "total_count":0})
+                } else if request == "GET /repos/acme/widgets HTTP/1.1" {
+                    serde_json::json!({"default_branch":"main"})
+                } else if request.contains("/protection/required_status_checks") {
+                    serde_json::json!({"contexts":[]})
+                } else if request.contains("/rulesets?") {
+                    serde_json::json!([])
+                } else {
+                    bail!("unexpected request: {request}");
+                };
+                let bytes = serde_json::to_vec(&body)?;
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    bytes.len()
+                )?;
+                stream.write_all(&bytes)?;
+                Ok(headers)
+            },
+        )
+    });
+    let temp = tempfile::tempdir()?;
+    let args = AuditCiArgs {
+        root: temp.path().to_owned(),
+        out: temp.path().join("out"),
+        repo: Some("acme/widgets".to_owned()),
+        github_token: Some("test-token".to_owned()),
+        github_api_url: api_url,
+        window_days: 90,
+        audit_cancel_events: None,
+    };
+    let result = fetch_ci_audit_history(&args, "acme/widgets", "test-token", temp.path());
+    let served = handle
+        .join()
+        .map_err(|_| anyhow::anyhow!("fixture thread panicked"))?;
+    let fetch = result?;
+    assert_eq!(
+        fetch.runs.len(),
+        2,
+        "later valid history hidden by dropped rows"
+    );
+    assert_eq!(fetch.pages_fetched, 2);
+    assert!(!fetch.truncated);
+    assert!(fetch.evidence_gaps.iter().any(|g| g.contains("99")));
+    assert_eq!(served?.len(), 8);
+    Ok(())
+}
+
+#[test]
+fn ci_repair_mixed_and_inverted_durations_keep_observed_runtime_only() -> Result<()> {
+    for invalid in [None, Some("2025-12-31T23:59:59Z".parse::<DateTime<Utc>>()?)] {
+        let mut runs = ci_fixture_runs(&[
+            (1, vec![("test", "success", 120)]),
+            (2, vec![("test", "timed_out", 60)]),
+        ])?;
+        runs[1].jobs[0].completed_at = invalid;
+        let a = ci_repair_artifacts(runs, Vec::new());
+        assert_eq!(a.costs.jobs[0].duration_p50_sec, Some(120));
+        assert_eq!(a.costs.jobs[0].runner_minutes_per_month, 2);
+        assert!(a.costs.jobs[0].runner_minutes_is_lower_bound);
+        assert!(
+            a.costs
+                .evidence_gaps
+                .iter()
+                .any(|g| g.contains("1 job durations unavailable"))
+        );
+        assert!(a.report.contains("observed lower bound ~2 runner-min/mo"));
+    }
+    Ok(())
+}
+
+#[test]
+fn ci_repair_ambiguous_correlation_never_earns_adaptive_rightsizing() -> Result<()> {
+    let runs = (1..=20)
+        .map(|id| {
+            (
+                id,
+                vec![
+                    ("same", "failure", 600),
+                    ("same", "success", 1200),
+                    ("later", "failure", 1800),
+                ],
+            )
+        })
+        .collect::<Vec<_>>();
+    let a = ci_repair_artifacts(ci_fixture_runs(&runs)?, Vec::new());
+    for row in &a.correlation.jobs {
+        assert_eq!(row.independent_failures, 0);
+        assert!(row.independent_failures_is_lower_bound);
+    }
+    for row in &a.recommendations.jobs {
+        assert_eq!(row.tier, "flag-for-human");
+        assert!(row.reason.contains("ambiguous"));
+        assert!(row.has_caught.starts_with("unknown:"));
+        assert!(!row.reason.contains("tokenless"));
+    }
+    assert!(
+        a.report
+            .contains("independent failures unknown (0 observed)")
+    );
+    Ok(())
+}
+
+#[test]
+fn ci_repair_counts_every_missing_duration_in_consumer_warnings() -> Result<()> {
+    let specs = (1..=20)
+        .map(|id| (id, vec![("test", "success", 600)]))
+        .collect::<Vec<_>>();
+    let mut runs = ci_fixture_runs(&specs)?;
+    for run in runs.iter_mut().skip(1) {
+        run.jobs[0].completed_at = None;
+    }
+    let a = ci_repair_artifacts(runs, Vec::new());
+    let expected = ".github/workflows/ci.yml / test: 19 job durations unavailable; runtime unknown and runner minutes are an observed lower bound";
+    for gaps in [
+        &a.history.evidence_gaps,
+        &a.costs.evidence_gaps,
+        &a.correlation.evidence_gaps,
+        &a.recommendations.evidence_gaps,
+    ] {
+        assert!(gaps.iter().any(|gap| gap == expected), "{gaps:?}");
+    }
+    assert!(a.report.contains(expected));
+    assert_eq!(a.costs.jobs[0].duration_p50_sec, Some(600));
+    assert_eq!(a.costs.jobs[0].runner_minutes_per_month, 10);
+    assert!(a.costs.jobs[0].runner_minutes_is_lower_bound);
+    Ok(())
+}
+
+#[test]
+fn ci_repair_display_name_ambiguity_is_confined_to_its_workflow() -> Result<()> {
+    let mut runs = ci_fixture_runs(&[
+        (1, vec![("same", "failure", 60), ("same", "success", 120)]),
+        (2, vec![("clean", "failure", 60)]),
+    ])?;
+    runs[1].run.workflow_id = 2;
+    let mut workflows = ci_fixture_workflows();
+    workflows.push(serde_json::from_value(serde_json::json!({
+        "id":2,"name":"Other CI","path":".github/workflows/other.yml"
+    }))?);
+    let mut fetch = CiAuditFetch {
+        workflows,
+        runs,
+        pages_fetched: 1,
+        truncated: false,
+        required_checks: ci_no_required_checks(),
+        evidence_gaps: Vec::new(),
+    };
+    let a = build_ci_audit_artifacts("acme/widgets", 30, &[], Some(&fetch), None, Utc::now());
+    let clean = a
+        .correlation
+        .jobs
+        .iter()
+        .find(|row| row.job == "clean")
+        .context("clean workflow row")?;
+    assert_eq!(clean.workflow, ".github/workflows/other.yml");
+    assert_eq!(clean.independent_failures, 1);
+    assert!(!clean.independent_failures_is_lower_bound);
+    let ambiguous = a
+        .correlation
+        .jobs
+        .iter()
+        .find(|row| row.job == "same")
+        .context("ambiguous workflow row")?;
+    assert_eq!(ambiguous.independent_failures, 0);
+    assert!(ambiguous.independent_failures_is_lower_bound);
+    assert!(
+        a.correlation
+            .evidence_gaps
+            .iter()
+            .any(|gap| gap.contains("duplicate job display names"))
+    );
+    assert!(
+        !a.correlation
+            .evidence_gaps
+            .iter()
+            .any(|gap| gap.contains("other.yml"))
+    );
+    fetch.runs.reverse();
+    for run in &mut fetch.runs {
+        run.jobs.reverse();
+    }
+    let b = build_ci_audit_artifacts("acme/widgets", 30, &[], Some(&fetch), None, Utc::now());
+    assert_eq!(
+        serde_json::to_value(&a.correlation)?,
+        serde_json::to_value(&b.correlation)?
+    );
     Ok(())
 }
