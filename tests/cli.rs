@@ -7706,6 +7706,9 @@ fn fake_setup_ci_listener_survives_handler_error() -> Result<()> {
     Ok(())
 }
 
+#[path = "cli/init_output.rs"]
+mod init_output;
+
 #[path = "cli/setup_ci.rs"]
 mod setup_ci;
 
