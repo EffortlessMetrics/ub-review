@@ -36415,7 +36415,6 @@ reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Clas
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_follow_up_routing.rs:return_value:a195edb8"
+finding_id = "probe:src_witness.rs:field_construction:a6d2e94d"
 owner = "ub-review/core"
-reason = "Twin of the call_deletion probe on the same adapter line in routed_receipt_excerpts_for_task: Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: reachable_unrevealed. routed_packet_batch_reuses_only_matching_receipt_excerpts in src/witness.rs pins the returned map across cache-hit, fresh-map, wrong-kind and wrong-id calls with exact content assertions. Re-verify after any edit to src/follow_up_routing.rs or the witness packet tests."
-
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The single-command element closed at this line in the routed_packet_tests receipt() fixture is load-bearing for every downstream assertion: collapsing it empties the excerpt, failing routed_proof_receipt_excerpt's context(\"excerpt\") in routed_packet_tail_preserves_utf8_and_missing_stream_format and the first[\"proof-1\"] lookups in routed_packet_batch_reuses_only_matching_receipt_excerpts; ripr's reach linker matched same-named receipt helpers in src/main.rs and src/review_topics.rs instead of this module-private fixture. Re-verify after any edit to the witness packet fixtures."
