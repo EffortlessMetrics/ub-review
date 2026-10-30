@@ -38317,3 +38317,103 @@ finding_id = "probe:src_summary_render.rs:call_deletion:d54c748c.2"
 owner = "ub-review/core"
 reason = "Closing-delimiter probe at line628 represents the complete available.push effect. The valid-empty and ordinary-sensor literal section equalities pin the effect and exact packet label; the original prefix-only tests are deliberately strengthened. PR #1537, issue #1533; pinned RIPR 0.10.0 on base ac06293/current production 407661e. Direct unsafe_review_evidence_sections_preserve_exact_availability asserts literal complete missing and available sections, including labels, and an ordinary tokmd success control. The exact test passes while the pinned output retains observation_unverified. Returned related-test previews omit this direct oracle; some previews are truncated, so the full association cause is not claimed. Related upstream association/discrimination work: EffortlessMetrics/ripr-swarm#5352/#5502. This is a static-exposure disposition, not runtime proof or gate sufficiency. Re-verify after semantic edits or tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions."
 
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:field_construction:f4440afe"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe summaries: &[SummaryOnlyFinding],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:46278c85"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe compile_review_surface(ReviewCompilerInput {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:field_construction:f4486d32"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe shared_context_id: \"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:810c4802"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe shared_context_id: \"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:field_construction:7ef27024"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe model_lanes: &[],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:e88271f5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe model_lanes: &[],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:field_construction:3b43617f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe missing_or_failed_sensor_evidence: &[],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:e5e7ef0b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe missing_or_failed_sensor_evidence: &[],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:field_construction:a1bc7568"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe missing_or_failed_model_evidence: &[],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:9522c281"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe missing_or_failed_model_evidence: &[],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:field_construction:96a89916"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe summary_only_findings: summaries,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:519b9562"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe summary_only_findings: summaries,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:field_construction:bf2c92cc"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe suggested_issues: &[],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:e48ddded"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe suggested_issues: &[],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:field_construction:9384d6e7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe final_follow_up_tasks: 0,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:818d9cc1"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe final_follow_up_tasks: 0,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:field_construction:4ed795b6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe reporter_distillation: None,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:33ea00f0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe reporter_distillation: None,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:field_construction:ac4745bc"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe severity: \"medium\".to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:16e4fd25"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1497; probe severity: \"medium\".to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by executed_evidence_beats_model_confidence, internal_audit_observations_are_withheld_from_public_review_boundary, internal_inline_planning_language_is_artifact_only. Re-verify after any edit to src/noise.rs."
