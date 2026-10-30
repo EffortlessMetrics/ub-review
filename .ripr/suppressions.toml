@@ -36395,3 +36395,27 @@ kind = "exposure_gap"
 finding_id = "probe:src_reporter.rs:return_value:3bcce1fc"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1524; probe };: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by invalid_model_verdict_stays_explicitly_undecided, lane_continuation_prompt_includes_proof_evidence_when_present, lane_continuation_prompt_includes_question_and_prior_conclusion. Re-verify after any edit to src/reporter.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_follow_up_routing.rs:match_arm:a4562608"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The non-empty Ok arm is pinned from src/witness.rs's routed_packet_tests: routed_packet_tail_preserves_utf8_and_missing_stream_format asserts the exact `stdout (last 600 bytes of 603)` truncation marker and the UTF-8 continuation-byte trim, routed_packet_consumption_measurement asserts byte-exact 1200/600-byte tails for 16 shared-receipt packets, and routed_packet_refreshes_sources_and_rejects_unmatched_routes asserts fresh source bytes replace prior content. Re-verify after any edit to src/follow_up_routing.rs or the witness packet tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_follow_up_routing.rs:call_deletion:0a8ea325"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: reachable_unrevealed. The per-batch excerpts cache in routed_receipt_excerpts_for_task is driven directly by routed_packet_batch_reuses_only_matching_receipt_excerpts in src/witness.rs: a second consumer with the stream files removed must return the cached snapshot (ensure!(first == second) fails if the entry binding is dropped and streams re-open), a fresh map must report unavailability, and non-matching kind or id must return empty. Re-verify after any edit to src/follow_up_routing.rs or the witness packet tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_follow_up_routing.rs:call_deletion:0307d778"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: reachable_unrevealed. The Option adapter feeding the returned excerpt map in routed_receipt_excerpts_for_task is pinned by routed_packet_batch_reuses_only_matching_receipt_excerpts in src/witness.rs: first/fresh/unrelated comparisons assert the returned map's exact membership (same-batch-proof, unavailable, empty for filtered evidence), so a broken unwrap path flips those outcomes; assertions address returned-map outcomes rather than the adapter text. Re-verify after any edit to src/follow_up_routing.rs or the witness packet tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_follow_up_routing.rs:return_value:a195edb8"
+owner = "ub-review/core"
+reason = "Twin of the call_deletion probe on the same adapter line in routed_receipt_excerpts_for_task: Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: reachable_unrevealed. routed_packet_batch_reuses_only_matching_receipt_excerpts in src/witness.rs pins the returned map across cache-hit, fresh-map, wrong-kind and wrong-id calls with exact content assertions. Re-verify after any edit to src/follow_up_routing.rs or the witness packet tests."
+
