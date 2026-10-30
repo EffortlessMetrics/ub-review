@@ -36586,7 +36586,22 @@ reason = "Local RIPR 0.10.0 weak discriminator on review patch decoding. Literal
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_review_text.rs:call_deletion:f631ac58"
+finding_id = "probe:src_review_text.rs:call_deletion:242e483e"
 owner = "ub-review/core"
-reason = "Local RIPR 0.10.0 weak discriminator on review patch decoding. Transport prefix check: review_patch_unusable_file_headers_do_not_inherit_prior_file rejects a quoted old-side prefix and review_patch_quoted_filename_preserves_anchor_identity accepts the new-side prefix. Re-verify after decoder, test or RIPR changes; this local finding is not an assertion about a hosted receipt."
+reason = "Local RIPR 0.10.0 weak discriminator on review patch decoding. Path normalization: review_patch_invalid_quoted_filename_never_reuses_previous_path rejects the decoded backslash that the normalizer would change; disabling the guard failed the compiled test. Re-verify after decoder, test or RIPR changes; this local finding is not an assertion about a hosted receipt."
 
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:return_value:a7f6029c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1591; probe new_line = None;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by applicable_suggestion_keeps_applying_edits_and_drops_the_rest, body_budget_drops_topics_and_preserves_inline_fallback_receipt, bullet_budget_drops_all_topics_as_inline_only. Re-verify after any edit to src/review_text.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:389d12b9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1591; probe match byte {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained, artifact_contract_docs_match_ci_audit_verifier_coverage. Re-verify after any edit to src/review_text.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:7627e833"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1591; probe Some(normalized): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by body_budget_drops_topics_and_preserves_inline_fallback_receipt, bullet_budget_drops_all_topics_as_inline_only, degradation_drops_lowest_ranked_topics_deterministically. Re-verify after any edit to src/review_text.rs."
