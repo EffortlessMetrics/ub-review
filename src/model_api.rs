@@ -423,12 +423,8 @@ pub(crate) fn wait_for_child_output_files(
         None => {
             let _ = child.kill();
             let _ = child.wait();
-            let (stdout, stderr) = read_and_remove_output_files(stdout_path, stderr_path)?;
-            bail!(
-                "process timed out after {timeout_sec}s: stderr: {}; stdout: {}",
-                String::from_utf8_lossy(&stderr),
-                String::from_utf8_lossy(&stdout)
-            );
+            let _ = read_and_remove_output_files(stdout_path, stderr_path)?;
+            bail!("process timed out after {timeout_sec}s; output omitted from diagnostic");
         }
     };
     let (stdout, stderr) = read_and_remove_output_files(stdout_path, stderr_path)?;
