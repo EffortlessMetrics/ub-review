@@ -3389,7 +3389,7 @@ fn doctor_rejects_failed_version_probe_even_when_it_prints_the_pin() -> Result<(
     let config = temp.path().join(".ub-review.toml");
     let mut config_text = "profile = \"gh-runner\"\n".to_owned();
     for (tool, version) in [
-        ("tokmd", "1.12.0"),
+        ("tokmd", "1.15.0"),
         ("cargo-allow", "0.1.8"),
         ("ripr", "0.10.0"),
         ("unsafe-review", "0.3.4"),
@@ -3420,7 +3420,7 @@ fn doctor_rejects_failed_version_probe_even_when_it_prints_the_pin() -> Result<(
         let executable = temp.path().join(format!("failed-probe-{label}"));
         write_executable_fixture(
             &executable,
-            &format!("#!/bin/sh\nprintf 'tokmd 1.12.0\\n'{redirect}\nexit 2\n"),
+            &format!("#!/bin/sh\nprintf 'tokmd 1.15.0\\n'{redirect}\nexit 2\n"),
         )?;
         let failed_config = temp.path().join(format!("failed-{label}.toml"));
         let failed_text = config_text.replace(
@@ -3439,7 +3439,7 @@ fn doctor_rejects_failed_version_probe_even_when_it_prints_the_pin() -> Result<(
             ],
             &[],
         )?;
-        assert!(output.contains("tokmd expected 1.12.0, got no --version output"));
+        assert!(output.contains("tokmd expected 1.15.0, got no --version output"));
         assert!(output.contains("tokmd version unknown:"));
         let advisory = run_capture_with_env(
             temp.path(),
