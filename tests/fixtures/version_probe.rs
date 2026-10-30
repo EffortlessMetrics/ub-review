@@ -19,17 +19,17 @@ fn main() -> io::Result<()> {
     fs::write(state.with_extension("pid"), std::process::id().to_string())?;
     let mode = fs::read_to_string(&state)?;
     match mode.trim() {
-        "stdout" => println!("tokmd 1.12.0"),
-        "stderr" => eprintln!("tokmd 1.12.0"),
+        "stdout" => println!("tokmd 1.15.0"),
+        "stderr" => eprintln!("tokmd 1.15.0"),
         "nonzero" => {
-            println!("tokmd 1.12.0");
+            println!("tokmd 1.15.0");
             eprintln!("SECRET_SENTINEL\x1b[31m::error::injected");
             std::process::exit(7);
         }
         "blank" => {}
         "malformed" => println!("SECRET_SENTINEL\x1b[31m::error::injected"),
         "oversized" | "oversized-stdout" | "oversized-stderr" => {
-            println!("tokmd 1.12.0");
+            println!("tokmd 1.15.0");
             let bytes = [b'x'; 1024];
             for _ in 0..8192 {
                 if mode.trim() != "oversized-stderr" {
@@ -56,7 +56,7 @@ fn main() -> io::Result<()> {
                 let _ = child.wait();
                 return Err(error);
             }
-            println!("tokmd 1.12.0");
+            println!("tokmd 1.15.0");
         }
         version if version.starts_with("version:") => println!("{}", &version[8..]),
         _ => std::process::exit(8),
