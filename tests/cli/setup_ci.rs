@@ -628,6 +628,7 @@ fn setup_ci_print_pr_rejects_invalid_action_sha_before_outputs() -> Result<()> {
         let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
             .current_dir(temp.path())
             .env_clear()
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .args(["setup-ci", "--print-pr", "--out"])
             .arg(&out)
             .args(["--accept", "unit=cargo test --lib --locked"])
@@ -697,6 +698,7 @@ fn setup_ci_print_pr_preserves_full_action_sha_and_replay() -> Result<()> {
         command
             .current_dir(temp.path())
             .env_clear()
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .args(["setup-ci", "--print-pr", "--out"])
             .arg(&out)
             .args(["--accept", "unit=cargo test --lib --locked"])
@@ -816,6 +818,7 @@ fn setup_ci_print_pr_preserves_plan_only_sha_semantics() -> Result<()> {
         command
             .current_dir(temp.path())
             .env_clear()
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .args(["setup-ci", "--print-pr", "--out"])
             .arg(&out);
         if accept_unit {
