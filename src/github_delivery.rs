@@ -469,7 +469,6 @@ fn reserve_delivery_attempt(
     Ok(())
 }
 
-fn load_claim_graph(args: &PostArgs) -> Result<serde_json::Value> {
 fn load_claim_graph(args: &PostArgs, required: bool) -> Result<Option<serde_json::Value>> {
     let graph_path = args
         .review_json
