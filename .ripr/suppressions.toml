@@ -38673,3 +38673,68 @@ kind = "exposure_gap"
 finding_id = "probe:src_enable.rs:error_path:5bef1a41"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1330; probe bail!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cmd_enable_with_resolver_writes_release_workflow_offline, enable_config_is_not_the_bun_dogfood_default, enable_config_round_trips. Re-verify after any edit to src/enable.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_init.rs:error_path:0079f6e9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1327; probe })?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by init_accepted_profiles_survive_full_config_loader, init_builtin_profiles_and_config_owned_custom_remain_usable, init_custom_profile_refuses_before_creating_or_overwriting_outputs. Re-verify after any edit to src/init.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_init.rs:error_path:1586d2d0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1327; probe bail!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by init_accepted_profiles_survive_full_config_loader, init_builtin_profiles_and_config_owned_custom_remain_usable, init_custom_profile_refuses_before_creating_or_overwriting_outputs. Re-verify after any edit to src/init.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_init.rs:match_arm:cbff6b94"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1327; probe Ok(metadata) if metadata.is_dir() => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by consumers_keep_independent_metadata_across_terminal_result, enable_workflows_include_exact_pr_head_metadata, fixture_new_writes_exact_sources_and_inert_release_metadata. Re-verify after any edit to src/init.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_init.rs:error_path:1586d2d0.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1327; probe bail!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by init_accepted_profiles_survive_full_config_loader, init_builtin_profiles_and_config_owned_custom_remain_usable, init_custom_profile_refuses_before_creating_or_overwriting_outputs. Re-verify after any edit to src/init.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_init.rs:match_arm:573c16da"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1327; probe Ok(metadata) if metadata.is_file() => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by consumers_keep_independent_metadata_across_terminal_result, enable_workflows_include_exact_pr_head_metadata, fixture_new_writes_exact_sources_and_inert_release_metadata. Re-verify after any edit to src/init.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_init.rs:error_path:0079f6e9.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1327; probe })?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by init_accepted_profiles_survive_full_config_loader, init_builtin_profiles_and_config_owned_custom_remain_usable, init_custom_profile_refuses_before_creating_or_overwriting_outputs. Re-verify after any edit to src/init.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_init.rs:match_arm:ebe02427"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1327; probe Ok(_) => {}: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by init_accepted_profiles_survive_full_config_loader, init_builtin_profiles_and_config_owned_custom_remain_usable, init_custom_profile_refuses_before_creating_or_overwriting_outputs. Re-verify after any edit to src/init.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_init.rs:match_arm:438bd795"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1327; probe Err(error) => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by child_cleanup_waits_for_confirmed_exit_even_when_kill_reports_an_error, doctor_reports_every_retained_error_with_source_and_correction, fake_setup_ci_listener_survives_handler_error. Re-verify after any edit to src/init.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_init.rs:error_path:bfda7d73"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1327; probe ): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by init_accepted_profiles_survive_full_config_loader, init_builtin_profiles_and_config_owned_custom_remain_usable, init_custom_profile_refuses_before_creating_or_overwriting_outputs. Re-verify after any edit to src/init.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_init.rs:return_value:150a9bef"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1327; probe ): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by init_accepted_profiles_survive_full_config_loader, init_builtin_profiles_and_config_owned_custom_remain_usable, init_custom_profile_refuses_before_creating_or_overwriting_outputs. Re-verify after any edit to src/init.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_init.rs:error_path:2d99146f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1327; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by init_accepted_profiles_survive_full_config_loader, init_builtin_profiles_and_config_owned_custom_remain_usable, init_custom_profile_refuses_before_creating_or_overwriting_outputs. Re-verify after any edit to src/init.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_init.rs:return_value:d788b664"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1327; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by init_accepted_profiles_survive_full_config_loader, init_builtin_profiles_and_config_owned_custom_remain_usable, init_custom_profile_refuses_before_creating_or_overwriting_outputs. Re-verify after any edit to src/init.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_init.rs:return_value:d09c2a0c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1327; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by init_accepted_profiles_survive_full_config_loader, init_builtin_profiles_and_config_owned_custom_remain_usable, init_custom_profile_refuses_before_creating_or_overwriting_outputs. Re-verify after any edit to src/init.rs."
