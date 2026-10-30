@@ -463,6 +463,93 @@ fn scoped_sibling_scan_limit_remains_coverage_limited() {
 }
 
 #[test]
+fn review_patch_quoted_filename_preserves_anchor_identity() {
+    let patch = concat!(
+        "diff --git a/ordinary.rs b/ordinary.rs\n",
+        "--- a/ordinary.rs\n+++ b/ordinary.rs\n@@ -1 +1 @@\n-old\n+ordinary\n",
+        "diff --git \"a/caf\\303\\251.rs\" \"b/caf\\303\\251.rs\"\n",
+        "--- \"a/caf\\303\\251.rs\"\n+++ \"b/caf\\303\\251.rs\"\n",
+        "@@ -7 +7 @@\n-old\n+quoted\n",
+    );
+    let lines = right_side_diff_line_text(patch);
+    assert_eq!(
+        lines.get(&("ordinary.rs".to_owned(), 1)),
+        Some(&"ordinary".to_owned())
+    );
+    assert_eq!(
+        lines.get(&("café.rs".to_owned(), 7)),
+        Some(&"quoted".to_owned())
+    );
+    assert!(!lines.contains_key(&("ordinary.rs".to_owned(), 7)));
+}
+
+#[test]
+fn review_patch_invalid_quoted_filename_never_reuses_previous_path() {
+    for header in [
+        r#"+++ "b/bad\400.rs""#,
+        r#"+++ "b/bad\q.rs""#,
+        r#"+++ "b/with\\slash.rs""#,
+    ] {
+        let patch = format!(
+            "diff --git a/ordinary.rs b/ordinary.rs\n+++ b/ordinary.rs\n@@ -1 +1 @@\n-old\n+ordinary\ndiff --git a/other b/other\n{header}\n@@ -7 +7 @@\n-old\n+wrong\n"
+        );
+        let lines = right_side_diff_line_text(&patch);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(
+            lines.get(&("ordinary.rs".to_owned(), 1)),
+            Some(&"ordinary".to_owned())
+        );
+    }
+}
+
+#[test]
+fn review_patch_git_c_escapes_preserve_exact_anchor_paths() {
+    // Git uses these escapes for control bytes and quotes within a filename.
+    for (encoded, expected) in [
+        (r"a\ab.rs", "a\u{7}b.rs"),
+        (r"a\bb.rs", "a\u{8}b.rs"),
+        (r"a\tb.rs", "a\tb.rs"),
+        (r"a\nb.rs", "a\nb.rs"),
+        (r"a\vb.rs", "a\u{b}b.rs"),
+        (r"a\fb.rs", "a\u{c}b.rs"),
+        (r"a\rb.rs", "a\rb.rs"),
+        (r#"a\"b.rs"#, "a\"b.rs"),
+        (r"a\303\251b.rs", "aéb.rs"),
+    ] {
+        let patch = format!("diff --git a/x b/x\n+++ \"b/{encoded}\"\n@@ -1 +1 @@\n-old\n+new\n");
+        let lines = right_side_diff_line_text(&patch);
+        assert_eq!(lines.len(), 1, "{encoded}");
+        assert_eq!(
+            lines.get(&(expected.to_owned(), 1)),
+            Some(&"new".to_owned()),
+            "{encoded}"
+        );
+    }
+}
+
+#[test]
+fn review_patch_unusable_file_headers_do_not_inherit_prior_file() {
+    for header in [
+        "",
+        "+++ /dev/null\n",
+        "+++ \"a/wrong-prefix.rs\"\n",
+        "+++ \"b/invalid\\377.rs\"\n",
+        "+++ \"b/unterminated.rs\n",
+    ] {
+        let patch = format!(
+            "diff --git a/first.rs b/first.rs\n+++ b/first.rs\n@@ -1 +1 @@\n-old\n+first\ndiff --git a/second.rs b/second.rs\n{header}@@ -4 +4 @@\n-old\n+second\n"
+        );
+        let lines = right_side_diff_line_text(&patch);
+        assert_eq!(lines.len(), 1, "{header:?}");
+        assert_eq!(
+            lines.get(&("first.rs".to_owned(), 1)),
+            Some(&"first".to_owned())
+        );
+        assert!(!lines.contains_key(&("first.rs".to_owned(), 4)));
+    }
+}
+
+#[test]
 fn inline_guard_accepts_only_right_side_diff_lines() -> Result<()> {
     let patch = "\
 diff --git a/src/lib.rs b/src/lib.rs

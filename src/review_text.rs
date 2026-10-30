@@ -830,8 +830,13 @@ pub(crate) fn right_side_diff_line_text(patch: &str) -> BTreeMap<(String, u32), 
     let mut current_path = String::new();
     let mut new_line: Option<u32> = None;
     for line in patch.lines() {
-        if let Some(path) = line.strip_prefix("+++ b/") {
-            current_path = normalize_repo_path(path);
+        if line.starts_with("diff --git ") {
+            current_path.clear();
+            new_line = None;
+            continue;
+        }
+        if new_line.is_none() && line.starts_with("+++ ") {
+            current_path = review_patch_new_path(line).unwrap_or_default();
             continue;
         }
         if line.starts_with("@@") {
@@ -861,6 +866,68 @@ pub(crate) fn right_side_diff_line_text(patch: &str) -> BTreeMap<(String, u32), 
         }
     }
     lines
+}
+
+// Git quotes unusual path bytes using C escapes and three-digit octal escapes.
+// Reject malformed or non-UTF-8 paths rather than attaching lines to another file.
+fn review_patch_new_path(line: &str) -> Option<String> {
+    let path = line.strip_prefix("+++ ")?;
+    let is_quoted = path.starts_with('"');
+    let decoded = if let Some(quoted) = path.strip_prefix('"') {
+        let bytes = quoted.as_bytes();
+        let mut out = Vec::new();
+        let mut i = 0;
+        loop {
+            let byte = *bytes.get(i)?;
+            i += 1;
+            match byte {
+                b'"' => {
+                    if !bytes[i..].is_empty() && bytes[i] != b'\t' {
+                        return None;
+                    }
+                    break;
+                }
+                b'\\' => {
+                    let escaped = *bytes.get(i)?;
+                    i += 1;
+                    let value = match escaped {
+                        b'a' => 7,
+                        b'b' => 8,
+                        b't' => b'\t',
+                        b'n' => b'\n',
+                        b'v' => 11,
+                        b'f' => 12,
+                        b'r' => b'\r',
+                        b'\\' | b'"' => escaped,
+                        b'0'..=b'7' => {
+                            let second = *bytes.get(i)?;
+                            let third = *bytes.get(i + 1)?;
+                            if !(b'0'..=b'7').contains(&second) || !(b'0'..=b'7').contains(&third) {
+                                return None;
+                            }
+                            i += 2;
+                            let octal = u16::from(escaped - b'0') * 64
+                                + u16::from(second - b'0') * 8
+                                + u16::from(third - b'0');
+                            u8::try_from(octal).ok()?
+                        }
+                        _ => return None,
+                    };
+                    out.push(value);
+                }
+                _ => out.push(byte),
+            }
+        }
+        String::from_utf8(out).ok()?
+    } else {
+        path.split('\t').next()?.to_owned()
+    };
+    let repo_path = decoded.strip_prefix("b/")?;
+    let normalized = normalize_repo_path(repo_path);
+    if is_quoted && normalized != repo_path {
+        return None;
+    }
+    Some(normalized)
 }
 
 pub(crate) fn parse_hunk_new_start(line: &str) -> Option<u32> {
