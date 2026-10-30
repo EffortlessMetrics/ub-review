@@ -3,6 +3,92 @@
 use super::*;
 use crate::*;
 
+#[test]
+fn review_path_identity_survives_b_directory_to_written_payload() -> Result<()> {
+    for path in ["src/lib.rs", "b/src/lib.rs", "b/b/src/lib.rs"] {
+        let temp = tempfile::tempdir()?;
+        let mut diff = test_diff();
+        diff.changed_files = vec![path.to_owned()];
+        diff.patch = format!(
+            "diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -1 +1 @@\n-let limit = count + 1;\n+let limit = count - 1;\n"
+        );
+        let right_lines = right_side_diff_lines(&diff.patch);
+        let lane = model_lane("tests-oracle", "Test oracle", &[], "Check bounds.");
+        let evidence = format!("{path}:1 subtracts before checking the zero boundary");
+        let comment = validate_inline_candidate(
+            &lane,
+            ModelCandidateComment {
+                severity: "high".to_owned(),
+                confidence: "high".to_owned(),
+                path: path.to_owned(),
+                line: 1,
+                body: "Subtracting from a zero count underflows before the bounds check."
+                    .to_owned(),
+                evidence: evidence.clone(),
+                suggestion: None,
+            },
+            &right_lines,
+        )
+        .map_err(|finding| {
+            anyhow::anyhow!("valid source anchor was demoted: {}", finding.reason)
+        })?;
+        assert_eq!(comment.evidence, evidence);
+        let args = test_run_args(temp.path().to_path_buf());
+        let plan = test_plan(Vec::new());
+        let policy = ReviewBodyPolicy::default();
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &policy,
+            run_pass: RunPass::Manual,
+            post_review_on: &[],
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &[model_lane_receipt("tests-oracle", "ok")],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &[comment],
+            summary_only_findings: &[],
+            observations: &[],
+            proof_receipts: &[],
+            suggested_issues: &[],
+            final_follow_up_tasks: 0,
+            reporter_distillation: None,
+        })?;
+        assert!(surface.should_prepare_github_review);
+        assert_eq!(surface.review_payload_status, "prepared");
+        write_github_review_payload(
+            temp.path(),
+            &surface.github_review,
+            &right_lines,
+            &policy,
+            false,
+        )?;
+        let public: serde_json::Value =
+            serde_json::from_slice(&fs::read(temp.path().join("github-review.json"))?)?;
+        assert_eq!(
+            public["comments"]
+                .as_array()
+                .context("comments missing")?
+                .len(),
+            1
+        );
+        assert_eq!(
+            public["comments"][0]["path"], path,
+            "wrong location in actionable payload: {public}"
+        );
+        assert_eq!(public["comments"][0]["line"], 1);
+        assert_eq!(public["comments"][0]["side"], "RIGHT");
+        assert!(
+            public["comments"][0]["body"]
+                .as_str()
+                .context("body missing")?
+                .contains("underflows")
+        );
+    }
+    Ok(())
+}
+
 // Joined offline proof of the artifact-only internal_audit contract. These
 // invented tokens are canaries, not credentials; public finding text is not
 // promised arbitrary secret detection by this contract.
@@ -1300,4 +1386,89 @@ index 1111111..2222222 100644
         }
     }
     Ok(())
+}
+
+// Independent controls for the leading-b repository path defect.
+#[cfg(test)]
+mod independent_leading_b_path_controls {
+    use crate::*;
+
+    fn patch(path: &str) -> String {
+        format!(
+            "diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -1 +1,2 @@\n fn load() {{\n+    consume(ptr);\n"
+        )
+    }
+
+    #[test]
+    fn independent_path_controls_diff_prefix_removed_once_and_real_b_preserved() {
+        for path in ["module.rs", "b/module.rs", "b/b/module.rs"] {
+            let lines = right_side_diff_line_text(&patch(path));
+            assert_eq!(lines.len(), 2, "the fixture must contain two RIGHT lines");
+            assert_eq!(
+                lines.get(&(path.to_owned(), 2)).map(String::as_str),
+                Some("    consume(ptr);"),
+                "the diff's b/ transport prefix must be removed exactly once: {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn independent_path_controls_post_rejects_shorter_alias_with_nonempty_positive_control()
+    -> Result<()> {
+        for (real, alias) in [
+            ("b/module.rs", "module.rs"),
+            ("b/b/module.rs", "b/module.rs"),
+        ] {
+            let temp = tempfile::tempdir()?;
+            let diff_patch = temp.path().join("diff.patch");
+            fs::write(&diff_patch, patch(real))?;
+            let args = PostArgs {
+                review_json: temp.path().join("review/github-review.json"),
+                diff_patch: Some(diff_patch),
+                out: temp.path().join("post"),
+                github_token: None,
+                repo: None,
+                pull_number: None,
+                github_api_url: "https://api.github.invalid".to_owned(),
+                fail_on_post_error: true,
+            };
+            let mut review = GitHubReview {
+                event: "COMMENT".to_owned(),
+                body: "The pointer consumption requires a validity guard.".to_owned(),
+                comments: vec![GitHubReviewComment {
+                    path: real.to_owned(),
+                    line: 2,
+                    side: "RIGHT".to_owned(),
+                    body: "[tests] Guard pointer validity before consuming it.".to_owned(),
+                    suggestion: Some("    consume_checked(ptr)?;".to_owned()),
+                }],
+            };
+            assert_eq!(review.comments.len(), 1);
+            validate_github_review_payload_for_post(&args, &review)?;
+            // Keep the already validated body, line, side and suggestion;
+            // only its path changes for the nonempty negative control.
+            review
+                .comments
+                .first_mut()
+                .context("positive control comment missing")?
+                .path = alias.to_owned();
+            assert_eq!(
+                review.comments.len(),
+                1,
+                "negative control must remain nonempty"
+            );
+            let error = validate_github_review_payload_for_post(&args, &review)
+                .err()
+                .ok_or_else(|| {
+                    anyhow::anyhow!("wrong alias {alias} passed for diff path {real}")
+                })?;
+            assert!(
+                error
+                    .to_string()
+                    .contains("not a valid RIGHT-side diff line"),
+                "alias must fail for its anchor, after payload validation: {error:#}"
+            );
+        }
+        Ok(())
+    }
 }
