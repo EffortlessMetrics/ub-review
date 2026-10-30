@@ -14,7 +14,16 @@ pub(crate) fn is_bun_focused_test_file(path: &str) -> bool {
         return false;
     }
     let lower = path.to_ascii_lowercase();
-    (lower.starts_with("test/") || lower.starts_with("tests/"))
+    // The file must sit under a test directory. Top-level test/ and tests/
+    // cover the common layout; a preserved leading directory (real `b/` names
+    // a directory per normalize_repo_path) keeps its own test component
+    // eligible, so `b/test/parser.test.ts` stays a focused candidate.
+    let mut segments = lower.split('/');
+    let file = segments.next_back();
+    let under_test_dir =
+        !lower.starts_with("./") && segments.any(|part| part == "test" || part == "tests");
+    under_test_dir
+        && file.is_some()
         && [
             ".test.ts",
             ".test.tsx",
