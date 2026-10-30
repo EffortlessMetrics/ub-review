@@ -358,6 +358,119 @@ path = "src/lib.rs"
 }
 
 #[test]
+fn missing_ledger_context_identifies_source_without_failing_run() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+    let config = temp.path().join("review.toml");
+    let available = repo.join("available.md");
+    write_file(&available, "available override context")?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    for (name, ledger, override_path, expected) in [
+        ("omitted", "", "", "No UB ledger configured"),
+        (
+            "configured-missing",
+            "docs/missing.md",
+            "",
+            "configured by `[repo].ledger`",
+        ),
+        (
+            "override-missing",
+            "docs/config-missing.md",
+            "override-missing.md",
+            "configured by `--ledger-path` / `UB_REVIEW_LEDGER_PATH`",
+        ),
+        (
+            "env-missing",
+            "docs/config-missing.md",
+            "env-missing.md",
+            "configured by `--ledger-path` / `UB_REVIEW_LEDGER_PATH`",
+        ),
+        (
+            "override-available",
+            "docs/config-missing.md",
+            "available.md",
+            "available override context",
+        ),
+    ] {
+        write_file(&config, &format!("[repo]\nledger = {ledger:?}\n"))?;
+        let out = temp.path().join(name);
+        let mut command = isolated_command(bin, temp.path());
+        command
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .env("HOME", temp.path())
+            .args([
+                "run",
+                "--root",
+                path_str(&repo)?,
+                "--config",
+                path_str(&config)?,
+                "--profile",
+                "gh-runner",
+                "--base",
+                "HEAD^",
+                "--head",
+                "HEAD",
+                "--dry-run",
+                "--model-mode",
+                "off",
+                "--posting",
+                "artifact-only",
+                "--no-github-summary",
+                "--out",
+                path_str(&out)?,
+            ]);
+        if name == "env-missing" {
+            command.env("UB_REVIEW_LEDGER_PATH", override_path);
+        } else {
+            command.args(["--ledger-path", override_path]);
+        }
+        let output = command.output()?;
+        assert!(
+            output.status.success(),
+            "{name}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        for file in ["shared_context.md", "shared_context_cache_block.md"] {
+            let context = fs::read_to_string(out.join("review").join(file))?;
+            assert!(context.contains(expected), "{name}: {context}");
+            if name.ends_with("missing") {
+                let missing = if override_path.is_empty() {
+                    ledger
+                } else {
+                    override_path
+                };
+                assert!(
+                    context.contains(path_str(&repo.join(missing))?),
+                    "{name}: {context}"
+                );
+                assert!(
+                    context.contains("optional context omitted"),
+                    "{name}: {context}"
+                );
+            }
+            if !override_path.is_empty() {
+                assert!(
+                    !context.contains("configured by `[repo].ledger`"),
+                    "{name}: {context}"
+                );
+            }
+        }
+        let gate: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/gate_outcome.json"))?)?;
+        assert!(
+            gate["reasons"]
+                .as_array()
+                .is_some_and(|reasons| reasons.iter().all(|reason| reason["kind"] != "policy")),
+            "{name}: {gate}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn run_with_pr_thread_context_seeds_shared_context() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;

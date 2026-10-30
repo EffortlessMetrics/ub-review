@@ -21,8 +21,13 @@ pub(crate) fn render_ledger_context(
         root.join(configured_path)
     };
     if !path.exists() {
+        let source = if args.ledger_path.trim().is_empty() {
+            "`[repo].ledger`"
+        } else {
+            "`--ledger-path` / `UB_REVIEW_LEDGER_PATH`"
+        };
         return Ok(format!(
-            "- UB ledger configured but unavailable at `{}`.\n",
+            "- UB ledger configured by {source} but unavailable at `{}`; optional context omitted. Verify the configured path to include ledger context.\n",
             path.display()
         ));
     }
