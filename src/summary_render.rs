@@ -695,11 +695,25 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
             continue;
         };
         match receipt.status.as_str() {
-            "ok" => available.push(format!(
-                "{} ran; {} available.",
-                sensor.id,
-                evidence_label(&sensor.id)
-            )),
+            "ok" => {
+                if sensor.id == "unsafe-review"
+                    && let Err(gap) =
+                        read_unsafe_review_artifacts(&out.join("sensors").join(&sensor.id))
+                {
+                    missing.push(format!(
+                        "{} artifact-gap; {} unavailable; reason: {}.",
+                        sensor.id,
+                        evidence_label(&sensor.id),
+                        gap.reason()
+                    ));
+                } else {
+                    available.push(format!(
+                        "{} ran; {} available.",
+                        sensor.id,
+                        evidence_label(&sensor.id)
+                    ));
+                }
+            }
             "missing" => missing.push(format!(
                 "{} not installed; {} unavailable.",
                 sensor.id,
@@ -849,6 +863,89 @@ mod tests {
         let mut summary = String::new();
         render_review_efficiency_section(&mut summary, out);
         assert!(summary.contains("Review metrics: unavailable"), "{summary}");
+        Ok(())
+    }
+
+    #[test]
+    fn unsafe_review_evidence_sections_preserve_exact_availability() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        let sensor = crate::tests::sensor_plan("unsafe-review", "unsafe-review", true);
+        let plan = crate::tests::test_plan(vec![sensor.clone()]);
+        write_sensor_status(
+            out,
+            &sensor,
+            SensorStatusWrite {
+                status: "ok",
+                argv: &["unsafe-review".to_owned()],
+                duration_ms: 10,
+                reason: "completed",
+                exit_code: Some(0),
+                timed_out: false,
+            },
+        )?;
+        let mut missing = String::new();
+        render_evidence_sections(&mut missing, out, &plan);
+        assert_eq!(
+            missing,
+            concat!(
+                "\n## Available evidence\n\n",
+                "- No sensor evidence completed successfully.\n",
+                "\n## Missing evidence\n\n",
+                "- unsafe-review artifact-gap; unsafe/native reviewability packet unavailable; ",
+                "reason: unsafe-review-gate.json absent; structured evidence unavailable.\n"
+            )
+        );
+
+        let structured = out
+            .join("sensors/unsafe-review")
+            .join(UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        fs::create_dir_all(&structured)?;
+        fs::write(
+            structured.join("unsafe-review-gate.json"),
+            r#"{"schema_version":"unsafe-review-gate/v1","status":"advisory","artifacts":{"comment_plan":"comment-plan.json"}}"#,
+        )?;
+        fs::write(
+            structured.join("comment-plan.json"),
+            r#"{"schema_version":"0.1","comments":[]}"#,
+        )?;
+        let mut available = String::new();
+        render_evidence_sections(&mut available, out, &plan);
+        assert_eq!(
+            available,
+            concat!(
+                "\n## Available evidence\n\n",
+                "- unsafe-review ran; unsafe/native reviewability packet available.\n",
+                "\n## Missing evidence\n\n",
+                "- No planned sensor evidence is currently missing.\n"
+            )
+        );
+
+        // An ordinary successful sensor needs no unsafe-review artifacts.
+        let tokmd = crate::tests::sensor_plan("tokmd", "tokmd", true);
+        write_sensor_status(
+            out,
+            &tokmd,
+            SensorStatusWrite {
+                status: "ok",
+                argv: &["tokmd".to_owned()],
+                duration_ms: 10,
+                reason: "completed",
+                exit_code: Some(0),
+                timed_out: false,
+            },
+        )?;
+        let mut ordinary = String::new();
+        render_evidence_sections(&mut ordinary, out, &crate::tests::test_plan(vec![tokmd]));
+        assert_eq!(
+            ordinary,
+            concat!(
+                "\n## Available evidence\n\n",
+                "- tokmd ran; deterministic repository/diff packet available.\n",
+                "\n## Missing evidence\n\n",
+                "- No planned sensor evidence is currently missing.\n"
+            )
+        );
         Ok(())
     }
 
