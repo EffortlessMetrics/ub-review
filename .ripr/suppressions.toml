@@ -36971,7 +36971,7 @@ reason = "wait_timeout Some/None dispatch (L100). cc5e8e8 tests execute_preserve
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:tests_onboarding_readme.rs:match_arm:f589f860"
+finding_id = "probe:tests_onboarding_readme.rs:match_arm:6f23333f"
 owner = "ub-review/tests"
-reason = "wait_timeout completed Some(status) arm (L101). cc5e8e8 completed-child test requires exact exit0 and exit7, stdout and stderr markers, cleared environment and restored temporary-file count. A recorded completed-child forced-success mutant was killed (PR #1354 receipt 6114963055); normal and coverage suites pass at gate 38189009420. RIPR 0.10.0 misattributes unrelated compilation targets to this private helper (ripr-swarm #7415); recheck after source edit or RIPR upgrade."
+reason = "wait_timeout None timeout arm (L102). cc5e8e8 timeout test starts a controlled exec-sleep child, forces a one-second deadline, asserts exact timeout message, captured PID no longer live and temporary-file and TempDir cleanup. Normal and coverage suites pass at gate 38189009420. Earlier timeout mutation controls are recorded in PR #1354 receipt 6114820533; one outer mutant experiment left a zombie, so this is not arbitrary descendant-containment proof. RIPR's assertion linker misses the outcome oracle; recheck after source edit or RIPR upgrade."
 
