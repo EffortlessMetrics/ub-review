@@ -26,6 +26,7 @@ mod config;
 use config::*;
 mod builtin;
 pub mod delivery_transaction;
+mod preflight_diagnostics;
 use builtin::*;
 mod gate;
 use gate::*;
@@ -4226,6 +4227,11 @@ fn cmd_doctor(args: DoctorArgs) -> Result<()> {
         args.config.as_deref(),
         runtime_profile_override(args.profile.as_ref(), args.runtime_profile.as_ref()),
     )?;
+    if let Some(diagnostic) =
+        preflight_diagnostics::config_diagnostic(&config, args.config.as_deref())
+    {
+        bail!("{diagnostic}");
+    }
     let profile = config.selected_profile()?;
     let box_state = BoxState::detect()?;
     let cache_root = cache_root_path(args.cache_dir.as_ref());
@@ -4462,11 +4468,17 @@ fn cmd_cache_warm(args: CacheWarmArgs) -> Result<()> {
 fn cmd_plan(args: PlanArgs) -> Result<()> {
     let (config, diff, box_state, plan, revision) =
         prepare_plan(&args.review, args.allow_heavy, &args.selectors)?;
+    let diagnostic =
+        preflight_diagnostics::config_diagnostic(&config, args.review.config.as_deref());
+    if let Some(diagnostic) = &diagnostic {
+        eprintln!("{diagnostic}");
+    }
     print_plan(&plan, &box_state);
     if args.write {
+        let artifact_config = preflight_diagnostics::diagnostic_artifact_config(&config);
         write_plan_artifacts(
             &args.review.out,
-            &config,
+            &artifact_config,
             &diff,
             &box_state,
             &plan,
@@ -4477,6 +4489,9 @@ fn cmd_plan(args: PlanArgs) -> Result<()> {
                 effective_model_lanes: None,
             },
         )?;
+    }
+    if diagnostic.is_some() {
+        bail!("invalid configuration; correct the reported policy errors and retry");
     }
     Ok(())
 }
