@@ -38738,3 +38738,8 @@ kind = "exposure_gap"
 finding_id = "probe:src_init.rs:return_value:d09c2a0c"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1327; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by init_accepted_profiles_survive_full_config_loader, init_builtin_profiles_and_config_owned_custom_remain_usable, init_custom_profile_refuses_before_creating_or_overwriting_outputs. Re-verify after any edit to src/init.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_ci_audit.rs:return_value:0b00bced"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1325; probe None: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by ci_audit_artifacts_carry_schema_fields_and_receipts, ci_audit_artifacts_flag_missing_permissions_as_human_review, ci_audit_artifacts_record_permissions_secrets_and_flag_sensitive_jobs. Re-verify after any edit to src/ci_audit.rs."
