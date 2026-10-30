@@ -3281,14 +3281,23 @@ pub(crate) fn setup_ci_api_post(
         60,
     )
     .with_context(|| format!("{method} {url}"))?;
-    if !output.status.success() {
+    // Every caller creates a new resource; a redirect or an accepted-but-not-
+    // created response cannot authorize the next dependent write.
+    if !output.status.success() || output.http_status != Some(201) {
         bail!(
             "{method} {url} failed with http status {:?}: {}",
             output.http_status,
             String::from_utf8_lossy(&output.stderr)
         );
     }
-    Ok(serde_json::from_slice(&output.stdout).unwrap_or(serde_json::Value::Null))
+    let response: serde_json::Value =
+        serde_json::from_slice(&output.stdout).with_context(|| {
+            format!("{method} {url} returned invalid JSON; inspect remote state before retrying")
+        })?;
+    if !response.is_object() {
+        bail!("{method} {url} did not return a JSON object; inspect remote state before retrying");
+    }
+    Ok(response)
 }
 
 /// Open the migration PR: one new branch from the default branch, four new
@@ -3418,7 +3427,10 @@ pub(crate) fn execute_setup_ci_open_pr(
     let pr_url = pr
         .get("html_url")
         .and_then(serde_json::Value::as_str)
-        .unwrap_or_default()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| anyhow::anyhow!(
+            "migration PR response has no nonempty html_url; inspect remote state before retrying"
+        ))?
         .to_owned();
     Ok(SetupPrResult {
         schema: SETUP_PR_RESULT_SCHEMA.to_owned(),
