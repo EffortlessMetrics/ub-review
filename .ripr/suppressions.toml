@@ -36605,3 +36605,13 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_text.rs:call_deletion:7627e833"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1591; probe Some(normalized): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by body_budget_drops_topics_and_preserves_inline_fallback_receipt, bullet_budget_drops_all_topics_as_inline_only, degradation_drops_lowest_ranked_topics_deterministically. Re-verify after any edit to src/review_text.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:b9a7d208"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1591; probe b'\"' => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by body_budget_drops_topics_and_preserves_inline_fallback_receipt, bracketed_prefix_boundaries, bullet_budget_drops_all_topics_as_inline_only. Re-verify after any edit to src/review_text.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:return_value:a092f4e2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1591; probe Some(normalized): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by body_budget_drops_topics_and_preserves_inline_fallback_receipt, bracketed_prefix_boundaries, bullet_budget_drops_all_topics_as_inline_only. Re-verify after any edit to src/review_text.rs."
