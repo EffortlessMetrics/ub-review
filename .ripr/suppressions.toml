@@ -36990,3 +36990,38 @@ kind = "exposure_gap"
 finding_id = "probe:tests_onboarding_readme.rs:return_value:2902e83d"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1575; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by execute_preserves_exit_status_streams_and_clears_credentials, execute_reports_missing_executable_and_removes_logs, execute_timeout_terminates_reaps_and_cleans_its_owned_child. Re-verify after any edit to tests/onboarding_readme.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:f5b4797c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1545; probe create_response: &str,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_pr_thread_context_omits_reuse_rules, action_config_input_overrides_bundled_preset_selection, action_release_download_verifies_sha256_receipt. Re-verify after any edit to src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:92c1fbeb"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1545; probe }))?,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_pr_thread_context_omits_reuse_rules, action_config_input_overrides_bundled_preset_selection, action_release_download_verifies_sha256_receipt. Re-verify after any edit to src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_post_command.rs:call_deletion:97feb710"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1545; probe .unwrap_or_default(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to src/post_command.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_post_command.rs:call_deletion:79d8891e"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1545; probe .to_owned();: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to src/post_command.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_post_command.rs:call_deletion:d890bf9c"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1545; probe });: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to src/post_command.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_post_command.rs:match_arm:661d6f46"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1545; probe let url = match confirmed_url {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained, artifact_contract_docs_match_ci_audit_verifier_coverage. Re-verify after any edit to src/post_command.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_post_command.rs:match_arm:e745aaa5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1545; probe Ok(url) => url,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by ci_repo_slug_parses_remote_url_variants, curl_http_status_marker_is_stripped_from_body. Re-verify after any edit to src/post_command.rs."
