@@ -505,7 +505,18 @@ pub(crate) fn read_review_metrics(
     out: &Path,
 ) -> std::result::Result<serde_json::Value, &'static str> {
     let bytes = read_summary_bytes(&out.join("review/metrics.json"))?;
-    parse_summary_object(&bytes)
+    let value = parse_summary_object(&bytes)?;
+    // Read the original bytes so duplicate version fields cannot be collapsed.
+    #[derive(Deserialize)]
+    struct MetricsSchema {
+        schema_version: Option<u64>,
+    }
+    let schema: MetricsSchema =
+        serde_json::from_slice(&bytes).map_err(|_| "has an invalid metrics schema version")?;
+    if schema.schema_version != Some(1) {
+        return Err("has a missing or unsupported metrics schema version");
+    }
+    Ok(value)
 }
 
 fn read_summary_bytes(path: &Path) -> std::result::Result<Vec<u8>, &'static str> {
@@ -788,6 +799,58 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn review_metrics_summary_rejects_unsupported_schema_versions() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        fs::create_dir_all(out.join("review"))?;
+        let path = out.join("review/metrics.json");
+        fs::write(
+            out.join("review/gate_outcome.json"),
+            r#"{"schema":"ub-review.gate_outcome.v1","conclusion":"pass","reasons":[]}"#,
+        )?;
+        let mut metrics = serde_json::json!({
+            "schema_version": 1,
+            "wall_clock_seconds": 42,
+            "github_review_comments": 7
+        });
+        fs::write(&path, serde_json::to_vec(&metrics)?)?;
+        let mut valid = String::new();
+        render_review_efficiency_section(&mut valid, out);
+        assert!(!valid.contains("Review metrics: unavailable"), "{valid}");
+        assert!(valid.contains("- Inline comments: `7/0`"), "{valid}");
+
+        for version in [
+            serde_json::json!(2),
+            serde_json::json!("1"),
+            serde_json::Value::Null,
+        ] {
+            metrics["schema_version"] = version;
+            fs::write(&path, serde_json::to_vec(&metrics)?)?;
+            let mut summary = String::new();
+            render_review_efficiency_section(&mut summary, out);
+            assert!(summary.contains("Review metrics: unavailable"), "{summary}");
+            assert!(summary.contains("- Gate: `pass`"), "{summary}");
+            assert!(!summary.contains("Inline comments: `7"), "{summary}");
+        }
+        metrics
+            .as_object_mut()
+            .ok_or_else(|| anyhow::anyhow!("metrics fixture is not an object"))?
+            .remove("schema_version");
+        fs::write(&path, serde_json::to_vec(&metrics)?)?;
+        let mut summary = String::new();
+        render_review_efficiency_section(&mut summary, out);
+        assert!(summary.contains("Review metrics: unavailable"), "{summary}");
+        fs::write(
+            &path,
+            r#"{"schema_version":2,"schema_version":1,"github_review_comments":7}"#,
+        )?;
+        let mut summary = String::new();
+        render_review_efficiency_section(&mut summary, out);
+        assert!(summary.contains("Review metrics: unavailable"), "{summary}");
+        Ok(())
+    }
 
     #[test]
     fn lane_packet_model_display_resolves_encoded_hostile_lane_id() -> Result<()> {
