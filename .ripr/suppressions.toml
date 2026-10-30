@@ -36785,7 +36785,12 @@ reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at s
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_tests_ci_audit_tests.rs:error_path:a747e2fd"
+finding_id = "probe:src_tests_ci_audit_tests.rs:return_value:cde69252"
 owner = "ub-review/core"
-reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1608: 'stop_result?;'. Stop-send failure is propagated to the test Result. Oracle/flow: A failed send prevents a passing helper; matrix caller uses ?. Limit: No deliberate receiver-drop injection. Literal error detail is not a product contract. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
+reason = "PR #1595, candidate 0b54601/tree 3d73b01. Exact cfg(test) subject at src/tests/ci_audit_tests.rs:1628: 'Ok(())'. Test helper returns success only after all publication failure oracles. Oracle/flow: Checks exact cutoff; requires command Err; checks expected diagnostic; absent stale success; error receipt status==failed and expected reason. Limit: No helper-specific mutation executed by this reviewer; parent owns compiled controls. RIPR 0.10.0 reports fixture_opaque and does not attribute the helper's 1609-1627 oracles; source-role disposition, not executed mutation proof. Upstream test-subject attribution: ripr-swarm#1055; active oracle/invocation attribution: EffortlessMetrics/ripr#1453 and ripr-swarm#1528. Re-verify after semantic edits/tool upgrades; dating follows policy/allow.toml#non-rust-ripr-suppressions. Unknown findings remain unsuppressed."
 
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_ci_audit.rs:error_path:3734a6b3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1595; probe })?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by ci_audit_artifacts_carry_schema_fields_and_receipts, ci_audit_artifacts_flag_missing_permissions_as_human_review, ci_audit_artifacts_record_permissions_secrets_and_flag_sensitive_jobs. Re-verify after any edit to src/ci_audit.rs."
