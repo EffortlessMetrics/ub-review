@@ -38608,3 +38608,8 @@ last_seen = "2026-10-16"
 review_by = "2026-11-21"
 expires = "2026-12-22"
 
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:14c0e375"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1494; probe .map(Some): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by auto_run_pass_maps_pull_request_actions, body_only_delivery_retry_and_unwritable_reservation_never_post, classify_proof_kind_maps_focused_test. Re-verify after any edit to src/github_delivery.rs."
