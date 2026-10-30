@@ -104,7 +104,7 @@ impl Harness {
         let h = Self { temp, fixture };
         let mut config = String::from("profile = \"gh-runner\"\n");
         for (tool, version) in [
-            ("tokmd", "1.12.0"),
+            ("tokmd", "1.15.0"),
             ("cargo-allow", "0.1.8"),
             ("ripr", "0.10.0"),
             ("unsafe-review", "0.3.4"),
@@ -328,7 +328,7 @@ fn required_doctor_rejects_failed_probe() -> Result<()> {
     let diagnostic = text(&output);
     ensure!(!output.status.success());
     ensure!(diagnostic.contains("probe=nonzero") && diagnostic.contains("version unknown:"));
-    ensure!(!diagnostic.contains("version=tokmd 1.12.0"));
+    ensure!(!diagnostic.contains("version=tokmd 1.15.0"));
     Ok(())
 }
 
@@ -385,7 +385,7 @@ fn cache_warm_keeps_failed_versions_unavailable() -> Result<()> {
         )?)?;
         ensure!(manifest["probe_status"] == expected, "{mode}: {manifest}");
         if expected == "valid" {
-            ensure!(manifest["version"] == "tokmd 1.12.0");
+            ensure!(manifest["version"] == "tokmd 1.15.0");
         } else {
             ensure!(
                 manifest["version"].is_null(),
