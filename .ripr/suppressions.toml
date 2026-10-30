@@ -39792,3 +39792,58 @@ kind = "exposure_gap"
 finding_id = "probe:src_tools.rs:match_arm:0e019646"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1347; probe Ok(gate_receipt::CountEvidence::Incomplete(new_unsuppressed)) => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by incomplete_run_receipts_preserve_subject_and_recovery_contract, known_partial_counts_preserve_violations_but_never_prove_pass, malformed_counts_explain_expected_object_shape. Re-verify after any edit to src/tools.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:39e5e9a2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1361; probe Some((: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by continuation_prompt_and_receipt_references_share_encoded_lane_root, continuation_receipt_reference_encodes_hostile_lane_id, literal_planner_requests_preserve_exact_resolution_and_rejection. Re-verify after any edit to src/model_exec.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:eb56911b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1361; probe )): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by continuation_prompt_and_receipt_references_share_encoded_lane_root, continuation_receipt_reference_encodes_hostile_lane_id, literal_planner_requests_preserve_exact_resolution_and_rejection. Re-verify after any edit to src/model_exec.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:39e5e9a2.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1361; probe Some((: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by continuation_prompt_and_receipt_references_share_encoded_lane_root, continuation_receipt_reference_encodes_hostile_lane_id, literal_planner_requests_preserve_exact_resolution_and_rejection. Re-verify after any edit to src/model_exec.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:eb56911b.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1361; probe )): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by continuation_prompt_and_receipt_references_share_encoded_lane_root, continuation_receipt_reference_encodes_hostile_lane_id, literal_planner_requests_preserve_exact_resolution_and_rejection. Re-verify after any edit to src/model_exec.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:39e5e9a2.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1361; probe Some((: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by continuation_prompt_and_receipt_references_share_encoded_lane_root, continuation_receipt_reference_encodes_hostile_lane_id, literal_planner_requests_preserve_exact_resolution_and_rejection. Re-verify after any edit to src/model_exec.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:eb56911b.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1361; probe )): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by continuation_prompt_and_receipt_references_share_encoded_lane_root, continuation_receipt_reference_encodes_hostile_lane_id, literal_planner_requests_preserve_exact_resolution_and_rejection. Re-verify after any edit to src/model_exec.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:39e5e9a2.4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1361; probe Some((: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by continuation_prompt_and_receipt_references_share_encoded_lane_root, continuation_receipt_reference_encodes_hostile_lane_id, literal_planner_requests_preserve_exact_resolution_and_rejection. Re-verify after any edit to src/model_exec.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:eb56911b.4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1361; probe )): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by continuation_prompt_and_receipt_references_share_encoded_lane_root, continuation_receipt_reference_encodes_hostile_lane_id, literal_planner_requests_preserve_exact_resolution_and_rejection. Re-verify after any edit to src/model_exec.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:error_path:ba7df6be"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1361; probe ),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by continuation_prompt_and_receipt_references_share_encoded_lane_root, continuation_receipt_reference_encodes_hostile_lane_id, literal_planner_requests_preserve_exact_resolution_and_rejection. Re-verify after any edit to src/model_exec.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:field_construction:b1c4b9d2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1361; probe ),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by continuation_prompt_and_receipt_references_share_encoded_lane_root, continuation_receipt_reference_encodes_hostile_lane_id, literal_planner_requests_preserve_exact_resolution_and_rejection. Re-verify after any edit to src/model_exec.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec.rs:return_value:e91687dd"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1361; probe ),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by continuation_prompt_and_receipt_references_share_encoded_lane_root, continuation_receipt_reference_encodes_hostile_lane_id, literal_planner_requests_preserve_exact_resolution_and_rejection. Re-verify after any edit to src/model_exec.rs."
