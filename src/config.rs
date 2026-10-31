@@ -865,19 +865,42 @@ fn known_policy_selector(value: &str, known: &[&str]) -> bool {
 }
 
 impl Config {
+    /// Explicit CLI/environment paths are required; only omitted discovery is optional.
+    pub(crate) fn load_requested(
+        path: Option<&Path>,
+        profile_override: Option<&str>,
+    ) -> Result<Self> {
+        Self::load_path(
+            path.unwrap_or_else(|| Path::new(".ub-review.toml")),
+            profile_override,
+            path.is_none(),
+        )
+    }
+
+    #[cfg(test)]
     pub(crate) fn load_or_default(path: &Path, profile_override: Option<&str>) -> Result<Self> {
-        let mut config = if path.exists() {
-            let text =
-                fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-            Self::from_toml_with_policy_receipts(&text)
-                .with_context(|| format!("parse {}", path.display()))?
-        } else {
-            Self::default()
+        Self::load_path(path, profile_override, true)
+    }
+
+    fn load_path(path: &Path, profile_override: Option<&str>, optional: bool) -> Result<Self> {
+        let mut config = match fs::read_to_string(path) {
+            Ok(text) => Self::from_toml_with_policy_receipts(&text)
+                .with_context(|| format!("parse {}", path.display()))?,
+            Err(error) if optional && error.kind() == std::io::ErrorKind::NotFound => Self::default(),
+            Err(error) => return Err(error).with_context(|| {
+                format!("read {}; provide a readable config file or omit --config/UB_REVIEW_CONFIG for optional .ub-review.toml discovery", path.display())
+            }),
         };
         if let Some(profile) = profile_override {
             config.profile = profile.to_owned();
         }
         config.merge_defaults();
+        // The map key is the selection authority. Keep the embedded name in
+        // sync so diagnostics and name-dependent planning describe the profile
+        // whose settings were actually selected.
+        for (name, profile) in &mut config.profiles {
+            profile.name.clone_from(name);
+        }
         if config.profile == "auto" {
             config.profile = BoxState::detect()?.suggested_profile();
         }
@@ -946,7 +969,7 @@ impl Config {
                     if !tool.provided.required {
                         tool.required = default_tool.required;
                     }
-                    if !tool.provided.timeout_sec || tool.timeout_sec == 0 {
+                    if !tool.provided.timeout_sec {
                         tool.timeout_sec = default_tool.timeout_sec;
                     }
                     if !tool.provided.artifact_budget_mb || tool.artifact_budget_mb == 0 {
@@ -1122,6 +1145,18 @@ fn sanitize_impact_section(table: &mut toml::value::Table, errors: &mut Vec<Poli
 /// are stripped with `PolicyError` receipts so the run cannot silently fall
 /// back while looking configured.
 fn sanitize_providers_section(table: &mut toml::value::Table, errors: &mut Vec<PolicyError>) {
+    if let Some(value) = table.get("providers")
+        && value.as_table().is_none()
+    {
+        errors.push(PolicyError {
+            section: "providers".to_owned(),
+            detail: format!(
+                "invalid [providers] value {value}; expected a table with `policy`, `minimax`, and `opencode` keys"
+            ),
+        });
+        table.remove("providers");
+        return;
+    }
     let Some(providers) = table
         .get_mut("providers")
         .and_then(toml::Value::as_table_mut)
@@ -1145,6 +1180,16 @@ fn sanitize_providers_section(table: &mut toml::value::Table, errors: &mut Vec<P
         }
     }
     for provider in ["minimax", "opencode"] {
+        if let Some(value) = providers.get(provider)
+            && value.as_table().is_none()
+        {
+            errors.push(PolicyError {
+                section: format!("providers.{provider}"),
+                detail: format!("invalid [providers.{provider}] value {value}; expected a table"),
+            });
+            providers.remove(provider);
+            continue;
+        }
         let Some(provider_table) = providers
             .get_mut(provider)
             .and_then(toml::Value::as_table_mut)
@@ -1335,11 +1380,19 @@ fn sanitize_tools_section(table: &mut toml::value::Table, errors: &mut Vec<Polic
                 continue;
             }
             let mut probe = toml::value::Table::new();
-            probe.insert(key.clone(), entry);
+            probe.insert(key.clone(), entry.clone());
             if let Err(err) = toml::Value::Table(probe).try_into::<ToolPolicyInput>() {
+                let detail = if key == "phase" {
+                    format!(
+                        "invalid [tools.{id}] key `phase`: expected `fast` or `late`, found {}",
+                        entry.type_str()
+                    )
+                } else {
+                    format!("invalid [tools.{id}] key `{key}`: {err}")
+                };
                 errors.push(PolicyError {
                     section: format!("tools.{id}.{key}"),
-                    detail: format!("invalid [tools.{id}] key `{key}`: {err}"),
+                    detail,
                 });
                 tool_table.remove(&key);
             }
@@ -1353,35 +1406,47 @@ fn sanitize_tool_gate_value(
     gate: toml::Value,
     errors: &mut Vec<PolicyError>,
 ) {
-    match gate.try_into::<ToolGatePolicy>() {
-        Err(err) => {
+    let Some(gate_table) = gate.as_table() else {
+        errors.push(PolicyError {
+            section: format!("tools.{id}.gate"),
+            detail: format!(
+                "invalid [tools.{id}.gate]: expected a table, found {}",
+                gate.type_str()
+            ),
+        });
+        tool_table.remove("gate");
+        return;
+    };
+    let mut sanitized = gate_table.clone();
+    for (key, value) in gate_table {
+        let mut probe = toml::value::Table::new();
+        probe.insert(key.clone(), value.clone());
+        if let Err(err) = toml::Value::Table(probe).try_into::<ToolGatePolicy>() {
             errors.push(PolicyError {
                 section: format!("tools.{id}.gate"),
-                detail: format!("invalid [tools.{id}.gate] table: {err}"),
+                detail: format!("invalid [tools.{id}.gate] key `{key}`: {err}"),
             });
-            tool_table.remove("gate");
-        }
-        Ok(policy) => {
-            if let Some(scope) = policy.scope.as_deref()
-                && !KNOWN_TOOL_GATE_SCOPES.contains(&scope)
-            {
-                errors.push(PolicyError {
-                    section: format!("tools.{id}.gate.scope"),
-                    detail: format!(
-                        "unknown [tools.{id}.gate] scope `{scope}`; expected one of: {} \
-                         (repo-wide tool-gate scoping does not exist yet)",
-                        KNOWN_TOOL_GATE_SCOPES.join(", ")
-                    ),
-                });
-                if let Some(gate_table) = tool_table
-                    .get_mut("gate")
-                    .and_then(toml::Value::as_table_mut)
-                {
-                    gate_table.remove("scope");
-                }
-            }
+            sanitized.remove(key);
         }
     }
+    if let Some(scope) = sanitized.get("scope").and_then(toml::Value::as_str)
+        && !KNOWN_TOOL_GATE_SCOPES.contains(&scope)
+    {
+        errors.push(PolicyError {
+            section: format!("tools.{id}.gate.scope"),
+            detail: format!(
+                "unknown [tools.{id}.gate] scope `{scope}`; expected one of: {} \
+                 (repo-wide tool-gate scoping does not exist yet)",
+                KNOWN_TOOL_GATE_SCOPES.join(", ")
+            ),
+        });
+        sanitized.remove("scope");
+    }
+    if sanitized.is_empty() && !gate_table.is_empty() {
+        tool_table.remove("gate");
+        return;
+    }
+    tool_table.insert("gate".to_owned(), toml::Value::Table(sanitized));
 }
 
 /// Per-key validation for `[proof]`: unknown keys (for example a misspelled
@@ -1561,6 +1626,45 @@ mod tests {
     use super::*;
 
     #[test]
+    fn requested_config_read_errors_retain_io_cause() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let missing = temp.path().join("missing config.toml");
+        let invalid_text = temp.path().join("invalid text.toml");
+        fs::write(&invalid_text, [0xff])?;
+        for (path, kind) in [
+            (&missing, std::io::ErrorKind::NotFound),
+            (&invalid_text, std::io::ErrorKind::InvalidData),
+        ] {
+            let Err(error) = Config::load_requested(Some(path), Some("gh-runner")) else {
+                anyhow::bail!(
+                    "unreadable requested config {} was accepted",
+                    path.display()
+                );
+            };
+            // The recovery context must supplement the actual read failure:
+            // replacing it with a generic error loses why this path failed.
+            let cause = error
+                .downcast_ref::<std::io::Error>()
+                .ok_or_else(|| anyhow::anyhow!("config error lost its I/O cause: {error:#}"))?;
+            assert_eq!(cause.kind(), kind, "{}: {error:#}", path.display());
+            let context = error.to_string();
+            assert!(
+                context.contains(&format!("read {}", path.display())),
+                "{context}"
+            );
+            assert!(
+                context.contains("provide a readable config file"),
+                "{context}"
+            );
+            assert!(
+                context.contains("omit --config/UB_REVIEW_CONFIG"),
+                "{context}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn default_sensor_phase_classifies_by_class_and_lease() {
         // Compile/test-requiring classes and leased witnesses are late.
         assert_eq!(
@@ -1633,27 +1737,48 @@ class = "test"
 
     #[test]
     fn invalid_tool_phase_value_is_stripped_with_policy_error() -> anyhow::Result<()> {
-        let config = Config::from_toml_with_policy_receipts(
-            r#"
+        for (value, kind) in [
+            ("{ token = \"phase-sentinel\" }", "table"),
+            ("\"phase-sentinel\"", "string"),
+            ("42", "integer"),
+        ] {
+            let config = Config::from_toml_with_policy_receipts(&format!(
+                r#"
 [tools.cargo-fmt]
 enabled = true
 class = "build"
-phase = "sometime"
+phase = {value}
+
+[tools.cargo-test]
+enabled = true
+class = "test"
+phase = "late"
 "#,
-        )?;
-        assert!(
-            config
-                .policy_errors
-                .iter()
-                .any(|error| error.section == "tools.cargo-fmt.phase"),
-            "expected a policy error for the invalid phase value: {:?}",
-            config.policy_errors
-        );
-        let fmt = config
-            .tools
-            .get("cargo-fmt")
-            .ok_or_else(|| anyhow::anyhow!("cargo-fmt tool missing"))?;
-        assert_eq!(fmt.phase, None, "invalid phase value must be stripped");
+            ))?;
+            assert_eq!(config.policy_errors.len(), 1);
+            let error = &config.policy_errors[0];
+            assert_eq!(error.section, "tools.cargo-fmt.phase");
+            assert!(!error.detail.contains("phase-sentinel"));
+            assert_eq!(
+                error.detail,
+                format!(
+                    "invalid [tools.cargo-fmt] key `phase`: expected `fast` or `late`, found {kind}"
+                )
+            );
+            let fmt = config
+                .tools
+                .get("cargo-fmt")
+                .ok_or_else(|| anyhow::anyhow!("cargo-fmt tool missing"))?;
+            assert!(fmt.enabled);
+            assert_eq!(fmt.class, ToolClass::Build);
+            assert_eq!(fmt.phase, None, "invalid phase value must be stripped");
+            assert_eq!(fmt.effective_phase(), SensorPhase::Late);
+            let test = config
+                .tools
+                .get("cargo-test")
+                .ok_or_else(|| anyhow::anyhow!("cargo-test tool missing"))?;
+            assert_eq!(test.phase, Some(SensorPhase::Late));
+        }
         Ok(())
     }
 
@@ -1716,6 +1841,85 @@ phase = "sometime"
     // ripr-swarm#1054, and line-keyed suppressions rot, ripr-swarm#1053).
     // The behavior-level twins (D2 precedence, broker planning, lane
     // merging) stay in main.rs where those functions live.
+
+    #[test]
+    fn tool_gate_unknown_key_preserves_valid_threshold() -> anyhow::Result<()> {
+        let valid = Config::from_toml_with_policy_receipts(
+            "[tools.ripr.gate]\nscope = \"on-diff\"\nmax_new_unsuppressed = 0\n",
+        )?;
+        anyhow::ensure!(valid.policy_errors.is_empty());
+        anyhow::ensure!(
+            valid.tools["ripr"]
+                .gate
+                .as_ref()
+                .and_then(|gate| gate.max_new_unsuppressed)
+                == Some(0)
+        );
+        let invalid = Config::from_toml_with_policy_receipts(
+            "[tools.ripr.gate]\nscope = \"on-diff\"\nmax_new_unsuppressed = 0\nmax_new_unsupressed = 1\n",
+        )?;
+        anyhow::ensure!(invalid.policy_errors.len() == 1);
+        anyhow::ensure!(
+            invalid.tools["ripr"]
+                .gate
+                .as_ref()
+                .and_then(|gate| gate.max_new_unsuppressed)
+                == Some(0)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn tool_gate_receipts_preserve_valid_siblings_and_invalid_only_fallback() -> anyhow::Result<()>
+    {
+        let config = Config::from_toml_with_policy_receipts(
+            r#"
+[tools.scalar]
+gate = 42
+[tools.bad_type.gate]
+scope = 7
+max_new_unsuppressed = 3
+[tools.bad_scope.gate]
+scope = "repo-wide"
+max_new_unsuppressed = 4
+[tools.bad_only.gate]
+unknown = true
+"#,
+        )?;
+        let errors = &config.policy_errors;
+        assert_eq!(errors.len(), 4);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.section == "tools.scalar.gate" && e.detail.contains("expected a table"))
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.section == "tools.bad_type.gate" && e.detail.contains("scope"))
+        );
+        assert!(
+            errors.iter().any(
+                |e| e.section == "tools.bad_scope.gate.scope" && e.detail.contains("repo-wide")
+            )
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.section == "tools.bad_only.gate" && e.detail.contains("unknown"))
+        );
+        assert!(config.tools["scalar"].gate.is_none());
+        assert!(config.tools["bad_only"].gate.is_none());
+        for (id, threshold) in [("bad_type", 3), ("bad_scope", 4)] {
+            let gate = config.tools[id]
+                .gate
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("missing gate {id}"))?;
+            assert_eq!(gate.scope, None);
+            assert_eq!(gate.max_new_unsuppressed, Some(threshold));
+        }
+        Ok(())
+    }
 
     #[test]
     fn impact_resolved_mode_defaults_to_shadow_and_clamps_invalid() {
@@ -1879,6 +2083,32 @@ phase = "sometime"
         assert!(sanitize_policy_sections(&mut valid).is_empty());
         let kept: Config = valid.try_into()?;
         assert_eq!(kept.providers.policy, "minimax-only");
+        Ok(())
+    }
+
+    #[test]
+    fn providers_section_receipts_invalid_table_shapes_and_keeps_valid_siblings()
+    -> anyhow::Result<()> {
+        let malformed = Config::from_toml_with_policy_receipts(
+            "providers = \"disabled\"\n[impact]\nmode = \"active\"\n",
+        )?;
+        assert_eq!(malformed.policy_errors.len(), 1);
+        assert_eq!(malformed.policy_errors[0].section, "providers");
+        assert_eq!(
+            malformed.policy_errors[0].detail,
+            "invalid [providers] value \"disabled\"; expected a table with `policy`, `minimax`, and `opencode` keys"
+        );
+        assert_eq!(malformed.providers.policy, "");
+        assert_eq!(malformed.impact.resolved_mode(), "active");
+
+        let malformed = Config::from_toml_with_policy_receipts(
+            "[providers]\npolicy = \"minimax-only\"\nminimax = false\nopencode = { max_concurrency = 2 }\n",
+        )?;
+        assert_eq!(malformed.policy_errors.len(), 1);
+        assert_eq!(malformed.policy_errors[0].section, "providers.minimax");
+        assert_eq!(malformed.providers.policy, "minimax-only");
+        assert_eq!(malformed.providers.minimax.max_concurrency, None);
+        assert_eq!(malformed.providers.opencode.max_concurrency, Some(2));
         Ok(())
     }
 
@@ -2119,6 +2349,22 @@ phase = "sometime"
             detail.contains("gh-runner"),
             "receipt must name the fallback: {detail}"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn profile_table_key_controls_identity_even_with_conflicting_name() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "profile = \"gh-runner\"\n[profiles.custom]\nname = \"gh-runner\"\n[profiles.custom.limits]\nllm_in_flight = 1\n",
+        )?;
+        let config = Config::load_or_default(&path, Some("custom"))?;
+        let selected = config.selected_profile()?;
+        assert_eq!(selected.name, "custom");
+        assert_eq!(selected.limits.llm_in_flight, 1);
+        assert!(config.policy_errors.is_empty());
         Ok(())
     }
 

@@ -424,7 +424,8 @@ pub(crate) fn write_proof_request_artifacts(
     let portfolio_path = review_dir.join("proof_portfolio.json");
     if !portfolio_path.exists() {
         let total_budget = proof_budget(profile)?;
-        let remaining_budget = remaining_focused_proof_budget(total_budget, resource_leases);
+        let remaining_budget =
+            settled_focused_proof_budget(total_budget, resource_leases, proof_receipts, &diff.head);
         let test_candidates = focused_test_candidates_from_diff(diff, proof_requests, None);
         let build_candidates = focused_build_candidates_from_requests(proof_requests);
         let portfolio = select_proof_portfolio(ProofPortfolioInput {
@@ -452,7 +453,7 @@ pub(crate) fn write_proof_request_artifacts(
             schema: PROOF_PORTFOLIO_SCHEMA,
             phase: "final",
             head: diff.head.clone(),
-            budget_seconds: total_budget.max_total_seconds,
+            budget_seconds: remaining_budget.max_total_seconds,
             remaining_seconds: portfolio.remaining_seconds,
             candidate_count: test_candidates.len() + build_candidates.len(),
             candidate_tasks: portfolio_candidate_tasks(
@@ -671,8 +672,18 @@ pub(crate) fn terminalize_proof_requests(
             let mut terminal = request.clone();
             if matching.is_empty() {
                 terminal.status = "deferred".to_owned();
+                let receipt_gap = if receipts
+                    .iter()
+                    .any(|receipt| receipt.request_ids.contains(&request.id))
+                {
+                    format!(
+                        "receipts for this request exist only on other heads; no proof receipt matches head `{head}`"
+                    )
+                } else {
+                    "no proof receipt was produced".to_owned()
+                };
                 terminal.reason = format!(
-                    "{} Terminal disposition: deferred; no proof receipt was produced.",
+                    "{} Terminal disposition: deferred; {receipt_gap}.",
                     request.reason
                 );
                 return terminal;
@@ -892,6 +903,89 @@ mod tests {
         ensure!(intent.estimated_value == "high");
         ensure!(intent.requested_by == request.requested_by);
         ensure!(intent.status == "requested");
+        Ok(())
+    }
+
+    #[test]
+    fn elapsed_budget_fallback_portfolio_preserves_settled_capacity() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut diff = test_diff();
+        diff.changed_files.clear();
+        diff.patch.clear();
+        let profile = Profile {
+            limits: Limits {
+                builds: 1,
+                tests: 1,
+                ..Limits::default()
+            },
+            budgets: Budgets {
+                proof_max_focused_tests: 2,
+                proof_max_focused_test_files: 2,
+                proof_command_timeout_sec: 4,
+                proof_total_timeout_sec: 6,
+                hard_timeout_sec: 30,
+                proof_cpu: 1,
+                proof_memory_mb: 32,
+                proof_disk_mb: 32,
+                proof_scratch: true,
+                ..Budgets::default()
+            },
+            ..Profile::default()
+        };
+        let requests = vec![ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "elapsed-fallback-build".to_owned(),
+            lane: "tests-oracle".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned()],
+            command: "cargo check --workspace --all-targets --locked".to_owned(),
+            reason: "Preserve settled capacity in a fresh fallback portfolio.".to_owned(),
+            cost: "focused-build".to_owned(),
+            timeout_sec: 4,
+            required: true,
+            status: "requested".to_owned(),
+        }];
+        let tasks = focused_build_candidates_from_requests(&requests);
+        assert_eq!(tasks.len(), 1);
+        let lease = focused_build_resource_lease(
+            &tasks[0],
+            proof_budget(&profile)?,
+            proof_lease_budget(&profile)?,
+            "granted",
+            "fixture admission",
+        );
+        let receipt = focused_build_receipt(
+            &diff,
+            &tasks[0],
+            vec![ProofCommandReceipt {
+                side: "head".to_owned(),
+                command: tasks[0].command.clone(),
+                env: Default::default(),
+                status: "passed".to_owned(),
+                exit_code: Some(0),
+                timed_out: false,
+                timeout_sec: 4,
+                duration_ms: 200,
+                stdout: String::new(),
+                stderr: String::new(),
+                reason: "deterministic elapsed-time fixture".to_owned(),
+            }],
+            "head_passed".to_owned(),
+            "completed fixture".to_owned(),
+        );
+        write_proof_request_artifacts(
+            temp.path(),
+            &diff,
+            &profile,
+            &requests,
+            &[receipt],
+            std::slice::from_ref(&lease),
+        )?;
+        let portfolio: serde_json::Value =
+            serde_json::from_slice(&fs::read(temp.path().join("review/proof_portfolio.json"))?)?;
+        assert_eq!(portfolio["budget_seconds"], 5);
+        assert_eq!(portfolio["remaining_seconds"], 5);
+        assert_eq!(portfolio["selected_task_ids"], serde_json::json!([]));
+        assert_eq!(lease.timeout_sec, 4);
         Ok(())
     }
 
@@ -1780,6 +1874,39 @@ index 1111111..2222222 100644
                 .collect::<Vec<_>>(),
             vec![("deferred", true)]
         );
+        assert!(stale_only[0].reason.contains(
+            "receipts for this request exist only on other heads; no proof receipt matches head `current-head`"
+        ));
+        assert!(
+            !stale_only[0]
+                .reason
+                .contains("no proof receipt was produced")
+        );
+
+        // An unrelated request's receipt cannot explain this request's deferral,
+        // even when it came from the previous head with the same command.
+        let mut unrelated_receipt = receipt.clone();
+        unrelated_receipt.request_ids = vec!["request-unrelated".to_owned()];
+        let mut unrelated_current_receipt = unrelated_receipt.clone();
+        unrelated_current_receipt.head = "current-head".to_owned();
+        for receipts in [
+            Vec::new(),
+            vec![unrelated_receipt],
+            vec![unrelated_current_receipt],
+        ] {
+            let missing = terminalize_proof_requests(
+                "current-head",
+                std::slice::from_ref(&request),
+                &receipts,
+            );
+            assert_eq!(missing[0].status, "deferred");
+            assert!(
+                missing[0]
+                    .reason
+                    .ends_with("no proof receipt was produced.")
+            );
+            assert!(!missing[0].reason.contains("other heads"));
+        }
         let terminal =
             terminalize_proof_requests("current-head", &[request], &[receipt, current_receipt]);
         assert_eq!(terminal[0].status, "satisfied");

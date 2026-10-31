@@ -149,8 +149,16 @@ fn parse_hunk_header(rest: &str) -> Result<PatchHunk> {
     let mut new_range = None;
     for token in ranges.split_whitespace() {
         if let Some(value) = token.strip_prefix('-') {
+            ensure!(
+                old_range.is_none(),
+                "duplicate old range in hunk header `@@{rest}`"
+            );
             old_range = Some(parse_hunk_range(value)?);
         } else if let Some(value) = token.strip_prefix('+') {
+            ensure!(
+                new_range.is_none(),
+                "duplicate new range in hunk header `@@{rest}`"
+            );
             new_range = Some(parse_hunk_range(value)?);
         } else {
             bail!("unexpected token `{token}` in hunk header `@@{rest}`");
@@ -200,12 +208,24 @@ fn push_hunk_body_line(hunk: &mut PatchHunk, line: &str) -> Result<()> {
         Some('+') => PatchLineKind::Addition,
         Some(_) => bail!("unexpected hunk body line `{line}`"),
     };
-    let next_old = hunk.old_start + count_side_lines(&hunk.lines, PatchLineKind::Deletion);
-    let next_new = hunk.new_start + count_side_lines(&hunk.lines, PatchLineKind::Addition);
+    let line_number = |start: usize, side: PatchLineKind| {
+        start
+            .checked_add(count_side_lines(&hunk.lines, side))
+            .ok_or_else(|| anyhow::anyhow!("hunk line number exceeds supported range"))
+    };
     let (old_line, new_line) = match kind {
-        PatchLineKind::Context => (Some(next_old), Some(next_new)),
-        PatchLineKind::Deletion => (Some(next_old), None),
-        PatchLineKind::Addition => (None, Some(next_new)),
+        PatchLineKind::Context => (
+            Some(line_number(hunk.old_start, PatchLineKind::Deletion)?),
+            Some(line_number(hunk.new_start, PatchLineKind::Addition)?),
+        ),
+        PatchLineKind::Deletion => (
+            Some(line_number(hunk.old_start, PatchLineKind::Deletion)?),
+            None,
+        ),
+        PatchLineKind::Addition => (
+            None,
+            Some(line_number(hunk.new_start, PatchLineKind::Addition)?),
+        ),
     };
     hunk.lines.push(PatchLine {
         kind,
@@ -366,11 +386,19 @@ pub(crate) fn render_selected_slices(
             .iter()
             .filter(|line| line.kind != PatchLineKind::Deletion)
             .count();
-        let old_start = hunk.old_start + old_before;
+        let old_start = hunk
+            .old_start
+            .checked_add(old_before)
+            .ok_or_else(|| anyhow::anyhow!("hunk old line exceeds supported range"))?;
         let new_start = if new_count == 0 {
             offset_line(old_start.saturating_sub(1), delta)?
         } else if old_count == 0 {
-            offset_line(old_start + 1, delta)?
+            offset_line(
+                old_start
+                    .checked_add(1)
+                    .ok_or_else(|| anyhow::anyhow!("hunk new line exceeds supported range"))?,
+                delta,
+            )?
         } else {
             offset_line(old_start, delta)?
         };
@@ -385,13 +413,18 @@ pub(crate) fn render_selected_slices(
                 out.push_str("\\ No newline at end of file\n");
             }
         }
-        delta += isize::try_from(new_count)? - isize::try_from(old_count)?;
+        let change = isize::try_from(new_count)? - isize::try_from(old_count)?;
+        delta = delta
+            .checked_add(change)
+            .ok_or_else(|| anyhow::anyhow!("hunk line offset exceeds supported range"))?;
     }
     Ok(out)
 }
 
 fn offset_line(line: usize, delta: isize) -> Result<usize> {
-    let shifted = isize::try_from(line)? + delta;
+    let shifted = isize::try_from(line)?
+        .checked_add(delta)
+        .ok_or_else(|| anyhow::anyhow!("hunk line offset exceeds supported range"))?;
     usize::try_from(shifted)
         .map_err(|error| anyhow::anyhow!("hunk header line {line} shifted out of range: {error}"))
 }
@@ -517,6 +550,53 @@ mod tests {
         assert_eq!(
             render_selected_slices(&file, &selected)?,
             render_selected_slices(&file, &selected)?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn hunk_ranges_reject_duplicates_and_partial_bodies() -> Result<()> {
+        let valid = "diff --git a/a.rs b/a.rs\n--- a/a.rs\n+++ b/a.rs\n@@ -1,2 +1,2 @@\n-old\n+new\n context\n";
+        assert_eq!(parse_unified_diff(valid)?.len(), 1);
+        assert!(parse_unified_diff(&valid.replace(" context\n", "")).is_err());
+        assert!(parse_unified_diff(&valid.replace("@@ -1,2 +1,2 @@", "@@ -1,2 @@")).is_err());
+        for header in ["@@ -99,2 -1,2 +1,2 @@", "@@ -1,2 +99,2 +1,2 @@"] {
+            assert!(
+                parse_unified_diff(&valid.replace("@@ -1,2 +1,2 @@", header)).is_err(),
+                "{header}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn hunk_line_numbers_handle_boundaries() -> Result<()> {
+        let prefix = "diff --git a/a.rs b/a.rs\n--- a/a.rs\n+++ b/a.rs\n";
+        let insertion = format!("{prefix}@@ -0,0 +1,1 @@\n+new\n");
+        assert_eq!(parse_unified_diff(&insertion)?.len(), 1);
+        let max_line = format!("{prefix}@@ -{} +1 @@\n-old\n+new\n", usize::MAX);
+        assert_eq!(parse_unified_diff(&max_line)?.len(), 1);
+        let old_overflow = format!(
+            "{prefix}@@ -{},2 +1,2 @@\n-old\n+new\n context\n",
+            usize::MAX
+        );
+        let new_overflow = format!(
+            "{prefix}@@ -1,2 +{},2 @@\n-old\n+new\n context\n",
+            usize::MAX
+        );
+        assert!(parse_unified_diff(&old_overflow).is_err());
+        assert!(parse_unified_diff(&new_overflow).is_err());
+        let max_insertion = format!("{prefix}@@ -{},0 +{},1 @@\n+new\n", usize::MAX, usize::MAX);
+        let file = only_file(&max_insertion)?;
+        assert!(
+            render_selected_slices(
+                &file,
+                &[SelectedSlice {
+                    hunk: 0,
+                    lines: 0..1
+                }]
+            )
+            .is_err()
         );
         Ok(())
     }

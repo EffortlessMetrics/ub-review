@@ -540,7 +540,7 @@ pub(crate) fn model_prompt_cache_metrics(
     let mut lane_misses = 0;
     let mut lane_unknown = 0;
     for receipt in &review.model_lanes {
-        if !model_call_attempted_status(&receipt.status)
+        if !model_lane_call_attempted(receipt)
             || model_cache_mode_for_args(args, &receipt.provider, &receipt.endpoint_kind)
                 != "explicit-anthropic-cache-control"
         {

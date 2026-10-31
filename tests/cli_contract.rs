@@ -58,7 +58,9 @@ fn adoption_docs_match_setup_ci_current_surface() {
     assert!(wizard.contains("Never mutates branch protection itself."));
 
     let readme = docs[6].1;
-    assert!(readme.contains("four new files"));
+    assert!(readme.contains("docs/ACTION_REFERENCE.md"));
+    let action_reference = include_str!("../docs/ACTION_REFERENCE.md");
+    assert!(action_reference.contains("four new files"));
 
     for (name, text) in &docs {
         if text.contains("--apply-branch-protection") {

@@ -31,10 +31,11 @@ pub(crate) fn pr_decision_sentence(context: PrDecisionContext) -> Option<&'stati
 }
 
 pub(crate) fn proof_receipt_is_test_proof_result(receipt: &ProofReceipt) -> bool {
-    matches!(
-        receipt.result.as_str(),
-        "discriminating" | "head_passed" | "head_failed"
-    )
+    !proof_receipt_has_contradictory_completion(receipt)
+        && matches!(
+            receipt.result.as_str(),
+            "discriminating" | "head_passed" | "head_failed"
+        )
 }
 
 /// Decide whether a proof receipt earns a bullet in the PR body.
@@ -54,6 +55,9 @@ pub(crate) fn proof_receipt_is_test_proof_result(receipt: &ProofReceipt) -> bool
 /// bans from PR commentary. Failures stay public because a red proof always
 /// changes the decision.
 pub(crate) fn proof_receipt_is_public_test_proof_result(receipt: &ProofReceipt) -> bool {
+    if proof_receipt_has_contradictory_completion(receipt) {
+        return false;
+    }
     match receipt.result.as_str() {
         "discriminating" | "head_failed" => true,
         "head_passed" => {
@@ -68,18 +72,21 @@ pub(crate) fn proof_receipt_is_public_test_proof_result(receipt: &ProofReceipt) 
 }
 
 pub(crate) fn proof_receipt_is_residual_risk(receipt: &ProofReceipt) -> bool {
-    matches!(receipt.result.as_str(), "non_discriminating")
+    !proof_receipt_has_contradictory_completion(receipt)
+        && matches!(receipt.result.as_str(), "non_discriminating")
 }
 
 pub(crate) fn proof_receipt_is_missing_evidence(receipt: &ProofReceipt) -> bool {
-    matches!(
-        receipt.result.as_str(),
-        "non_discriminating"
-            | "base_patch_failed"
-            | "timed_out"
-            | "skipped_budget"
-            | "skipped_profile"
-    )
+    proof_receipt_has_contradictory_completion(receipt)
+        || matches!(
+            receipt.result.as_str(),
+            "non_discriminating"
+                | "base_patch_failed"
+                | "timed_out"
+                | "skipped_budget"
+                | "skipped_profile"
+                | "skipped_unresolved"
+        )
 }
 
 pub(crate) fn proof_receipts_answer_summary_test_witness_question(
@@ -439,6 +446,98 @@ mod tests {
 
     use crate::tests::test_proof_receipt;
     use crate::*;
+
+    #[test]
+    fn skipped_budget_and_profile_remain_missing_evidence() {
+        for result in ["skipped_budget", "skipped_profile"] {
+            let receipt = test_proof_receipt(result, "skipped");
+            assert!(proof_receipt_is_missing_evidence(&receipt), "{result}");
+            assert_eq!(
+                routed_status_for_proof_receipt(&receipt),
+                "missing-evidence"
+            );
+            assert!(!proof_receipt_is_test_proof_result(&receipt), "{result}");
+        }
+    }
+
+    #[test]
+    fn skipped_unresolved_is_missing_evidence_without_decisive_proof() -> Result<()> {
+        for kind in ["focused-head", "focused-red-green", "focused-build"] {
+            let mut receipt = test_proof_receipt("skipped_unresolved", "skipped");
+            receipt.kind = kind.to_owned();
+            for command in &mut receipt.commands {
+                command.exit_code = None;
+                command.timeout_sec = 0;
+                command.duration_ms = 0;
+                command.reason = "approved target could not be resolved".to_owned();
+            }
+            if kind == "focused-red-green" {
+                receipt.test_patch_mode = "base-plus-tests".to_owned();
+                let mut baseline = receipt.commands[0].clone();
+                baseline.side = "base-plus-tests".to_owned();
+                receipt.commands[0].status = "passed".to_owned();
+                receipt.commands[0].exit_code = Some(0);
+                receipt.commands[0].timeout_sec = 30;
+                receipt.commands[0].duration_ms = 10;
+                receipt.commands.push(baseline);
+            }
+            assert!(proof_receipt_is_missing_evidence(&receipt));
+            assert!(!proof_receipt_is_test_proof_result(&receipt));
+            assert!(!proof_receipt_is_public_test_proof_result(&receipt));
+            assert_eq!(
+                routed_status_for_proof_receipt(&receipt),
+                "missing-evidence"
+            );
+            assert_eq!(witness_status_for_proof_receipt(&receipt), "needs-witness");
+            assert!(matches!(
+                required_proof_receipt_class(&receipt),
+                RequiredProofClass::Skipped
+            ));
+
+            let request = ProofRequest {
+                schema: crate::artifacts::PROOF_REQUEST_SCHEMA.to_owned(),
+                id: receipt.request_ids[0].clone(),
+                lane: "tests-oracle".to_owned(),
+                requested_by: vec!["tests-oracle".to_owned()],
+                command: "cargo test --locked --test absent".to_owned(),
+                reason: "controlled unresolved request".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 30,
+                required: false,
+                status: "requested".to_owned(),
+            };
+            let terminal = terminalize_proof_requests(
+                &receipt.head,
+                &[request],
+                std::slice::from_ref(&receipt),
+            );
+            assert_eq!(terminal[0].status, "deferred");
+            assert!(terminal[0].reason.contains("skipped_unresolved"));
+
+            let body = render_review_body(
+                "controlled",
+                &crate::tests::test_plan(Vec::new()),
+                &crate::tests::test_diff(),
+                &[],
+                &[] as &[SensorEvidenceIssue],
+                &[] as &[ModelEvidenceIssue],
+                &[] as &[ReviewInlineComment],
+                &[] as &[SummaryOnlyFinding],
+                &[] as &[Observation],
+                &[receipt],
+                60_000,
+                ReviewBodyAudience::PullRequest,
+            );
+            assert!(!body.contains("## Test proof"));
+            assert!(!body.contains("Needs focused proof failure resolved"));
+            assert!(!body.contains("This is a current failure"));
+            assert!(!body.contains("discriminates the patch"));
+            // An unlinked receipt remains artifact-only; the unresolved
+            // result cannot itself manufacture a reviewer decision.
+            assert!(body.is_empty());
+        }
+        Ok(())
+    }
 
     /// `"discriminating" | "head_failed" => true`: both results change what the
     /// reviewer does next, so neither consults the receipt kind or which

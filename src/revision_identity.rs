@@ -131,8 +131,8 @@ const CANONICAL_VERSION: &str = "ub-review.revision-identity.v1";
 ///
 /// `digest` is the cross-artifact join key (the identity digest of the
 /// admitted revision); `reviewed_commit` is the exact git commit object the
-/// run reviewed, for consumers that must bind to a real object (delivery
-/// exact-head checks); `semantics` preserves the candidate-head versus
+/// run reviewed. Merge-result delivery must join this reference to the full
+/// admission to recover the distinct PR head; `semantics` preserves the candidate-head versus
 /// merge-result distinction end to end. Legacy symbolic `head` labels stay
 /// display-only next to this.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -185,16 +185,6 @@ impl RevisionIdentity {
     /// Independently bind recorded anchor text to this identity's diff bytes.
     pub(crate) fn matches_diff_bytes(&self, bytes: &[u8]) -> bool {
         Self::diff_digest(bytes) == self.diff
-    }
-
-    /// Derive a reference from the validated full identity, never a producer's
-    /// claimed digest. Pure recorded judgment validation uses this exact join.
-    pub(crate) fn revision_ref(&self) -> RevisionRef {
-        RevisionRef {
-            digest: self.identity_digest(),
-            semantics: self.semantics.as_str().to_owned(),
-            reviewed_commit: self.reviewed.commit_oid().to_owned(),
-        }
     }
 
     /// Validates and constructs an identity from resolved object ids.
@@ -274,6 +264,24 @@ impl RevisionIdentity {
             changed_paths: changed_paths.to_owned(),
             diff: diff.to_owned(),
         })
+    }
+
+    /// Reference derived from the digest-bound canonical identity.
+    pub(crate) fn revision_ref(&self) -> RevisionRef {
+        RevisionRef {
+            digest: self.identity_digest(),
+            semantics: self.semantics.as_str().to_owned(),
+            reviewed_commit: self.reviewed.commit_oid().to_owned(),
+        }
+    }
+
+    /// Exact object pairs for a merge-result publication binding. Analysis
+    /// continues to refer to reviewed; delivery targets head.
+    pub(crate) fn merge_delivery_sides(&self) -> Result<(&CommitTree, &CommitTree, &CommitTree)> {
+        if self.semantics != ReviewSemantics::MergeResult {
+            bail!("merge delivery requires merge_result admission");
+        }
+        Ok((&self.base, &self.head, &self.reviewed))
     }
 
     /// Stable, order-independent digest over a changed-path set.

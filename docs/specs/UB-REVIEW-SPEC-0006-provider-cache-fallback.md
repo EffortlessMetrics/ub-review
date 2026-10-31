@@ -237,6 +237,7 @@ ModelLaneReceipt                     lane, provider, model, endpoint_kind,
                                      status, reason, duration_ms,
                                      http_status, response_shape,
                                      fallback_from, cache_usage
+                                     attempt_count (optional for legacy receipts)
 status taxonomy                      ok | degraded | planned | running |
                                      skipped | skipped_budget | missing_key |
                                      preflight_failed | auth_failed |
@@ -256,6 +257,20 @@ cache_manifest.json                  schema ub-review.cache_manifest.v1;
 cache_events.ndjson                  schema ub-review.cache_event.v1; at
                                      least one shared_context_prepared event
 ```
+
+New model-lane receipts retain `attempt_count`: zero before dispatch, one
+for the primary attempt, and two when its runtime fallback is dispatched.
+The count records dispatched model calls, not completed responses or usable
+evidence; absent on legacy receipts means unknown. Existing
+`metrics.models.model_lane_calls_attempted` counts distinct attempted lanes,
+not individual retry calls. It uses explicit counts when present and preserves
+the legacy status-based interpretation for older receipts.
+
+A queued fallback that cannot start before the call budget is exhausted stays
+terminal `skipped`, retains its primary HTTP/error provenance, and names the
+budget reached before the fallback retry. It remains missing model evidence
+and budget exhaustion. A lane with zero attempts retains the separate reason
+`model call budget reached before lane execution`.
 
 ## Advisory vs blocking behavior
 

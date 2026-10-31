@@ -357,6 +357,35 @@ class PublicationBoundaries(unittest.TestCase):
         self.assertEqual(report["delivery_state"], "unverifiable")
         self.assertIn("post_payload_mismatch", self.codes(report))
 
+    def test_leading_markdown_link_matches_actual_post_payload(self) -> None:
+        comment = {
+            "path": "src/lib.rs", "line": 7, "side": "RIGHT",
+            "body": "[tests](https://example.com) explains the failure",
+            "suggestion": None,
+        }
+        identity = base_packet(self.root, prepared=True, comments=[comment])
+        post_result(self.root, identity)
+        payload = read_json(self.root, "review/github-review-post-payload.json")
+        payload["comments"][0]["body"] = comment["body"]
+        write_json(self.root, "review/github-review-post-payload.json", payload)
+        write_transaction(self.root, identity, payload)
+        report = self.report()
+        self.assertEqual(report["status"], "coherent", report["issues"])
+        self.assertEqual(report["delivery_state"], "confirmed")
+
+    def test_public_comment_bracket_parity_controls(self) -> None:
+        cases = [
+            ("[tests] finding", "finding"),
+            ("[tests] [tests](url) finding", "[tests](url) finding"),
+            ("[tests](url) finding", "[tests](url) finding"),
+            ("[label [nested]][ref] finding", "[label [nested]][ref] finding"),
+            (r"[label \] nested](url) finding", r"[label \] nested](url) finding"),
+            ("[" + "é" * 40 + "] finding", "[" + "é" * 40 + "] finding"),
+        ]
+        for body, expected in cases:
+            with self.subTest(body=body):
+                self.assertEqual(subject.public_comment_body({"body": body}), expected)
+
     def test_missing_terminal_transaction_never_confirms(self) -> None:
         identity = base_packet(self.root, prepared=True)
         post_result(self.root, identity)

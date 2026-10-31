@@ -236,6 +236,16 @@ so a workflow branches on tokens rather than prose. `action.yml` exposes
 `not-proven-reasons` (JSON array) and `sensor-coverage` (JSON object) as step
 outputs.
 
+### Proof request deferral diagnostics
+
+When terminalizing a requested proof, receipts must share the request ID and
+match the supplied head label (case-insensitively). If only receipts for other
+heads share that ID, the request remains `deferred` and its reason distinguishes
+that mismatch from a missing receipt. Receipts for unrelated request IDs do not
+change the missing-receipt diagnostic. A matching current-head receipt retains
+its normal terminal disposition. This compatibility head-label check does not
+establish immutable revision qualification or authorize reuse of old receipts.
+
 ### Retained planner-required proofs (#4271)
 
 `required_proof` counts only policy-configured `[[proof.required]]` requests,
@@ -444,8 +454,18 @@ until a future stable coordinator consumes it (non-goal of this slice).
 The verdict `state` is one of `terminal` / `pending` / `inconclusive`, and the
 fail-closed invariant of the gate extends to the head: **only a `terminal`
 state carries a `conclusion`, and only an exact-head completed run whose
-matching `gate_outcome.json` is present can produce one — so missing or
+matching `gate_outcome.json` is present can produce one. Only the newest
+exact-head run/attempt is considered; it must complete with `success` or
+`failure`, and a failed run cannot authorize a retained `pass`. Missing or
 malformed evidence can never serialize `pass`.**
+
+Multiple observations for that same head, run ID and attempt must agree on
+status and conclusion after the existing whitespace/case normalization.
+Conflicting lifecycle observations cannot authorize a conclusion in either
+input order. They yield `inconclusive / incomplete-run` when selected-run
+classification is reached; coordinator/proof failures retain their earlier
+precedence. Agreeing duplicates remain valid;
+conflicts on superseded runs or attempts do not block a newer valid observation.
 
 ```text
 state         reason                          when
@@ -461,6 +481,11 @@ inconclusive  missing-run                     no completed run for the head
                                               after the deadline
 inconclusive  cancelled-without-replacement   newest exact-head run was
                                               cancelled with nothing replacing it
+inconclusive  incomplete-run                  newest exact-head run/attempt did
+                                              not finish by the deadline, has an
+                                              interrupted/unsupported conclusion,
+                                              conflicting lifecycle observations,
+                                              or failed while retaining a pass
 inconclusive  stale-success                   only an older-SHA success exists;
                                               it cannot satisfy the current head
 inconclusive  missing-artifact                exact-head run completed but no

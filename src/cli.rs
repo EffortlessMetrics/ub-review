@@ -7,7 +7,9 @@ use crate::{STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCUR
 #[derive(Debug, Parser)]
 #[command(name = "ub-review")]
 #[command(version)]
-#[command(about = "Build box-aware evidence packets for UB-focused PR review")]
+#[command(
+    about = "Build bounded evidence packets with configured model review and optional GitHub delivery"
+)]
 pub(crate) struct Cli {
     #[command(subcommand)]
     pub(crate) command: Command,
@@ -15,6 +17,9 @@ pub(crate) struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
+    /// Validate independently pinned recorded analyzer selection evidence.
+    /// Read-only; never installs, executes or activates an analyzer.
+    VerifyAnalyzerBundle(VerifyAnalyzerBundleArgs),
     /// Write a starter .ub-review.toml.
     Init(InitArgs),
     /// One-command adoption: write a safe GitHub Actions workflow + minimal
@@ -75,6 +80,19 @@ pub(crate) enum Command {
     /// Export or replay independently pinned recorded review source files.
     /// Local-only; never runs models, posts reviews or computes a CI result.
     RecordedReview(crate::review_judgment::public_plan::recorded_export::files::RecordedReviewArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct VerifyAnalyzerBundleArgs {
+    /// Root containing transferred, independently pinned evidence objects.
+    #[arg(long)]
+    pub(crate) evidence_root: PathBuf,
+    /// Repository-relative intake file inside evidence-root.
+    #[arg(long)]
+    pub(crate) intake: String,
+    /// Independently retained intake SHA-256; never derive it from the bundle.
+    #[arg(long)]
+    pub(crate) intake_sha256: String,
 }
 
 #[derive(Debug, Args)]
@@ -472,9 +490,9 @@ pub(crate) struct ReviewArgs {
     /// Trusted-base admission: patch object generated outside this process.
     #[arg(long, env = "UB_REVIEW_TRUSTED_DIFF_PATCH")]
     pub(crate) trusted_diff_patch: Option<PathBuf>,
-    /// Config path.
-    #[arg(long, default_value = ".ub-review.toml", env = "UB_REVIEW_CONFIG")]
-    pub(crate) config: PathBuf,
+    /// Config path. If omitted, optionally discover .ub-review.toml.
+    #[arg(long, env = "UB_REVIEW_CONFIG")]
+    pub(crate) config: Option<PathBuf>,
     /// Output run directory.
     #[arg(long, default_value = "target/ub-review", env = "UB_REVIEW_OUT")]
     pub(crate) out: PathBuf,
@@ -514,11 +532,14 @@ pub(crate) struct InitArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct EnableArgs {
-    /// Review posture: advisory (comment only), gate (recommended required
-    /// check), or strict (+ reporter verdict can block). See #720.
+    /// Review posture: advisory (recommended initial posture), gate (opt-in
+    /// deterministic-floor check), or strict (+ reporter verdict can block).
+    /// Gate/strict enforce the legacy conclusion, not shadow result authority.
     #[arg(long, value_enum, env = "UB_REVIEW_REVIEW_MODE")]
     pub(crate) mode: ReviewModePreset,
-    /// Model backend. Only `minimax` is supported in v0.
+    /// Model backend. Only `minimax` is supported in v0. The generated template
+    /// is not automatically model-off or artifact-only; configure those
+    /// evaluation controls separately and preserve existing required CI.
     #[arg(long, default_value = "minimax")]
     pub(crate) model: String,
     /// Optional full 40-hex ub-review commit SHA for cached source fallback.
@@ -539,8 +560,8 @@ pub(crate) struct EnableArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct DoctorArgs {
-    #[arg(long, default_value = ".ub-review.toml", env = "UB_REVIEW_CONFIG")]
-    pub(crate) config: PathBuf,
+    #[arg(long, env = "UB_REVIEW_CONFIG")]
+    pub(crate) config: Option<PathBuf>,
     #[arg(long, value_enum, env = "UB_REVIEW_PROFILE")]
     pub(crate) profile: Option<ProfileArg>,
     #[arg(
@@ -573,8 +594,8 @@ pub(crate) enum CacheCommand {
 
 #[derive(Debug, Args)]
 pub(crate) struct CacheWarmArgs {
-    #[arg(long, default_value = ".ub-review.toml", env = "UB_REVIEW_CONFIG")]
-    pub(crate) config: PathBuf,
+    #[arg(long, env = "UB_REVIEW_CONFIG")]
+    pub(crate) config: Option<PathBuf>,
     #[arg(long, value_enum, env = "UB_REVIEW_PROFILE")]
     pub(crate) profile: Option<ProfileArg>,
     #[arg(
@@ -637,7 +658,8 @@ pub(crate) struct RunArgs {
     /// Review pass identity. `auto` maps pull_request opened/ready_for_review to the matching pass.
     #[arg(long = "run-pass", value_parser = parse_run_pass, default_value = "auto", env = "UB_REVIEW_RUN_PASS")]
     pub(crate) run_pass: RunPass,
-    /// Model execution mode.
+    /// Model execution mode. Default: auto. With off, semantic review was not
+    /// performed; this is not a clean model judgment.
     #[arg(long, value_enum, default_value = "auto", env = "UB_REVIEW_MODEL_MODE")]
     pub(crate) model_mode: ModelMode,
     /// Sensor scheduling (#325). `pipelined` launches model lanes off the
@@ -653,8 +675,9 @@ pub(crate) struct RunArgs {
     pub(crate) sensor_phases: SensorPhasesMode,
     /// Gate enforcement. When this resolves to true, `run` exits non-zero
     /// (exit code 1) after all artifacts are written unless the recorded
-    /// conclusion is exactly `pass`. `auto` resolves to true for --mode
-    /// intelligent-ci and false otherwise.
+    /// legacy conclusion is exactly `pass`. `auto` resolves to true for --mode
+    /// intelligent-ci and false otherwise. Shadow results do not replace
+    /// this enforcement authority.
     #[arg(
         long = "fail-on-gate",
         value_enum,
@@ -664,9 +687,12 @@ pub(crate) struct RunArgs {
     pub(crate) fail_on_gate: FailOnGate,
     /// User-facing review posture. When set, overrides `--mode`,
     /// `--fail-on-gate`, and `[gate].review_forward` (with a per-knob
-    /// warning). `advisory` = comment only; `gate` = deterministic-floor
-    /// required check (recommended); `strict` = + reporter verdict can block.
-    /// Unset (the default) uses the legacy knobs unchanged.
+    /// warning). Initial evaluation: advisory with --posting artifact-only and
+    /// --model-mode off, preserving existing required CI. `gate` is an opt-in
+    /// deterministic-floor check; `strict` adds reporter verdict blocking.
+    /// Gate/strict enforce the legacy conclusion, not shadow result authority.
+    /// Unset (the default) uses the legacy knobs unchanged; model-mode defaults
+    /// to auto and run posting defaults to artifact-only.
     #[arg(long = "review-mode", value_enum, env = "UB_REVIEW_REVIEW_MODE")]
     pub(crate) review_mode: Option<ReviewModePreset>,
     #[command(flatten)]
@@ -945,8 +971,8 @@ pub(crate) struct SetupCiArgs {
     #[arg(long = "accept")]
     pub(crate) accept: Vec<String>,
     /// Existing repo config, consulted only for \[gate].required_check.
-    #[arg(long, default_value = ".ub-review.toml", env = "UB_REVIEW_CONFIG")]
-    pub(crate) config: PathBuf,
+    #[arg(long, env = "UB_REVIEW_CONFIG")]
+    pub(crate) config: Option<PathBuf>,
     /// Open the migration PR on GitHub: create a branch, add the generated
     /// files (.ub-review.toml, the gate workflow, docs/ci/ub-review-migration.md,
     /// docs/ci/branch-protection-change.md), and open one PR whose body is
