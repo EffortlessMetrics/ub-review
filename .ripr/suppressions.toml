@@ -40592,3 +40592,143 @@ kind = "exposure_gap"
 finding_id = "probe:src_tests_proof_budget_regressions.rs:field_construction:2efa3e2d"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1371; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_matrix_releases_early_commands_before_required_build, builtin_runtime_profiles_encode_trusted_repo_gate_defaults, builtin_runtime_profiles_match_runtime_files. Re-verify after any edit to src/tests/proof_budget_regressions.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:return_value:9b4d2b99"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1378; probe Observation {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_internal_audit_retains_no_evidence_semantics, active_graph_does_not_reuse_stale_proof_receipts, active_graph_keeps_inline_delivery_and_proof_receipt_links. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:call_deletion:a82607f8"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe build_active_claim_graph(: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:return_value:30e7d6a6"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe build_active_claim_graph(: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:call_deletion:8d770022"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe &[],: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:return_value:73f1c476"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe &[],: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:call_deletion:8d770022.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe &[],: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:return_value:73f1c476.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe &[],: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:call_deletion:61b18b7b"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe &PrThreadContext {: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:return_value:a08b9c25"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe &PrThreadContext {: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:call_deletion:f6d198be"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe max_bytes: 65_536,: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:field_construction:15748153"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe max_bytes: 65_536,: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:return_value:d8913fe4"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe max_bytes: 65_536,: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:field_construction:4e2e502e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1378; probe warnings: Vec::new(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by broker_satisfies_new_request_from_existing_receipt_without_execution, ci_repair_counts_every_missing_duration_in_consumer_warnings, equivalent_proof_record_permutations_have_literal_links_and_identical_bytes. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:return_value:9651a6ad"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1378; probe warnings: Vec::new(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by broker_satisfies_new_request_from_existing_receipt_without_execution, ci_repair_counts_every_missing_duration_in_consumer_warnings, equivalent_proof_record_permutations_have_literal_links_and_identical_bytes. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:call_deletion:7360f4b4"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe title: None,: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:field_construction:cbbde0f8"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe title: None,: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:return_value:e9b7e081"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe title: None,: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:call_deletion:e4444c96"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe body_truncated: false,: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:field_construction:4a5bdf1a"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe body_truncated: false,: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:return_value:384a81f4"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe body_truncated: false,: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:call_deletion:a155bb0f"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe thread_context_path: None,: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:field_construction:400c8aca"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe thread_context_path: None,: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:return_value:89c06f4c"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe thread_context_path: None,: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:call_deletion:74a1e31e"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe thread_context_truncated: false,: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:field_construction:fbe19262"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe thread_context_truncated: false,: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:call_deletion:ac205ef3"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe },: No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics_replay_tests.rs:call_deletion:a469b847"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1378; probe ): No assertion found on related tests. Reached by equivalent_proof_record_permutations_have_literal_links_and_identical_bytes, same_receipt_id_with_distinct_details_is_retained_in_stable_order, stale_unrelated_and_substring_subject_records_leave_missing_proof_explicit. Re-verify after any edit to src/review_topics/replay_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:2a2d46cd"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1378; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by active_graph_does_not_reuse_stale_proof_receipts, active_graph_keeps_inline_delivery_and_proof_receipt_links, active_graph_keeps_unresolved_conflict_when_another_lane_lacks_evidence. Re-verify after any edit to src/review_topics.rs."
