@@ -40552,3 +40552,43 @@ kind = "exposure_gap"
 finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:6adeba89.2"
 owner = "ub-review/core"
 reason = "reachable_unrevealed static-path gap on PR #1368; probe Ok(()): No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_proof_budget_regressions.rs:field_construction:cee474d5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1371; probe limits: Limits {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by granted_1500_seconds_preserves_63_seconds_of_actual_command_duration, model_lane_scheduler_fills_wave_across_provider_limits, required_build_exhaustion_terminalizes_declined_command_and_releases_completed_command. Re-verify after any edit to src/tests/proof_budget_regressions.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_proof_budget_regressions.rs:field_construction:a917fe2c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1371; probe builds: 1,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by enable_workflow_release_path_downloads_binary_not_source_builds, granted_1500_seconds_preserves_63_seconds_of_actual_command_duration, required_build_exhaustion_terminalizes_declined_command_and_releases_completed_command. Re-verify after any edit to src/tests/proof_budget_regressions.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_proof_budget_regressions.rs:return_value:bf135aa0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1371; probe builds: 1,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by enable_workflow_release_path_downloads_binary_not_source_builds, granted_1500_seconds_preserves_63_seconds_of_actual_command_duration, required_build_exhaustion_terminalizes_declined_command_and_releases_completed_command. Re-verify after any edit to src/tests/proof_budget_regressions.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_proof_budget_regressions.rs:field_construction:5a9c0473"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1371; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by granted_1500_seconds_preserves_63_seconds_of_actual_command_duration, required_build_exhaustion_terminalizes_declined_command_and_releases_completed_command, required_wind_down_distinguishes_allocation_from_live_deadline. Re-verify after any edit to src/tests/proof_budget_regressions.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_proof_budget_regressions.rs:return_value:e19029e0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1371; probe ProofPortfolioRuntime {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_matrix_releases_early_commands_before_required_build, builtin_runtime_profiles_encode_trusted_repo_gate_defaults, builtin_runtime_profiles_match_runtime_files. Re-verify after any edit to src/tests/proof_budget_regressions.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_proof_budget_regressions.rs:field_construction:2d613c53"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1371; probe cpu: 1,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_matrix_releases_early_commands_before_required_build, builtin_runtime_profiles_encode_trusted_repo_gate_defaults, builtin_runtime_profiles_match_runtime_files. Re-verify after any edit to src/tests/proof_budget_regressions.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_proof_budget_regressions.rs:return_value:b5b2fa97"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1371; probe cpu: 1,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_matrix_releases_early_commands_before_required_build, builtin_runtime_profiles_encode_trusted_repo_gate_defaults, builtin_runtime_profiles_match_runtime_files. Re-verify after any edit to src/tests/proof_budget_regressions.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tests_proof_budget_regressions.rs:field_construction:2efa3e2d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1371; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_matrix_releases_early_commands_before_required_build, builtin_runtime_profiles_encode_trusted_repo_gate_defaults, builtin_runtime_profiles_match_runtime_files. Re-verify after any edit to src/tests/proof_budget_regressions.rs."
