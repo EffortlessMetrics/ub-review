@@ -41612,3 +41612,528 @@ kind = "exposure_gap"
 finding_id = "probe:tests_analyzer_bundle_cli.rs:predicate:d1bcf0fb"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1389; probe receipt[\"intake_sha256\"] == hash(&fs::read(self.dir.path().join(\"intake.json\"))?),: Strong oracle found: exact value or pattern assertion. Reached by a_workspace_without_a_lockfile_selects_no_cargo_candidate, absent_pr_thread_context_omits_reuse_rules, accounting_ambiguous_or_unbound_receipts_keep_reservation. Re-verify after any edit to tests/analyzer_bundle_cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_helper-exact_src_test_support.rs:call_deletion:0d89937d"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe let actual = super::answer();: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/helper-exact/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_helper-exact_src_test_support.rs:call_deletion:29e48c93"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe ensure!(actual == 7);: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/helper-exact/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_helper-exact_src_test_support.rs:predicate:006c7ecd"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe ensure!(actual == 7);: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/helper-exact/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_helper-exact_src_test_support.rs:call_deletion:40eace36"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe Ok(()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/helper-exact/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_helper-exact_src_test_support.rs:return_value:20672af5"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe Ok(()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/helper-exact/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_helper-exact_src_test_support.rs:call_deletion:aebc9013"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe check_answer(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/helper-exact/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_helper-no-oracle_src_test_support.rs:call_deletion:deb2b698"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe let _actual = super::answer();: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/helper-no-oracle/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_helper-no-oracle_src_test_support.rs:call_deletion:e5c17d33"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe Ok(()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/helper-no-oracle/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_helper-no-oracle_src_test_support.rs:return_value:019f9b5a"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe Ok(()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/helper-no-oracle/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_helper-no-oracle_src_test_support.rs:call_deletion:261973fc"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe check_answer(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/helper-no-oracle/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_helper-self-expected_src_test_support.rs:call_deletion:73964fc7"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe let actual = super::answer();: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/helper-self-expected/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_helper-self-expected_src_test_support.rs:call_deletion:7f6034e3"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe ensure!(actual == super::answer());: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/helper-self-expected/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_helper-self-expected_src_test_support.rs:predicate:f039c14a"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe ensure!(actual == super::answer());: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/helper-self-expected/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_helper-self-expected_src_test_support.rs:call_deletion:2e761014"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe Ok(()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/helper-self-expected/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_helper-self-expected_src_test_support.rs:return_value:167127a1"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe Ok(()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/helper-self-expected/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_helper-self-expected_src_test_support.rs:call_deletion:2b4caff6"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe check_answer(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/helper-self-expected/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_production-lookalike_src_test_support.rs:call_deletion:bbb67617"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe let actual = super::answer();: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/production-lookalike/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_production-lookalike_src_test_support.rs:call_deletion:b5b2ddcd"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe ensure!(actual == 7);: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/production-lookalike/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_production-lookalike_src_test_support.rs:predicate:5d3c7891"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe ensure!(actual == 7);: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/production-lookalike/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_production-lookalike_src_test_support.rs:call_deletion:c9002d14"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe Ok(()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/production-lookalike/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_production-lookalike_src_test_support.rs:return_value:4538410e"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe Ok(()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/production-lookalike/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_production-lookalike_src_test_support.rs:call_deletion:8f69a836"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe check_answer(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/production-lookalike/src/test_support.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_executable_fixture.rs:call_deletion:8f0f7cea"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe static EXECUTABLE_FIXTURE_LAUNCH: RwLock<()> = RwLock::new(());: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_executable_fixture.rs:call_deletion:50ed5e53"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .read(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_executable_fixture.rs:call_deletion:790f31c8"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .unwrap_or_else(std::sync::PoisonError::into_inner);: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_executable_fixture.rs:error_path:04dafe73"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .unwrap_or_else(std::sync::PoisonError::into_inner);: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_executable_fixture.rs:call_deletion:cb5fe2d5"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe self.spawn(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_executable_fixture.rs:call_deletion:2d329e38"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe self.stdin(Stdio::null()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_executable_fixture.rs:call_deletion:82faa04b"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .stdout(Stdio::piped()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_executable_fixture.rs:call_deletion:b03105ab"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .stderr(Stdio::piped()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_executable_fixture.rs:call_deletion:20e79015"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .fixture_spawn()?: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_executable_fixture.rs:error_path:c4057566"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .fixture_spawn()?: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_executable_fixture.rs:call_deletion:2f182f44"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .wait_with_output(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_executable_fixture.rs:call_deletion:328f3f78"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe self.fixture_spawn()?.wait(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_executable_fixture.rs:error_path:8edf713d"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe self.fixture_spawn()?.wait(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_lib.rs:call_deletion:d7f6a0fe"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe let output = std::process::Command::new(\"/bin/sh\"): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_lib.rs:call_deletion:6da70467"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .args([\"-c\", \"printf 'role-control-byte\\n'; exit 7\"]): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_lib.rs:call_deletion:d598e246"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .fixture_output()?;: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_lib.rs:error_path:6f3fae81"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .fixture_output()?;: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_lib.rs:return_value:3b578cd0"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe assert_eq!(output.status.code(), Some(7));: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_lib.rs:call_deletion:c122267b"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe Ok(()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_cfg-test-module_src_lib.rs:return_value:a27e5ce9"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe Ok(()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/cfg-test-module/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_original-helper-prefix.rs:call_deletion:7035070b"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .fixture_spawn()?: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/original-helper-prefix.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_original-helper-prefix.rs:error_path:cda73218"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .fixture_spawn()?: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/original-helper-prefix.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_original-helper-prefix.rs:call_deletion:82f085fe"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .wait_with_output(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/original-helper-prefix.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_executable_fixture.rs:call_deletion:9526bcf5"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe static EXECUTABLE_FIXTURE_LAUNCH: RwLock<()> = RwLock::new(());: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_executable_fixture.rs:call_deletion:aef080a0"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .read(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_executable_fixture.rs:call_deletion:27d4c614"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .unwrap_or_else(std::sync::PoisonError::into_inner);: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_executable_fixture.rs:error_path:9736fd74"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .unwrap_or_else(std::sync::PoisonError::into_inner);: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_executable_fixture.rs:call_deletion:95afb8a6"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe self.spawn(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_executable_fixture.rs:call_deletion:b5670066"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe self.stdin(Stdio::null()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_executable_fixture.rs:call_deletion:7453240d"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .stdout(Stdio::piped()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_executable_fixture.rs:call_deletion:b33346bb"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .stderr(Stdio::piped()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_executable_fixture.rs:call_deletion:57aaa860"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .fixture_spawn()?: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_executable_fixture.rs:error_path:05512f2d"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .fixture_spawn()?: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_executable_fixture.rs:call_deletion:80711700"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .wait_with_output(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_executable_fixture.rs:call_deletion:8aa68485"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe self.fixture_spawn()?.wait(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_executable_fixture.rs:error_path:c8ae01b8"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe self.fixture_spawn()?.wait(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_lib.rs:call_deletion:2449aa93"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe let output = std::process::Command::new(\"/bin/sh\"): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_lib.rs:call_deletion:7c905623"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .args([\"-c\", \"printf 'role-control-byte\\n'; exit 7\"]): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_lib.rs:call_deletion:739c2eee"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .fixture_output()?;: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_lib.rs:error_path:7de3939b"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .fixture_output()?;: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_lib.rs:return_value:d3f0c69e"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe assert_eq!(output.status.code(), Some(7));: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_lib.rs:call_deletion:2bbc7904"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe Ok(()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-normal_src_lib.rs:return_value:e5629096"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe Ok(()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-normal/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_executable_fixture_tests.rs:call_deletion:97a2c230"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe static EXECUTABLE_FIXTURE_LAUNCH: RwLock<()> = RwLock::new(());: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/executable_fixture_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_executable_fixture_tests.rs:call_deletion:f5bbc3e6"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .read(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/executable_fixture_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_executable_fixture_tests.rs:call_deletion:4bfaf0b1"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .unwrap_or_else(std::sync::PoisonError::into_inner);: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/executable_fixture_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_executable_fixture_tests.rs:error_path:fa9e825e"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .unwrap_or_else(std::sync::PoisonError::into_inner);: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/executable_fixture_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_executable_fixture_tests.rs:call_deletion:9aa2b729"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe self.spawn(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/executable_fixture_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_executable_fixture_tests.rs:call_deletion:20e408ac"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe self.stdin(Stdio::null()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/executable_fixture_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_executable_fixture_tests.rs:call_deletion:591a0190"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .stdout(Stdio::piped()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/executable_fixture_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_executable_fixture_tests.rs:call_deletion:242e695c"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .stderr(Stdio::piped()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/executable_fixture_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_executable_fixture_tests.rs:call_deletion:af8b67f1"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .fixture_spawn()?: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/executable_fixture_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_executable_fixture_tests.rs:error_path:2b0f0c36"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .fixture_spawn()?: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/executable_fixture_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_executable_fixture_tests.rs:call_deletion:5757e0c7"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .wait_with_output(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/executable_fixture_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_executable_fixture_tests.rs:call_deletion:0cdc7c01"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe self.fixture_spawn()?.wait(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/executable_fixture_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_executable_fixture_tests.rs:error_path:db10f1f2"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe self.fixture_spawn()?.wait(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/executable_fixture_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_lib.rs:call_deletion:61fc8bd0"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe let output = std::process::Command::new(\"/bin/sh\"): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_lib.rs:call_deletion:12e2039b"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .args([\"-c\", \"printf 'role-control-byte\\n'; exit 7\"]): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_lib.rs:call_deletion:5aca469f"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .fixture_output()?;: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_lib.rs:error_path:673a4761"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .fixture_output()?;: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_lib.rs:return_value:9390fee0"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe assert_eq!(output.status.code(), Some(7));: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_lib.rs:call_deletion:3e2cfd6c"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe Ok(()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_production-test-name_src_lib.rs:return_value:4026d888"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe Ok(()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/production-test-name/src/lib.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_common_executable_fixture.rs:call_deletion:6086fb40"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe static EXECUTABLE_FIXTURE_LAUNCH: RwLock<()> = RwLock::new(());: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/common/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_common_executable_fixture.rs:call_deletion:9c24de49"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .read(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/common/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_common_executable_fixture.rs:call_deletion:dd9f37ca"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .unwrap_or_else(std::sync::PoisonError::into_inner);: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/common/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_common_executable_fixture.rs:error_path:9abb81e5"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .unwrap_or_else(std::sync::PoisonError::into_inner);: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/common/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_common_executable_fixture.rs:call_deletion:f4c81c91"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe self.spawn(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/common/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_common_executable_fixture.rs:call_deletion:cb2f522e"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe self.stdin(Stdio::null()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/common/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_common_executable_fixture.rs:call_deletion:818ab035"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .stdout(Stdio::piped()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/common/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_common_executable_fixture.rs:call_deletion:5c9e5fd9"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .stderr(Stdio::piped()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/common/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_common_executable_fixture.rs:call_deletion:5e8dfcec"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .fixture_spawn()?: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/common/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_common_executable_fixture.rs:error_path:3bb2841f"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .fixture_spawn()?: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/common/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_common_executable_fixture.rs:call_deletion:ebd0ee74"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .wait_with_output(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/common/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_common_executable_fixture.rs:call_deletion:b2a10944"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe self.fixture_spawn()?.wait(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/common/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_common_executable_fixture.rs:error_path:edb33ba1"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe self.fixture_spawn()?.wait(): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/common/executable_fixture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_route.rs:call_deletion:903c375c"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe let output = std::process::Command::new(\"/bin/sh\"): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/route.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_route.rs:call_deletion:9c041f4e"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .args([\"-c\", \"printf 'role-control-byte\\n'; exit 7\"]): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/route.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_route.rs:call_deletion:8d65815d"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .fixture_output()?;: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/route.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_route.rs:error_path:64140fc0"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe .fixture_output()?;: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/route.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_route.rs:return_value:c744c9eb"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe assert_eq!(output.status.code(), Some(7));: No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/route.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_route.rs:call_deletion:7034b83f"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe Ok(()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/route.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:fixtures_ripr-shadow-813_source-role-1401_test-layout_tests_route.rs:return_value:a23444fd"
+owner = "ub-review/core"
+reason = "no_static_path static-path gap on PR #1403; probe Ok(()): No assertion can discriminate the changed behavior without a reachable test. Reached by . Re-verify after any edit to fixtures/ripr-shadow-813/source-role-1401/test-layout/tests/route.rs."
