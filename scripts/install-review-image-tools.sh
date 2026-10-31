@@ -34,7 +34,7 @@ mkdir -p "$prefix/bin"
 
 # Pinned: versions move together with STANDARD_IMAGE_*_VERSION in
 # src/post_run_utils.rs and scripts/install-gh-runner-tools.sh (#610).
-install_tool tokmd tokmd "${UB_REVIEW_TOKMD_VERSION:-1.12.0}"
+install_tool tokmd tokmd "${UB_REVIEW_TOKMD_VERSION:-1.15.0}"
 install_tool cargo-allow cargo-allow "${UB_REVIEW_CARGO_ALLOW_VERSION:-0.1.8}"
 install_tool ripr ripr "${UB_REVIEW_RIPR_VERSION:-0.10.0}"
 install_tool unsafe-review unsafe-review "${UB_REVIEW_UNSAFE_REVIEW_VERSION:-0.3.4}"

@@ -58,8 +58,98 @@ pub(crate) fn proof_lease_budget(profile: &Profile) -> Result<ProofLeaseBudget> 
 }
 
 pub(crate) fn remaining_focused_proof_budget(
+    budget: ProofBudget,
+    existing_leases: &[ResourceLease],
+) -> ProofBudget {
+    focused_proof_budget_with_charges(budget, existing_leases, |lease| lease.timeout_sec)
+}
+
+/// A ceiling remains reserved until one unambiguous, matching receipt settles
+/// it. Keep the original lease intact: its timeout is still the admission cap.
+pub(crate) fn settled_focused_proof_budget(
+    budget: ProofBudget,
+    leases: &[ResourceLease],
+    receipts: &[ProofReceipt],
+    head: &str,
+) -> ProofBudget {
+    if receipts.is_empty() {
+        return remaining_focused_proof_budget(budget, leases);
+    }
+    focused_proof_budget_with_charges(budget, leases, |lease| {
+        let mut matching = receipts
+            .iter()
+            .filter(|receipt| receipt.id == lease.consumer);
+        let Some(receipt) = matching.next() else {
+            return lease.timeout_sec;
+        };
+        if matching.next().is_some()
+            || leases.iter().filter(|other| other.id == lease.id).count() != 1
+            || leases
+                .iter()
+                .filter(|other| other.consumer == lease.consumer && other.status == "granted")
+                .count()
+                != 1
+            || !receipt.head.eq_ignore_ascii_case(head)
+            || receipt.revision != lease.revision
+            || !matches!(
+                (lease.kind.as_str(), receipt.kind.as_str()),
+                ("focused-test", "focused-head" | "focused-red-green")
+                    | ("focused-build", "focused-build")
+            )
+        {
+            return lease.timeout_sec;
+        }
+        focused_proof_receipt_spent_seconds(receipt).unwrap_or(lease.timeout_sec)
+    })
+}
+
+/// Budget units are whole seconds; round the aggregate actual duration up.
+/// A real timeout spends at least its allowance, including when its receipt
+/// clock rounds down. Unknown/legacy error timing cannot create free credit.
+pub(crate) fn focused_proof_receipt_spent_seconds(receipt: &ProofReceipt) -> Option<u64> {
+    if receipt.commands.is_empty() {
+        return None;
+    }
+    let expected_sides = match receipt.kind.as_str() {
+        "focused-red-green" if receipt.commands[0].status == "passed" => {
+            &["head", "base-plus-tests"][..]
+        }
+        "focused-red-green" | "focused-head" | "focused-build" => &["head"][..],
+        _ => return None,
+    };
+    if !receipt
+        .commands
+        .iter()
+        .map(|command| command.side.as_str())
+        .eq(expected_sides.iter().copied())
+    {
+        return None;
+    }
+    let mut duration_ms = 0_u128;
+    for command in &receipt.commands {
+        let spent_ms = match command.status.as_str() {
+            "passed" | "failed" if !command.timed_out && command.timeout_sec > 0 => {
+                command.duration_ms.max(1)
+            }
+            "timed_out" if command.timed_out && command.timeout_sec > 0 => command
+                .duration_ms
+                .max(u128::from(command.timeout_sec) * 1_000),
+            "skipped"
+                if !command.timed_out && (command.timeout_sec == 0 || command.duration_ms > 0) =>
+            {
+                command.duration_ms
+            }
+            _ => return None,
+        };
+        duration_ms = duration_ms.saturating_add(spent_ms);
+    }
+    Some(u64::try_from(duration_ms.div_ceil(1_000)).unwrap_or(u64::MAX))
+}
+
+fn focused_proof_budget_with_charges(
     mut budget: ProofBudget,
     existing_leases: &[ResourceLease],
+    charge: impl Fn(&ResourceLease) -> u64,
 ) -> ProofBudget {
     let focused_leases = existing_leases
         .iter()
@@ -82,8 +172,7 @@ pub(crate) fn remaining_focused_proof_budget(
     let granted_seconds = focused_leases
         .iter()
         .filter(|lease| lease.status == "granted")
-        .map(|lease| lease.timeout_sec)
-        .sum::<u64>();
+        .fold(0_u64, |total, lease| total.saturating_add(charge(lease)));
     budget.max_focused_tests = budget.max_focused_tests.saturating_sub(granted);
     budget.max_focused_test_files = budget.max_focused_test_files.saturating_sub(granted);
     budget.max_total_seconds = budget.max_total_seconds.saturating_sub(granted_seconds);
@@ -129,6 +218,186 @@ mod tests {
             worktree: None,
             command: None,
         }
+    }
+
+    fn accounting_receipt(status: &str, duration_ms: u128) -> ProofReceipt {
+        ProofReceipt {
+            revision: None,
+            schema: PROOF_RECEIPT_SCHEMA.to_owned(),
+            id: "proof-test".to_owned(),
+            kind: "focused-head".to_owned(),
+            base: "base".to_owned(),
+            head: "head".to_owned(),
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: Vec::new(),
+            request_ids: Vec::new(),
+            commands: vec![ProofCommandReceipt {
+                side: "head".to_owned(),
+                command: "fixture".to_owned(),
+                env: Default::default(),
+                status: status.to_owned(),
+                exit_code: Some(if status == "passed" { 0 } else { 7 }),
+                timed_out: status == "timed_out",
+                timeout_sec: 6,
+                duration_ms,
+                stdout: String::new(),
+                stderr: String::new(),
+                reason: "fixture".to_owned(),
+            }],
+            result: "fixture".to_owned(),
+            reason: "fixture".to_owned(),
+        }
+    }
+
+    #[test]
+    fn elapsed_budget_reserves_duplicate_lease_ids_for_distinct_consumers() {
+        let first = test_lease("focused-test", "granted", 6);
+        let mut second = first.clone();
+        second.consumer = "second-proof".to_owned();
+        let first_receipt = accounting_receipt("passed", 200);
+        let mut second_receipt = first_receipt.clone();
+        second_receipt.id = "second-proof".to_owned();
+        let mut budget = test_budget();
+        budget.max_total_seconds = 20;
+        let remaining = settled_focused_proof_budget(
+            budget,
+            &[first, second],
+            &[first_receipt, second_receipt],
+            "head",
+        );
+        assert_eq!(remaining.max_total_seconds, 8);
+        assert_eq!(remaining.max_focused_tests, 2);
+    }
+
+    #[test]
+    fn elapsed_budget_rejects_zero_allowance_and_unknown_receipt_kind() {
+        for status in ["passed", "failed", "timed_out"] {
+            let mut receipt = accounting_receipt(status, 200);
+            receipt.commands[0].timeout_sec = 0;
+            assert_eq!(focused_proof_receipt_spent_seconds(&receipt), None);
+        }
+        let mut receipt = accounting_receipt("passed", 200);
+        receipt.kind = "unknown".to_owned();
+        assert_eq!(focused_proof_receipt_spent_seconds(&receipt), None);
+
+        let mut receipt = accounting_receipt("skipped", 0);
+        assert_eq!(focused_proof_receipt_spent_seconds(&receipt), None);
+        receipt.commands[0].timeout_sec = 0;
+        assert_eq!(focused_proof_receipt_spent_seconds(&receipt), Some(0));
+        receipt.commands[0].timed_out = true;
+        assert_eq!(focused_proof_receipt_spent_seconds(&receipt), None);
+    }
+
+    #[test]
+    fn accounting_settles_actual_duration_with_conservative_rounding() {
+        for status in ["passed", "failed", "skipped"] {
+            for (ms, spent) in [(1, 1), (999, 1), (1_000, 1), (1_001, 2), (6_001, 7)] {
+                let lease = test_lease("focused-test", "granted", 6);
+                let receipt = accounting_receipt(status, ms);
+                let budget =
+                    settled_focused_proof_budget(test_budget(), &[lease], &[receipt], "head");
+                assert_eq!(budget.max_total_seconds, 600 - spent);
+                assert_eq!(budget.max_focused_tests, 3);
+                assert_eq!(budget.max_focused_test_files, 2);
+                assert_eq!(budget.per_command_timeout_sec, 300);
+            }
+        }
+    }
+
+    #[test]
+    fn accounting_timeout_spends_allowance_and_aggregates_red_green_once() {
+        let mut receipt = accounting_receipt("timed_out", 1);
+        assert_eq!(focused_proof_receipt_spent_seconds(&receipt), Some(6));
+        receipt.commands[0].duration_ms = 6_001;
+        assert_eq!(focused_proof_receipt_spent_seconds(&receipt), Some(7));
+        receipt = accounting_receipt("passed", 1);
+        receipt.kind = "focused-red-green".to_owned();
+        let mut base = receipt.commands[0].clone();
+        base.side = "base-plus-tests".to_owned();
+        receipt.commands.push(base);
+        assert_eq!(focused_proof_receipt_spent_seconds(&receipt), Some(1));
+        receipt.commands[1].status = "skipped".to_owned();
+        receipt.commands[1].timeout_sec = 0;
+        receipt.commands[1].duration_ms = 0;
+        assert_eq!(focused_proof_receipt_spent_seconds(&receipt), Some(1));
+    }
+
+    #[test]
+    fn accounting_ambiguous_or_unbound_receipts_keep_reservation() {
+        let lease = test_lease("focused-test", "granted", 6);
+        let valid = accounting_receipt("passed", 1);
+        let mut bad = Vec::new();
+        let mut receipt = valid.clone();
+        receipt.head = "stale".to_owned();
+        bad.push(vec![receipt]);
+        let mut receipt = valid.clone();
+        receipt.kind = "focused-build".to_owned();
+        bad.push(vec![receipt]);
+        let mut receipt = valid.clone();
+        receipt.kind = "focused-red-green".to_owned();
+        bad.push(vec![receipt]);
+        let mut receipt = valid.clone();
+        receipt.id = "unrelated".to_owned();
+        bad.push(vec![receipt]);
+        let mut receipt = valid.clone();
+        receipt.commands.push(receipt.commands[0].clone());
+        bad.push(vec![receipt]);
+        let mut receipt = valid.clone();
+        receipt.commands[0].side = "unknown".to_owned();
+        bad.push(vec![receipt]);
+        let mut receipt = valid.clone();
+        receipt.commands[0].status = "running".to_owned();
+        bad.push(vec![receipt]);
+        let mut receipt = valid.clone();
+        receipt.revision = Some(RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: "b".repeat(40),
+        });
+        bad.push(vec![receipt]);
+        bad.push(vec![accounting_receipt("skipped", 0)]);
+        bad.push(vec![valid.clone(), valid]);
+        bad.push(Vec::new());
+        for receipts in bad {
+            let budget = settled_focused_proof_budget(
+                test_budget(),
+                std::slice::from_ref(&lease),
+                &receipts,
+                "head",
+            );
+            assert_eq!(budget.max_total_seconds, 594);
+        }
+    }
+
+    #[test]
+    fn accounting_duplicate_reservations_and_overflow_never_create_credit() {
+        let lease = test_lease("focused-test", "granted", 6);
+        let receipt = accounting_receipt("passed", 1);
+        for different_id in [false, true] {
+            let mut duplicate = lease.clone();
+            if different_id {
+                duplicate.id.push_str("-second");
+            }
+            let budget = settled_focused_proof_budget(
+                test_budget(),
+                &[lease.clone(), duplicate],
+                std::slice::from_ref(&receipt),
+                "head",
+            );
+            assert_eq!(budget.max_total_seconds, 588);
+        }
+        let budget = remaining_focused_proof_budget(
+            test_budget(),
+            &[
+                test_lease("focused-test", "granted", u64::MAX),
+                test_lease("focused-build", "granted", u64::MAX),
+            ],
+        );
+        assert_eq!(budget.max_total_seconds, 0);
+        assert_eq!(
+            focused_proof_receipt_spent_seconds(&accounting_receipt("passed", u128::MAX)),
+            Some(u64::MAX)
+        );
     }
 
     #[test]

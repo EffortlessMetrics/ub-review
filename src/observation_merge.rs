@@ -228,3 +228,49 @@ pub(crate) fn model_call_attempted_status(status: &str) -> bool {
             | "bad_envelope"
     )
 }
+
+pub(crate) fn model_lane_call_attempted(receipt: &ModelLaneReceipt) -> bool {
+    receipt.attempt_count.map_or_else(
+        || model_call_attempted_status(&receipt.status),
+        |count| count > 0,
+    )
+}
+
+#[cfg(test)]
+mod attempt_tests {
+    use super::*;
+
+    #[test]
+    fn explicit_attempt_count_and_legacy_status_remain_distinct() -> Result<()> {
+        for (status, count, expected_attempted, expected_gap) in [
+            ("skipped", Some(1), true, true),
+            ("skipped", Some(0), false, false),
+            ("skipped", None, false, false),
+            ("ok", None, true, false),
+            ("failed", None, true, true),
+            ("ok", Some(0), false, false),
+            ("ok", Some(2), true, false),
+        ] {
+            let mut value = serde_json::json!({
+                "lane": "fixture", "provider": "minimax", "model": "fixture",
+                "endpoint_kind": "openai-chat", "status": status, "reason": "fixture"
+            });
+            if let Some(count) = count {
+                value["attempt_count"] = serde_json::json!(count);
+            }
+            let receipt: ModelLaneReceipt = serde_json::from_value(value)?;
+            assert_eq!(
+                model_lane_call_attempted(&receipt),
+                expected_attempted,
+                "{status}/{count:?}"
+            );
+            assert_eq!(
+                is_model_receipt_evidence_issue(&receipt),
+                expected_gap,
+                "{status}/{count:?}"
+            );
+            assert_eq!(receipt.attempt_count, count);
+        }
+        Ok(())
+    }
+}

@@ -9,7 +9,7 @@ fn gh_runner_tool_installer_pins_core_rust_sensor_versions() -> Result<()> {
     let script = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/install-gh-runner-tools.sh"),
     )?;
-    assert!(script.contains("UB_REVIEW_TOKMD_VERSION:-1.12.0"));
+    assert!(script.contains("UB_REVIEW_TOKMD_VERSION:-1.15.0"));
     assert!(script.contains("UB_REVIEW_CARGO_ALLOW_VERSION:-0.1.8"));
     assert!(script.contains("install_cargo_bin tokmd tokmd \"$tokmd_version\""));
     assert!(script.contains("install_cargo_bin cargo-allow cargo-allow \"$cargo_allow_version\""));
@@ -29,7 +29,7 @@ fn review_image_tool_installer_uses_tool_dir_as_install_prefix() -> Result<()> {
     let script = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/install-review-image-tools.sh"),
     )?;
-    assert!(script.contains("UB_REVIEW_TOKMD_VERSION:-1.12.0"));
+    assert!(script.contains("UB_REVIEW_TOKMD_VERSION:-1.15.0"));
     assert!(script.contains("UB_REVIEW_CARGO_ALLOW_VERSION:-0.1.8"));
     assert!(script.contains("UB_REVIEW_RIPR_VERSION:-0.10.0"));
     let github_runner_script = std::fs::read_to_string("scripts/install-gh-runner-tools.sh")?;
@@ -167,11 +167,10 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
     let fake_bin = temp.path().join("fake-bin");
     fs::create_dir(&fake_bin)?;
     let curl = fake_bin.join("curl");
-    fs::write(
+    write_executable_fixture(
         &curl,
         "#!/bin/sh\nset -eu\nout=\"\"\nurl=\"\"\nwhile [ \"$#\" -gt 0 ]; do\n  case \"$1\" in\n    -o) out=\"$2\"; shift 2 ;;\n    http*) url=\"$1\"; shift ;;\n    *) shift ;;\n  esac\ndone\ncase \"$url\" in\n  *.sha256) cp \"$FIXTURE_CHECKSUM\" \"$out\" ;;\n  *) cp \"$FIXTURE_ARCHIVE\" \"$out\" ;;\nesac\n",
     )?;
-    fs::set_permissions(&curl, fs::Permissions::from_mode(0o755))?;
 
     let cases = [
         (
@@ -396,14 +395,14 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
             fs::write(&archive, b"not a gzip or tar archive")?;
         } else if layout == "truncated" {
             let status = archive_command
-                .status()
+                .fixture_status()
                 .context("create release fixture archive")?;
             anyhow::ensure!(status.success(), "tar failed for fixture {name}");
             let bytes = fs::read(&archive)?;
             fs::write(&archive, &bytes[..bytes.len().min(24)])?;
         } else {
             let archive_status = archive_command
-                .status()
+                .fixture_status()
                 .context("create release fixture archive")?;
             anyhow::ensure!(archive_status.success(), "tar failed for fixture {name}");
         }
@@ -415,7 +414,7 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
                         .to_str()
                         .ok_or_else(|| anyhow::anyhow!("archive path is not UTF-8"))?,
                 ])
-                .output()
+                .fixture_output()
                 .context("list root-directory release fixture archive")?;
             anyhow::ensure!(
                 listing.status.success(),
@@ -430,7 +429,7 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
         let checksum = temp.path().join(format!("{name}.sha256"));
         let checksum_output = Command::new("sha256sum")
             .arg(&archive)
-            .output()
+            .fixture_output()
             .context("hash release fixture archive")?;
         anyhow::ensure!(
             checksum_output.status.success(),
@@ -468,7 +467,7 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
             .env("UB_REVIEW_SERVER_URL", "https://fixture.invalid")
             .env("FIXTURE_ARCHIVE", &archive)
             .env("FIXTURE_CHECKSUM", &checksum)
-            .output()
+            .fixture_output()
             .context("run production release resolver fixture")?;
         let log = format!(
             "{}{}",
@@ -659,7 +658,7 @@ fn quality_github_outcomes_cli_writes_thread_state_receipt() -> Result<()> {
         .arg(&source)
         .arg("--out")
         .arg(&out)
-        .output()?;
+        .fixture_output()?;
     assert!(
         output.status.success(),
         "quality-github-outcomes failed\nstdout:\n{}\nstderr:\n{}",
@@ -804,7 +803,7 @@ jobs:
             "--window-days",
             "45",
         ]);
-    let output = command.output()?;
+    let output = command.fixture_output()?;
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     assert!(
@@ -971,6 +970,282 @@ jobs:
         );
     }
 
+    Ok(())
+}
+
+#[cfg(unix)]
+fn init_guide_recommended_command(guide: &str, subcommand: &str) -> Result<String> {
+    let prefix = format!("ub-review {subcommand} ");
+    let mut recommended = false;
+    let mut lines = guide.split('\n');
+    while let Some(line) = lines.next() {
+        let line = line.strip_prefix("   ").unwrap_or(line);
+        let fence_length = line.bytes().take_while(|byte| *byte == b'`').count();
+        if fence_length >= 3 {
+            let language = &line[fence_length..];
+            let mut body = Vec::new();
+            let mut closed = false;
+            for body_line in lines.by_ref() {
+                let body_line = body_line.strip_prefix("   ").unwrap_or(body_line);
+                if body_line.len() >= fence_length && body_line.bytes().all(|byte| byte == b'`') {
+                    closed = true;
+                    break;
+                }
+                body.push(body_line);
+            }
+            anyhow::ensure!(closed, "guide fence is not closed");
+            let command = body.join("\n");
+            if recommended && language == "sh" && command.starts_with(&prefix) {
+                return Ok(command);
+            }
+        } else if line == "## Recommended path" {
+            recommended = true;
+        } else if recommended && let Some(start) = line.find(&prefix) {
+            let suffix = match subcommand {
+                "doctor" => {
+                    "` and fix missing tools or provider keys before trusting the standard gate image."
+                }
+                "audit-ci" => "` for read-only CI receipts.",
+                _ => bail!("unexpected guide subcommand"),
+            };
+            return line[start..]
+                .strip_suffix(suffix)
+                .map(str::to_owned)
+                .context("legacy command suffix is missing");
+        }
+    }
+    bail!("recommended command is missing: {subcommand}")
+}
+
+#[cfg(unix)]
+fn verify_init_guide_posix_paths(root_name: &str, config_name: &str) -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join(root_name);
+    let config = temp.path().join(config_name);
+    let guide = temp.path().join("guide.md");
+    let empty_path = temp.path().join("empty-path");
+    fs::create_dir(&empty_path)?;
+    write_file(
+        &repo.join(".github/workflows/ci.yml"),
+        "name: path-proof\non: [pull_request]\njobs:\n  path_witness:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n",
+    )?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let init = Command::new(bin)
+        .current_dir(temp.path())
+        .env_clear()
+        .env("PATH", &empty_path)
+        .arg("init")
+        .arg(format!("--root={root_name}"))
+        .arg(format!("--path={config_name}"))
+        .arg("--guide-out")
+        .arg(&guide)
+        .args(["--profile", "cx23"])
+        .output()?;
+    anyhow::ensure!(
+        init.status.success(),
+        "init failed: {}",
+        String::from_utf8_lossy(&init.stderr)
+    );
+    let guide_text = fs::read_to_string(&guide)?;
+    let workflow_before = fs::read(repo.join(".github/workflows/ci.yml"))?;
+    for subcommand in ["doctor", "audit-ci"] {
+        let command = init_guide_recommended_command(&guide_text, subcommand)?;
+        let argv_path = temp.path().join(format!("{subcommand}.argv"));
+        let script = format!(
+            "record_ub_review() {{ printf '%s\\000' \"$@\" > \"$UB_REVIEW_TEST_ARGV\"; \"$UB_REVIEW_TEST_BINARY\" \"$@\"; }}\nalias ub-review=record_ub_review\n{command}"
+        );
+        let output = Command::new("/bin/sh")
+            .current_dir(temp.path())
+            .env_clear()
+            .env("PATH", &empty_path)
+            .env("UB_REVIEW_TEST_BINARY", bin)
+            .env("UB_REVIEW_TEST_ARGV", &argv_path)
+            .env("UB_REVIEW_TEST_EXPAND", "expanded")
+            .env("GITHUB_REPOSITORY", "fixture/path-proof")
+            .args(["-c", &script])
+            .output()?;
+        let raw_argv = fs::read(&argv_path).context("command did not invoke ub-review")?;
+        anyhow::ensure!(raw_argv.last() == Some(&0), "argv is not NUL-terminated");
+        let mut argv = Vec::new();
+        for argument in raw_argv[..raw_argv.len() - 1].split(|byte| *byte == 0) {
+            let argument = std::str::from_utf8(argument)?;
+            if let Some(value) = argument.strip_prefix("--config=") {
+                argv.extend(["--config".to_owned(), value.to_owned()]);
+            } else if let Some(value) = argument.strip_prefix("--root=") {
+                argv.extend(["--root".to_owned(), value.to_owned()]);
+            } else {
+                argv.push(argument.to_owned());
+            }
+        }
+        let expected = if subcommand == "doctor" {
+            vec![
+                "doctor".to_owned(),
+                "--config".to_owned(),
+                config_name.to_owned(),
+                "--root".to_owned(),
+                root_name.to_owned(),
+                "--require-core-tools".to_owned(),
+            ]
+        } else {
+            vec![
+                "audit-ci".to_owned(),
+                "--root".to_owned(),
+                root_name.to_owned(),
+                "--out".to_owned(),
+                "target/ub-review".to_owned(),
+            ]
+        };
+        anyhow::ensure!(
+            argv == expected,
+            "{subcommand} changed path arguments: {argv:?}"
+        );
+        if subcommand == "doctor" {
+            let stdout = String::from_utf8(output.stdout)?;
+            let stderr = String::from_utf8(output.stderr)?;
+            anyhow::ensure!(
+                stdout.contains("Profile: cx23\n"),
+                "doctor did not load the config"
+            );
+            anyhow::ensure!(
+                stderr.contains("required core review tools missing"),
+                "doctor did not reach the required-tool check: {stderr}"
+            );
+        } else {
+            anyhow::ensure!(output.status.success(), "audit-ci failed");
+            let inventory: serde_json::Value = serde_json::from_slice(&fs::read(
+                temp.path().join("target/ub-review/ci-audit/inventory.json"),
+            )?)?;
+            anyhow::ensure!(inventory["repo"] == "fixture/path-proof");
+            anyhow::ensure!(
+                inventory["jobs"]
+                    .as_array()
+                    .is_some_and(|jobs| jobs.len() == 1)
+            );
+            anyhow::ensure!(inventory["jobs"][0]["job"] == "path_witness");
+        }
+    }
+    anyhow::ensure!(config.is_file());
+    anyhow::ensure!(fs::read(repo.join(".github/workflows/ci.yml"))? == workflow_before);
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn init_guide_posix_commands_preserve_ordinary_paths() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    verify_init_guide_posix_paths("repo", "config.toml")
+}
+
+#[cfg(unix)]
+#[test]
+fn init_guide_posix_commands_preserve_paths_with_spaces() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    verify_init_guide_posix_paths("My Repo", "review config.toml")
+}
+
+#[cfg(unix)]
+#[test]
+fn init_guide_posix_commands_preserve_hostile_paths() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    for name in [
+        "quotes ' \"",
+        "dollar $UB_REVIEW_TEST_EXPAND $(printf injected)",
+        "backticks `printf injected`",
+        "separator ; printf injected #",
+        "glob * ? [x] \\ tab\t",
+        "newline\n```\nrest",
+        "-leading-option",
+        "unicode café 文",
+    ] {
+        verify_init_guide_posix_paths(name, &format!("{name}.toml"))?;
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn init_guide_rejects_non_utf8_command_paths_before_writes() -> Result<()> {
+    use std::os::unix::ffi::OsStringExt;
+
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    for invalid_root in [false, true] {
+        let temp = tempfile::tempdir()?;
+        let invalid = std::ffi::OsString::from_vec(b"invalid-\xff".to_vec());
+        let root = if invalid_root {
+            temp.path().join(&invalid)
+        } else {
+            temp.path().join("repo")
+        };
+        let config = if invalid_root {
+            temp.path().join("config.toml")
+        } else {
+            temp.path().join(&invalid)
+        };
+        let guide = temp.path().join("guide.md");
+        let empty_path = temp.path().join("empty-path");
+        fs::create_dir(&root)?;
+        fs::create_dir(&empty_path)?;
+        let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
+            .current_dir(temp.path())
+            .env_clear()
+            .env("PATH", &empty_path)
+            .args(["init", "--root"])
+            .arg(&root)
+            .arg("--path")
+            .arg(&config)
+            .arg("--guide-out")
+            .arg(&guide)
+            .output()?;
+        anyhow::ensure!(!output.status.success());
+        anyhow::ensure!(
+            String::from_utf8_lossy(&output.stderr)
+                .contains("POSIX command paths must be valid UTF-8")
+        );
+        anyhow::ensure!(!config.exists());
+        anyhow::ensure!(!guide.exists());
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn init_guide_rejects_carriage_return_command_paths_before_writes() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    for name in ["carriage\rreturn", "pair\r\nreturn"] {
+        for invalid_root in [false, true] {
+            let temp = tempfile::tempdir()?;
+            let root = temp.path().join(if invalid_root { name } else { "repo" });
+            let config = temp
+                .path()
+                .join(if invalid_root { "config.toml" } else { name });
+            let guide = temp.path().join("guide.md");
+            let empty_path = temp.path().join("empty-path");
+            fs::create_dir(&root)?;
+            fs::create_dir(&empty_path)?;
+            let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
+                .current_dir(temp.path())
+                .env_clear()
+                .env("PATH", &empty_path)
+                .args(["init", "--root"])
+                .arg(&root)
+                .arg("--path")
+                .arg(&config)
+                .arg("--guide-out")
+                .arg(&guide)
+                .output()?;
+            anyhow::ensure!(
+                !output.status.success(),
+                "init accepted a carriage return in a command path"
+            );
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::ensure!(
+                stderr.contains("POSIX command paths must not contain carriage returns"),
+                "init did not explain the path limitation: {stderr}"
+            );
+            anyhow::ensure!(!config.exists());
+            anyhow::ensure!(!guide.exists());
+        }
+    }
     Ok(())
 }
 
@@ -1337,6 +1612,116 @@ fn init_guide_lists_existing_package_scripts_as_proof_candidates() -> Result<()>
 }
 
 #[test]
+fn calibration_guidance_rejects_unsupported_runs_without_changing_thresholds() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let runs = temp.path().join("runs");
+    let supported = serde_json::json!({
+        "schema": "ub-review.calibration.v0",
+        "repo": "test/repo", "base": "base", "head": "head",
+        "run_mode": "intelligent-ci", "gate_policy": "pass",
+        "cohort": {
+            "provider": "test", "model": "test", "cohort_id": "cohort",
+            "shared_prefix_hash": "hash", "cohort_broken": false
+        },
+        "counts": {
+            "lanes_planned": 1, "lanes_executed": 1, "lane_continuations": 1,
+            "reporter_questions": 0, "messages": 0, "proof_requests_model_selected": 1,
+            "proof_requests_executed": 1, "proof_receipts_routed": 1,
+            "lane_conclusions_changed_by_proof": 1,
+            "inline_comments_posted": 1, "summary_comments_posted": 0
+        },
+        "classification": {
+            "run_class": "proof-changed-conclusion",
+            "suggested_class": "proof-changed-conclusion", "infra_excluded": false,
+            "human_classification": "acted-on"
+        }
+    });
+    for i in 0..5 {
+        let dir = runs.join(format!("run-{i}/review"));
+        fs::create_dir_all(&dir)?;
+        fs::write(
+            dir.join("calibration.json"),
+            serde_json::to_vec(&supported)?,
+        )?;
+    }
+    for (command, chosen_mode) in [
+        ("recommend", "Recommended mode: strict (strict)"),
+        ("promote", "Target mode:          strict (strict)"),
+    ] {
+        let output = Command::new(bin)
+            .args([command, "--runs-dir"])
+            .arg(&runs)
+            .output()?;
+        assert!(output.status.success(), "{command}: {:?}", output.stderr);
+        let stdout = String::from_utf8(output.stdout)?;
+        assert!(
+            stdout.lines().any(|line| line == chosen_mode),
+            "{command}: {stdout}"
+        );
+        assert!(stdout.contains("5 runs"), "{command}: {stdout}");
+    }
+
+    let extra_dir = runs.join("nested/incompatible/review");
+    fs::create_dir_all(&extra_dir)?;
+    let extra_path = extra_dir.join("calibration.json");
+    let mut extra = supported;
+    extra["schema"] = serde_json::json!("ub-review.calibration.v999");
+    extra["classification"]["infra_excluded"] = serde_json::json!(true);
+    extra["classification"]["human_classification"] = serde_json::json!("false-positive");
+    fs::write(&extra_path, serde_json::to_vec(&extra)?)?;
+    for command in ["recommend", "promote"] {
+        let output = Command::new(bin)
+            .args([command, "--runs-dir"])
+            .arg(&runs)
+            .output()?;
+        assert!(
+            !output.status.success(),
+            "{command} silently excluded an incompatible run"
+        );
+        assert!(
+            output.stdout.is_empty(),
+            "guidance must not precede admission"
+        );
+        let stderr = String::from_utf8(output.stderr)?;
+        for needle in [
+            extra_path.to_str().context("fixture path must be UTF-8")?,
+            "ub-review.calibration.v999",
+            "expected `ub-review.calibration.v0`",
+            "cannot interpret",
+        ] {
+            assert!(
+                stderr.contains(needle),
+                "{command}: missing {needle}: {stderr}"
+            );
+        }
+    }
+
+    // The same adverse run under the supported schema must remain in the
+    // denominator and prevent a strict recommendation using existing rules.
+    extra["schema"] = serde_json::json!("ub-review.calibration.v0");
+    fs::write(extra_path, serde_json::to_vec(&extra)?)?;
+    for (command, chosen_mode) in [
+        ("recommend", "Recommended mode: advisory (advisory)"),
+        ("promote", "Target mode:          advisory (advisory)"),
+    ] {
+        let output = Command::new(bin)
+            .args([command, "--runs-dir"])
+            .arg(&runs)
+            .output()?;
+        assert!(output.status.success(), "{command}: {:?}", output.stderr);
+        let stdout = String::from_utf8(output.stdout)?;
+        assert!(stdout.contains("6 runs"), "{command}: {stdout}");
+        assert!(stdout.contains("16.7%"), "{command}: {stdout}");
+        assert!(
+            stdout.lines().any(|line| line == chosen_mode),
+            "{command}: {stdout}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn quality_backfill_cli_writes_rolling_artifact_with_source_receipts() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
@@ -1416,7 +1801,7 @@ fn quality_backfill_cli_writes_rolling_artifact_with_source_receipts() -> Result
         .arg(&previous)
         .arg("--window-days")
         .arg("30")
-        .output()?;
+        .fixture_output()?;
     assert!(
         output.status.success(),
         "quality-backfill failed\nstdout:\n{}\nstderr:\n{}",
@@ -1488,7 +1873,7 @@ fn quality_backfill_cli_records_missing_trend_without_failing() -> Result<()> {
         .arg(&run)
         .arg("--window-days")
         .arg("30")
-        .output()?;
+        .fixture_output()?;
     assert!(
         output.status.success(),
         "quality-backfill should keep receipt-only historical runs\nstdout:\n{}\nstderr:\n{}",
@@ -3267,7 +3652,7 @@ command = "ub-review-test-missing-tokmd"
     assert!(output.contains("tokmd"));
     assert!(output.contains("Fixes:"));
     assert!(
-        output.contains("tokmd missing: cargo install tokmd --locked --version 1.12.0 --force")
+        output.contains("tokmd missing: cargo install tokmd --locked --version 1.15.0 --force")
     );
     assert!(output.contains("see Fixes above"));
     Ok(())
@@ -3276,13 +3661,11 @@ command = "ub-review-test-missing-tokmd"
 #[cfg(unix)]
 #[test]
 fn doctor_rejects_failed_version_probe_even_when_it_prints_the_pin() -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
     let temp = tempfile::tempdir()?;
     let config = temp.path().join(".ub-review.toml");
     let mut config_text = "profile = \"gh-runner\"\n".to_owned();
     for (tool, version) in [
-        ("tokmd", "1.12.0"),
+        ("tokmd", "1.15.0"),
         ("cargo-allow", "0.1.8"),
         ("ripr", "0.10.0"),
         ("unsafe-review", "0.3.4"),
@@ -3290,11 +3673,10 @@ fn doctor_rejects_failed_version_probe_even_when_it_prints_the_pin() -> Result<(
         ("actionlint", "1.7.12"),
     ] {
         let executable = temp.path().join(tool);
-        write_file(
+        write_executable_fixture(
             &executable,
             &format!("#!/bin/sh\nprintf '{tool} {version}\\n'\n"),
         )?;
-        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755))?;
         config_text.push_str(&format!(
             "\n[tools.{tool}]\ncommand = {:?}\n",
             path_str(&executable)?
@@ -3312,11 +3694,10 @@ fn doctor_rejects_failed_version_probe_even_when_it_prints_the_pin() -> Result<(
 
     for (label, redirect) in [("stdout", ""), ("stderr", " >&2")] {
         let executable = temp.path().join(format!("failed-probe-{label}"));
-        write_file(
+        write_executable_fixture(
             &executable,
-            &format!("#!/bin/sh\nprintf 'tokmd 1.12.0\\n'{redirect}\nexit 2\n"),
+            &format!("#!/bin/sh\nprintf 'tokmd 1.15.0\\n'{redirect}\nexit 2\n"),
         )?;
-        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755))?;
         let failed_config = temp.path().join(format!("failed-{label}.toml"));
         let failed_text = config_text.replace(
             &format!("command = {:?}", path_str(&temp.path().join("tokmd"))?),
@@ -3334,7 +3715,7 @@ fn doctor_rejects_failed_version_probe_even_when_it_prints_the_pin() -> Result<(
             ],
             &[],
         )?;
-        assert!(output.contains("tokmd expected 1.12.0, got no --version output"));
+        assert!(output.contains("tokmd expected 1.15.0, got no --version output"));
         assert!(output.contains("tokmd version unknown:"));
         let advisory = run_capture_with_env(
             temp.path(),
@@ -3405,10 +3786,10 @@ command = "ub-review-test-missing-tokmd"
         .find(|line| line.trim_start().starts_with("tokmd "))
         .context("doctor output missing tokmd tool row")?;
     assert!(tokmd_row.contains("missing"), "{tokmd_row}");
-    assert!(tokmd_row.contains("expected=1.12.0"), "{tokmd_row}");
+    assert!(tokmd_row.contains("expected=1.15.0"), "{tokmd_row}");
     assert!(output.contains("Fixes:"), "{output}");
     assert!(
-        output.contains("tokmd missing: cargo install tokmd --locked --version 1.12.0 --force"),
+        output.contains("tokmd missing: cargo install tokmd --locked --version 1.15.0 --force"),
         "{output}"
     );
     assert!(!output.contains("required core review tools missing from standard image"));
@@ -3423,7 +3804,7 @@ fn doctor_reports_advisory_stale_tool_fix_without_requiring_core_tools() -> Resu
     write_fake_core_review_tools_with_versions(
         &fake_bin,
         &[
-            ("tokmd", "1.12.0"),
+            ("tokmd", "1.15.0"),
             ("cargo-allow", "0.1.8"),
             ("ripr", "0.7.9"),
             ("unsafe-review", "0.3.4"),
@@ -3482,7 +3863,7 @@ command = "ub-review-test-missing-tokmd"
     assert!(output.contains("tokmd"));
     assert!(output.contains("Fixes:"));
     assert!(
-        output.contains("tokmd missing: cargo install tokmd --locked --version 1.12.0 --force")
+        output.contains("tokmd missing: cargo install tokmd --locked --version 1.15.0 --force")
     );
     assert!(output.contains("see Fixes above"));
     Ok(())
@@ -3511,12 +3892,12 @@ fn doctor_require_core_tools_fails_stale_tokmd_version() -> Result<()> {
         &[("PATH", path.as_str())],
     )?;
     assert!(output.contains("required core review tool versions drifted"));
-    assert!(output.contains("tokmd expected 1.12.0"));
+    assert!(output.contains("tokmd expected 1.15.0"));
     assert!(output.contains("tokmd 1.10.0"));
     assert!(output.contains("Fixes:"));
     assert!(
         output
-            .contains("tokmd version drift: cargo install tokmd --locked --version 1.12.0 --force")
+            .contains("tokmd version drift: cargo install tokmd --locked --version 1.15.0 --force")
     );
     assert!(output.contains("see Fixes above"));
     Ok(())
@@ -3530,7 +3911,7 @@ fn doctor_require_core_tools_fails_stale_cargo_allow_version() -> Result<()> {
     let fake_tools_written = write_fake_core_review_tools_with_versions(
         &fake_bin,
         &[
-            ("tokmd", "1.12.0"),
+            ("tokmd", "1.15.0"),
             ("cargo-allow", "0.1.7"),
             ("ripr", "0.10.0"),
             ("unsafe-review", "0.3.4"),
@@ -3578,7 +3959,7 @@ fn doctor_require_core_tools_fails_stale_actionlint_version() -> Result<()> {
     let fake_tools_written = write_fake_core_review_tools_with_versions(
         &fake_bin,
         &[
-            ("tokmd", "1.12.0"),
+            ("tokmd", "1.15.0"),
             ("cargo-allow", "0.1.8"),
             ("ripr", "0.10.0"),
             ("unsafe-review", "0.3.4"),
@@ -4109,7 +4490,7 @@ fn model_provider_fixture_ignores_ambient_event_body() -> Result<()> {
             "--nocapture",
         ])
         .env("GITHUB_EVENT_PATH", &event)
-        .output()?;
+        .fixture_output()?;
     assert!(
         output.status.success(),
         "ambient-event provider fixture failed\nstdout:\n{}\nstderr:\n{}",
@@ -4406,6 +4787,20 @@ path = "src/lib.rs"
 
 #[test]
 fn model_auto_run_retries_transient_primary_failure_on_provider_fallback() -> Result<()> {
+    model_auto_run_provider_session_headers("openai-chat", 1)
+}
+
+#[test]
+fn model_auto_run_anthropic_fallback_sends_provider_session_headers() -> Result<()> {
+    model_auto_run_provider_session_headers("anthropic-messages", 1)
+}
+
+#[test]
+fn model_auto_run_reused_output_gets_fresh_provider_sessions() -> Result<()> {
+    model_auto_run_provider_session_headers("openai-chat", 2)
+}
+
+fn model_auto_run_provider_session_headers(endpoint_kind: &str, invocations: usize) -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
     let repo = temp.path().join("repo");
@@ -4414,56 +4809,108 @@ fn model_auto_run_retries_transient_primary_failure_on_provider_fallback() -> Re
 
     let primary_key = "dummy-primary-key-for-fallback-test";
     let fallback_key = "dummy-fallback-key-for-fallback-test";
-    let (primary_url, primary_provider) = spawn_fake_openai_provider_with_statuses(vec![503])?;
-    let (fallback_url, fallback_provider) = spawn_fake_openai_provider(2)?;
+    let (primary_url, primary_provider) =
+        spawn_fake_openai_provider_with_statuses(vec![503; invocations])?;
+    let (fallback_url, fallback_provider) = spawn_fake_openai_provider(2 * invocations)?;
     let out = temp.path().join("packet");
     let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
     let bin = env!("CARGO_BIN_EXE_ub-review");
-    run_with_env(
-        temp.path(),
-        bin,
-        &[
-            "run",
-            "--dry-run",
-            "--config",
-            path_str(&config)?,
-            "--root",
-            path_str(&repo)?,
-            "--base",
-            "HEAD~1",
-            "--head",
-            "HEAD",
-            "--out",
-            path_str(&out)?,
-            "--no-github-summary",
-            "--model-mode",
-            "auto",
-            "--provider-policy",
-            "primary-with-fallback",
-            "--minimax-provider-kind",
-            "openai",
-            "--opencode-endpoint-kind",
-            "openai-chat",
-            "--lanes",
-            "correctness",
-            "--model-concurrency",
-            "1",
-            "--max-model-calls",
-            "1",
-            "--model-timeout-sec",
-            "10",
-        ],
-        &[
-            ("UB_REVIEW_MINIMAX_API_KEY", primary_key),
-            ("UB_REVIEW_MINIMAX_API_URL", primary_url.as_str()),
-            ("UB_REVIEW_OPENCODE_API_KEY", fallback_key),
-            ("UB_REVIEW_OPENCODE_API_URL", fallback_url.as_str()),
-        ],
-    )?;
+    for _ in 0..invocations {
+        run_with_env(
+            temp.path(),
+            bin,
+            &[
+                "run",
+                "--dry-run",
+                "--config",
+                path_str(&config)?,
+                "--root",
+                path_str(&repo)?,
+                "--base",
+                "HEAD~1",
+                "--head",
+                "HEAD",
+                "--out",
+                path_str(&out)?,
+                "--no-github-summary",
+                "--model-mode",
+                "auto",
+                "--provider-policy",
+                "primary-with-fallback",
+                "--minimax-provider-kind",
+                "openai",
+                "--opencode-endpoint-kind",
+                endpoint_kind,
+                "--lanes",
+                "correctness",
+                "--model-concurrency",
+                "1",
+                "--max-model-calls",
+                "1",
+                "--model-timeout-sec",
+                "10",
+            ],
+            &[
+                ("UB_REVIEW_MINIMAX_API_KEY", primary_key),
+                ("UB_REVIEW_MINIMAX_API_URL", primary_url.as_str()),
+                ("UB_REVIEW_OPENCODE_API_KEY", fallback_key),
+                ("UB_REVIEW_OPENCODE_API_URL", fallback_url.as_str()),
+            ],
+        )?;
+    }
     let primary_requests = join_fake_provider(primary_provider)?;
     let fallback_requests = join_fake_provider(fallback_provider)?;
-    assert_eq!(primary_requests.len(), 1);
-    assert_eq!(fallback_requests.len(), 2);
+    assert_eq!(primary_requests.len(), invocations);
+    assert_eq!(fallback_requests.len(), 2 * invocations);
+    let header = |request: &str, name: &str| {
+        request
+            .split("\r\n\r\n")
+            .next()
+            .unwrap_or_default()
+            .lines()
+            .find_map(|line| {
+                let (key, value) = line.split_once(':')?;
+                key.eq_ignore_ascii_case(name)
+                    .then(|| value.trim().to_owned())
+            })
+    };
+    assert_eq!(header(&primary_requests[0], "x-opencode-session"), None);
+    let mut sessions = Vec::new();
+    for request in &fallback_requests {
+        let session = header(request, "x-opencode-session")
+            .ok_or_else(|| anyhow::anyhow!("OpenCode preflight/lane missing session header"))?;
+        assert_eq!(session.len(), 64);
+        assert!(session.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        assert_eq!(
+            header(request, "user-agent"),
+            Some(format!("ub-review/{}", env!("CARGO_PKG_VERSION")))
+        );
+        assert_eq!(
+            header(request, "accept").as_deref(),
+            Some("application/json")
+        );
+        assert_eq!(
+            header(request, "content-type").as_deref(),
+            Some("application/json")
+        );
+        assert_eq!(
+            header(request, "authorization"),
+            Some(format!("Bearer {fallback_key}"))
+        );
+        sessions.push(session);
+    }
+    assert_ne!(
+        sessions[0], sessions[1],
+        "preflight and lane are distinct conversations"
+    );
+    assert_eq!(
+        sessions
+            .iter()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        2 * invocations,
+        "new processes reusing the same output must start fresh sessions"
+    );
 
     let preflights: serde_json::Value = serde_json::from_slice(&fs::read(
         out.join("review/provider-preflight-status.json"),
@@ -4518,6 +4965,276 @@ fn model_auto_run_retries_transient_primary_failure_on_provider_fallback() -> Re
         }
     }
     Ok(())
+}
+
+#[test]
+fn model_retry_starvation_retains_attempt_reporting() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let case = model_attempt_reporting_case(
+        vec![200, 429],
+        vec![200],
+        "1",
+        "correctness",
+        "primary-with-fallback",
+    )?;
+    assert_eq!(case["primary_requests"], 2);
+    assert_eq!(case["fallback_requests"], 1);
+    assert_eq!(case["metrics"]["models"]["model_lane_calls_attempted"], 1);
+    let lane = &case["review"]["model_lanes"][0];
+    assert_eq!(lane["lane"], "correctness");
+    assert_eq!(lane["status"], "skipped");
+    assert_eq!(lane["http_status"], 429);
+    assert_eq!(lane["attempt_count"], 1);
+    let reason = lane["reason"].as_str().context("lane reason")?;
+    assert!(
+        reason.contains("budget reached before fallback retry"),
+        "{reason}"
+    );
+    assert!(reason.contains("primary rate_limited"), "{reason}");
+    assert!(!reason.contains("before lane execution"), "{reason}");
+    assert_eq!(
+        case["review"]["missing_or_failed_model_evidence"][0]["reason"],
+        reason
+    );
+    assert_eq!(case["gate"]["model_coverage"]["lanes_usable"], 0);
+    assert_eq!(case["gate"]["model_coverage"]["budget_exhausted_lanes"], 1);
+    assert_eq!(case["gate"]["analysis_result"], "not_proven");
+    assert_eq!(case["gate"]["gate_result"], "not_proven");
+    Ok(())
+}
+
+#[test]
+fn model_partial_retry_starvation_counts_both_attempted_lanes() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let case = model_attempt_reporting_case(
+        vec![200, 200, 429],
+        vec![200],
+        "2",
+        "correctness,architecture",
+        "primary-with-fallback",
+    )?;
+    assert_eq!(case["primary_requests"], 3);
+    assert_eq!(case["fallback_requests"], 1);
+    assert_eq!(case["metrics"]["models"]["model_lane_calls_attempted"], 2);
+    let lanes = case["review"]["model_lanes"]
+        .as_array()
+        .context("lane receipts")?;
+    let first = lanes
+        .iter()
+        .find(|lane| lane["lane"] == "correctness")
+        .context("correctness receipt")?;
+    let second = lanes
+        .iter()
+        .find(|lane| lane["lane"] == "architecture")
+        .context("architecture receipt")?;
+    assert_eq!(first["status"], "ok");
+    assert_eq!(first["attempt_count"], 1);
+    assert_eq!(second["status"], "skipped");
+    assert_eq!(second["http_status"], 429);
+    assert_eq!(second["attempt_count"], 1);
+    let reason = second["reason"].as_str().context("starved reason")?;
+    assert!(
+        reason.contains("budget reached before fallback retry"),
+        "{reason}"
+    );
+    assert!(reason.contains("primary rate_limited"), "{reason}");
+    assert!(!reason.contains("before lane execution"), "{reason}");
+    assert_eq!(case["gate"]["model_coverage"]["lanes_usable"], 1);
+    assert_eq!(case["gate"]["model_coverage"]["budget_exhausted_lanes"], 1);
+    assert_ne!(case["gate"]["analysis_result"], "clean");
+    Ok(())
+}
+
+#[test]
+fn model_attempt_reporting_controls() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    for (
+        name,
+        primary,
+        fallback,
+        budget,
+        policy,
+        expected_status,
+        expected_requests,
+        expected_attempted,
+        expected_calls,
+    ) in [
+        (
+            "healthy",
+            vec![200, 200],
+            vec![200],
+            "1",
+            "primary-with-fallback",
+            "ok",
+            (2, 1),
+            1,
+            1,
+        ),
+        (
+            "never attempted",
+            vec![200],
+            vec![200],
+            "0",
+            "primary-with-fallback",
+            "skipped",
+            (1, 1),
+            0,
+            0,
+        ),
+        (
+            "no fallback",
+            vec![200, 429],
+            vec![],
+            "1",
+            "minimax-only",
+            "rate_limited",
+            (2, 0),
+            1,
+            1,
+        ),
+        (
+            "fallback succeeds",
+            vec![200, 429],
+            vec![200, 200],
+            "2",
+            "primary-with-fallback",
+            "ok",
+            (2, 2),
+            1,
+            2,
+        ),
+        (
+            "fallback fails",
+            vec![200, 429],
+            vec![200, 503],
+            "2",
+            "primary-with-fallback",
+            "failed",
+            (2, 2),
+            1,
+            2,
+        ),
+    ] {
+        let case = model_attempt_reporting_case(primary, fallback, budget, "correctness", policy)?;
+        assert_eq!(case["primary_requests"], expected_requests.0, "{name}");
+        assert_eq!(case["fallback_requests"], expected_requests.1, "{name}");
+        assert_eq!(
+            case["metrics"]["models"]["model_lane_calls_attempted"], expected_attempted,
+            "{name}"
+        );
+        let lane = &case["review"]["model_lanes"][0];
+        assert_eq!(lane["status"], expected_status, "{name}");
+        assert_eq!(lane["attempt_count"], expected_calls, "{name}");
+        let refuter = case["review"]["model_lanes"]
+            .as_array()
+            .context("model lanes")?
+            .iter()
+            .find(|lane| lane["lane"] == "refuter")
+            .context("refuter")?;
+        assert_eq!(refuter["attempt_count"], 0, "{name}");
+        if name == "never attempted" {
+            assert_eq!(
+                lane["reason"],
+                "model call budget reached before lane execution"
+            );
+            assert!(lane["http_status"].is_null());
+        }
+        if name.starts_with("fallback ") {
+            assert_eq!(
+                lane["fallback_from"], "minimax:MiniMax-M3:openai-chat",
+                "{name}"
+            );
+        }
+        assert_eq!(case["gate"]["conclusion"], "pass", "{name}");
+        assert_eq!(case["gate"]["analysis_result"], "not_proven", "{name}");
+        assert_eq!(case["gate"]["gate_result"], "not_proven", "{name}");
+    }
+    Ok(())
+}
+
+fn model_attempt_reporting_case(
+    primary_statuses: Vec<u16>,
+    fallback_statuses: Vec<u16>,
+    budget: &str,
+    lanes: &str,
+    policy: &str,
+) -> Result<serde_json::Value> {
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+    let content = serde_json::json!({
+        "summary": "", "inline_comments": [], "summary_only_findings": [],
+        "internal_audit": {"surfaces_checked": ["src/lib.rs:answer"]}
+    })
+    .to_string();
+    let (primary_url, primary) = spawn_fake_openai_provider_with_responses(
+        primary_statuses
+            .into_iter()
+            .map(|status| (status, content.clone()))
+            .collect(),
+    )?;
+    let (fallback_url, fallback) = spawn_fake_openai_provider_with_responses(
+        fallback_statuses
+            .into_iter()
+            .map(|status| (status, content.clone()))
+            .collect(),
+    )?;
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    run_with_env(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--no-github-summary",
+            "--posting",
+            "artifact-only",
+            "--model-mode",
+            "auto",
+            "--provider-policy",
+            policy,
+            "--minimax-provider-kind",
+            "openai",
+            "--opencode-endpoint-kind",
+            "openai-chat",
+            "--lanes",
+            lanes,
+            "--model-concurrency",
+            "1",
+            "--max-model-calls",
+            budget,
+            "--model-timeout-sec",
+            "3",
+        ],
+        &[
+            ("UB_REVIEW_MINIMAX_API_KEY", "dummy-local-primary"),
+            ("UB_REVIEW_MINIMAX_API_URL", primary_url.as_str()),
+            ("UB_REVIEW_OPENCODE_API_KEY", "dummy-local-fallback"),
+            ("UB_REVIEW_OPENCODE_API_URL", fallback_url.as_str()),
+        ],
+    )?;
+    let primary_requests = join_fake_provider(primary)?.len();
+    let fallback_requests = join_fake_provider(fallback)?.len();
+    let read = |name: &str| -> Result<serde_json::Value> {
+        Ok(serde_json::from_slice(&fs::read(
+            out.join("review").join(name),
+        )?)?)
+    };
+    Ok(serde_json::json!({
+        "primary_requests": primary_requests, "fallback_requests": fallback_requests,
+        "review": read("review.json")?, "metrics": read("metrics.json")?, "gate": read("gate_outcome.json")?
+    }))
 }
 
 #[test]
@@ -4620,6 +5337,123 @@ fn model_outage_degrades_review_without_reddening_enforced_gate() -> Result<()> 
         "gate_outcome must name why nothing was proven: {gate}"
     );
     assert_eq!(gate["model_coverage"]["lanes_usable"], 0);
+    Ok(())
+}
+
+/// A successful preflight does not grant credit to a later disconnected lane.
+/// Recovery reuses the same revision/output path so stale failure state cannot
+/// silently poison the next attempt. This is rerun recovery, not checkpointing.
+#[test]
+fn model_transport_failure_after_preflight_remains_incomplete_and_rerunnable() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let args = [
+        "run",
+        "--dry-run",
+        "--config",
+        path_str(&config)?,
+        "--root",
+        path_str(&repo)?,
+        "--base",
+        "HEAD~1",
+        "--head",
+        "HEAD",
+        "--out",
+        path_str(&out)?,
+        "--mode",
+        "intelligent-ci",
+        "--fail-on-gate",
+        "true",
+        "--no-github-summary",
+        "--model-mode",
+        "auto",
+        "--provider-policy",
+        "minimax-only",
+        "--minimax-provider-kind",
+        "openai",
+        "--lanes",
+        "correctness",
+        "--tools",
+        "cargo-allow",
+        "--model-concurrency",
+        "1",
+        "--max-model-calls",
+        "1",
+        "--model-timeout-sec",
+        "10",
+    ];
+    let mut failed_revision = None;
+    for recovering in [false, true] {
+        let (provider_url, provider) = if recovering {
+            spawn_fake_openai_provider(2)?
+        } else {
+            // First request succeeds (preflight), second disconnects (lane).
+            spawn_fake_openai_provider_with_statuses(vec![200, 0])?
+        };
+        run_with_env(
+            temp.path(),
+            bin,
+            &args,
+            &[
+                ("UB_REVIEW_MINIMAX_API_KEY", "dummy-transport-recovery-key"),
+                ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
+            ],
+        )?;
+        assert_eq!(join_fake_provider(provider)?.len(), 2);
+        let read = |path: &str| -> Result<serde_json::Value> {
+            Ok(serde_json::from_slice(&fs::read(out.join(path))?)?)
+        };
+        let preflight = read("review/provider-preflight-status.json")?;
+        assert_eq!(preflight[0]["status"], "ok");
+        let revision = read("input/revision-admission.json")?;
+        let review = read("review/review.json")?;
+        let lane = review["model_lanes"]
+            .as_array()
+            .and_then(|lanes| lanes.iter().find(|lane| lane["lane"] == "correctness"))
+            .ok_or_else(|| anyhow::anyhow!("correctness lane receipt missing"))?;
+        let gate = read("review/gate_outcome.json")?;
+        let terminal = read("review/terminal_state.json")?;
+        let gaps = review["missing_or_failed_model_evidence"]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("model evidence gaps missing"))?;
+        // Legacy advisory enforcement may pass while semantic review is missing.
+        assert_eq!(gate["conclusion"], "pass");
+        if recovering {
+            assert_eq!(failed_revision.as_ref(), Some(&revision));
+            assert_eq!(lane["status"], "ok");
+            assert_eq!(gate["model_coverage"]["lanes_usable"], 1);
+            assert_eq!(terminal["usable_model_lanes"], 1);
+            assert!(gaps.is_empty(), "stale model failure retained: {gaps:?}");
+        } else {
+            failed_revision = Some(revision);
+            assert_eq!(lane["status"], "failed");
+            // curl reports 000 when the peer closes without an HTTP response.
+            assert_eq!(lane["http_status"], 0);
+            assert_eq!(gate["model_coverage"]["lanes_usable"], 0);
+            assert_eq!(terminal["usable_model_lanes"], 0);
+            assert_eq!(gate["analysis_result"], "not_proven");
+            assert_eq!(gate["gate_result"], "not_proven");
+            assert_eq!(terminal["status"], "artifact-only");
+            assert!(
+                gaps.iter()
+                    .any(|gap| gap["lane"] == "correctness" && gap["status"] == "failed")
+            );
+            assert!(
+                gate["not_proven_reasons"]
+                    .as_array()
+                    .is_some_and(|reasons| !reasons.is_empty())
+            );
+            let lane_dir = out.join("review/model/correctness");
+            assert!(lane_dir.join("request.json").is_file());
+            assert!(!lane_dir.join("content.json").exists());
+            assert!(!fs::read_to_string(lane_dir.join("stderr.txt"))?.is_empty());
+        }
+    }
     Ok(())
 }
 
@@ -6716,7 +7550,7 @@ fn isolated_command_scrubs_ambient_profile_env_from_child_runs() -> Result<()> {
         .env("RUNNER_ENVIRONMENT", "github-hosted")
         .env("UB_SCRUB_REPO", &repo)
         .env("UB_SCRUB_OUT", &out)
-        .output()?;
+        .fixture_output()?;
     assert!(
         output.status.success(),
         "scrub driver failed\nstdout:\n{}\nstderr:\n{}",
@@ -7156,15 +7990,7 @@ fn main() {{
                 .find_map(|(name, version)| (*name == tool).then_some(*version))
                 .unwrap_or("0.0.0");
             let script = dir.join(tool);
-            write_file(&script, &format!("#!/bin/sh\necho \"{tool} {version}\"\n"))?;
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-
-                let mut permissions = fs::metadata(&script)?.permissions();
-                permissions.set_mode(0o755);
-                fs::set_permissions(&script, permissions)?;
-            }
+            write_executable_fixture(&script, &format!("#!/bin/sh\necho \"{tool} {version}\"\n"))?;
         }
     }
 
@@ -7222,8 +8048,14 @@ fn fake_setup_ci_listener_survives_handler_error() -> Result<()> {
     Ok(())
 }
 
+#[path = "cli/init_output.rs"]
+mod init_output;
+
 #[path = "cli/setup_ci.rs"]
 mod setup_ci;
+
+#[path = "cli/summary_evidence.rs"]
+mod summary_evidence;
 
 mod common;
 use common::*;
@@ -7274,8 +8106,31 @@ fn source_runner_requires_committed_regular_lockfile_before_locked_build() {
         Command::new("bash")
             .arg("fixtures/action-source-lockfile/contract.sh")
             .arg("action.yml")
-            .status()
+            .fixture_status()
             .is_ok_and(|status| status.success()),
         "source lockfile fixture failed"
     );
+}
+
+#[test]
+fn audit_ci_rejects_unrepresentable_history_window() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let mut command = isolated_command(env!("CARGO_BIN_EXE_ub-review"), temp.path());
+    let output = command
+        .env("GITHUB_TOKEN", "unused-test-token")
+        .env_remove("GITHUB_REPOSITORY")
+        .args([
+            "audit-ci",
+            "--repo",
+            "acme/widgets",
+            "--window-days",
+            "4294967295",
+        ])
+        .fixture_output()?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "unexpected success");
+    assert!(stderr.contains("window-days"), "unexpected error: {stderr}");
+    assert!(!stderr.contains("panicked"), "unexpected panic: {stderr}");
+    assert!(!temp.path().join("target/ub-review").exists());
+    Ok(())
 }

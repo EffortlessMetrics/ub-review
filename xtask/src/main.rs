@@ -108,7 +108,7 @@ cargo xtask commands
 
 precommit options
 
-  --staged                      inspect only staged changes
+  --staged                      inspect staged changes; requires index/worktree agreement
 
 ripr options
 
@@ -265,16 +265,20 @@ where
         }
     }
 
-    let untracked = git_lines(root, &["ls-files", "--others", "--exclude-standard"])?;
-    let untracked_rust: Vec<&str> = untracked
+    let untracked = git_paths(root, &["ls-files", "-z", "--others", "--exclude-standard"])?;
+    let untracked_rust: Vec<&[u8]> = untracked
         .iter()
-        .map(String::as_str)
+        .map(Vec::as_slice)
         .filter(|path| is_rust_input(path))
         .collect();
     if !untracked_rust.is_empty() {
         bail!(
             "untracked Rust inputs are not included in git diff: {}; add or stage them, then rerun `cargo xtask ripr`",
-            untracked_rust.join(", ")
+            untracked_rust
+                .iter()
+                .map(|path| format!("\"{}\"", path.escape_ascii()))
+                .collect::<Vec<_>>()
+                .join(", ")
         );
     }
 
@@ -292,7 +296,7 @@ where
             options.base
         );
     }
-    let changed = git_lines(root, &["diff", "--name-only", &merge_base, "--"])?;
+    let changed = git_paths(root, &["diff", "--name-only", "-z", &merge_base, "--"])?;
     let rust_changed = changed.iter().any(|path| is_rust_input(path));
     if changed.is_empty() || !rust_changed {
         let reason = if changed.is_empty() {
@@ -546,18 +550,21 @@ fn clip_text(text: String, head_bytes: usize, tail_bytes: usize, label: &str) ->
     )
 }
 
-fn is_rust_input(path: &str) -> bool {
-    path.ends_with(".rs") || path.ends_with("Cargo.toml") || path.ends_with("Cargo.lock")
+fn is_rust_input(path: &[u8]) -> bool {
+    path.ends_with(b".rs") || path.ends_with(b"Cargo.toml") || path.ends_with(b"Cargo.lock")
 }
 
-fn git_lines(root: &Path, args: &[&str]) -> Result<Vec<String>> {
+fn git_paths(root: &Path, args: &[&str]) -> Result<Vec<Vec<u8>>> {
     let output = git_bytes(root, args)?;
-    Ok(String::from_utf8_lossy(&output)
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(str::to_owned)
-        .collect())
+    Ok(parse_git_paths(&output))
+}
+
+fn parse_git_paths(output: &[u8]) -> Vec<Vec<u8>> {
+    output
+        .split(|byte| *byte == b'\0')
+        .filter(|path| !path.is_empty())
+        .map(<[u8]>::to_vec)
+        .collect()
 }
 
 fn git_bytes(root: &Path, args: &[&str]) -> Result<Vec<u8>> {
@@ -712,6 +719,11 @@ struct ClippyDiagnostic {
 
 fn run_precommit(root: &Path, options: PrecommitOptions) -> Result<PrecommitReport> {
     let out_dir = prepare_precommit_out_dir(root)?;
+    let staged_tree = if options.staged {
+        Some(precommit_staged_tree(root)?)
+    } else {
+        None
+    };
 
     let changed = changed_files(root, options.staged)?;
     let workspace = workspace_packages(root)?;
@@ -879,8 +891,17 @@ fn run_precommit(root: &Path, options: PrecommitOptions) -> Result<PrecommitRepo
     )?;
     receipts.push(ast_grep);
 
-    let summary =
+    if let Some(expected) = &staged_tree {
+        let actual = precommit_staged_tree(root)?;
+        if &actual != expected {
+            bail!("staged index changed during precommit; rerun against the final staged tree");
+        }
+    }
+    let mut summary =
         render_precommit_summary(options, &changed, &affected, &receipts, blocking_failures);
+    if let Some(tree) = staged_tree {
+        summary.push_str(&format!("\nValidated staged tree: `{tree}`.\n"));
+    }
     write_markdown(&out_dir.join("summary.md"), &summary)?;
 
     Ok(PrecommitReport {
@@ -888,6 +909,48 @@ fn run_precommit(root: &Path, options: PrecommitOptions) -> Result<PrecommitRepo
         summary_md: summary,
         blocking_failures,
     })
+}
+
+/// Refuse to label checks of a different working tree as staged validation.
+/// Check all tracked inputs and nonignored untracked files: Cargo can consume
+/// unstaged manifests, modules, includes and build inputs outside the diff.
+/// The before/after checks detect ordinary drift, not atomic snapshot custody.
+fn precommit_staged_tree(root: &Path) -> Result<String> {
+    let diff = Command::new("git")
+        .args([
+            "diff",
+            "--quiet",
+            "--no-ext-diff",
+            "--ignore-submodules=none",
+            "--",
+        ])
+        .current_dir(root)
+        .output()
+        .context("compare precommit worktree with staged index")?;
+    match diff.status.code() {
+        Some(0) => {}
+        Some(1) => bail!(
+            "precommit --staged requires the working tree to match the staged index; \
+             stage or save unstaged changes, or use precommit without --staged"
+        ),
+        _ => bail!(
+            "could not compare precommit worktree with staged index: {}",
+            bounded_text(&diff.stderr)
+        ),
+    }
+    if !git_bytes(root, &["ls-files", "--others", "--exclude-standard", "-z"])?.is_empty() {
+        bail!(
+            "precommit --staged cannot validate nonignored untracked inputs; \
+             stage or save those files, or use precommit without --staged"
+        );
+    }
+    let tree = git_bytes(root, &["write-tree"])?;
+    let tree = String::from_utf8(tree).context("decode staged precommit tree")?;
+    let tree = tree.trim();
+    if tree.is_empty() {
+        bail!("git write-tree returned no staged precommit tree");
+    }
+    Ok(tree.to_owned())
 }
 
 impl CommandReceipt {
@@ -916,7 +979,7 @@ fn skipped_receipt(name: &str, reason: &str) -> CommandReceipt {
 /// by the missing-tool receipts; versions track scripts/install-gh-runner-tools.sh.
 fn install_hint(name: &str) -> &'static str {
     match name {
-        "tokmd" => "cargo install tokmd --locked --version 1.12.0 --force",
+        "tokmd" => "cargo install tokmd --locked --version 1.15.0 --force",
         "cargo-allow" => "cargo install cargo-allow --locked",
         "ripr" => "cargo install ripr --locked --version 0.10.0 --force",
         "unsafe-review" => "cargo install unsafe-review --locked --version 0.3.4 --force",
@@ -952,42 +1015,54 @@ fn missing_receipt(name: &str) -> CommandReceipt {
 }
 
 fn changed_files(root: &Path, staged: bool) -> Result<Vec<ChangedFile>> {
-    let mut args = if staged {
-        vec!["diff", "--cached", "--name-only", "--diff-filter=ACMRTUXB"]
+    let args = if staged {
+        vec![
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z",
+            "--diff-filter=ACMRTUXB",
+        ]
     } else {
-        vec!["diff", "HEAD", "--name-only", "--diff-filter=ACMRTUXB"]
+        vec![
+            "diff",
+            "HEAD",
+            "--name-only",
+            "-z",
+            "--diff-filter=ACMRTUXB",
+        ]
     };
-    let output = command_output(root, "git", &args)?;
-    if !output.status.success() {
-        bail!(
-            "git changed-file detection failed: {}",
-            output.stderr.trim()
-        );
-    }
-
     let mut files = BTreeMap::new();
-    for line in output.stdout.lines() {
-        let path = line.trim();
-        if !path.is_empty() {
-            files.insert(path.to_owned(), BTreeSet::new());
+    for path in git_nul_paths(root, &args).context("detect changed paths")? {
+        // Git can classify invalid-text Rust as binary and emit no hunks.
+        // Validate admitted Rust explicitly rather than silently losing lines.
+        if path.ends_with(".rs") {
+            read_rust_source(root, &path)?;
         }
+        files.insert(path, BTreeSet::new());
     }
 
     if !staged {
-        args = vec!["ls-files", "--others", "--exclude-standard"];
-        let untracked = command_output(root, "git", &args)?;
-        if untracked.status.success() {
-            for line in untracked.stdout.lines() {
-                let path = line.trim();
-                if !path.is_empty() {
-                    files.insert(path.to_owned(), all_file_lines(root, path)?);
-                }
-            }
+        for path in git_nul_paths(root, &["ls-files", "--others", "--exclude-standard", "-z"])
+            .context("detect untracked paths")?
+        {
+            // Only Rust sources need line text. Binary assets retain their
+            // exact identity without being decoded as source text.
+            let lines = if path.ends_with(".rs") {
+                all_file_lines(root, &path)?
+            } else {
+                BTreeSet::new()
+            };
+            files.insert(path, lines);
         }
     }
 
     for (path, lines) in diff_changed_lines(root, staged)? {
-        files.entry(path).or_default().extend(lines);
+        if let Some(admitted) = files.get_mut(&path) {
+            admitted.extend(lines);
+        } else {
+            bail!("Git patch path {path:?} does not match an admitted changed path");
+        }
     }
 
     Ok(files
@@ -996,36 +1071,129 @@ fn changed_files(root: &Path, staged: bool) -> Result<Vec<ChangedFile>> {
         .collect())
 }
 
+fn git_nul_paths(root: &Path, args: &[&str]) -> Result<Vec<String>> {
+    git_bytes(root, args)?
+        .split(|byte| *byte == 0)
+        .filter(|record| !record.is_empty())
+        .map(|record| {
+            String::from_utf8(record.to_vec()).with_context(|| format!(
+                "precommit cannot classify non-UTF-8 Git path bytes {record:02x?}; use a UTF-8 path or a path-aware workflow"
+            ))
+        })
+        .collect()
+}
+
 fn diff_changed_lines(root: &Path, staged: bool) -> Result<BTreeMap<String, BTreeSet<u64>>> {
-    let args = if staged {
-        vec!["diff", "--cached", "--unified=0"]
-    } else {
-        vec!["diff", "HEAD", "--unified=0"]
-    };
-    let output = command_output(root, "git", &args)?;
-    if !output.status.success() {
-        bail!(
-            "git changed-line detection failed: {}",
-            output.stderr.trim()
-        );
-    }
+    let mut args = vec!["diff", if staged { "--cached" } else { "HEAD" }];
+    // Make the machine-parsed patch independent of display prefix settings
+    // and text converters. Source payload bytes do not need UTF-8 decoding.
+    args.extend([
+        "--no-ext-diff",
+        "--no-textconv",
+        "--src-prefix=a/",
+        "--dst-prefix=b/",
+        "--unified=0",
+        "--",
+    ]);
+    let output = git_bytes(root, &args).context("detect changed lines")?;
 
     let mut lines_by_file: BTreeMap<String, BTreeSet<u64>> = BTreeMap::new();
     let mut current: Option<String> = None;
-    for line in output.stdout.lines() {
-        if let Some(rest) = line.strip_prefix("+++ b/") {
-            current = Some(rest.to_owned());
-        } else if line.starts_with("@@")
-            && let Some(path) = current.as_ref()
-            && let Some((start, count)) = parse_hunk_added_range(line)
-        {
-            let entry = lines_by_file.entry(path.clone()).or_default();
-            for offset in 0..count {
-                entry.insert(start + offset);
+    let mut headers = false;
+    for line in output.split(|byte| *byte == b'\n') {
+        if line.starts_with(b"diff --git ") {
+            current = None;
+            headers = true;
+        } else if headers && let Some(header) = line.strip_prefix(b"+++ ") {
+            let header = std::str::from_utf8(header).context("decode Git patch path")?;
+            let header = if header.starts_with('"') {
+                header
+            } else {
+                header.strip_suffix('\t').unwrap_or(header)
+            };
+            let path = parse_git_patch_path(header).context("parse changed-file patch path")?;
+            current = if path == "/dev/null" {
+                None
+            } else {
+                Some(
+                    path.strip_prefix("b/")
+                        .context("Git patch path lacks b/ prefix")?
+                        .to_owned(),
+                )
+            };
+        } else if line.starts_with(b"@@") {
+            headers = false;
+            if let Some(path) = current.as_ref()
+                && let Some((start, count)) = parse_hunk_added_range(
+                    std::str::from_utf8(line).context("decode Git hunk header")?,
+                )
+            {
+                let entry = lines_by_file.entry(path.clone()).or_default();
+                for offset in 0..count {
+                    entry.insert(start + offset);
+                }
             }
         }
     }
     Ok(lines_by_file)
+}
+
+fn parse_git_patch_path(path: &str) -> Result<String> {
+    let bytes = path.as_bytes();
+    if bytes.first() != Some(&b'"') {
+        if path.is_empty() {
+            bail!("empty Git patch path");
+        }
+        return Ok(path.to_owned());
+    }
+    if bytes.len() < 2 || bytes.last() != Some(&b'"') {
+        bail!("unterminated quoted Git patch path");
+    }
+    let mut decoded = Vec::new();
+    let mut index = 1;
+    while index < bytes.len() - 1 {
+        let byte = bytes[index];
+        index += 1;
+        if byte == b'"' {
+            bail!("unescaped quote in Git patch path");
+        }
+        if byte != b'\\' {
+            decoded.push(byte);
+            continue;
+        }
+        if index >= bytes.len() - 1 {
+            bail!("Git path escape consumes closing quote");
+        }
+        let escaped = bytes[index];
+        index += 1;
+        decoded.push(match escaped {
+            b'"' | b'\\' => escaped,
+            b'a' => 7,
+            b'b' => 8,
+            b't' => b'\t',
+            b'n' => b'\n',
+            b'v' => 11,
+            b'f' => 12,
+            b'r' => b'\r',
+            b'0'..=b'7' => {
+                let mut value = u16::from(escaped - b'0');
+                for _ in 1..3 {
+                    if index >= bytes.len() - 1 || !(b'0'..=b'7').contains(&bytes[index]) {
+                        break;
+                    }
+                    value = value * 8 + u16::from(bytes[index] - b'0');
+                    index += 1;
+                }
+                u8::try_from(value).context("Git path escape exceeds one byte")?
+            }
+            other => bail!("unsupported Git path escape {other:#x}"),
+        });
+    }
+    if decoded.is_empty() || decoded.contains(&0) {
+        bail!("empty or NUL Git patch path");
+    }
+    String::from_utf8(decoded)
+        .context("Git patch path is not UTF-8; refusing to misattribute changed lines")
 }
 
 fn parse_hunk_added_range(line: &str) -> Option<(u64, u64)> {
@@ -1044,14 +1212,23 @@ fn parse_hunk_added_range(line: &str) -> Option<(u64, u64)> {
 }
 
 fn all_file_lines(root: &Path, relative: &str) -> Result<BTreeSet<u64>> {
-    let text = fs::read_to_string(root.join(relative))
-        .with_context(|| format!("read changed file {relative}"))?;
+    let text = read_rust_source(root, relative)?;
     let mut lines = BTreeSet::new();
     for (index, _) in text.lines().enumerate() {
         let number = u64::try_from(index).context("line number overflow")? + 1;
         lines.insert(number);
     }
     Ok(lines)
+}
+
+fn read_rust_source(root: &Path, relative: &str) -> Result<String> {
+    let bytes = fs::read(root.join(relative))
+        .with_context(|| format!("read changed Rust file {relative:?}"))?;
+    String::from_utf8(bytes).with_context(|| {
+        format!(
+            "changed Rust file {relative} is not valid UTF-8; cannot safely determine changed lines"
+        )
+    })
 }
 
 fn prepare_precommit_out_dir(root: &Path) -> Result<PathBuf> {
@@ -1162,13 +1339,13 @@ fn affected_packages(
         .context("canonicalize repository root")?;
     let mut affected = BTreeSet::new();
     for file in changed {
-        let normalized = normalize_path(&file.path);
+        let normalized = file.path.as_str();
         if normalized == "Cargo.lock" || normalized == "Cargo.toml" {
             affected.extend(packages.iter().map(|package| package.name.clone()));
             continue;
         }
 
-        let absolute = repo_absolute_path(&canonical_root, &normalized);
+        let absolute = repo_absolute_path(&canonical_root, normalized);
         if normalized.ends_with("Cargo.toml") {
             if let Some(package) = packages
                 .iter()
@@ -1237,16 +1414,13 @@ fn write_diff_artifact(root: &Path, out_dir: &Path, staged: bool) -> Result<Path
     } else {
         vec!["diff", "HEAD", "--unified=3"]
     };
-    let output = command_output(root, "git", &args)?;
-    if !output.status.success() {
-        bail!("git diff artifact failed: {}", output.stderr.trim());
-    }
+    let output = git_bytes(root, &args).context("write Git diff artifact")?;
     let path = out_dir.join(if staged {
         "staged.diff"
     } else {
         "working-tree.diff"
     });
-    fs::write(&path, output.stdout).with_context(|| format!("write {}", path.display()))?;
+    fs::write(&path, output).with_context(|| format!("write {}", path.display()))?;
     Ok(path)
 }
 
@@ -1258,7 +1432,7 @@ fn run_clippy_on_diff(
 ) -> Result<(Vec<CommandReceipt>, Vec<ClippyDiagnostic>)> {
     let changed_map = changed
         .iter()
-        .map(|file| (normalize_repo_path(root, &file.path), file.lines.clone()))
+        .map(|file| (file.path.clone(), file.lines.clone()))
         .collect::<BTreeMap<_, _>>();
     let mut receipts = Vec::new();
     let mut all_messages = Vec::new();
@@ -1663,7 +1837,12 @@ fn safe_name(name: &str) -> String {
 }
 
 fn normalize_path(path: &str) -> String {
-    path.trim_start_matches("./").replace('\\', "/")
+    let path = path.strip_prefix("./").unwrap_or(path);
+    if cfg!(windows) {
+        path.replace('\\', "/")
+    } else {
+        path.to_owned()
+    }
 }
 
 fn repo_absolute_path(canonical_root: &Path, path: &str) -> PathBuf {
@@ -1710,7 +1889,12 @@ fn repo_relative_path(root: &Path, candidate: &Path) -> Option<String> {
 }
 
 fn path_to_slash_string(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
+    let text = path.to_string_lossy();
+    if cfg!(windows) {
+        text.replace('\\', "/")
+    } else {
+        text.into_owned()
+    }
 }
 
 #[cfg(test)]
@@ -1749,6 +1933,244 @@ mod tests {
         let root = initialized_test_repo(name)?;
         fs::write(root.join("src/lib.rs"), "pub fn value() -> u8 { 2 }\n")?;
         Ok(root)
+    }
+
+    #[test]
+    fn local_ripr_quoted_paths_preserve_input_admission() -> Result<()> {
+        let paths: Vec<PathBuf> = [
+            "src/é.rs",
+            "src/regular.rs",
+            "src/with space.rs",
+            "crates/é/Cargo.toml",
+            "crates/é/Cargo.lock",
+        ]
+        .into_iter()
+        .map(PathBuf::from)
+        .collect();
+        #[cfg(unix)]
+        let paths = {
+            use std::ffi::OsStr;
+            use std::os::unix::ffi::OsStrExt;
+            let mut paths = paths;
+            paths.extend(
+                [
+                    b"src/tab\tfile.rs".as_slice(),
+                    b"src/new\nline.rs",
+                    b"crates/tab\tparent/Cargo.toml",
+                    b"crates/new\nparent/Cargo.lock",
+                    b"src/bad-\xff.rs",
+                ]
+                .into_iter()
+                .map(|path| PathBuf::from(OsStr::from_bytes(path))),
+            );
+            paths
+        };
+        for path in paths {
+            for tracked in [true, false] {
+                let root = initialized_test_repo("ripr-path-admission")?;
+                git_test(&root, &["config", "core.quotePath", "true"])?;
+                let file = root.join(&path);
+                fs::create_dir_all(file.parent().context("fixture path has no parent")?)?;
+                fs::write(&file, "initial\n")?;
+                if tracked {
+                    git_test(&root, &["add", "."])?;
+                    git_test(&root, &["commit", "-m", "path fixture"])?;
+                    fs::write(&file, "changed\n")?;
+                }
+                let calls = RefCell::new(0);
+                let result = run_local_ripr_with(
+                    &root,
+                    RiprOptions {
+                        base: "HEAD".to_owned(),
+                    },
+                    |_, args, _| {
+                        *calls.borrow_mut() += 1;
+                        let stdout = if args == ["--version"] {
+                            b"ripr 0.10.0\n".to_vec()
+                        } else if args.last().map(String::as_str) == Some("badge-json") {
+                            fake_badge(0, 0, 1)
+                        } else if args.last().map(String::as_str) == Some("json") {
+                            fake_detail(&["exposed"])
+                        } else {
+                            b"no exposure gaps\n".to_vec()
+                        };
+                        Ok(RiprInvocation {
+                            success: true,
+                            stdout,
+                            stderr: Vec::new(),
+                        })
+                    },
+                );
+                let out_dir = root.join("target/xtask/ripr");
+                if tracked {
+                    result?;
+                    assert_eq!(*calls.borrow(), 4, "tracked input {path:?} was skipped");
+                    let receipt: JsonValue =
+                        serde_json::from_slice(&fs::read(out_dir.join("receipt.json"))?)?;
+                    assert_eq!(receipt["status"], "completed");
+                    assert_eq!(
+                        fs::read(out_dir.join("diff.patch"))?,
+                        git_bytes(&root, &["diff", "--binary", "--no-ext-diff", "HEAD", "--"])?
+                    );
+                } else {
+                    let error = result
+                        .err()
+                        .with_context(|| format!("untracked input {path:?} was admitted"))?;
+                    let message = format!("{error:#}");
+                    assert!(message.contains("untracked Rust inputs"));
+                    assert_eq!(*calls.borrow(), 0);
+                    assert!(!out_dir.join("receipt.json").exists());
+                    assert!(!out_dir.join("diff.patch").exists());
+                }
+                fs::remove_dir_all(root)?;
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_ripr_git_paths_preserve_exact_nul_delimited_bytes() -> Result<()> {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        let root = initialized_test_repo("ripr-git-path-bytes")?;
+        let expected: Vec<Vec<u8>> = [
+            b"src/\xc3\xa9.rs".as_slice(),
+            b"src/tab\tfile.rs",
+            b"src/new\nline.rs",
+            b"src/bad-\xff.rs",
+            b" leading.rs\n",
+            b"notes.rs\ntrailing.md",
+        ]
+        .into_iter()
+        .map(<[u8]>::to_vec)
+        .collect();
+        for path in &expected {
+            fs::write(root.join(OsStr::from_bytes(path)), "fixture\n")?;
+        }
+        for quote_paths in ["true", "false"] {
+            git_test(&root, &["config", "core.quotePath", quote_paths])?;
+            assert_eq!(
+                git_paths(&root, &["ls-files", "-z", "--others", "--exclude-standard"])?,
+                vec![
+                    b" leading.rs\n".to_vec(),
+                    b"notes.rs\ntrailing.md".to_vec(),
+                    b"src/bad-\xff.rs".to_vec(),
+                    b"src/new\nline.rs".to_vec(),
+                    b"src/tab\tfile.rs".to_vec(),
+                    b"src/\xc3\xa9.rs".to_vec(),
+                ]
+            );
+        }
+        git_test(&root, &["add", "."])?;
+        git_test(&root, &["commit", "-m", "path bytes"])?;
+        for path in &expected {
+            fs::write(root.join(OsStr::from_bytes(path)), "changed\n")?;
+        }
+        for quote_paths in ["true", "false"] {
+            git_test(&root, &["config", "core.quotePath", quote_paths])?;
+            assert_eq!(
+                git_paths(&root, &["diff", "--name-only", "-z", "HEAD", "--"])?,
+                vec![
+                    b" leading.rs\n".to_vec(),
+                    b"notes.rs\ntrailing.md".to_vec(),
+                    b"src/bad-\xff.rs".to_vec(),
+                    b"src/new\nline.rs".to_vec(),
+                    b"src/tab\tfile.rs".to_vec(),
+                    b"src/\xc3\xa9.rs".to_vec(),
+                ]
+            );
+        }
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn local_ripr_path_decoder_splits_only_nul_and_preserves_literal_bytes() {
+        assert_eq!(parse_git_paths(b""), Vec::<Vec<u8>>::new());
+        assert_eq!(parse_git_paths(b"\0\0"), Vec::<Vec<u8>>::new());
+        assert_eq!(
+            parse_git_paths(b"src/only.rs\0"),
+            vec![b"src/only.rs".to_vec()]
+        );
+        assert_eq!(
+            parse_git_paths(b" trailing.rs "),
+            vec![b" trailing.rs ".to_vec()]
+        );
+        assert_eq!(
+            parse_git_paths(
+                b"src/lib.rs\0src/with space.rs\0src/new\nline.rs\0src/bad-\xff.rs\0 trailing.rs\n\0"
+            ),
+            vec![
+                b"src/lib.rs".to_vec(),
+                b"src/with space.rs".to_vec(),
+                b"src/new\nline.rs".to_vec(),
+                b"src/bad-\xff.rs".to_vec(),
+                b" trailing.rs\n".to_vec(),
+            ]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_ripr_untracked_diagnostic_distinguishes_original_path_bytes() -> Result<()> {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        let root = initialized_test_repo("ripr-untracked-path-diagnostics")?;
+        for path in [
+            b"src/bad-\xfe.rs".as_slice(),
+            b"src/bad-\xff.rs",
+            b"src/new\nline.rs",
+            b"src/\xc3\xa9.rs",
+        ] {
+            fs::write(root.join(OsStr::from_bytes(path)), "untracked\n")?;
+        }
+        let error = run_local_ripr_with(
+            &root,
+            RiprOptions {
+                base: "HEAD".to_owned(),
+            },
+            |_, _, _| Err(io::Error::other("untracked inputs invoked RIPR")),
+        )
+        .err()
+        .context("untracked paths unexpectedly admitted")?;
+        assert_eq!(
+            error.to_string(),
+            "untracked Rust inputs are not included in git diff: \"src/bad-\\xfe.rs\", \"src/bad-\\xff.rs\", \"src/new\\nline.rs\", \"src/\\xc3\\xa9.rs\"; add or stage them, then rerun `cargo xtask ripr`"
+        );
+        assert!(!root.join("target/xtask/ripr/receipt.json").exists());
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_ripr_embedded_rust_suffix_in_non_rust_path_stays_skipped() -> Result<()> {
+        let root = initialized_test_repo("ripr-non-rust-path-boundary")?;
+        let paths = ["notes.rs\ntrailing.md", "trailing.rs\n"];
+        for path in paths {
+            fs::write(root.join(path), "initial\n")?;
+        }
+        git_test(&root, &["add", "."])?;
+        git_test(&root, &["commit", "-m", "non-rust path"])?;
+        for path in paths {
+            fs::write(root.join(path), "changed\n")?;
+        }
+        run_local_ripr_with(
+            &root,
+            RiprOptions {
+                base: "HEAD".to_owned(),
+            },
+            |_, _, _| Err(io::Error::other("non-Rust input invoked RIPR")),
+        )?;
+        let receipt: JsonValue =
+            serde_json::from_slice(&fs::read(root.join("target/xtask/ripr/receipt.json"))?)?;
+        assert_eq!(receipt["status"], "skipped");
+        assert_eq!(receipt["reason"], "no Rust inputs changed");
+        fs::remove_dir_all(root)?;
+        Ok(())
     }
 
     #[test]
@@ -1959,10 +2381,12 @@ mod tests {
         let parsed =
             RiprOptions::parse(["--base", "upstream/main"].into_iter().map(str::to_owned))?;
         assert_eq!(parsed.base, "upstream/main");
-        assert!(is_rust_input("src/lib.rs"));
-        assert!(is_rust_input("crates/x/Cargo.toml"));
-        assert!(is_rust_input("Cargo.lock"));
-        assert!(!is_rust_input("docs/ci/ripr.md"));
+        assert!(is_rust_input(b"src/lib.rs"));
+        assert!(is_rust_input(b"crates/x/Cargo.toml"));
+        assert!(is_rust_input(b"Cargo.lock"));
+        assert!(!is_rust_input(b"docs/ci/ripr.md"));
+        assert!(!is_rust_input(b"notes.rs\ntrailing.md"));
+        assert!(!is_rust_input(b"trailing.rs\n"));
         let root = changed_rust_repo("ripr-out-dir-sentinel")?;
         let sentinel = root.join("sentinel.txt");
         fs::write(&sentinel, "preserve me")?;
@@ -2310,7 +2734,7 @@ mod tests {
         let expected = [
             (
                 "tokmd",
-                "cargo install tokmd --locked --version 1.12.0 --force",
+                "cargo install tokmd --locked --version 1.15.0 --force",
             ),
             ("cargo-allow", "cargo install cargo-allow --locked"),
             (
@@ -2406,6 +2830,36 @@ mod tests {
             .collect::<Vec<_>>()
     }
 
+    #[test]
+    fn git_patch_paths_decode_bytes_without_normalizing_identity() -> Result<()> {
+        for (encoded, decoded) in [
+            (r#""b/\303\251.rs""#, "b/é.rs"),
+            (r#""b/a\tb\nc\\d\".rs""#, "b/a\tb\nc\\d\".rs"),
+            (r#""b/\a\b\v\f\r""#, "b/\x07\x08\x0b\x0c\r"),
+            (r#""b/\1\12\1234""#, "b/\x01\nS4"),
+            ("b/ leading and trailing ", "b/ leading and trailing "),
+        ] {
+            assert_eq!(parse_git_patch_path(encoded)?, decoded);
+        }
+        for invalid in [
+            "",
+            "\"",
+            "\"\"",
+            "\"unterminated",
+            "\"a\\\"",
+            "\"a\"b\"",
+            r#""b/\q""#,
+            r#""b/\8""#,
+            r#""b/\400""#,
+            r#""b/\777""#,
+            r#""b/\377""#,
+            r#""b/\0""#,
+        ] {
+            assert!(parse_git_patch_path(invalid).is_err(), "{invalid:?}");
+        }
+        Ok(())
+    }
+
     fn write_bun_pin_docs(root: &Path, pin: &str, pr: &str) -> Result<()> {
         fs::create_dir_all(root.join("docs/calibration"))?;
         fs::create_dir_all(root.join("examples/bun/.github/workflows"))?;
@@ -2415,7 +2869,7 @@ mod tests {
         let files = [
             (
                 "README.md",
-                format!("{action_ref}\nvalidated by `{proof_ref}`\n"),
+                "See [the Bun runner guide](docs/GH_RUNNER_BUN.md).\n".to_owned(),
             ),
             (
                 "REPO_READY.md",
@@ -2476,9 +2930,62 @@ mod tests {
     #[test]
     fn bun_gate_pin_policy_accepts_consistent_docs() -> Result<()> {
         let root = temp_repo_root("bun-pin-consistent")?;
-        write_bun_pin_docs(&root, "217f123e688e42ddfce98eec5795b88bf457dd34", "45")?;
+        let pin = "217f123e688e42ddfce98eec5795b88bf457dd34";
+        write_bun_pin_docs(&root, pin, "45")?;
+
+        let readme = fs::read_to_string(root.join("README.md"))?;
+        assert!(readme.contains("docs/GH_RUNNER_BUN.md"));
+        assert!(!readme.contains(pin));
+        assert!(!readme.contains("EffortlessSteven/bun#45"));
 
         validate_bun_gate_pin(&root)?;
+
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
+    #[test]
+    fn bun_gate_pin_policy_rejects_missing_guide_pin() -> Result<()> {
+        let root = temp_repo_root("bun-pin-missing-guide-pin")?;
+        let pin = "217f123e688e42ddfce98eec5795b88bf457dd34";
+        write_bun_pin_docs(&root, pin, "45")?;
+        let guide = root.join("docs/GH_RUNNER_BUN.md");
+        let text = fs::read_to_string(&guide)?.replace(pin, "not-a-pin");
+        fs::write(&guide, text)?;
+
+        let error = match validate_bun_gate_pin(&root) {
+            Ok(()) => bail!("policy accepted a Bun guide without the current pin"),
+            Err(error) => error,
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("docs/GH_RUNNER_BUN.md must include the current Bun gate SHA pin"),
+            "{error:#}"
+        );
+
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
+    #[test]
+    fn bun_gate_pin_policy_rejects_missing_guide_proof() -> Result<()> {
+        let root = temp_repo_root("bun-pin-missing-guide-proof")?;
+        write_bun_pin_docs(&root, "217f123e688e42ddfce98eec5795b88bf457dd34", "45")?;
+        let guide = root.join("docs/GH_RUNNER_BUN.md");
+        let text = fs::read_to_string(&guide)?.replace("EffortlessSteven/bun#45", "bun proof");
+        fs::write(&guide, text)?;
+
+        let error = match validate_bun_gate_pin(&root) {
+            Ok(()) => bail!("policy accepted a Bun guide without the current proof reference"),
+            Err(error) => error,
+        };
+        assert!(
+            error.to_string().contains(
+                "docs/GH_RUNNER_BUN.md must reference current Bun gate proof EffortlessSteven/bun#45"
+            ),
+            "{error:#}"
+        );
 
         fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
         Ok(())
@@ -3217,7 +3724,6 @@ fn validate_ripr_suppressions(root: &Path) -> Result<()> {
 }
 
 const BUN_GATE_PIN_FILES: &[&str] = &[
-    "README.md",
     "REPO_READY.md",
     "RELEASE_NOTES.md",
     "RELEASE_NOTES_GH_RUNNER.md",
@@ -3309,7 +3815,6 @@ fn validate_current_bun_gate_ledger(root: &Path, pin: &str) -> Result<()> {
         bail!("current Bun gate ledger artifact must name the Bun packet artifact");
     }
 
-    require_current_bun_pr_reference(root, "README.md", pr, "EffortlessSteven/bun#")?;
     require_current_bun_pr_reference(root, "REPO_READY.md", pr, "EffortlessSteven/bun#")?;
     require_current_bun_pr_reference(root, "docs/GH_RUNNER_BUN.md", pr, "EffortlessSteven/bun#")?;
     require_current_bun_pr_reference(root, "docs/GH_RUNNER_SETUP.md", pr, "EffortlessSteven/bun#")?;

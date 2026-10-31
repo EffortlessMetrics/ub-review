@@ -13,6 +13,7 @@ use anyhow::Result;
 use crate::*;
 
 const DEFAULT_TARGET_PREFIX: &str = "cargo-test:";
+const UNSUPPORTED_KIND_REASON: &str = "unsupported proof kind; supported kinds: focused-test, focused-build, base-plus-tests. Choose one only if it answers the proof question; otherwise leave the proof unresolved.";
 
 #[derive(Clone, Debug)]
 struct ApprovedTarget {
@@ -89,13 +90,13 @@ pub(crate) fn resolve_model_proof_intents(
                 resolve_test_target(graph, diff, &intent.target)
             }
             ProofKind::FocusedBuild => resolve_build_target(graph, diff, &intent.target),
-            _ => Err("unsupported proof kind".to_owned()),
+            _ => Err(UNSUPPORTED_KIND_REASON.to_owned()),
         };
 
         let target = match target_result {
             Ok(target) => target,
             Err(reason) => {
-                resolved.status = if reason == "unsupported proof kind" {
+                resolved.status = if reason == UNSUPPORTED_KIND_REASON {
                     "unsupported_kind".to_owned()
                 } else if reason.starts_with("ambiguous") {
                     "ambiguous_target".to_owned()
@@ -113,7 +114,7 @@ pub(crate) fn resolve_model_proof_intents(
             ProofKind::FocusedBuild => "focused-build",
             _ => {
                 resolved.status = "unsupported_kind".to_owned();
-                resolved.resolution_reason = "unsupported proof kind".to_owned();
+                resolved.resolution_reason = UNSUPPORTED_KIND_REASON.to_owned();
                 resolved_intents.push(resolved);
                 continue;
             }
@@ -244,9 +245,11 @@ fn resolve_test_target(
     });
     match candidates.len() {
         1 => Ok(candidates.remove(0)),
-        0 => Err(format!("no approved focused test target matches `{label}`")),
+        0 => Err(format!(
+            "no approved focused test target matches `{label}`; choose a declared integration test using `cargo-test:<package>::<test>`"
+        )),
         count => Err(format!(
-            "ambiguous focused test target `{label}` matched {count} approved targets"
+            "ambiguous focused test target `{label}` matched {count} approved targets; choose one declared integration test using `cargo-test:<package>::<test>`"
         )),
     }
 }
@@ -303,12 +306,21 @@ fn resolve_build_target(
             .cmp(&(right.package.as_str(), right.target_name()))
     });
     match candidates.len() {
-        1 => Ok(candidates.remove(0)),
+        1 => {
+            let candidate = candidates.remove(0);
+            if let Some(target) = &candidate.target {
+                return Err(format!(
+                    "named focused build target `{label}` of kind `{}` is unsupported by the proof broker; choose `cargo-package:{}` only if package-level checking answers the proof question; otherwise leave the proof unresolved",
+                    target.kind, candidate.package
+                ));
+            }
+            Ok(candidate)
+        }
         0 => Err(format!(
-            "no approved focused build target matches `{label}`"
+            "no approved focused build target matches `{label}`; choose a declared package using `cargo-package:<package>`"
         )),
         count => Err(format!(
-            "ambiguous focused build target `{label}` matched {count} approved targets"
+            "ambiguous focused build target `{label}` matched {count} approved targets; choose a declared package using `cargo-package:<package>`"
         )),
     }
 }
@@ -558,7 +570,7 @@ mod tests {
         assert_eq!(result.intents[1].status, "unsupported_kind");
         assert_eq!(
             result.intents[1].resolution_reason,
-            "unsupported proof kind"
+            "unsupported proof kind; supported kinds: focused-test, focused-build, base-plus-tests. Choose one only if it answers the proof question; otherwise leave the proof unresolved."
         );
         assert_eq!(result.intents[2].status, "rejected_target");
         assert_eq!(result.intents[3].status, "invalid_timeout");
@@ -704,7 +716,7 @@ mod tests {
                 &diff(&[]),
                 "no-such-target"
             ))?,
-            "no approved focused test target matches `no-such-target`"
+            "no approved focused test target matches `no-such-target`; choose a declared integration test using `cargo-test:<package>::<test>`"
         );
         assert_eq!(
             expected_error(resolve_test_target(
@@ -712,43 +724,65 @@ mod tests {
                 &diff(&[]),
                 "cargo-package:ub-review"
             ))?,
-            "ambiguous focused test target `cargo-package:ub-review` matched 2 approved targets"
+            "ambiguous focused test target `cargo-package:ub-review` matched 2 approved targets; choose one declared integration test using `cargo-test:<package>::<test>`"
         );
         Ok(())
     }
 
     #[test]
-    fn library_build_resolution_produces_a_broker_approved_command() -> Result<()> {
+    fn library_build_template_preserves_named_target_refusal() -> Result<()> {
         let mut workspace = graph();
-        workspace.packages[0].targets.push(CargoTargetInfo {
+        let library = CargoTargetInfo {
             name: "library".to_owned(),
             kind: "lib".to_owned(),
             src_path: "src/lib.rs".to_owned(),
-        });
-        let target = resolve_build_target(&workspace, &diff(&[]), "cargo-target:ub-review/library")
-            .map_err(anyhow::Error::msg)?;
-        assert_eq!(target.target_name(), "library");
-        assert_eq!(
-            target.command,
-            "cargo check --locked --package ub-review --lib"
-        );
-        let spec = focused_build_command_spec(&target.command)
-            .ok_or_else(|| anyhow::anyhow!("resolved library command refused by broker"))?;
+        };
+        workspace.packages[0].targets.push(library.clone());
+        let command = build_command(&workspace.packages[0], Some(&library));
+        assert_eq!(command, "cargo check --locked --package ub-review --lib");
+        let spec = focused_build_command_spec(&command)
+            .ok_or_else(|| anyhow::anyhow!("library template refused by broker"))?;
         assert_eq!(
             spec.argv,
-            [
-                "cargo",
-                "check",
-                "--locked",
-                "--package",
-                "ub-review",
-                "--lib"
-            ]
+            ["cargo", "check", "--locked", "--package", "ub-review", "--lib"]
         );
         assert!(
             focused_build_command_spec("cargo check --locked --package ub-review --lib library")
                 .is_none()
         );
+
+        // Valid Cargo syntax does not authorize a named model intent.
+        for separator in ["::", "/"] {
+            let label = format!("cargo-target:ub-review{separator}library");
+            assert_eq!(
+                expected_error(resolve_build_target(&workspace, &diff(&[]), &label))?,
+                format!(
+                    "named focused build target `{label}` of kind `lib` is unsupported by the proof broker; choose `cargo-package:ub-review` only if package-level checking answers the proof question; otherwise leave the proof unresolved"
+                )
+            );
+        }
+        let package = resolve_build_target(&workspace, &diff(&[]), "cargo-package:ub-review")
+            .map_err(anyhow::Error::msg)?;
+        assert!(package.target.is_none());
+        assert_eq!(package.command, "cargo check --locked --package ub-review");
+        assert!(focused_build_command_spec(&package.command).is_some());
+
+        for (kind, flag) in [
+            ("bin", "--bin"),
+            ("test", "--test"),
+            ("example", "--example"),
+            ("bench", "--bench"),
+        ] {
+            let target = CargoTargetInfo {
+                name: "named".to_owned(),
+                kind: kind.to_owned(),
+                src_path: "fixture.rs".to_owned(),
+            };
+            assert_eq!(
+                build_command(&workspace.packages[0], Some(&target)),
+                format!("cargo check --locked --package ub-review {flag} named")
+            );
+        }
         Ok(())
     }
 
@@ -768,14 +802,14 @@ mod tests {
         );
         assert!(package_target.target.is_none());
 
-        let bin_target =
-            resolve_build_target(&workspace, &diff(&[]), "cargo-target:ub-review/ub-review")
-                .map_err(anyhow::Error::msg)?;
         assert_eq!(
-            bin_target.command,
-            "cargo check --locked --package ub-review --bin ub-review"
+            expected_error(resolve_build_target(
+                &workspace,
+                &diff(&[]),
+                "cargo-target:ub-review/ub-review"
+            ))?,
+            "named focused build target `cargo-target:ub-review/ub-review` of kind `bin` is unsupported by the proof broker; choose `cargo-package:ub-review` only if package-level checking answers the proof question; otherwise leave the proof unresolved"
         );
-        assert_eq!(bin_target.target_name(), "ub-review");
 
         let package = &workspace.packages[0];
         let lib = CargoTargetInfo {
@@ -811,7 +845,7 @@ mod tests {
                 &diff(&[]),
                 "no-such-package"
             ))?,
-            "no approved focused build target matches `no-such-package`"
+            "no approved focused build target matches `no-such-package`; choose a declared package using `cargo-package:<package>`"
         );
         assert_eq!(
             expected_error(resolve_build_target(
@@ -819,7 +853,7 @@ mod tests {
                 &diff(&[]),
                 "cargo-target:ub-review/no-such-target"
             ))?,
-            "no approved focused build target matches `cargo-target:ub-review/no-such-target`"
+            "no approved focused build target matches `cargo-target:ub-review/no-such-target`; choose a declared package using `cargo-package:<package>`"
         );
         assert_eq!(
             expected_error(resolve_test_target(
@@ -827,7 +861,7 @@ mod tests {
                 &diff(&[]),
                 "no-such-test-target"
             ))?,
-            "no approved focused test target matches `no-such-test-target`"
+            "no approved focused test target matches `no-such-test-target`; choose a declared integration test using `cargo-test:<package>::<test>`"
         );
         assert!(
             expected_error(resolve_test_target(
@@ -842,14 +876,14 @@ mod tests {
             .ok_or_else(|| anyhow::anyhow!("missing focused-test rejection"))?;
         assert_eq!(
             direct_test_error,
-            "no approved focused test target matches `no-such-test-target`"
+            "no approved focused test target matches `no-such-test-target`; choose a declared integration test using `cargo-test:<package>::<test>`"
         );
         let direct_build_error = resolve_build_target(&workspace, &diff(&[]), "no-such-package")
             .err()
             .ok_or_else(|| anyhow::anyhow!("missing focused-build rejection"))?;
         assert_eq!(
             direct_build_error,
-            "no approved focused build target matches `no-such-package`"
+            "no approved focused build target matches `no-such-package`; choose a declared package using `cargo-package:<package>`"
         );
         assert_eq!(
             request_key(
@@ -966,6 +1000,526 @@ mod tests {
         assert_eq!(defaulted_result.proof_requests[0].lane, "proof-planner");
         assert_eq!(defaulted_result.proof_requests[0].timeout_sec, 300);
         assert_eq!(defaulted_result.intents[0].status, "resolved");
+        Ok(())
+    }
+
+    #[test]
+    fn recovery_guidance_preserves_literal_rejection_and_resolution_controls() -> Result<()> {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        for kind in [
+            ProofKind::SanitizerWitness,
+            ProofKind::MutationWitness,
+            ProofKind::MiriWitness,
+            ProofKind::SourceRouteProbe,
+            ProofKind::ExternalCheck,
+        ] {
+            let mut request = intent(kind, "cli");
+            request
+                .resolved_request_ids
+                .push("stale-request".to_owned());
+            let result = resolve_model_proof_intents(root, &diff(&[]), &[request], &[], budget())?;
+            assert!(result.proof_requests.is_empty());
+            assert_eq!(result.intents[0].status, "unsupported_kind");
+            assert!(result.intents[0].resolved_request_ids.is_empty());
+            assert_eq!(
+                result.intents[0].resolution_reason,
+                "unsupported proof kind; supported kinds: focused-test, focused-build, base-plus-tests. Choose one only if it answers the proof question; otherwise leave the proof unresolved."
+            );
+        }
+        for (target, status) in [
+            ("absent-package::absent-test", "unsupported_target"),
+            ("module::unit_test_function", "unsupported_target"),
+            ("cargo-package:ub-review", "ambiguous_target"),
+            ("--test", "rejected_target"),
+            ("../../tests/cli.rs", "rejected_target"),
+            ("cli;cargo", "rejected_target"),
+            ("$(cargo)", "rejected_target"),
+        ] {
+            let result = resolve_model_proof_intents(
+                root,
+                &diff(&[]),
+                &[intent(ProofKind::FocusedTest, target)],
+                &[],
+                budget(),
+            )?;
+            assert!(result.proof_requests.is_empty(), "{target}");
+            assert_eq!(result.intents[0].status, status, "{target}");
+            assert!(
+                result.intents[0].resolved_request_ids.is_empty(),
+                "{target}"
+            );
+            if status != "rejected_target" {
+                assert!(
+                    result.intents[0]
+                        .resolution_reason
+                        .contains("declared integration test using `cargo-test:<package>::<test>`")
+                );
+            }
+        }
+        for timeout in [0, 301, 600] {
+            let mut request = intent(ProofKind::FocusedTest, "cargo-test:ub-review::cli");
+            request.timeout_sec = Some(timeout);
+            let result = resolve_model_proof_intents(root, &diff(&[]), &[request], &[], budget())?;
+            assert!(result.proof_requests.is_empty());
+            assert_eq!(result.intents[0].status, "invalid_timeout");
+            assert!(result.intents[0].resolved_request_ids.is_empty());
+        }
+        for (kind, target, command) in [
+            (
+                ProofKind::FocusedTest,
+                "cargo-test:ub-review::cli",
+                "cargo test --locked --package ub-review --test cli",
+            ),
+            (
+                ProofKind::BasePlusTests,
+                "cargo-test:ub-review::cli",
+                "cargo test --locked --package ub-review --test cli",
+            ),
+            (
+                ProofKind::FocusedBuild,
+                "cargo-package:ub-review",
+                "cargo check --locked --package ub-review",
+            ),
+            (
+                ProofKind::FocusedBuild,
+                "workspace",
+                "cargo check --locked --workspace",
+            ),
+        ] {
+            let result = resolve_model_proof_intents(
+                root,
+                &diff(&[]),
+                &[intent(kind, target)],
+                &[],
+                budget(),
+            )?;
+            assert_eq!(result.intents[0].status, "resolved");
+            assert_eq!(result.proof_requests.len(), 1);
+            assert_eq!(result.proof_requests[0].command, command);
+            assert_eq!(
+                result.intents[0].resolved_request_ids,
+                [result.proof_requests[0].id.clone()]
+            );
+            assert!(
+                focused_cargo_test_command_spec(command).is_some()
+                    || focused_build_command_spec(command).is_some()
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn build_rejections_explain_declared_package_recovery() -> Result<()> {
+        let mut workspace = graph();
+        let guidance = "; choose a declared package using `cargo-package:<package>`";
+        for target in ["absent-package", "cargo-target:ub-review/absent-target"] {
+            assert_eq!(
+                expected_error(resolve_build_target(&workspace, &diff(&[]), target))?,
+                format!("no approved focused build target matches `{target}`{guidance}")
+            );
+        }
+        let mut nested = workspace.packages[0].clone();
+        nested.name = "nested".to_owned();
+        nested.directory = "nested".to_owned();
+        workspace.packages.push(nested);
+        assert_eq!(
+            expected_error(resolve_build_target(
+                &workspace,
+                &diff(&["nested/src/lib.rs"]),
+                "nested/src/lib.rs"
+            ))?,
+            format!(
+                "ambiguous focused build target `nested/src/lib.rs` matched 2 approved targets{guidance}"
+            )
+        );
+        let selected = resolve_build_target(&workspace, &diff(&[]), "cargo-package:nested")
+            .map_err(anyhow::Error::msg)?;
+        assert_eq!(selected.command, "cargo check --locked --package nested");
+        Ok(())
+    }
+
+    fn named_target_fixture() -> Result<tempfile::TempDir> {
+        let temp = tempfile::tempdir()?;
+        std::fs::write(
+            temp.path().join("Cargo.toml"),
+            r#"[package]
+name = "proof-fixture"
+version = "0.0.0"
+edition = "2024"
+build = "build.rs"
+[workspace]
+[lib]
+name = "library"
+path = "library.rs"
+[[bin]]
+name = "app"
+path = "app.rs"
+[[test]]
+name = "integration"
+path = "integration.rs"
+[[example]]
+name = "demo"
+path = "demo.rs"
+test = true
+[[bench]]
+name = "speed"
+path = "speed.rs"
+"#,
+        )?;
+        for path in [
+            "library.rs",
+            "build.rs",
+            "app.rs",
+            "integration.rs",
+            "demo.rs",
+            "speed.rs",
+        ] {
+            std::fs::write(temp.path().join(path), "fn main() {}\n")?;
+        }
+        Ok(temp)
+    }
+
+    #[test]
+    fn named_build_intents_are_declined_before_scheduling() -> Result<()> {
+        let temp = named_target_fixture()?;
+        for (kind, target, command) in [
+            (
+                "bin",
+                "app",
+                "cargo check --locked --package proof-fixture --bin app",
+            ),
+            (
+                "test",
+                "integration",
+                "cargo check --locked --package proof-fixture --test integration",
+            ),
+            (
+                "example",
+                "demo",
+                "cargo check --locked --package proof-fixture --example demo",
+            ),
+            (
+                "bench",
+                "speed",
+                "cargo check --locked --package proof-fixture --bench speed",
+            ),
+        ] {
+            for separator in ["::", "/"] {
+                let label = format!("cargo-target:proof-fixture{separator}{target}");
+                let mut input = intent(ProofKind::FocusedBuild, &label);
+                input.resolved_request_ids.push("stale-request".to_owned());
+                let result =
+                    resolve_model_proof_intents(temp.path(), &diff(&[]), &[input], &[], budget())?;
+                assert_eq!(result.intents[0].status, "unsupported_target", "{label}");
+                assert_eq!(
+                    result.intents[0].resolution_reason,
+                    format!(
+                        "named focused build target `{label}` of kind `{kind}` is unsupported by the proof broker; choose `cargo-package:proof-fixture` only if package-level checking answers the proof question; otherwise leave the proof unresolved"
+                    )
+                );
+                assert!(result.intents[0].resolved_request_ids.is_empty());
+                assert!(result.proof_requests.is_empty());
+                assert!(focused_build_candidates_from_requests(&result.proof_requests).is_empty());
+                assert!(focused_test_candidates_from_requests(&result.proof_requests).is_empty());
+                let tasks = build_proof_planner_output(
+                    &diff(&[]),
+                    &Profile::default(),
+                    &result.proof_requests,
+                )?
+                .proof_tasks;
+                assert!(tasks.is_empty());
+                assert!(focused_build_command_spec(command).is_none());
+                let broker_status = proof_request_status(command, "focused-build");
+                assert_eq!(broker_status, "unsupported");
+                println!(
+                    "named_target_receipt {}",
+                    serde_json::json!({
+                        "intent": result.intents[0], "generated_requests": result.proof_requests,
+                        "declined_command": command, "broker_status": broker_status, "planner_tasks": tasks,
+                    })
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn remaining_named_build_kinds_are_declined_before_scheduling() -> Result<()> {
+        let temp = named_target_fixture()?;
+        for (kind, target) in [("lib", "library"), ("custom-build", "build-script-build")] {
+            for separator in ["::", "/"] {
+                let label = format!("cargo-target:proof-fixture{separator}{target}");
+                let mut input = intent(ProofKind::FocusedBuild, &label);
+                input.resolved_request_ids.push("stale-request".to_owned());
+                let result =
+                    resolve_model_proof_intents(temp.path(), &diff(&[]), &[input], &[], budget())?;
+                assert_eq!(result.intents[0].status, "unsupported_target", "{label}");
+                assert_eq!(
+                    result.intents[0].resolution_reason,
+                    format!(
+                        "named focused build target `{label}` of kind `{kind}` is unsupported by the proof broker; choose `cargo-package:proof-fixture` only if package-level checking answers the proof question; otherwise leave the proof unresolved"
+                    )
+                );
+                assert!(result.intents[0].resolved_request_ids.is_empty());
+                assert!(result.proof_requests.is_empty());
+                assert!(focused_build_candidates_from_requests(&result.proof_requests).is_empty());
+                assert!(focused_test_candidates_from_requests(&result.proof_requests).is_empty());
+                assert!(
+                    build_proof_planner_output(
+                        &diff(&[]),
+                        &Profile::default(),
+                        &result.proof_requests,
+                    )?
+                    .proof_tasks
+                    .is_empty()
+                );
+            }
+        }
+        assert!(
+            focused_build_command_spec(
+                "cargo check --locked --package proof-fixture --lib library"
+            )
+            .is_none()
+        );
+        assert!(
+            focused_build_command_spec("cargo check --locked --package proof-fixture").is_some()
+        );
+        let Some(mut graph) = parse_cargo_workspace(temp.path()) else {
+            anyhow::bail!("named-target fixture metadata is unavailable");
+        };
+        graph.packages[0].targets[0].kind = "future-target-kind".to_owned();
+        let target_name = &graph.packages[0].targets[0].name;
+        for separator in ["::", "/"] {
+            let label = format!("cargo-target:proof-fixture{separator}{target_name}");
+            assert_eq!(
+                resolve_build_target(&graph, &diff(&[]), &label).err(),
+                Some(format!(
+                    "named focused build target `{label}` of kind `future-target-kind` is unsupported by the proof broker; choose `cargo-package:proof-fixture` only if package-level checking answers the proof question; otherwise leave the proof unresolved"
+                ))
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn named_target_supported_intents_keep_exact_requests() -> Result<()> {
+        let temp = named_target_fixture()?;
+        for (kind, label, cost, command) in [
+            (
+                ProofKind::FocusedTest,
+                "cargo-test:proof-fixture::integration",
+                "focused-test",
+                "cargo test --locked --package proof-fixture --test integration",
+            ),
+            (
+                ProofKind::BasePlusTests,
+                "cargo-test:proof-fixture::integration",
+                "focused-test",
+                "cargo test --locked --package proof-fixture --test integration",
+            ),
+            (
+                ProofKind::FocusedBuild,
+                "cargo-package:proof-fixture",
+                "focused-build",
+                "cargo check --locked --package proof-fixture",
+            ),
+            (
+                ProofKind::FocusedBuild,
+                "workspace",
+                "focused-build",
+                "cargo check --locked --workspace",
+            ),
+        ] {
+            let result = resolve_model_proof_intents(
+                temp.path(),
+                &diff(&[]),
+                &[intent(kind, label)],
+                &[],
+                budget(),
+            )?;
+            assert_eq!(result.intents[0].status, "resolved");
+            assert_eq!(result.proof_requests.len(), 1);
+            let request = &result.proof_requests[0];
+            assert_eq!(request.command, command);
+            assert_eq!(request.cost, cost);
+            assert_eq!(request.timeout_sec, 300);
+            assert!(request.required);
+            assert_eq!(
+                result.intents[0].resolved_request_ids,
+                std::slice::from_ref(&request.id)
+            );
+            let test_tasks = focused_test_candidates_from_requests(&result.proof_requests);
+            let build_tasks = focused_build_candidates_from_requests(&result.proof_requests);
+            assert_eq!(
+                (test_tasks.len(), build_tasks.len()),
+                if cost == "focused-test" {
+                    (1, 0)
+                } else {
+                    (0, 1)
+                }
+            );
+            let spec = if cost == "focused-test" {
+                focused_cargo_test_command_spec(command)
+            } else {
+                focused_build_command_spec(command)
+            };
+            assert_eq!(
+                spec.map(|spec| spec.argv.join(" ")).as_deref(),
+                Some(command)
+            );
+            let broker_status = proof_request_status(command, cost);
+            assert_eq!(broker_status, "requested");
+            let tasks = build_proof_planner_output(
+                &diff(&[]),
+                &Profile::default(),
+                &result.proof_requests,
+            )?
+            .proof_tasks;
+            assert_eq!(tasks.len(), 1);
+            assert_eq!(tasks[0].request_ids, std::slice::from_ref(&request.id));
+            println!(
+                "named_target_receipt {}",
+                serde_json::json!({
+                    "intent": result.intents[0], "generated_requests": result.proof_requests,
+                        "test_tasks": test_tasks.len(), "build_tasks": build_tasks.len(), "broker_status": broker_status, "planner_tasks": tasks,
+                })
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn named_target_literal_admission_and_malicious_controls() -> Result<()> {
+        for (command, test, build) in [
+            (
+                "cargo test --locked --package proof-fixture --test integration",
+                true,
+                false,
+            ),
+            (
+                "cargo test --locked --package proof-fixture --bin app named_probe",
+                true,
+                false,
+            ),
+            (
+                "cargo test --locked --package proof-fixture --example demo named_probe",
+                true,
+                false,
+            ),
+            (
+                "cargo test --locked --package proof-fixture --bin app",
+                false,
+                false,
+            ),
+            (
+                "cargo test --locked --package proof-fixture --example demo",
+                false,
+                false,
+            ),
+            (
+                "cargo test --locked --package proof-fixture --bench speed named_probe",
+                false,
+                false,
+            ),
+            (
+                "cargo check --locked --package proof-fixture --bins",
+                false,
+                true,
+            ),
+            (
+                "cargo check --locked --package proof-fixture --tests",
+                false,
+                true,
+            ),
+            (
+                "cargo check --locked --package proof-fixture --examples",
+                false,
+                true,
+            ),
+            (
+                "cargo check --locked --package proof-fixture --benches",
+                false,
+                true,
+            ),
+            (
+                "cargo check --locked --package proof-fixture --bin app",
+                false,
+                false,
+            ),
+            (
+                "cargo check --locked --package proof-fixture --test integration",
+                false,
+                false,
+            ),
+            (
+                "cargo check --locked --package proof-fixture --example demo",
+                false,
+                false,
+            ),
+            (
+                "cargo check --locked --package proof-fixture --bench speed",
+                false,
+                false,
+            ),
+            (
+                "cargo check --locked --package proof-fixture --bins extra",
+                false,
+                false,
+            ),
+            (
+                "cargo test --locked --package proof-fixture --test integration -- --format json",
+                false,
+                false,
+            ),
+            (
+                "cargo test --locked --package proof-fixture --test integration && cargo build",
+                false,
+                false,
+            ),
+        ] {
+            assert_eq!(
+                focused_cargo_test_command_spec(command).is_some(),
+                test,
+                "{command}"
+            );
+            assert_eq!(
+                focused_build_command_spec(command).is_some(),
+                build,
+                "{command}"
+            );
+            assert_eq!(
+                proof_request_allowed_v0(command, "focused-test"),
+                test,
+                "{command}"
+            );
+            assert_eq!(
+                proof_request_allowed_v0(command, "focused-build"),
+                build,
+                "{command}"
+            );
+            println!(
+                "named_target_admission_receipt {}",
+                serde_json::json!({"command": command, "focused_test": proof_request_status(command, "focused-test"), "focused_build": proof_request_status(command, "focused-build")})
+            );
+        }
+        let temp = named_target_fixture()?;
+        for label in [
+            "cargo-target:proof-fixture::app --release",
+            "cargo-target:proof-fixture::app;cargo",
+            "cargo-target:proof-fixture::../app",
+            "cargo-target:proof-fixture::$(cargo)",
+        ] {
+            let result = resolve_model_proof_intents(
+                temp.path(),
+                &diff(&[]),
+                &[intent(ProofKind::FocusedBuild, label)],
+                &[],
+                budget(),
+            )?;
+            assert_eq!(result.intents[0].status, "rejected_target", "{label}");
+            assert!(result.proof_requests.is_empty());
+            assert!(result.intents[0].resolved_request_ids.is_empty());
+        }
         Ok(())
     }
 }

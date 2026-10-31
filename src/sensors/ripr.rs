@@ -70,10 +70,21 @@ pub(crate) fn ripr_exposure_gap_details_from_value(
         if !finding_ids.insert(id) {
             bail!("ripr detail contains duplicate finding id `{id}`");
         }
-        object
+        let classification = object
             .get("classification")
             .and_then(serde_json::Value::as_str)
             .with_context(|| format!("ripr finding `{id}` omitted classification"))?;
+        // Validate the pinned vocabulary before filtering: an unfamiliar
+        // class cannot establish a complete zero-gap projection. Known
+        // uncertainty classes remain non-gaps under the existing policy.
+        if !RIPR_GAP_CLASSIFICATIONS.contains(&classification)
+            && !matches!(
+                classification,
+                "exposed" | "infection_unknown" | "propagation_unknown" | "static_unknown"
+            )
+        {
+            bail!("ripr finding `{id}` has unsupported classification {classification:?}");
+        }
         let probe = object
             .get("probe")
             .and_then(serde_json::Value::as_object)
@@ -557,6 +568,133 @@ mod tests {
             kept["entries"][0]["expression"].as_str().context("kept")?,
             "y".repeat(200)
         );
+        Ok(())
+    }
+
+    #[test]
+    fn ripr_detail_rejects_unknown_classifications_before_filtering() -> Result<()> {
+        for class in ["", "   ", "future_class", "Weakly_exposed"] {
+            for classes in [vec![class], vec!["weakly_exposed", class]] {
+                let findings: Vec<_> = classes
+                    .iter()
+                    .enumerate()
+                    .map(|(index, class)| {
+                        serde_json::json!({
+                            "id": format!("probe:{index}"),
+                            "classification": class,
+                            "probe": {"file": "src/lib.rs", "line": 1},
+                        })
+                    })
+                    .collect();
+                let input = serde_json::json!({
+                    "schema_version": "0.2", "tool": "ripr", "mode": "ready",
+                    "summary": {"findings": findings.len()}, "findings": findings,
+                });
+                let error = super::ripr_exposure_gap_details_from_value(&input)
+                    .err()
+                    .with_context(|| format!("classification {class:?} was silently filtered"))?;
+                let message = error.to_string();
+                ensure!(message.contains("unsupported classification"), "{message}");
+                ensure!(message.contains(class), "{message}");
+                ensure!(
+                    message.contains(&format!("probe:{}", classes.len() - 1)),
+                    "{message}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn ripr_detail_writer_preserves_classification_gaps_and_recovers() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let dir = temp.path().join("sensors/ripr");
+        std::fs::create_dir_all(&dir)?;
+        // Reuse one output directory to distinguish unavailable detail from
+        // both a valid empty projection and stale results of a prior write.
+        for (class, expected_gaps) in [
+            ("exposed", Some(0)),
+            ("future_class", None),
+            ("weakly_exposed", Some(1)),
+            ("", None),
+            ("reachable_unrevealed", Some(1)),
+            ("no_static_path", Some(1)),
+            ("infection_unknown", Some(0)),
+            ("propagation_unknown", Some(0)),
+            ("static_unknown", Some(0)),
+        ] {
+            let stdout = serde_json::to_vec(&serde_json::json!({
+                "schema_version": "0.2", "tool": "ripr", "mode": "ready",
+                "summary": {"findings": 1},
+                "findings": [{
+                    "id": "probe:classification", "classification": class,
+                    "probe": {"file": "src/lib.rs", "line": 7},
+                }],
+            }))?;
+            let stderr = format!("classification fixture: {class}\n");
+            let mut runner =
+                |_root: &Path,
+                 _argv: &[String],
+                 _env: &BTreeMap<String, String>,
+                 _timeout: u64,
+                 stdout_path: &Path,
+                 stderr_path: &Path,
+                 _observer: &mut dyn FnMut(CommandProcessObservation)| {
+                    std::fs::write(stdout_path, &stdout)?;
+                    std::fs::write(stderr_path, &stderr)?;
+                    Ok(CommandStatus {
+                        exit_code: Some(0),
+                        timed_out: false,
+                        success: true,
+                        reason: "completed".to_owned(),
+                        duration_ms: 1,
+                    })
+                };
+            super::write_ripr_exposure_gap_details_with_runner(
+                temp.path(),
+                &dir,
+                "ripr",
+                30,
+                &mut |_| {},
+                &mut runner,
+            )?;
+            let detail: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(dir.join("exposure-gaps.json"))?)?;
+            assert_eq!(
+                std::fs::read(dir.join("exposure-gaps.ripr.stdout"))?,
+                stdout
+            );
+            assert_eq!(
+                std::fs::read_to_string(dir.join("exposure-gaps.ripr.stderr"))?,
+                stderr
+            );
+            assert_eq!(detail["semantics"], "raw_pre_policy");
+            assert_eq!(
+                detail["policy_authority"],
+                "sensors/ripr/gate-decision.json"
+            );
+            if let Some(count) = expected_gaps {
+                assert_eq!(detail["status"], "ok", "{class:?}");
+                assert_eq!(detail["total_raw_findings"], 1);
+                assert_eq!(detail["total_raw_gap_findings"], count);
+                assert_eq!(detail["entries"].as_array().map(Vec::len), Some(count));
+                if count == 1 {
+                    assert_eq!(detail["entries"][0]["classification"], class);
+                }
+            } else {
+                assert_eq!(detail["status"], "detail_unavailable", "{class:?}");
+                assert!(
+                    detail["error"]
+                        .as_str()
+                        .is_some_and(|error| error.contains("unsupported classification")
+                            && error.contains("probe:classification"))
+                );
+                assert!(detail.get("total_raw_gap_findings").is_none());
+                assert!(detail.get("entries").is_none());
+            }
+            assert!(!dir.join("exposure-gaps.stdout.tmp").exists());
+            assert!(!dir.join("exposure-gaps.stderr.tmp").exists());
+        }
         Ok(())
     }
 

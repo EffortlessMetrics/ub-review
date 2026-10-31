@@ -28,7 +28,7 @@ fn setup_ci_print_pr_cli_materializes_accepted_preview_files() -> Result<()> {
             "--action-sha",
             action_sha.as_str(),
         ]);
-    let output = command.output()?;
+    let output = command.fixture_output()?;
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     assert!(
@@ -191,7 +191,7 @@ fn setup_ci_open_pr_cli_creates_payloads_and_terminal_receipt() -> Result<()> {
             "--action-sha",
             action_sha.as_str(),
         ]);
-    let preview_output = preview.output()?;
+    let preview_output = preview.fixture_output()?;
     let preview_stdout = String::from_utf8_lossy(&preview_output.stdout).to_string();
     let preview_stderr = String::from_utf8_lossy(&preview_output.stderr).to_string();
     assert!(
@@ -222,7 +222,7 @@ fn setup_ci_open_pr_cli_creates_payloads_and_terminal_receipt() -> Result<()> {
             "--action-sha",
             action_sha.as_str(),
         ]);
-    let output = command.output()?;
+    let output = command.fixture_output()?;
     let requests = match handle.join() {
         Ok(result) => result?,
         Err(_) => bail!("fake setup-ci API thread panicked"),
@@ -398,6 +398,8 @@ fn setup_ci_print_pr_rejects_malformed_existing_config_before_outputs() -> Resul
         let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
             .current_dir(temp.path())
             .env_clear()
+            // Keep LLVM output outside the fixture without inheriting CLI configuration.
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .args(["setup-ci", "--print-pr", "--out"])
             .arg(&out)
             .arg("--config")
@@ -405,7 +407,7 @@ fn setup_ci_print_pr_rejects_malformed_existing_config_before_outputs() -> Resul
             .args(["--accept", "unit=cargo test --lib --locked"])
             .arg("--action-sha")
             .arg("d".repeat(40))
-            .output()?;
+            .fixture_output()?;
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
             !output.status.success(),
@@ -427,18 +429,18 @@ fn setup_ci_print_pr_rejects_malformed_existing_config_before_outputs() -> Resul
 }
 
 #[test]
-fn setup_ci_print_pr_rejects_unreadable_existing_config_before_outputs() -> Result<()> {
+fn setup_ci_print_pr_rejects_missing_or_unreadable_config_before_outputs() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
-    for directory in [true, false] {
+    for kind in ["directory", "non-text", "missing"] {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("target/ub-review");
         let audit = out.join("ci-audit");
         write_setup_ci_cli_audit_fixture(&audit)?;
         let config = temp.path().join("review config.toml");
-        if directory {
-            fs::create_dir(&config)?;
-        } else {
-            fs::write(&config, b"invalid-utf8-\xff")?;
+        match kind {
+            "directory" => fs::create_dir(&config)?,
+            "non-text" => fs::write(&config, b"invalid-utf8-\xff")?,
+            _ => {}
         }
         let before_paths = collect_relative_file_paths(temp.path())?;
         let before_bytes = before_paths
@@ -448,6 +450,8 @@ fn setup_ci_print_pr_rejects_unreadable_existing_config_before_outputs() -> Resu
         let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
             .current_dir(temp.path())
             .env_clear()
+            // Keep LLVM output outside the fixture without inheriting CLI configuration.
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .args(["setup-ci", "--print-pr", "--out"])
             .arg(&out)
             .arg("--config")
@@ -455,11 +459,11 @@ fn setup_ci_print_pr_rejects_unreadable_existing_config_before_outputs() -> Resu
             .args(["--accept", "unit=cargo test --lib --locked"])
             .arg("--action-sha")
             .arg("d".repeat(40))
-            .output()?;
+            .fixture_output()?;
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
             !output.status.success(),
-            "setup-ci accepted unreadable config (directory={directory})\n{stderr}"
+            "setup-ci accepted unreadable config (kind={kind})\n{stderr}"
         );
         assert!(stderr.contains(&format!("read {}", config.display())));
         assert!(
@@ -503,14 +507,17 @@ fn setup_ci_print_pr_preserves_missing_and_valid_config_semantics() -> Result<()
         command
             .current_dir(temp.path())
             .env_clear()
+            // Keep LLVM output outside the fixture without inheriting CLI configuration.
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .args(["setup-ci", "--print-pr", "--out"])
             .arg(&out)
-            .arg("--config")
-            .arg(&config)
             .args(["--accept", "unit=cargo test --lib --locked"])
             .arg("--action-sha")
             .arg("d".repeat(40));
-        let first = command.output()?;
+        if contents.is_some() {
+            command.arg("--config").arg(&config);
+        }
+        let first = command.fixture_output()?;
         assert!(
             first.status.success(),
             "setup-ci failed for a supported config: {}",
@@ -570,12 +577,293 @@ fn setup_ci_print_pr_preserves_missing_and_valid_config_semantics() -> Result<()
             .iter()
             .map(|relative| fs::read(temp.path().join(relative)))
             .collect::<std::io::Result<Vec<_>>>()?;
-        let second = command.output()?;
+        let second = command.fixture_output()?;
         assert!(
             second.status.success(),
             "repeated setup-ci failed: {}",
             String::from_utf8_lossy(&second.stderr)
         );
+        assert_eq!(first.stdout, second.stdout);
+        assert_eq!(first.stderr, second.stderr);
+        assert_eq!(collect_relative_file_paths(temp.path())?, first_paths);
+        for (relative, before) in first_paths.iter().zip(&first_bytes) {
+            assert_eq!(fs::read(temp.path().join(relative))?, *before);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn setup_ci_print_pr_rejects_invalid_action_sha_before_outputs() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let mut failures = Vec::new();
+    for action_sha in [
+        "deadbeef",
+        "0123456789abcdef0123456789abcdef0123456g",
+        "",
+        " \t\n ",
+        "main",
+        "0123456789abcdef0123456789abcdef01234567,abcdef0123456789abcdef0123456789abcdef01",
+    ] {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("target/ub-review");
+        let audit = out.join("ci-audit");
+        write_setup_ci_cli_audit_fixture(&audit)?;
+        fs::write(audit.join("migration-plan.md"), b"keep existing plan\n")?;
+        for relative in [
+            ".ub-review.toml",
+            ".github/workflows/ub-review-gate.yml",
+            "docs/ci/ub-review-migration.md",
+            "docs/ci/branch-protection-change.md",
+        ] {
+            let path = audit.join("preview").join(relative);
+            fs::create_dir_all(path.parent().context("preview sentinel parent")?)?;
+            fs::write(path, b"keep existing preview\n")?;
+        }
+        let before_paths = collect_relative_file_paths(temp.path())?;
+        let before_bytes = before_paths
+            .iter()
+            .map(|relative| fs::read(temp.path().join(relative)))
+            .collect::<std::io::Result<Vec<_>>>()?;
+        let output = Command::new(env!("CARGO_BIN_EXE_ub-review"))
+            .current_dir(temp.path())
+            .env_clear()
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
+            .args(["setup-ci", "--print-pr", "--out"])
+            .arg(&out)
+            .args(["--accept", "unit=cargo test --lib --locked"])
+            .arg("--action-sha")
+            .arg(action_sha)
+            .output()?;
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let after_paths = collect_relative_file_paths(temp.path())?;
+        let after_bytes = after_paths
+            .iter()
+            .map(|relative| fs::read(temp.path().join(relative)))
+            .collect::<std::io::Result<Vec<_>>>()?;
+        let paths_unchanged = after_paths == before_paths;
+        let bytes_unchanged = after_bytes == before_bytes;
+        if output.status.success()
+            || !stderr.contains(
+                "--action-sha must be the full 40-hex ub-review commit to pin in the generated workflow",
+            )
+            || !output.stdout.is_empty()
+            || stderr.contains("wrote ")
+            || !paths_unchanged
+            || !bytes_unchanged
+        {
+            failures.push(format!(
+                "SHA {action_sha:?}: status={}, stdout={:?}, stderr={stderr}, paths unchanged={paths_unchanged}, bytes unchanged={bytes_unchanged}, plan={:?}",
+                output.status,
+                String::from_utf8_lossy(&output.stdout),
+                fs::read_to_string(audit.join("migration-plan.md"))?,
+            ));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "invalid preview SHA must fail before output or regular-file changes:\n{}",
+        failures.join("\n")
+    );
+    Ok(())
+}
+
+#[test]
+fn setup_ci_print_pr_preserves_full_action_sha_and_replay() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    for (action_sha, expected_pin) in [
+        (
+            "0123456789abcdef0123456789abcdef01234567",
+            "        uses: EffortlessMetrics/ub-review@0123456789abcdef0123456789abcdef01234567",
+        ),
+        (
+            "0123456789aBcDeF0123456789AbCdEf01234567",
+            "        uses: EffortlessMetrics/ub-review@0123456789aBcDeF0123456789AbCdEf01234567",
+        ),
+        (
+            " \t0123456789aBcDeF0123456789AbCdEf01234567\n ",
+            "        uses: EffortlessMetrics/ub-review@0123456789aBcDeF0123456789AbCdEf01234567",
+        ),
+    ] {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("target/ub-review");
+        let audit = out.join("ci-audit");
+        write_setup_ci_cli_audit_fixture(&audit)?;
+        let input_paths = collect_relative_file_paths(temp.path())?;
+        let input_bytes = input_paths
+            .iter()
+            .map(|relative| fs::read(temp.path().join(relative)))
+            .collect::<std::io::Result<Vec<_>>>()?;
+        let mut command = Command::new(env!("CARGO_BIN_EXE_ub-review"));
+        command
+            .current_dir(temp.path())
+            .env_clear()
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
+            .args(["setup-ci", "--print-pr", "--out"])
+            .arg(&out)
+            .args(["--accept", "unit=cargo test --lib --locked"])
+            .arg("--action-sha")
+            .arg(action_sha);
+        let first = command.output()?;
+        assert!(
+            first.status.success(),
+            "supported full SHA failed: {}",
+            String::from_utf8_lossy(&first.stderr)
+        );
+        let plan = fs::read(audit.join("migration-plan.md"))?;
+        assert_eq!(first.stdout, plan);
+        assert!(
+            std::str::from_utf8(&plan)?
+                .contains("Fold 1 accepted job(s) into one required check `ub-review/gate`")
+        );
+        let preview = audit.join("preview");
+        assert_eq!(
+            collect_relative_file_paths(&preview)?,
+            vec![
+                ".github/workflows/ub-review-gate.yml",
+                ".ub-review.toml",
+                "docs/ci/branch-protection-change.md",
+                "docs/ci/ub-review-migration.md",
+            ]
+        );
+        let workflow = fs::read_to_string(preview.join(".github/workflows/ub-review-gate.yml"))?;
+        let pins = workflow
+            .lines()
+            .filter(|line| line.contains("uses: EffortlessMetrics/ub-review@"))
+            .collect::<Vec<_>>();
+        assert_eq!(pins, vec![expected_pin]);
+        for expected in [
+            "      - uses: actions/checkout@v5",
+            "          persist-credentials: false",
+            "          posting: artifact-only",
+            "          model-mode: 'off'",
+            "      - name: Upload ub-review artifacts",
+            "        uses: actions/upload-artifact@v7",
+        ] {
+            assert!(workflow.lines().any(|line| line == expected));
+        }
+        let generated: toml::Value =
+            toml::from_str(&fs::read_to_string(preview.join(".ub-review.toml"))?)?;
+        assert_eq!(
+            generated
+                .get("gate")
+                .and_then(|gate| gate.get("required_check"))
+                .and_then(toml::Value::as_str),
+            Some("ub-review/gate")
+        );
+        let proofs = generated
+            .get("proof")
+            .and_then(|proof| proof.get("required"))
+            .and_then(toml::Value::as_array)
+            .context("generated proof list")?;
+        assert_eq!(proofs.len(), 1);
+        let proof = proofs.first().context("unit proof")?;
+        assert_eq!(proof.get("id").and_then(toml::Value::as_str), Some("unit"));
+        assert_eq!(
+            proof.get("command").and_then(toml::Value::as_str),
+            Some("cargo test --lib --locked")
+        );
+        assert_eq!(
+            proof.get("required").and_then(toml::Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            proof.get("enabled").and_then(toml::Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            fs::read(preview.join("docs/ci/ub-review-migration.md"))?,
+            plan
+        );
+        assert!(
+            fs::read_to_string(preview.join("docs/ci/branch-protection-change.md"))?
+                .contains("Branch protection remains manual")
+        );
+        for (relative, before) in input_paths.iter().zip(&input_bytes) {
+            assert_eq!(fs::read(temp.path().join(relative))?, *before);
+        }
+        let first_paths = collect_relative_file_paths(temp.path())?;
+        let first_bytes = first_paths
+            .iter()
+            .map(|relative| fs::read(temp.path().join(relative)))
+            .collect::<std::io::Result<Vec<_>>>()?;
+        let second = command.output()?;
+        assert!(second.status.success());
+        assert_eq!(first.stdout, second.stdout);
+        assert_eq!(first.stderr, second.stderr);
+        assert_eq!(collect_relative_file_paths(temp.path())?, first_paths);
+        for (relative, before) in first_paths.iter().zip(&first_bytes) {
+            assert_eq!(fs::read(temp.path().join(relative))?, *before);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn setup_ci_print_pr_preserves_plan_only_sha_semantics() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    for accept_unit in [true, false] {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("target/ub-review");
+        let audit = out.join("ci-audit");
+        write_setup_ci_cli_audit_fixture(&audit)?;
+        let input_paths = collect_relative_file_paths(&audit)?;
+        let input_bytes = input_paths
+            .iter()
+            .map(|relative| fs::read(audit.join(relative)))
+            .collect::<std::io::Result<Vec<_>>>()?;
+        fs::create_dir_all(audit.join("preview"))?;
+        fs::write(audit.join("preview/keep.txt"), b"existing preview\n")?;
+        let mut command = Command::new(env!("CARGO_BIN_EXE_ub-review"));
+        command
+            .current_dir(temp.path())
+            .env_clear()
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
+            .args(["setup-ci", "--print-pr", "--out"])
+            .arg(&out);
+        if accept_unit {
+            command.args(["--accept", "unit=cargo test --lib --locked"]);
+        } else {
+            command.args(["--action-sha", "main"]);
+        }
+        let first = command.output()?;
+        assert!(first.status.success());
+        let plan = fs::read(audit.join("migration-plan.md"))?;
+        assert_eq!(first.stdout, plan);
+        if accept_unit {
+            assert!(
+                std::str::from_utf8(&plan)?
+                    .contains("Fold 1 accepted job(s) into one required check `ub-review/gate`")
+            );
+            assert!(!audit.join("preview").exists());
+            assert!(
+                String::from_utf8_lossy(&first.stderr)
+                    .contains("skipped setup-ci preview files; pass --action-sha <40-hex-sha>")
+            );
+        } else {
+            assert!(
+                std::str::from_utf8(&plan)?
+                    .contains("No jobs accepted into the generated gate policy")
+            );
+            assert_eq!(
+                collect_relative_file_paths(&audit.join("preview"))?,
+                vec!["keep.txt"]
+            );
+            assert_eq!(
+                fs::read(audit.join("preview/keep.txt"))?,
+                b"existing preview\n"
+            );
+        }
+        for (relative, before) in input_paths.iter().zip(&input_bytes) {
+            assert_eq!(fs::read(audit.join(relative))?, *before);
+        }
+        let first_paths = collect_relative_file_paths(temp.path())?;
+        let first_bytes = first_paths
+            .iter()
+            .map(|relative| fs::read(temp.path().join(relative)))
+            .collect::<std::io::Result<Vec<_>>>()?;
+        let second = command.output()?;
+        assert!(second.status.success());
         assert_eq!(first.stdout, second.stdout);
         assert_eq!(first.stderr, second.stderr);
         assert_eq!(collect_relative_file_paths(temp.path())?, first_paths);

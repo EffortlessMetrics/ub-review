@@ -193,8 +193,6 @@ struct UnsafeReviewSchemaProbe {
 #[derive(Deserialize)]
 struct UnsafeReviewCommentPlanEnvelope {
     #[serde(default)]
-    schema_version: Option<String>,
-    #[serde(default)]
     comments: Option<Vec<UnsafeReviewCommentPlanEntry>>,
 }
 
@@ -254,9 +252,11 @@ fn parse_comment_plan(
             "top-level value must be an object envelope".to_owned(),
         ));
     }
-    let envelope: UnsafeReviewCommentPlanEnvelope = serde_json::from_value(value)
+    // Route the discriminator before binding version-specific comments: a
+    // future schema may change their shape, which is not a v0.1 parse error.
+    let probe = UnsafeReviewSchemaProbe::deserialize(&value)
         .map_err(|err| UnsafeReviewIngestGap::CommentPlanMalformed(err.to_string()))?;
-    let Some(found_version) = envelope.schema_version else {
+    let Some(found_version) = probe.schema_version else {
         return Err(UnsafeReviewIngestGap::CommentPlanMissingField(
             "schema_version".to_owned(),
         ));
@@ -266,6 +266,8 @@ fn parse_comment_plan(
             found_version,
         ));
     }
+    let envelope: UnsafeReviewCommentPlanEnvelope = serde_json::from_value(value)
+        .map_err(|err| UnsafeReviewIngestGap::CommentPlanMalformed(err.to_string()))?;
     let Some(comments) = envelope.comments else {
         return Err(UnsafeReviewIngestGap::CommentPlanMissingField(
             "comments".to_owned(),
@@ -848,6 +850,51 @@ mod tests {
                 "comments[0].operation_family must be nonempty".to_owned()
             )
         );
+        Ok(())
+    }
+
+    #[test]
+    fn comment_plan_schema_routes_before_binding_versioned_comments() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir =
+            write_comment_plan_gate(&sensor_dir, r#"{"comment_plan":"comment-plan.json"}"#)?;
+        let plan_path = out_dir.join("comment-plan.json");
+        for comments in [
+            r#"{"future_candidates":[]}"#,
+            r#"[{"line":"future-anchor"}]"#,
+        ] {
+            fs::write(
+                &plan_path,
+                format!(r#"{{"schema_version":"0.2","comments":{comments}}}"#),
+            )?;
+            let gap = super::read_unsafe_review_artifacts(&sensor_dir)
+                .err()
+                .ok_or_else(|| anyhow::anyhow!("future schema unexpectedly parsed"))?;
+            assert_eq!(
+                gap,
+                super::UnsafeReviewIngestGap::CommentPlanUnknownSchema("0.2".to_owned()),
+                "future payload was interpreted as the pinned schema: {comments}"
+            );
+            let rendered = crate::render_unsafe_review_lane_evidence(&sensor_dir, "ok");
+            assert!(rendered.contains("schema_version `0.2` not recognised (known: `0.1`)"));
+            assert!(!rendered.contains("malformed"));
+            assert!(!rendered.contains("unsafe-review movement"));
+
+            // The same payload is malformed when it claims the known schema.
+            fs::write(
+                &plan_path,
+                format!(r#"{{"schema_version":"0.1","comments":{comments}}}"#),
+            )?;
+            assert!(matches!(
+                super::read_unsafe_review_artifacts(&sensor_dir).err(),
+                Some(super::UnsafeReviewIngestGap::CommentPlanMalformed(_))
+            ));
+        }
+        fs::write(&plan_path, r#"{"schema_version":"0.1","comments":[]}"#)?;
+        let recovered = super::read_unsafe_review_artifacts(&sensor_dir)
+            .map_err(|gap| anyhow::anyhow!("known schema did not recover: {gap:?}"))?;
+        assert!(recovered.comment_plan.is_empty());
         Ok(())
     }
 

@@ -26,6 +26,7 @@ mod config;
 use config::*;
 mod builtin;
 pub mod delivery_transaction;
+mod preflight_diagnostics;
 use builtin::*;
 mod gate;
 use gate::*;
@@ -158,9 +159,11 @@ mod summary_render;
 pub(crate) use summary_render::*;
 mod post_run_utils;
 pub(crate) use post_run_utils::*;
+mod version_probe;
+use version_probe::command_version;
 mod system_detect;
 use system_detect::{
-    command_path, command_version, detect_disk_free_mb, detect_load_1m, detect_mem_available_mb,
+    command_path, detect_disk_free_mb, detect_load_1m, detect_mem_available_mb,
     doctor_binary_install_status, git_tree_sha, profile_config_hash,
 };
 mod diff_posture;
@@ -1511,6 +1514,8 @@ struct ToolCacheReceipt {
     command: String,
     status: String,
     version: Option<String>,
+    probe_status: String,
+    probe_cleanup: String,
     rule_cache_dir: String,
     base_cache_dir: String,
 }
@@ -2598,6 +2603,10 @@ struct ModelLaneReceipt {
     http_status: Option<u16>,
     response_shape: Option<String>,
     fallback_from: Option<String>,
+    /// Calls dispatched for this lane, including runtime retries. Absent on
+    /// older receipts; never infer a known zero from an absent count.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    attempt_count: Option<usize>,
     #[serde(default)]
     cache_usage: ModelCacheUsage,
     /// Run-level cohort identity: one value per strict-cohort run, derived
@@ -2762,6 +2771,7 @@ mod cohort_contract_tests {
             http_status: Some(200),
             response_shape: None,
             fallback_from: None,
+            attempt_count: None,
             cache_usage: ModelCacheUsage::default(),
             cohort_id: "cohort:minimax:MiniMax-M3:abcdef012345".to_owned(),
             shared_prefix_hash: "abcdef0123456789".to_owned(),
@@ -2788,6 +2798,13 @@ mod cohort_contract_tests {
         assert_eq!(legacy.shared_prefix_hash, "");
         assert!(!legacy.cohort_broken);
         assert_eq!(legacy.turn, 0);
+        assert_eq!(legacy.attempt_count, None);
+        assert!(
+            !serde_json::to_value(&legacy)?
+                .as_object()
+                .context("receipt object")?
+                .contains_key("attempt_count")
+        );
         Ok(())
     }
 }
@@ -4218,10 +4235,15 @@ fn overlap_ms(left: &[LoopInterval], right: &[LoopInterval]) -> u128 {
 }
 
 fn cmd_doctor(args: DoctorArgs) -> Result<()> {
-    let config = Config::load_or_default(
-        &args.config,
+    let config = Config::load_requested(
+        args.config.as_deref(),
         runtime_profile_override(args.profile.as_ref(), args.runtime_profile.as_ref()),
     )?;
+    if let Some(diagnostic) =
+        preflight_diagnostics::config_diagnostic(&config, args.config.as_deref())
+    {
+        bail!("{diagnostic}");
+    }
     let profile = config.selected_profile()?;
     let box_state = BoxState::detect()?;
     let cache_root = cache_root_path(args.cache_dir.as_ref());
@@ -4265,11 +4287,8 @@ fn cmd_doctor(args: DoctorArgs) -> Result<()> {
         let command_path = command_path(&tool.command);
         let found = command_path.is_some();
         let status = if found { "found" } else { "missing" };
-        let version = if found {
-            command_version(&tool.command)
-        } else {
-            None
-        };
+        let probe = command_version(&tool.id, &tool.command);
+        let version = probe.version;
         let version_text = version.as_deref().unwrap_or("-");
         let path_text = command_path
             .as_ref()
@@ -4303,14 +4322,16 @@ fn cmd_doctor(args: DoctorArgs) -> Result<()> {
             })
         };
         println!(
-            "  {:<16} {:<8} {:<24} path={} version={} expected={} rule-cache={}",
+            "  {:<16} {:<8} {:<24} path={} version={} expected={} rule-cache={} probe={} cleanup={}",
             tool.id,
             status,
             tool.command,
             path_text,
             version_text,
             expected.unwrap_or("-"),
-            if rule_hit { "hit" } else { "miss" }
+            if rule_hit { "hit" } else { "miss" },
+            probe.state.label(),
+            probe.cleanup.label(),
         );
         if let Some(fix) = fix_entry {
             fixes.push(fix);
@@ -4375,8 +4396,8 @@ fn cmd_cache(args: CacheArgs) -> Result<()> {
 }
 
 fn cmd_cache_warm(args: CacheWarmArgs) -> Result<()> {
-    let config = Config::load_or_default(
-        &args.config,
+    let config = Config::load_requested(
+        args.config.as_deref(),
         runtime_profile_override(args.profile.as_ref(), args.runtime_profile.as_ref()),
     )?;
     let profile = config.selected_profile()?;
@@ -4397,12 +4418,15 @@ fn cmd_cache_warm(args: CacheWarmArgs) -> Result<()> {
         let tool_base_dir = base_dir.join(&tool.id);
         fs::create_dir_all(&rule_dir)?;
         fs::create_dir_all(&tool_base_dir)?;
-        let version = command_version(&tool.command);
+        let probe = command_version(&tool.id, &tool.command);
+        let version = probe.version;
         let tool_manifest = serde_json::json!({
             "schema_version": 1,
             "tool": tool.id,
             "command": tool.command,
             "version": version.clone(),
+            "probe_status": probe.state.label(),
+            "probe_cleanup": probe.cleanup.label(),
             "profile_hash": profile_hash,
             "base_tree_sha": base_tree_sha,
         });
@@ -4423,6 +4447,8 @@ fn cmd_cache_warm(args: CacheWarmArgs) -> Result<()> {
                 "missing".to_owned()
             },
             version,
+            probe_status: probe.state.label().to_owned(),
+            probe_cleanup: probe.cleanup.label().to_owned(),
             rule_cache_dir: rule_dir.display().to_string(),
             base_cache_dir: tool_base_dir.display().to_string(),
         });
@@ -4454,11 +4480,17 @@ fn cmd_cache_warm(args: CacheWarmArgs) -> Result<()> {
 fn cmd_plan(args: PlanArgs) -> Result<()> {
     let (config, diff, box_state, plan, revision) =
         prepare_plan(&args.review, args.allow_heavy, &args.selectors)?;
+    let diagnostic =
+        preflight_diagnostics::config_diagnostic(&config, args.review.config.as_deref());
+    if let Some(diagnostic) = &diagnostic {
+        eprintln!("{diagnostic}");
+    }
     print_plan(&plan, &box_state);
     if args.write {
+        let artifact_config = preflight_diagnostics::diagnostic_artifact_config(&config);
         write_plan_artifacts(
             &args.review.out,
-            &config,
+            &artifact_config,
             &diff,
             &box_state,
             &plan,
@@ -4469,6 +4501,9 @@ fn cmd_plan(args: PlanArgs) -> Result<()> {
                 effective_model_lanes: None,
             },
         )?;
+    }
+    if diagnostic.is_some() {
+        bail!("invalid configuration; correct the reported policy errors and retry");
     }
     Ok(())
 }
@@ -4646,7 +4681,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         evidence_loop,
         "completed",
     )?;
-    let preliminary_summary = render_summary(&args.review.out, &plan, &diff)?;
+    let preliminary_summary = render_preliminary_summary(&args.review.out, &plan, &diff)?;
     fs::write(
         args.review.out.join("running-summary.md"),
         &preliminary_summary,
@@ -4695,10 +4730,33 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
 }
 
 fn cmd_summary(args: SummaryArgs) -> Result<()> {
+    #[derive(Deserialize)]
+    struct SummaryPlanPhase {
+        schema: String,
+        run_pass: String,
+    }
+
     let plan: Plan = serde_json::from_slice(&fs::read(args.run_dir.join("plan.json"))?)?;
     let diff: DiffContext =
         serde_json::from_slice(&fs::read(args.run_dir.join("input/diff-context.json"))?)?;
-    let summary = render_summary(&args.run_dir, &plan, &diff)?;
+    let phase_path = args.run_dir.join("resolved-plan.json");
+    let recovery = "recover the original packet or create a new identified run";
+    let phase_bytes = fs::read(&phase_path)
+        .with_context(|| format!("cannot read {}; {recovery}", phase_path.display()))?;
+    let phase: SummaryPlanPhase = serde_json::from_slice(&phase_bytes)
+        .with_context(|| format!("cannot parse {}; {recovery}", phase_path.display()))?;
+    if phase.schema != RESOLVED_PLAN_SCHEMA {
+        bail!("unsupported schema in {}; {recovery}", phase_path.display());
+    }
+    let summary = match phase.run_pass.as_str() {
+        "plan-default" => render_preliminary_summary(&args.run_dir, &plan, &diff)?,
+        "opened" | "reopened" | "ready_for_review" | "synchronize" | "pull_request_other"
+        | "manual" => render_summary(&args.run_dir, &plan, &diff)?,
+        _ => bail!(
+            "unsupported or unresolved run_pass in {}; {recovery}",
+            phase_path.display()
+        ),
+    };
     fs::write(args.run_dir.join("running-summary.md"), summary)?;
     println!("wrote {}/running-summary.md", args.run_dir.display());
     Ok(())
@@ -6561,7 +6619,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
             model_lane_calls_attempted: review
                 .model_lanes
                 .iter()
-                .filter(|receipt| model_call_attempted_status(&receipt.status))
+                .filter(|receipt| model_lane_call_attempted(receipt))
                 .count(),
             model_fallbacks_used: review
                 .model_lanes
@@ -6969,7 +7027,7 @@ mod tests {
     fn doctor_tool_install_hints_name_exact_core_tool_fixes() {
         assert_eq!(
             super::doctor_tool_install_hint("tokmd"),
-            "cargo install tokmd --locked --version 1.12.0 --force"
+            "cargo install tokmd --locked --version 1.15.0 --force"
         );
         assert_eq!(
             super::doctor_tool_install_hint("cargo-allow"),
@@ -6992,8 +7050,8 @@ mod tests {
     #[test]
     fn doctor_version_fix_reinstalls_pinned_standard_image_tools() {
         assert_eq!(
-            super::doctor_tool_version_fix("tokmd", "1.12.0"),
-            "cargo install tokmd --locked --version 1.12.0 --force"
+            super::doctor_tool_version_fix("tokmd", "1.15.0"),
+            "cargo install tokmd --locked --version 1.15.0 --force"
         );
         assert_eq!(
             super::doctor_tool_version_fix("cargo-allow", "0.1.8"),
@@ -12832,6 +12890,194 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn model_lane_deferred_fallback_then_primary_success_has_primary_provenance() -> Result<()> {
+        assert_deferred_model_lane_provider(false)
+    }
+
+    #[test]
+    fn model_lane_deferred_fallback_then_primary_failure_gets_one_retry() -> Result<()> {
+        assert_deferred_model_lane_provider(true)
+    }
+
+    #[test]
+    fn model_lane_missing_key_preserves_selected_fallback_metadata() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let args = test_run_args(temp.path().join("out"));
+        let primary = direct_minimax_spec(&args);
+        let fallback = opencode_canary_spec(&args);
+        let assignments = vec![ModelAssignment {
+            lane: lane_plan("security"),
+            spec: primary.clone(),
+            fallback: Some(fallback.clone()),
+        }];
+        let preflights = vec![preflight_ok_receipt(&fallback)];
+        let mut model_lanes = vec![model_lane_receipt("security", "planned")];
+        let mut missing_or_failed_model_evidence = Vec::new();
+        let line_map = BTreeSet::new();
+
+        let calls = run_available_model_lanes_with_runner(
+            ModelRunContext {
+                root: temp.path(),
+                review_dir: temp.path(),
+                assignments: &assignments,
+                provider_preflights: &preflights,
+                shared_context: "shared context",
+                args: &args,
+                line_map: &line_map,
+                key_present: |_| false,
+                provider_concurrency: ProviderConcurrencyLimits::default(),
+            },
+            &mut model_lanes,
+            &mut missing_or_failed_model_evidence,
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            |_context, _model_dir, _tasks| {
+                anyhow::bail!("a missing-key lane must not reach the runner")
+            },
+        )?;
+
+        assert_eq!(calls, 0);
+        assert_eq!(model_lanes[0].status, "missing_key");
+        assert_eq!(model_lanes[0].provider, fallback.provider.key());
+        assert_eq!(model_lanes[0].model, fallback.model);
+        assert_eq!(model_lanes[0].endpoint_kind, fallback.endpoint_kind.key());
+        assert_eq!(model_lanes[0].fallback_from, Some(primary.label()));
+        assert_eq!(
+            model_lanes[0].reason,
+            format!(
+                "{} not provided; {} lane output unavailable",
+                super::model_api_key_label(fallback.provider),
+                fallback.provider.key()
+            )
+        );
+        assert_eq!(missing_or_failed_model_evidence.len(), 1);
+        assert_eq!(missing_or_failed_model_evidence[0].status, "missing_key");
+        Ok(())
+    }
+
+    fn assert_deferred_model_lane_provider(second_primary_fails: bool) -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut args = test_run_args(temp.path().join("out"));
+        args.max_model_calls = 4;
+        args.model_concurrency = 2;
+        let primary = direct_minimax_spec(&args);
+        let fallback = opencode_canary_spec(&args);
+        let assignments = ["security", "opposition"]
+            .into_iter()
+            .map(|lane| ModelAssignment {
+                lane: lane_plan(lane),
+                spec: primary.clone(),
+                fallback: Some(fallback.clone()),
+            })
+            .collect::<Vec<_>>();
+        let preflights = vec![
+            preflight_ok_receipt(&primary),
+            preflight_ok_receipt(&fallback),
+        ];
+        let mut model_lanes = assignments
+            .iter()
+            .map(|assignment| model_lane_receipt(&assignment.lane.id, "planned"))
+            .collect::<Vec<_>>();
+        let mut missing_or_failed_model_evidence = Vec::new();
+        let line_map = BTreeSet::new();
+        let waves = std::cell::RefCell::new(Vec::new());
+
+        let calls = run_available_model_lanes_with_runner(
+            ModelRunContext {
+                root: temp.path(),
+                review_dir: temp.path(),
+                assignments: &assignments,
+                provider_preflights: &preflights,
+                shared_context: "shared context",
+                args: &args,
+                line_map: &line_map,
+                key_present: |_| true,
+                provider_concurrency: ProviderConcurrencyLimits {
+                    minimax: Some(1),
+                    opencode_go: Some(1),
+                },
+            },
+            &mut model_lanes,
+            &mut missing_or_failed_model_evidence,
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            |_context, _model_dir, tasks| {
+                waves.borrow_mut().push(
+                    tasks
+                        .iter()
+                        .map(|task| (task.index, task.spec.provider))
+                        .collect::<Vec<_>>(),
+                );
+                Ok(tasks
+                    .into_iter()
+                    .map(|task| {
+                        let result = if task.spec.provider == ModelProvider::MiniMaxDirect
+                            && (task.index == 0 || second_primary_fails)
+                        {
+                            Err(anyhow::anyhow!(
+                                "model curl: http status Some(429) too many requests"
+                            ))
+                        } else {
+                            Ok(ModelCallOutcome {
+                                output: empty_lane_output(),
+                                duration_ms: 5,
+                                http_status: Some(200),
+                                response_shape: "anthropic-messages".to_owned(),
+                                cache_usage: ModelCacheUsage::default(),
+                                degraded: false,
+                            })
+                        };
+                        ModelLaneTaskResult {
+                            index: task.index,
+                            result,
+                        }
+                    })
+                    .collect())
+            },
+        )?;
+
+        // A's retry fills the fallback slot in wave two, so B must wait and
+        // then return to primary after the one-wave backpressure expires.
+        let mut expected_waves = vec![
+            vec![(0, ModelProvider::MiniMaxDirect)],
+            vec![(0, ModelProvider::OpenCodeGo)],
+            vec![(1, ModelProvider::MiniMaxDirect)],
+        ];
+        if second_primary_fails {
+            expected_waves.push(vec![(1, ModelProvider::OpenCodeGo)]);
+        }
+        assert_eq!(waves.into_inner(), expected_waves);
+        assert_eq!(calls, if second_primary_fails { 4 } else { 3 });
+        assert!(calls <= args.max_model_calls);
+        assert!(model_lanes.iter().all(|receipt| receipt.status == "ok"));
+        assert_eq!(model_lanes[0].fallback_from, Some(primary.label()));
+        let second = &model_lanes[1];
+        if second_primary_fails {
+            assert_eq!(second.provider, fallback.provider.key());
+            assert_eq!(second.model, fallback.model);
+            assert_eq!(second.fallback_from, Some(primary.label()));
+            assert_eq!(second.reason, "completed after runtime fallback retry");
+            assert!(second.cohort_broken);
+        } else {
+            assert_eq!(second.provider, primary.provider.key());
+            assert_eq!(second.model, primary.model);
+            assert_eq!(second.fallback_from, None);
+            assert_eq!(second.reason, "completed");
+            assert!(!second.cohort_broken);
+        }
+        assert!(missing_or_failed_model_evidence.is_empty());
+        Ok(())
+    }
+
+    #[test]
     fn model_lane_rate_limited_retry_provider_sheds_next_wave_to_fallback() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let mut args = test_run_args(temp.path().join("out"));
@@ -14789,12 +15035,37 @@ UB_REVIEW_HTTP_STATUS:429
             .spawn()
             .with_context(|| "spawn sleeper")?;
 
+        fs::write(&stdout_path, "SYNTHETIC_RESPONSE_VALUE_7329")?;
+        fs::write(&stderr_path, "SYNTHETIC_DIAGNOSTIC_VALUE_8421")?;
         let err = match wait_for_child_output_files(child, &stdout_path, &stderr_path, 1) {
             Ok(_) => return Err(anyhow::anyhow!("sleeper completed before timeout")),
             Err(err) => err,
         };
 
-        assert!(err.to_string().contains("timed out after 1s"));
+        assert_eq!(
+            err.to_string(),
+            "process timed out after 1s; output omitted from diagnostic"
+        );
+        assert_eq!(super::classify_model_error(&err), "timed_out");
+        assert!(!format!("{err:#}").contains("SYNTHETIC_RESPONSE_VALUE_7329"));
+        assert!(!format!("{err:#}").contains("SYNTHETIC_DIAGNOSTIC_VALUE_8421"));
+        assert!(!stdout_path.exists());
+        assert!(!stderr_path.exists());
+
+        let stdout = fs::File::create(&stdout_path)?;
+        let stderr = fs::File::create(&stderr_path)?;
+        let child = ProcessCommand::new(program)
+            .args(args)
+            .current_dir(temp.path())
+            .stdout(Stdio::from(stdout))
+            .stderr(Stdio::from(stderr))
+            .spawn()?;
+        fs::write(&stdout_path, "SYNTHETIC_SUCCESS_OUTPUT")?;
+        fs::write(&stderr_path, "SYNTHETIC_SUCCESS_DIAGNOSTIC")?;
+        let output = wait_for_child_output_files(child, &stdout_path, &stderr_path, 5)?;
+        assert!(output.status.success());
+        assert_eq!(output.stdout, b"SYNTHETIC_SUCCESS_OUTPUT");
+        assert_eq!(output.stderr, b"SYNTHETIC_SUCCESS_DIAGNOSTIC");
         assert!(!stdout_path.exists());
         assert!(!stderr_path.exists());
         Ok(())
@@ -18708,6 +18979,38 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn missing_proof_timeout_identifies_the_timed_out_command() {
+        let mut receipt = test_red_green_proof_receipt("timed_out", "timed_out");
+        let mut text = String::new();
+        // The status and flag independently carry timeout provenance.
+        for (status, flag) in [("timed_out", false), ("failed", true)] {
+            receipt.commands[1].status = status.to_owned();
+            receipt.commands[1].timed_out = flag;
+            text.clear();
+            super::render_missing_proof_receipt_summary(&mut text, &receipt);
+            assert!(text.contains("USE_SYSTEM_BUN=1 bun test"), "{text}");
+            assert!(!text.contains("bun bd test"), "{text}");
+        }
+
+        receipt.commands.truncate(1);
+        receipt.commands[0].status = "timed_out".to_owned();
+        receipt.commands[0].timed_out = true;
+        text.clear();
+        super::render_missing_proof_receipt_summary(&mut text, &receipt);
+        assert!(text.contains("bun bd test"), "{text}");
+
+        receipt.commands[0].timed_out = false;
+        receipt.commands[0].status = "passed".to_owned();
+        text.clear();
+        super::render_missing_proof_receipt_summary(&mut text, &receipt);
+        assert!(
+            text.contains("Focused proof timed out; details are in artifacts"),
+            "{text}"
+        );
+        assert!(!text.contains("bun bd test"), "{text}");
+    }
+
+    #[test]
     fn pr_review_body_collapses_timed_out_proof_to_missing_evidence() {
         let mut receipt = test_proof_receipt("timed_out", "timed_out");
         receipt.request_ids = vec!["markdown-red-green-witness".to_owned()];
@@ -19369,6 +19672,53 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn cost_tokens_sum_partial_usage_and_saturate() -> Result<()> {
+        let mut review = test_review_artifacts();
+        let mut first = model_lane_receipt("first", "ok");
+        first.cache_usage = super::ModelCacheUsage {
+            input_tokens: Some(10),
+            output_tokens: Some(u64::MAX),
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: Some(4),
+        };
+        let mut second = model_lane_receipt("second", "ok");
+        second.cache_usage = super::ModelCacheUsage {
+            input_tokens: None,
+            output_tokens: Some(1),
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: Some(12),
+        };
+        review.model_lanes = vec![first, second];
+        let totals = super::cost_tokens(&review, &[]);
+        let json = serde_json::to_value(&totals)?;
+        assert_eq!(json["fresh_input"], 6);
+        assert_eq!(json["cached_input"], 16);
+        assert_eq!(json["output"], u64::MAX);
+        review.model_lanes.reverse();
+        assert_eq!(
+            serde_json::to_value(super::cost_tokens(&review, &[]))?,
+            json
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn cost_rate_rejects_nonfinite_values() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        fs::create_dir_all(temp.path().join("policy"))?;
+        for value in ["nan", "inf", "-inf"] {
+            fs::write(
+                temp.path().join("policy/ci-budget.toml"),
+                format!("[budget]\nlinux_minute_rate_usd = {value}\n"),
+            )?;
+            let (rate, missing) = super::linux_minute_rate_usd(temp.path());
+            assert_eq!(rate, None);
+            assert!(missing.is_some());
+        }
+        Ok(())
+    }
+
+    #[test]
     fn floor_trend_records_single_run_without_history_overclaim() {
         let cost = super::CostReceipt {
             schema: super::COST_RECEIPT_SCHEMA,
@@ -19463,7 +19813,57 @@ index 1111111..2222222 100644
         assert!(missing_fields.contains("cache.cargo"));
 
         let serialized = serde_json::to_value(&receipt)?;
+        assert_eq!(
+            serialized["tokens"],
+            serde_json::json!({
+                "fresh_input": 0, "cached_input": 0, "output": 0
+            })
+        );
+        assert!(serialized["estimated_cost_usd"].is_null());
+        assert!(serialized["cost_basis"]["linux_minute_rate_usd"].is_null());
         assert!(serialized.get("suggested_fill_seconds").is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn cost_receipt_marks_overflowed_estimate_missing() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        fs::create_dir_all(temp.path().join("policy"))?;
+        fs::write(
+            temp.path().join("policy/ci-budget.toml"),
+            "[budget]\nlinux_minute_rate_usd = 1e308\n",
+        )?;
+        let review = test_review_artifacts();
+        let metrics = build_review_metrics(ReviewMetricsInput {
+            out: temp.path(),
+            diff: &test_diff(),
+            plan: &test_plan(Vec::new()),
+            review: &review,
+            github_review: None,
+            review_payload_status: "prepared",
+            observations_count: 0,
+            follow_up_results: &[],
+            final_follow_up_tasks: 0,
+            run: test_run_loop_metrics(),
+            elapsed: std::time::Duration::from_secs(1),
+            args: &test_run_args(temp.path().join("out")),
+        });
+        let receipt = build_cost_receipt(
+            temp.path(),
+            temp.path(),
+            &Config::default(),
+            &metrics,
+            &review,
+            &[],
+        );
+        let json = serde_json::to_value(&receipt)?;
+        assert!(json["estimated_cost_usd"].is_null());
+        assert!(
+            receipt
+                .missing
+                .iter()
+                .any(|missing| missing.field == "estimated_cost_usd")
+        );
         Ok(())
     }
 
@@ -22754,7 +23154,10 @@ index 1111111..2222222 100644
 
         // Fake GitHub API: search for "fresh" finds nothing then accepts the
         // create; search for "existing" returns one hit so no create happens.
-        let (api_url, handle) = spawn_fake_issue_broker_api(3)?;
+        let (api_url, handle) = spawn_fake_issue_broker_api(
+            3,
+            r#"{"html_url":"https://github.com/EffortlessMetrics/ripr-swarm/issues/9001"}"#,
+        )?;
         let args = PostArgs {
             review_json: review_dir.join("github-review.json"),
             diff_patch: None,
@@ -22810,25 +23213,105 @@ index 1111111..2222222 100644
         Ok(())
     }
 
+    #[test]
+    fn issue_broker_does_not_report_unconfirmed_create_responses_as_opened() -> Result<()> {
+        for response in [
+            "not-json",
+            "null",
+            "[]",
+            "{}",
+            r#"{"html_url":null}"#,
+            r#"{"html_url":42}"#,
+            r#"{"html_url":""}"#,
+            r#"{"html_url":"  \t\n"}"#,
+        ] {
+            let temp = tempfile::tempdir()?;
+            let plan_path = temp.path().join("issue_broker_plan.json");
+            fs::write(
+                &plan_path,
+                serde_json::to_vec(&vec![IssueBrokerPlanEntry {
+                    schema: "ub-review.issue_broker_plan.v1".to_owned(),
+                    candidate_id: "unconfirmed-create".to_owned(),
+                    fingerprint: "fresh".to_owned(),
+                    target_repo: "EffortlessMetrics/ripr-swarm".to_owned(),
+                    decision: "attempt".to_owned(),
+                    reason: "test".to_owned(),
+                    title: "Broker response test".to_owned(),
+                    body: "body".to_owned(),
+                    labels: Vec::new(),
+                }])?,
+            )?;
+            let (api_url, handle) = spawn_fake_issue_broker_api(2, response)?;
+            let args = PostArgs {
+                review_json: temp.path().join("github-review.json"),
+                diff_patch: None,
+                out: temp.path().to_owned(),
+                github_token: Some("test-token".to_owned()),
+                repo: Some("EffortlessMetrics/ub-review".to_owned()),
+                pull_number: Some(346),
+                github_api_url: api_url,
+                fail_on_post_error: false,
+            };
+            let results = execute_issue_broker(&args, &plan_path)?;
+            let requests = join_fake_issue_broker_api(handle)?;
+            assert_eq!(requests.len(), 2);
+            assert!(requests[0].starts_with("GET /search/issues"));
+            assert!(requests[1].starts_with("POST /repos/EffortlessMetrics/ripr-swarm/issues"));
+            write_issue_broker_results(&args.out, &results)?;
+            let json: Vec<serde_json::Value> = serde_json::from_slice(&fs::read(
+                args.out.join("review/issue_broker_results.json"),
+            )?)?;
+            let ndjson: serde_json::Value = serde_json::from_str(&fs::read_to_string(
+                args.out.join("issue_broker_results.ndjson"),
+            )?)?;
+            assert_eq!(json, vec![ndjson]);
+            assert_eq!(json[0]["candidate_id"], "unconfirmed-create");
+            assert_eq!(json[0]["action"], "failed_to_open", "response: {response}");
+            assert_eq!(
+                json[0]["reason"],
+                "GitHub issue creation was not confirmed by the response; the issue may have been created"
+            );
+            assert!(json[0].get("url").is_none());
+            if response == "not-json" {
+                assert!(
+                    json[0]["error"].as_str().is_some_and(
+                        |error| error.starts_with("parse GitHub issue create response:")
+                    )
+                );
+            } else {
+                assert_eq!(
+                    json[0]["error"],
+                    "GitHub issue create response omitted a nonempty html_url"
+                );
+            }
+        }
+        Ok(())
+    }
+
     fn spawn_fake_issue_broker_api(
         expected_requests: usize,
+        create_response: &str,
     ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
         let listener = TcpListener::bind("127.0.0.1:0")?;
         listener.set_nonblocking(true)?;
         let url = format!("http://{}", listener.local_addr()?);
+        let create_response = create_response.to_owned();
         let handle = thread::spawn(move || {
             serve_fake_http(
                 listener,
                 expected_requests,
                 "issue broker",
                 FAKE_HTTP_IDLE_DEADLINE,
-                |_idx, stream| handle_fake_issue_broker_request(stream),
+                |_idx, stream| handle_fake_issue_broker_request(stream, &create_response),
             )
         });
         Ok((url, handle))
     }
 
-    fn handle_fake_issue_broker_request(mut stream: TcpStream) -> Result<String> {
+    fn handle_fake_issue_broker_request(
+        mut stream: TcpStream,
+        create_response: &str,
+    ) -> Result<String> {
         stream.set_nonblocking(false)?;
         stream.set_read_timeout(Some(FAKE_HTTP_STREAM_TIMEOUT))?;
         stream.set_write_timeout(Some(FAKE_HTTP_STREAM_TIMEOUT))?;
@@ -22877,12 +23360,7 @@ index 1111111..2222222 100644
                 serde_json::to_vec(&serde_json::json!({"total_count": 0, "items": []}))?,
             )
         } else {
-            (
-                "HTTP/1.1 201 Created",
-                serde_json::to_vec(&serde_json::json!({
-                    "html_url": "https://github.com/EffortlessMetrics/ripr-swarm/issues/9001"
-                }))?,
-            )
+            ("HTTP/1.1 201 Created", create_response.as_bytes().to_vec())
         };
         write!(
             stream,
@@ -24273,6 +24751,7 @@ index 1111111..2222222 100644
             http_status: None,
             response_shape: None,
             fallback_from: None,
+            attempt_count: None,
             cache_usage: super::ModelCacheUsage::default(),
             cohort_id: String::new(),
             shared_prefix_hash: String::new(),
@@ -24736,7 +25215,7 @@ index 1111111..2222222 100644
                 trusted_head_sha: None,
                 trusted_changed_files: None,
                 trusted_diff_patch: None,
-                config: Path::new(".ub-review.toml").to_path_buf(),
+                config: None,
                 out,
                 profile: None,
                 runtime_profile: None,

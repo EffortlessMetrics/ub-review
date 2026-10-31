@@ -90,3 +90,46 @@ using the same review-profile and repository-kind arguments recorded by the
 run. Reject the artifact if the run `headSha` does not equal the reviewed
 commit; the verifier validates the receipt schema and complete raw-ID join but
 cannot infer which commit a manually selected download represented.
+
+## Source compatibility comparison (not promotion)
+
+The packet verifier has a separate, explicit comparison mode for the native
+badge0.8/raw0.2/typed-outcome0.1 source contract tracked by #813:
+
+```text
+python scripts/verify-bun-review-artifacts.py <comparison-root> --ripr-source-comparison
+```
+
+Supply the frozen `input/diff.patch` and the four existing `sensors/ripr/`
+files: original `gate-decision.json`, complete v3 `exposure-gaps.json`, and
+preserved `exposure-gaps.ripr.stdout`/`.stderr`. Preserve the original versions;
+never relabel0.8 as0.6. This mode checks only that RIPR artifact pair. It rejects
+full-packet validation flags so a successful comparison cannot imply that model,
+review, revision-admission or delivery evidence was checked.
+
+The bounded source contract requires complete, limitation-free typed outcomes,
+matching badge/raw outcomes and the actual frozen diff digest, known Rust-only
+findings, explicit `candidate_current`/`base_deleted` currentness, and the known
+`include_unknowns=false` policy. It refuses unknown versions, partial outcomes,
+missing currentness, duplicate JSON keys or finding IDs, stale inputs, and
+inconsistent projected identities/classes/locations. Nonempty `preview_skipped`
+also fails, including with `warn`/`fail` status or zero current gaps: skipped
+languages contradict this complete source contract. Other source contracts need
+their own reviewed acceptance; schema-shaped counts alone are insufficient.
+
+All raw findings and gap entries stay in the audit projection. Only the
+producer-declared current Rust gap rows reconcile with the badge partition;
+deleted rows remain visible. Limitation metadata supplies no exposure credit.
+For the frozen ac47/M21 comparison this means52 raw findings,20 raw gaps and18
+current gaps. Eighteen remains nonzero under the unchanged strict18/max0 policy.
+The badge remains the suppression-partition authority; the verifier does not
+assign suppression state to individual IDs.
+
+Default full-packet verification still requires the pinned RIPR0.10.0 badge0.6
+contract. This opt-in comparison does not change #1347's separate badge0.5/0.6
+Rust parser, select a tool, verify executable provenance, prove a source checkout
+or environment, qualify a released/installed bundle, or clear a Required gate.
+A matching diff digest alone cannot prove those identities. Retain exact
+producer binary/source, consumer head/base/config/environment and artifact
+receipts alongside the comparison. #813 owns the full compatibility decision;
+#1066→#1067→#1068 own selection, coherent migration and installed acceptance.
