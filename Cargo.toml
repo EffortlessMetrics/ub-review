@@ -5,7 +5,7 @@ edition = "2024"
 # Pinned to match rust-toolchain.toml and action.yml (all three must move
 # together — #610). Standardized to the full semver "1.95.0" spelling.
 rust-version = "1.95.0"
-description = "No-token evidence packet runner for UB-focused PR review."
+description = "Build bounded evidence packets with configured model review and optional GitHub delivery."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/EffortlessMetrics/ub-review"
 readme = "README.md"
