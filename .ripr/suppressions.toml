@@ -42761,3 +42761,573 @@ kind = "exposure_gap"
 finding_id = "probe:src_sensors_unsafe_review.rs:return_value:721d9355.2"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1439; probe ));: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by comment_plan_absolute_pointer_is_rejected, comment_plan_empty_operation_family_is_explicit_invalid_gap, comment_plan_empty_pointer_is_rejected. Re-verify after any edit to src/sensors/unsafe_review.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:field_construction:06d4449a"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe max_total_bytes: u64,: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:field_construction:a496aca7"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe fixed_fixture_only: bool,: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:field_construction:c53cc56f"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe job_id: u64,: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:field_construction:f3af137f"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe step_number: u64,: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:field_construction:2a8b0a65"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe process_started: bool,: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:field_construction:21e80c54"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe execution_observed: bool,: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:field_construction:93411140"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe complete_bytes_retained: bool,: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:12cd4f18"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by ci_repair_display_name_ambiguity_is_confined_to_its_workflow, fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:b5d33f10"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by ci_repair_display_name_ambiguity_is_confined_to_its_workflow, fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:field_construction:072a7293"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe \"authorization:\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:d11fbc18"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:match_arm:f67796ce"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe match value {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained, artifact_contract_docs_match_ci_audit_verifier_coverage. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:match_arm:92bb4e2c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe Value::Object(object) => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by compiler_surface_caps_inline_comments_after_value_ranking, config_discovery_and_explicit_sources_preserve_effective_values, cost_rate_rejects_nonfinite_values. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:match_arm:d4c86afd"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe Value::Array(rows) => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by ci_parse_api_array_counts_dropped_items, ci_repair_invalid_envelopes_are_not_complete_empty_arrays, compiler_surface_caps_inline_comments_after_value_ranking. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:match_arm:c59c5a6f"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe _ => {}: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:f0f3bed9"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Ok(()): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:856b551e"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Ok(()): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:error_path:7b6479a6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe let entry = entry?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, audit_ci_tokenless_cli_writes_receipts_without_repo_side_effects, ci_audit_artifacts_carry_schema_fields_and_receipts. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:896319f0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, audit_ci_tokenless_cli_writes_receipts_without_repo_side_effects, ci_audit_artifacts_carry_schema_fields_and_receipts. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:79d62f0b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe Ok(corpus): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_prior_resolved_candidates_input, action_release_download_verifies_sha256_receipt, action_release_install_mode_fails_closed_instead_of_source_fallback. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:d366f750"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe .pointer(pointer): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by ci_parse_api_array_counts_dropped_items, comment_plan_absolute_pointer_is_rejected, comment_plan_empty_pointer_is_rejected. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:8a5e2309"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe .pointer(pointer): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, ci_repair_pagination_uses_raw_page_not_decoded_population, command_receipts_retain_spawn_failure_and_nonzero_exit. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:f9317f6f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe .as_slice()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, ci_repair_pagination_uses_raw_page_not_decoded_population, command_receipts_retain_spawn_failure_and_nonzero_exit. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:e40aeb41"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe Ok(&corpus: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corpus_is_complete_sanitized_and_digest_bound, corpus_rejects_mutation_missing_files_secrets_and_bad_evidence, display_projection_never_retains_child_prose_or_controls. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:b083f7e5"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe };: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:d746112b"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe });: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:3b2d69eb"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe .split_whitespace(): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:d44a2b4b"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe .split_whitespace(): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:3a767a17"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe }): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:c2aef01a"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe })): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:predicate:1f96425c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe .find(|row| row.id == name): Strong oracle found: exact value or pattern assertion. Reached by anchoring_failure_keeps_the_model_finding_out_of_the_diagnostic, artifact_name_sanitizer_bounds_long_generated_ids, broker_keeps_same_named_tests_with_distinct_commands_separate. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:7a89042e"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe ]: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:predicate:50cabaeb"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe current > previous && string(line, \"/text\")?.len() <= 1024,: Strong oracle found: exact value or pattern assertion. Reached by absent_pr_thread_context_omits_reuse_rules, active_graph_keeps_inline_delivery_and_proof_receipt_links, active_graph_links_current_threads_and_separates_stale_threads. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:21ed8aa7"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Ok(()): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:371eaf14"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Ok(()): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:df5b197c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe .workflows: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by enable_workflows_include_exact_pr_head_metadata, enable_workflows_render_primary_with_optional_opencode_fallback, enable_workflows_select_the_written_companion_config. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:d2f04dc3"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe )? && contains(: No assertion found on related tests. Reached by delivery_reservation_is_exclusive_and_contains_no_token, fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:error_path:a21df29a"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe )? && contains(: No assertion found on related tests. Reached by delivery_reservation_is_exclusive_and_contains_no_token, fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:error_path:c38042b2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe )?,: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:befe7229"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Ok(()): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:e3485a94"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Ok(()): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:9e56a1f3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe .workflows: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by enable_workflows_include_exact_pr_head_metadata, enable_workflows_render_primary_with_optional_opencode_fallback, enable_workflows_select_the_written_companion_config. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:da514c4e"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe .projections: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:match_arm:e0663f7a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe match row.kind.as_str() {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained, artifact_contract_docs_match_ci_audit_verifier_coverage. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:match_arm:6c5caff9"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe \"executed_command\" => {: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:match_arm:a0d0a881"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe let expected_step = match row.id.as_str() {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained, artifact_contract_docs_match_ci_audit_verifier_coverage. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:match_arm:6853e87d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe \"candidate-test-projections\" => 3,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_workspace_without_a_lockfile_selects_no_cargo_candidate, action_forwards_prior_resolved_candidates_input, box_from_allocation_false_premise_candidate_is_refuted_not_inline. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:match_arm:30a97a72"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe \"candidate-test-publication\" | \"candidate-test-transactions\" => 4,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_workspace_without_a_lockfile_selects_no_cargo_candidate, action_forwards_prior_resolved_candidates_input, box_from_allocation_false_premise_candidate_is_refuted_not_inline. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:match_arm:1f192579"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe \"candidate-test-bootstrap\" => 7,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_workspace_without_a_lockfile_selects_no_cargo_candidate, action_forwards_prior_resolved_candidates_input, box_from_allocation_false_premise_candidate_is_refuted_not_inline. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:match_arm:e89170a7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe \"candidate-source-bootstrap\" | \"candidate-review-run\" => 9,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_workspace_without_a_lockfile_selects_no_cargo_candidate, action_forwards_prior_resolved_candidates_input, action_release_install_mode_fails_closed_instead_of_source_fallback. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:match_arm:df184e47"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe \"candidate-artifact-verifier\" => 10,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_workspace_without_a_lockfile_selects_no_cargo_candidate, action_forwards_prior_resolved_candidates_input, artifact_bound_to_other_run_is_missing_artifact. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:match_arm:3f2187aa"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe \"candidate-reconcile-tasks\" => 11,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_workspace_without_a_lockfile_selects_no_cargo_candidate, action_forwards_prior_resolved_candidates_input, box_from_allocation_false_premise_candidate_is_refuted_not_inline. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:match_arm:38e574e3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe \"candidate-reconcile-publication\" => 12,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_workspace_without_a_lockfile_selects_no_cargo_candidate, action_forwards_prior_resolved_candidates_input, box_from_allocation_false_premise_candidate_is_refuted_not_inline. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:match_arm:ab1f3497"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe _ => anyhow::bail!(\"unknown fixed wrapper identity\"),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by badge_unknown_versions_cannot_evaluate_familiar_zero_counts, candidate_plan_artifacts_preserve_identity_and_budget_status, cargo_candidate_identity_follows_the_approved_command. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:predicate:03ff2579"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe && row.step_number == 6: Strong oracle found: exact value or pattern assertion. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:510d7b6e"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe .observed_argv: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:1387f773"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe .as_ref(): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:55924ede"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe == Some(false): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:35e432f0"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe == Some(false): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:match_arm:3dfc8a00"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe \"reported_executed_task\" => {: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:d6d33b8a"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe .as_deref(): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:predicate:8bf22de4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe && row.step_number == 9: Strong oracle found: exact value or pattern assertion. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:9cd011d3"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe None: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:b03c7704"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Some(\"reported_terminal_not_succeeded\"): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:8e59fa83"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Some(\"reported_terminal_not_succeeded\"): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:65316f48"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Some(\"reported_succeeded\"): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:353a16a9"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Some(\"reported_succeeded\"): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:match_arm:cdd38fb4"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe \"consumer_observation\" => {: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:predicate:8bf22de4.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe && row.step_number == 9: Strong oracle found: exact value or pattern assertion. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:225e2850"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe && row.receipt_satisfied == Some(false): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:match_arm:243d403c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe _ => anyhow::bail!(\"configured-only or unknown row counted as observation\"),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by agreeing_duplicate_observations_preserve_terminal_results, artifact_only_run_with_no_usable_lane_is_not_proven, badge_unknown_versions_cannot_evaluate_familiar_zero_counts. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:d8e58e61"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Ok(()): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:54dd22b9"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Ok(()): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:8cb2181c"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe .as_deref(): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:82fee621"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe }): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:8cb2181c.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe .as_deref(): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:82fee621.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe }): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:predicate:91df0260"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe sensors == 11: Strong oracle found: exact value or pattern assertion. Reached by fixed_required_starvation_fixture_joins_sources, inspected_enable_config_disables_unavailable_sensors, lane_packets_render_late_phase_sensors_as_scheduled. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:predicate:a8136406"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe && proofs == 3: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:6469e70f"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe == Some(\"required_request_without_satisfying_receipt\"): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:5b2774a2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe == Some(\"required_request_without_satisfying_receipt\"): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:82fee621.3"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe }): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:e16365cc"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe == Some(\"timeout_ceilings_exhausted_budget_before_actual_deadline\")),: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:c81157a8"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe == Some(\"timeout_ceilings_exhausted_budget_before_actual_deadline\")),: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:4dc5af9f"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe )? && contains(: No assertion found on related tests. Reached by delivery_reservation_is_exclusive_and_contains_no_token, fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:error_path:a0fdd9c1"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe )? && contains(: No assertion found on related tests. Reached by delivery_reservation_is_exclusive_and_contains_no_token, fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:223b91fa"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe reconcile.command_exit_code == Some(2): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by fixed_required_starvation_fixture_joins_sources, focused_build_stream_failure_reconciles_receipt_and_releases_resources, focused_command_wrapper_reconciles_stream_failure. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:e312ac00"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe && reconcile.workflow_continue_on_error == Some(true): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by fixed_required_starvation_fixture_joins_sources, focused_build_stream_failure_reconciles_receipt_and_releases_resources, focused_command_wrapper_reconciles_stream_failure. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:error_path:70b00ea7"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe )?: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:error_path:70b00ea7.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe )?: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:1e79fbb4"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Ok(()): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:566a4297"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Ok(()): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:62bcd758"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe .to_owned();: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:3fd988ef"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe .id: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:b40f639a"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe .split_whitespace(): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:168c358e"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Ok(()): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:055a5e1f"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Ok(()): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:predicate:ee75f812"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe corpus.manifest.overlaps.len() == 9,: Strong oracle found: exact value or pattern assertion. Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, broker_merges_equivalent_focused_test_commands_and_request_ids. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:7a79a5c5"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Ok(()): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:d0c25d65"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Ok(()): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:predicate:bc720f69"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe && manifest.issue == 1270: Strong oracle found: exact value or pattern assertion. Reached by active_graph_resolves_explicit_conflict_using_proof_precedence, actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, affected_packages_include_all_packages_for_root_manifest_and_lockfile. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:predicate:4e16f575"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe && manifest.pull_request == 1458: Strong oracle found: exact value or pattern assertion. Reached by active_graph_resolves_explicit_conflict_using_proof_precedence, actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, affected_packages_include_all_packages_for_root_manifest_and_lockfile. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:80cff729"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by active_graph_resolves_explicit_conflict_using_proof_precedence, actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, anchoring_failure_keeps_the_model_finding_out_of_the_diagnostic. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:3ce0dad4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe .pointer_mut(pointer): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by comment_plan_absolute_pointer_is_rejected, comment_plan_empty_pointer_is_rejected, comment_plan_parent_relative_pointer_is_rejected. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:ab2f666e"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Ok(()): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:c10bedc1"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Ok(()): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:error_path:bfdcb700"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe let entry = entry?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, comment_plan_identity_field_gaps_name_the_missing_entry_field, comment_plan_malformed_entry_is_explicit_field_gap. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:field_construction:81590073"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe corpus: &Corpus,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corpus_is_complete_sanitized_and_digest_bound, corpus_rejects_mutation_missing_files_secrets_and_bad_evidence, fixed_required_starvation_fixture_joins_sources. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:075c6745"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe )?;: No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:4c23909f"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Ok(()): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:2232c750"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe Ok(()): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:call_deletion:86a6e8b6"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe .iter_mut(): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:return_value:a7403132"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1460; probe .iter_mut(): No assertion found on related tests. Reached by fixed_required_starvation_fixture_joins_sources, loader_rejects_digest_inventory_paths_and_size_drift, loader_rejects_forged_ordinary_wrapper_outcome_at_step_report_join. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_ci_efficiency_baseline.rs:predicate:2c8de36c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1460; probe .find(|row| row.get(\"id\").and_then(Value::as_str) == Some(id)): Strong oracle found: exact value or pattern assertion. Reached by anchoring_failure_keeps_the_model_finding_out_of_the_diagnostic, body_budget_drops_topics_and_preserves_inline_fallback_receipt, budget_rejection_does_not_block_a_later_cheaper_candidate. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
