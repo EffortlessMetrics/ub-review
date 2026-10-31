@@ -42501,3 +42501,203 @@ last_seen = "2026-10-31"
 review_by = "2026-11-21"
 expires = "2026-12-22"
 reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-only marker/budget selection uses the actual startup path with a 50 ms budget in the MissingMarker case. The real-child case checks cancellation, diagnostic, cleanup and ledger, and the helper separately checks bounded timeout. The tuple itself does not return Result; no distinct tuple, budget or error-path mutation is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:d7a109e6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe \"render-release-notes\" => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, affected_packages_include_all_packages_for_root_manifest_and_lockfile. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:field_construction:ea8b42b8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe tag: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_workflow_tag_shapes, affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:437e5a9f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe match arg.as_str() {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:ba76414e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe \"--tag\" => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_workflow_tag_shapes, affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:d9ccf512"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe \"--output\" => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:f31fca2a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe other => bail!(\"unexpected render-release-notes argument `{other}`\"),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:d6dd54fc"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe if chars.next() != Some('v') {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:65003847"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe return false;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:cb946556"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe match chars.next() {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:7b9d2d7a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe Some(next) if next.is_ascii_digit() => {}: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:e5306103"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe _ => return false,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:2b4eaf2f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe _ => return false,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:65003847.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe return false;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:predicate:ae696406"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe while index < bytes.len() {: Strong oracle found: exact value or pattern assertion. Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:predicate:d83489ec"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe if after >= bytes.len() {: Strong oracle found: exact value or pattern assertion. Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:predicate:5dea7eb6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe if next == b'{' {: Strong oracle found: exact value or pattern assertion. Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:7c86fd3f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe let placeholder = match template[after..].find('}') {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:419d0c9b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe Some(close) => &template[dollar..after + close + 1],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:78a58944"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe None => &template[dollar..],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:predicate:24f19dc1"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe if next.is_ascii_alphabetic() || next == b'_' {: Strong oracle found: exact value or pattern assertion. Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:predicate:711c7226"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {: Strong oracle found: exact value or pattern assertion. Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:predicate:24f9104a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe if &template[after..end] == \"TAG\" {: Strong oracle found: exact value or pattern assertion. Reached by accepts_workflow_tag_shapes, affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:predicate:c8a1d5bd"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe if substitutions == 0 {: Strong oracle found: exact value or pattern assertion. Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:d3d5696c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe Ok(rendered): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:return_value:c50f0dc5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_tests_release_notes.rs:field_construction:a986aaa9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe const LITERAL_TAG: &str = \"v9.8.7-rc.12\";: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, clip_capture_bounds_streams_with_head_tail_and_marker. Re-verify after any edit to xtask/tests/release_notes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_tests_release_notes.rs:call_deletion:3a8ccf03"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe static COUNTER: AtomicU64 = AtomicU64::new(0);: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, path_intake_unix_tabs_newlines_and_backslashes_reach_real_cargo. Re-verify after any edit to xtask/tests/release_notes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_tests_release_notes.rs:call_deletion:a796b985"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, preserves_literal_dollar_currency. Re-verify after any edit to xtask/tests/release_notes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_tests_release_notes.rs:return_value:413818a8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, preserves_literal_dollar_currency. Re-verify after any edit to xtask/tests/release_notes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_tests_release_notes.rs:call_deletion:789ce17d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, preserves_literal_dollar_currency. Re-verify after any edit to xtask/tests/release_notes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_tests_release_notes.rs:return_value:4bb99c21"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, preserves_literal_dollar_currency. Re-verify after any edit to xtask/tests/release_notes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_tests_release_notes.rs:call_deletion:439f2364"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe Ok(fs::read_to_string(self.root.join(OUTPUT_NAME))?): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, affected_packages_include_all_packages_for_root_manifest_and_lockfile. Re-verify after any edit to xtask/tests/release_notes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_tests_release_notes.rs:return_value:bd5ca7cc"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe Ok(fs::read_to_string(self.root.join(OUTPUT_NAME))?): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, affected_packages_include_all_packages_for_root_manifest_and_lockfile. Re-verify after any edit to xtask/tests/release_notes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_tests_release_notes.rs:return_value:a658ec5d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe Command::new(env!(\"CARGO_BIN_EXE_xtask\")): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, clip_capture_bounds_streams_with_head_tail_and_marker. Re-verify after any edit to xtask/tests/release_notes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_tests_release_notes.rs:return_value:6817737f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe .args(args): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, clip_capture_bounds_streams_with_head_tail_and_marker. Re-verify after any edit to xtask/tests/release_notes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_tests_release_notes.rs:call_deletion:27e434a7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, preserves_literal_dollar_currency. Re-verify after any edit to xtask/tests/release_notes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_tests_release_notes.rs:return_value:01c30e7a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, preserves_literal_dollar_currency. Re-verify after any edit to xtask/tests/release_notes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_tests_release_notes.rs:return_value:ed0194fe"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe \"--tag\".to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, git_failure_during_staged_admission_keeps_no_success_summary. Re-verify after any edit to xtask/tests/release_notes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_tests_release_notes.rs:return_value:efa61151"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe tag.to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, git_failure_during_staged_admission_keeps_no_success_summary. Re-verify after any edit to xtask/tests/release_notes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_tests_release_notes.rs:return_value:67cf6ccb"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1380; probe OUTPUT_NAME.to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, preserves_literal_dollar_currency. Re-verify after any edit to xtask/tests/release_notes.rs."
