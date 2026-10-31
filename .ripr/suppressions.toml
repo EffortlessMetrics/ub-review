@@ -41694,3 +41694,35 @@ last_seen = "2026-10-31"
 review_by = "2026-11-21"
 expires = "2026-12-22"
 reason = "PR #1619 gate 41175497432 artifact 13033280508 SHA256 f6421c4ccba0ee7460dc9bcdc05457282cd77f3cb635447351831713bad36323, reviewed merge bc2bae59e74afa7fafb2abaafe31c9851d493cbb, head c47e24169f129408c07a4eb9beb28eb02df740ed; packet records worktree_dirty=true. RIPR 0.10.0 reports weakly_exposed observation_unverified with fixture_opaque; preserve that raw classification. Inside cfg(test) bind_gate_fixture, worktree_dirty=false is required admission provenance whose value is not compared by this summary join. RevisionAdmission::validate and RevisionRef construction do not use that field for this summary join; it is not an oracle that a hosted packet was clean. In particular the hosted packet records worktree_dirty=true and remains so. Source/test evidence: reviewed test successor 05394f1ae14cba403f9d694d1d31928f0a2ffdfd and PR #1619; attribution limits ripr-swarm#3213 and ripr#1453. Owner ub-review/core. Reverify after summary, fixture, revision contract or analyzer changes; this is not hosted qualification or a Required-proof waiver."
+
+# PR #1617: three test-helper boundaries with compiled source controls.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:b85daa6e"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41181420132 artifact 13035616223 SHA256 bd3d50738e9d2d4b62fa8eb0529293bb2dde52a64f3f483ea852f6b5c02d80a0, head 5d81159325f37f43938a21a386f51c9e21c0b593, reviewed merge 23e54039b56eeac9a3cc25b80d6e40c4cf569c6d. Admission records worktree_dirty=true. Raw finding remains as reported; this is a bounded source/test-role disposition, not reclassification or complete proof. Test-only wait_for_start_marker checks whether the marker exists. In missing_start_marker_is_bounded, forcing the condition true compiled and failed with missing marker must time out; restored lifecycle seven passed. The real-child paths require the actual start marker and the missing-marker path also tests absence. This is one forced-true control, not a literal deletion or arbitrary filesystem failure proof. Patch SHA256 0f66f0dddda88c5b4657c5cb6ee9fe2474d5828c9995ffe6c45a306afccc8e4a; log SHA256 98d63173fc05212b759382ea10132348d3c4008e3fa1a950f4f8fdb945630234. Reverify after lifecycle fixture, runner contract or analyzer changes. Independent review and current strict-zero qualification remain required; no threshold or pin change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:predicate:32d4c13e"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41181420132 artifact 13035616223 SHA256 bd3d50738e9d2d4b62fa8eb0529293bb2dde52a64f3f483ea852f6b5c02d80a0, head 5d81159325f37f43938a21a386f51c9e21c0b593, reviewed merge 23e54039b56eeac9a3cc25b80d6e40c4cf569c6d. Admission records worktree_dirty=true. Raw finding remains as reported; this is a bounded source/test-role disposition, not reclassification or complete proof. Test-only wait_for_start_marker compares monotonic time to its deadline. Forcing that predicate true compiled and failed the minimum elapsed assertion in missing_start_marker_is_bounded; restored lifecycle seven passed. This proves rejection of premature timeout, not the nontermination case or all deadline mutations. Patch SHA256 4cca90eb41a2f882e589f1ca202cc7a3bc75933f8d3ef8c4ecaea596bf83d7ef; log SHA256 34b1963f88cce6f4b341fd3fbb15d01ff377fbe28122b6cf65293fd09626b857. Reverify after lifecycle fixture, runner contract or analyzer changes. Independent review and current strict-zero qualification remain required; no threshold or pin change."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:f90ced77"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41181420132 artifact 13035616223 SHA256 bd3d50738e9d2d4b62fa8eb0529293bb2dde52a64f3f483ea852f6b5c02d80a0, head 5d81159325f37f43938a21a386f51c9e21c0b593, reviewed merge 23e54039b56eeac9a3cc25b80d6e40c4cf569c6d. Admission records worktree_dirty=true. Raw finding remains as reported; this is a bounded source/test-role disposition, not reclassification or complete proof. Test-only publish_start_observation invokes before_rename after staged write. Removing the callback compiled and failed the checked_staged assertion in start_observation_is_complete_before_marker_is_published; restored lifecycle seven passed. A separate early-marker-publication mutant also failed the staged-state check. This proves those controls, not arbitrary filesystem failure coverage. Callback-deletion patch SHA256 7dd3eb6d0008e108a90c2fe9a3aa6c3a3db25141a7860d94635c6241907f00f1; log SHA256 95ac33a0fb1925576202d018a051c11709b513df6ce544d6d98064d5868de133. Reverify after lifecycle fixture, runner contract or analyzer changes. Independent review and current strict-zero qualification remain required; no threshold or pin change."
