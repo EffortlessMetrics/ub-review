@@ -28,10 +28,14 @@ fn missing_start_marker_cleans_up_live_child_and_cannot_publish_proof() -> Resul
 }
 
 fn stopped_child_receipt(stop: Stop) -> Result<()> {
-    stopped_child_receipt_after_start_delay(stop, 0)
+    stopped_child_receipt_after_start_delay(stop, 0, None)
 }
 
-fn stopped_child_receipt_after_start_delay(stop: Stop, start_delay_ms: u64) -> Result<()> {
+fn stopped_child_receipt_after_start_delay(
+    stop: Stop,
+    start_delay_ms: u64,
+    expected_start: Option<(u64, u128)>,
+) -> Result<()> {
     let temp = tempfile::tempdir()?;
     let started = temp.path().join("started");
     let missing = temp.path().join("never-created");
@@ -187,6 +191,14 @@ fn stopped_child_receipt_after_start_delay(stop: Stop, start_delay_ms: u64) -> R
     );
     ensure!(cleanup_called);
     ensure!(stop_action_called == !matches!(stop, Stop::MissingMarker));
+    if let Some((expected_delay_ms, minimum_elapsed_ms)) = expected_start {
+        let observation = fs::read_to_string(&started)?;
+        let (delay, elapsed) = observation
+            .split_once(' ')
+            .context("child startup observation must include delay and elapsed time")?;
+        ensure!(delay.parse::<u64>()? == expected_delay_ms);
+        ensure!(elapsed.parse::<u128>()? >= minimum_elapsed_ms);
+    }
     // A killed child can remain a zombie if the runner omits its reap. Marker
     // absence alone cannot detect that bug. Linux procfs retains the PID until
     // the parent collects its exit status; check before creating other children.
@@ -283,7 +295,7 @@ fn wait_for_start_marker(started: &Path, budget: Duration) -> io::Result<()> {
 
 #[test]
 fn delayed_start_still_checks_live_child_cleanup_and_receipt() -> Result<()> {
-    stopped_child_receipt_after_start_delay(Stop::Interrupted, 1500)
+    stopped_child_receipt_after_start_delay(Stop::Interrupted, 1500, Some((1500, 1200)))
 }
 
 #[test]
@@ -307,8 +319,12 @@ fn startup_marker_child() -> Result<()> {
     let delayed =
         std::env::var_os("UB_REVIEW_WAIT_ERROR_DELAYED").context("delayed marker missing")?;
     let delay: u64 = std::env::var("UB_LIFECYCLE_START_DELAY_MS")?.parse()?;
+    let delay_started = Instant::now();
     thread::sleep(Duration::from_millis(delay));
-    fs::write(started, b"started")?;
+    fs::write(
+        started,
+        format!("{delay} {}", delay_started.elapsed().as_millis()),
+    )?;
     thread::sleep(Duration::from_secs(2));
     fs::write(delayed, b"still running")?;
     Ok(())
