@@ -96,7 +96,7 @@ fn stopped_child_receipt_after_start_delay(stop: Stop, start_delay_ms: u64) -> R
     };
     let mut child_was_running = false;
     #[cfg(target_os = "linux")]
-    let mut child_pid = None;
+    let child_pid = std::cell::Cell::<Option<u32>>::new(None);
     let mut cleanup_called = false;
     let mut stop_action_called = false;
     let mut cleanup = || {
@@ -104,6 +104,16 @@ fn stopped_child_receipt_after_start_delay(stop: Stop, start_delay_ms: u64) -> R
         // Proof-root cleanup must occur only after termination and reaping.
         ensure!(started.is_file());
         ensure!(!delayed.exists());
+        #[cfg(target_os = "linux")]
+        {
+            let pid = child_pid
+                .get()
+                .context("cleanup must observe the child PID")?;
+            ensure!(
+                !Path::new("/proc").join(pid.to_string()).exists(),
+                "cleanup began before child {pid} was reaped"
+            );
+        }
         Ok(())
     };
     let receipt = run_proof_command_receipt_for_task_with_cleanup(
@@ -137,7 +147,7 @@ fn stopped_child_receipt_after_start_delay(stop: Stop, start_delay_ms: u64) -> R
                         child_was_running = child.try_wait()?.is_none();
                         #[cfg(target_os = "linux")]
                         {
-                            child_pid = Some(child.id());
+                            child_pid.set(Some(child.id()));
                         }
                     }
                     let (marker, budget) = if matches!(stop, Stop::MissingMarker) {
@@ -155,7 +165,7 @@ fn stopped_child_receipt_after_start_delay(stop: Stop, start_delay_ms: u64) -> R
                                     "live child is not visible in procfs",
                                 ));
                             }
-                            child_pid = Some(child.id());
+                            child_pid.set(Some(child.id()));
                         }
                         stop_action_called = true;
                         match stop {
@@ -182,7 +192,7 @@ fn stopped_child_receipt_after_start_delay(stop: Stop, start_delay_ms: u64) -> R
     // the parent collects its exit status; check before creating other children.
     #[cfg(target_os = "linux")]
     {
-        let pid = child_pid.context("live child PID was not observed")?;
+        let pid = child_pid.get().context("live child PID was not observed")?;
         ensure!(
             !Path::new("/proc").join(pid.to_string()).exists(),
             "proof runner returned before reaping child {pid}"
