@@ -38,7 +38,7 @@ fn stopped_child_receipt_after_start_delay(
 ) -> Result<()> {
     let temp = tempfile::tempdir()?;
     let started = temp.path().join("started");
-    let missing = temp.path().join("never-created");
+    let ready = temp.path().join("child-ready");
     let delayed = temp.path().join("delayed");
     let out = temp.path().join("out");
     let revision = RevisionRef {
@@ -70,6 +70,14 @@ fn stopped_child_receipt_after_start_delay(
             (
                 "UB_LIFECYCLE_START_DELAY_MS".to_owned(),
                 start_delay_ms.to_string(),
+            ),
+            (
+                "UB_LIFECYCLE_CHILD_READY".to_owned(),
+                ready.display().to_string(),
+            ),
+            (
+                "UB_LIFECYCLE_SKIP_START_MARKER".to_owned(),
+                matches!(stop, Stop::MissingMarker).to_string(),
             ),
             (
                 "UB_REVIEW_WAIT_ERROR_STARTED".to_owned(),
@@ -106,7 +114,7 @@ fn stopped_child_receipt_after_start_delay(
     let mut cleanup = || {
         cleanup_called = true;
         // Proof-root cleanup must occur only after termination and reaping.
-        ensure!(started.is_file());
+        ensure!(started.is_file() != matches!(stop, Stop::MissingMarker));
         ensure!(!delayed.exists());
         #[cfg(target_os = "linux")]
         {
@@ -146,8 +154,8 @@ fn stopped_child_receipt_after_start_delay(
                 },
                 &mut |child, timeout| {
                     if matches!(stop, Stop::MissingMarker) {
-                        // Observe a real running child before testing the separate missing marker.
-                        wait_for_start_marker(&started, Duration::from_secs(5))?;
+                        // Observe child readiness without requiring its startup marker.
+                        wait_for_start_marker(&ready, Duration::from_secs(5))?;
                         child_was_running = child.try_wait()?.is_none();
                         #[cfg(target_os = "linux")]
                         {
@@ -155,7 +163,7 @@ fn stopped_child_receipt_after_start_delay(
                         }
                     }
                     let (marker, budget) = if matches!(stop, Stop::MissingMarker) {
-                        (&missing, Duration::from_millis(50))
+                        (&started, Duration::from_millis(50))
                     } else {
                         (&started, Duration::from_secs(5))
                     };
@@ -299,6 +307,11 @@ fn delayed_start_still_checks_live_child_cleanup_and_receipt() -> Result<()> {
 }
 
 #[test]
+fn delayed_start_still_applies_execution_timeout() -> Result<()> {
+    stopped_child_receipt_after_start_delay(Stop::TimedOut, 1500, Some((1500, 1200)))
+}
+
+#[test]
 fn missing_start_marker_is_bounded() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let before = Instant::now();
@@ -363,13 +376,18 @@ fn startup_marker_child() -> Result<()> {
     let delayed =
         std::env::var_os("UB_REVIEW_WAIT_ERROR_DELAYED").context("delayed marker missing")?;
     let delay: u64 = std::env::var("UB_LIFECYCLE_START_DELAY_MS")?.parse()?;
+    let ready =
+        std::env::var_os("UB_LIFECYCLE_CHILD_READY").context("child ready marker missing")?;
+    fs::write(ready, b"ready")?;
     let delay_started = Instant::now();
     thread::sleep(Duration::from_millis(delay));
-    publish_start_observation(
-        Path::new(&started),
-        &format!("{delay} {}", delay_started.elapsed().as_millis()),
-        |_| Ok(()),
-    )?;
+    if std::env::var("UB_LIFECYCLE_SKIP_START_MARKER")? != "true" {
+        publish_start_observation(
+            Path::new(&started),
+            &format!("{delay} {}", delay_started.elapsed().as_millis()),
+            |_| Ok(()),
+        )?;
+    }
     thread::sleep(Duration::from_secs(2));
     fs::write(delayed, b"still running")?;
     Ok(())
