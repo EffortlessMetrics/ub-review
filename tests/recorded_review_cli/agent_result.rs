@@ -613,3 +613,30 @@ fn real_cli_watermark_hint_respects_observation_byte_boundary() -> Result<()> {
     }
     Ok(())
 }
+
+#[test]
+fn real_cli_agent_replay_rejects_mismatched_payload_source_pin() -> Result<()> {
+    let mut h = History::new()?;
+    h.admit(4)?;
+    let view = h.f.invoke("agent-export", &[])?;
+    assert!(view.status.success());
+    fs::write(h.f.root.path().join("valid-agent-view.json"), &view.stdout)?;
+    let pin = hash(&view.stdout);
+    let valid = h.f.invoke(
+        "agent-replay",
+        &["--view", "valid-agent-view.json", "--view-sha256", &pin],
+    )?;
+    assert!(valid.status.success());
+    h.f.intake["observations"]["payload_source_digest"] = json!("0".repeat(64));
+    let rejected = h.f.invoke(
+        "agent-replay",
+        &["--view", "valid-agent-view.json", "--view-sha256", &pin],
+    )?;
+    assert!(
+        !rejected.status.success(),
+        "mismatched payload source pin admitted"
+    );
+    assert!(rejected.stdout.is_empty());
+    assert!(!String::from_utf8_lossy(&rejected.stderr).contains("PRIVATE_"));
+    Ok(())
+}
