@@ -908,6 +908,38 @@ mod tests {
     }
 
     #[test]
+    fn bound_gate_fixture_joins_canonical_admission() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        fs::create_dir_all(out.join("review"))?;
+        fs::write(
+            out.join("review/gate_outcome.json"),
+            r#"{"schema":"ub-review.gate_outcome.v1","conclusion":"pass","reasons":[]}"#,
+        )?;
+        let digest = bind_gate_fixture(out)?;
+        let admission: crate::revision_admission::RevisionAdmission =
+            serde_json::from_slice(&fs::read(out.join("input/revision-admission.json"))?)?;
+        admission.validate()?;
+        let canonical = crate::revision_identity::RevisionIdentity::from_canonical(
+            &admission.identity_canonical,
+        )?;
+        assert_eq!(
+            canonical.revision_ref(),
+            crate::RevisionRef::from_admission(&admission)
+        );
+        assert_eq!(digest, canonical.identity_digest());
+        let (_, gate) = read_gate_outcome(out).map_err(anyhow::Error::msg)?;
+        assert_eq!(gate.conclusion.as_deref(), Some("pass"));
+
+        let path = out.join("review/gate_outcome.json");
+        let mut gate: serde_json::Value = serde_json::from_slice(&fs::read(&path)?)?;
+        gate["revision"]["reviewed_commit"] = serde_json::json!("f".repeat(40));
+        fs::write(&path, serde_json::to_vec(&gate)?)?;
+        assert!(read_gate_outcome(out).is_err());
+        Ok(())
+    }
+
+    #[test]
     fn review_metrics_summary_rejects_unsupported_schema_versions() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path();
