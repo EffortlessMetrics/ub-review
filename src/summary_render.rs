@@ -923,6 +923,16 @@ mod tests {
         let canonical = crate::revision_identity::RevisionIdentity::from_canonical(
             &admission.identity_canonical,
         )?;
+        assert_eq!(admission.semantics, "candidate_head");
+        assert!(canonical.canonical_form().contains("\nmerge=-\n"));
+        assert_eq!(canonical.revision_ref().reviewed_commit, "3".repeat(40));
+        let changed_paths =
+            crate::revision_identity::RevisionIdentity::changed_paths_digest(["src/lib.rs"]);
+        assert!(
+            canonical
+                .canonical_form()
+                .contains(&format!("\nchanged_paths={changed_paths}\n"))
+        );
         assert_eq!(
             canonical.revision_ref(),
             crate::RevisionRef::from_admission(&admission)
@@ -936,6 +946,28 @@ mod tests {
         gate["revision"]["reviewed_commit"] = serde_json::json!("f".repeat(40));
         fs::write(&path, serde_json::to_vec(&gate)?)?;
         assert!(read_gate_outcome(out).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn bound_gate_fixture_propagates_admission_write_failure() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        let admission_path = out.join("input/revision-admission.json");
+        fs::create_dir_all(&admission_path)?;
+        fs::create_dir_all(out.join("review"))?;
+        fs::write(
+            out.join("review/gate_outcome.json"),
+            r#"{"schema":"ub-review.gate_outcome.v1","conclusion":"pass","reasons":[]}"#,
+        )?;
+        let error = bind_gate_fixture(out)
+            .err()
+            .context("writing an admission over a directory must fail")?;
+        assert!(
+            error.downcast_ref::<std::io::Error>().is_some(),
+            "{error:#}"
+        );
+        assert!(admission_path.is_dir());
         Ok(())
     }
 
