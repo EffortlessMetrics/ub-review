@@ -21,8 +21,13 @@ pub(crate) fn render_ledger_context(
         root.join(configured_path)
     };
     if !path.exists() {
+        let source = if args.ledger_path.trim().is_empty() {
+            "`[repo].ledger`"
+        } else {
+            "`--ledger-path` / `UB_REVIEW_LEDGER_PATH`"
+        };
         return Ok(format!(
-            "- UB ledger configured but unavailable at `{}`.\n",
+            "- UB ledger configured by {source} but unavailable at `{}`; optional context omitted. Verify the configured path to include ledger context.\n",
             path.display()
         ));
     }
@@ -200,6 +205,7 @@ pub(crate) fn build_model_lane_receipts(
                 http_status: None,
                 response_shape: None,
                 fallback_from: None,
+                attempt_count: Some(0),
                 cache_usage: ModelCacheUsage::default(),
                 // Preflight/planned receipts carry empty cohort provenance;
                 // the cohort is stamped when the lane executes (model_exec /
@@ -309,18 +315,19 @@ pub(crate) fn is_model_receipt_evidence_issue(receipt: &ModelLaneReceipt) -> boo
 
 pub(crate) fn is_model_skipped_evidence_issue(receipt: &ModelLaneReceipt) -> bool {
     receipt.status == "skipped"
-        && matches!(
-            receipt.reason.as_str(),
-            // The wave-loop sweep writes the budget-only phrasing; the
-            // "or inline comment cap" variant is the legacy phrasing kept so
-            // older receipts still classify. Without the current string,
-            // budget-skipped lanes (including a starved fallback retry)
-            // silently vanished from missing model evidence.
-            "model-mode off"
-                | "model call budget reached before lane execution"
-                | "model call budget or inline comment cap reached before lane execution"
-                | "model call budget exhausted before refuter pass"
-        )
+        && (model_lane_call_attempted(receipt)
+            || matches!(
+                receipt.reason.as_str(),
+                // The wave-loop sweep writes the budget-only phrasing; the
+                // "or inline comment cap" variant is the legacy phrasing kept so
+                // older receipts still classify. Without the current string,
+                // budget-skipped lanes (including a starved fallback retry)
+                // silently vanished from missing model evidence.
+                "model-mode off"
+                    | "model call budget reached before lane execution"
+                    | "model call budget or inline comment cap reached before lane execution"
+                    | "model call budget exhausted before refuter pass"
+            ))
 }
 
 pub(crate) fn collect_sensor_evidence_issues(out: &Path, plan: &Plan) -> Vec<SensorEvidenceIssue> {

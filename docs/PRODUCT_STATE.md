@@ -1,8 +1,14 @@
 # Product state
 
-_Last reconciled against `main` at `33f4271` on 2026-09-08 UTC; roadmap
+_Last reconciled against `main` at `4cc2e90` on 2026-10-30 UTC; roadmap
 dependencies retain the model-off CI-efficiency amendment. Merged [#1289]
-provides bounded shadow comparisons, not completed #957 acceptance._
+provides bounded shadow comparisons, not completed #957 acceptance. The
+2026-10-29/30 gate-train wave landed 40 fix PRs and closed 5 superseded
+branches; #1608 restored `main` after two gate-green PRs (#1520's
+`normalize_repo_path` change and b9df50b's broker `b/`-path test) semantically
+conflicted: the bun focused-test detector now accepts a `test`/`tests`
+directory component at any depth while `normalize_repo_path` preserves real
+leading `b/` directories._
 
 This is the canonical capability-state document. [Issue #945] owns execution
 order; parent issues own capability contracts; retained receipts and runtime

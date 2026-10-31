@@ -51,8 +51,34 @@ pub(crate) fn strip_bracketed_lane_prefix(value: &str) -> Option<&str> {
     if !trimmed.starts_with('[') {
         return None;
     }
-    let end = trimmed.find(']')?;
+    let mut depth = 0usize;
+    let mut escaped = false;
+    let mut end = None;
+    for (index, ch) in trimmed.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match ch {
+            '\\' => escaped = true,
+            '[' => depth += 1,
+            ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    end = Some(index);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let end = end?;
     if end > 80 {
+        return None;
+    }
+    // A Markdown link or reference begins with a bracketed label too, but
+    // that label is part of the finding rather than internal lane metadata.
+    if trimmed[end + 1..].starts_with(['(', '[']) {
         return None;
     }
     Some(trimmed[end + 1..].trim_start())
@@ -173,7 +199,17 @@ pub(crate) fn render_missing_proof_receipt_summary(text: &mut String, receipt: &
                 "Focused red/green proof did not discriminate the patch: {head_status} and {base_plus_tests_status} for `{command}`."
             )
         }
-        "timed_out" => format!("Focused proof timed out for `{command}`; logs are in artifacts."),
+        "timed_out" => match receipt
+            .commands
+            .iter()
+            .find(|command| command.timed_out || command.status == "timed_out")
+        {
+            Some(timed_out) => format!(
+                "Focused proof timed out for `{}`; logs are in artifacts.",
+                timed_out.command
+            ),
+            None => "Focused proof timed out; details are in artifacts.".to_owned(),
+        },
         "skipped_budget" => {
             format!(
                 "Focused proof was skipped by budget for `{command}`; plan details are in artifacts."
@@ -501,7 +537,9 @@ fn output_topics(text: &str) -> Vec<OutputTopic> {
             if topic_text.is_empty() {
                 return None;
             }
-            let normalized = normalize_output_topic(topic_text);
+            // Ranking tokens discard syntax, but duplicate identity must retain
+            // operators, case and literal whitespace that can change a claim.
+            let normalized = topic_text.to_owned();
             Some(OutputTopic {
                 id: String::new(),
                 content_key: normalized,
@@ -792,8 +830,13 @@ pub(crate) fn right_side_diff_line_text(patch: &str) -> BTreeMap<(String, u32), 
     let mut current_path = String::new();
     let mut new_line: Option<u32> = None;
     for line in patch.lines() {
-        if let Some(path) = line.strip_prefix("+++ b/") {
-            current_path = normalize_repo_path(path);
+        if line.starts_with("diff --git ") {
+            current_path.clear();
+            new_line = None;
+            continue;
+        }
+        if new_line.is_none() && line.starts_with("+++ ") {
+            current_path = review_patch_new_path(line).unwrap_or_default();
             continue;
         }
         if line.starts_with("@@") {
@@ -825,6 +868,68 @@ pub(crate) fn right_side_diff_line_text(patch: &str) -> BTreeMap<(String, u32), 
     lines
 }
 
+// Git quotes unusual path bytes using C escapes and three-digit octal escapes.
+// Reject malformed or non-UTF-8 paths rather than attaching lines to another file.
+fn review_patch_new_path(line: &str) -> Option<String> {
+    let path = line.strip_prefix("+++ ")?;
+    let is_quoted = path.starts_with('"');
+    let decoded = if let Some(quoted) = path.strip_prefix('"') {
+        let bytes = quoted.as_bytes();
+        let mut out = Vec::new();
+        let mut i = 0;
+        loop {
+            let byte = *bytes.get(i)?;
+            i += 1;
+            match byte {
+                b'"' => {
+                    if !bytes[i..].is_empty() && bytes[i] != b'\t' {
+                        return None;
+                    }
+                    break;
+                }
+                b'\\' => {
+                    let escaped = *bytes.get(i)?;
+                    i += 1;
+                    let value = match escaped {
+                        b'a' => 7,
+                        b'b' => 8,
+                        b't' => b'\t',
+                        b'n' => b'\n',
+                        b'v' => 11,
+                        b'f' => 12,
+                        b'r' => b'\r',
+                        b'\\' | b'"' => escaped,
+                        b'0'..=b'7' => {
+                            let second = *bytes.get(i)?;
+                            let third = *bytes.get(i + 1)?;
+                            if !(b'0'..=b'7').contains(&second) || !(b'0'..=b'7').contains(&third) {
+                                return None;
+                            }
+                            i += 2;
+                            let octal = u16::from(escaped - b'0') * 64
+                                + u16::from(second - b'0') * 8
+                                + u16::from(third - b'0');
+                            u8::try_from(octal).ok()?
+                        }
+                        _ => return None,
+                    };
+                    out.push(value);
+                }
+                _ => out.push(byte),
+            }
+        }
+        String::from_utf8(out).ok()?
+    } else {
+        path.split('\t').next()?.to_owned()
+    };
+    let repo_path = decoded.strip_prefix("b/")?;
+    let normalized = normalize_repo_path(repo_path);
+    if is_quoted && normalized != repo_path {
+        return None;
+    }
+    Some(normalized)
+}
+
 pub(crate) fn parse_hunk_new_start(line: &str) -> Option<u32> {
     let plus = line.split_whitespace().find(|part| part.starts_with('+'))?;
     let start = plus
@@ -836,13 +941,16 @@ pub(crate) fn parse_hunk_new_start(line: &str) -> Option<u32> {
     Some(start)
 }
 
+/// Normalize an already repository-relative path. Diff readers remove their
+/// `+++ b/` transport prefix before calling this; a remaining `b/` names a real
+/// directory and must survive candidate, proof and delivery validation.
 pub(crate) fn normalize_repo_path(path: &str) -> String {
-    path.trim().trim_start_matches("b/").replace('\\', "/")
+    path.trim().replace('\\', "/")
 }
 
 pub(crate) fn ensure_lane_prefix(lane: &str, body: &str) -> String {
     let prefix = format!("[{lane}]");
-    if body.starts_with(&prefix) {
+    if body.starts_with(&prefix) && strip_bracketed_lane_prefix(body).is_some() {
         body.to_owned()
     } else {
         format!("{prefix} {body}")
@@ -978,8 +1086,178 @@ pub(crate) fn posted_inline_comment_text(body: &str) -> String {
 }
 
 #[cfg(test)]
+mod github_review_serialization_tests {
+    use super::*;
+    use anyhow::{Result, ensure};
+
+    #[test]
+    fn bracketed_prefix_boundaries() {
+        assert_eq!(strip_bracketed_lane_prefix("plain"), None);
+        assert_eq!(strip_bracketed_lane_prefix("[unclosed"), None);
+        assert_eq!(strip_bracketed_lane_prefix("[lane [nested]"), None);
+        assert_eq!(strip_bracketed_lane_prefix(r"[lane \] tail"), None);
+        assert_eq!(
+            strip_bracketed_lane_prefix("[lane] finding"),
+            Some("finding")
+        );
+        assert_eq!(
+            strip_bracketed_lane_prefix("[lane [nested]] finding"),
+            Some("finding")
+        );
+        assert_eq!(
+            strip_bracketed_lane_prefix(r"[lane \] nested] finding"),
+            Some("finding")
+        );
+        assert_eq!(strip_bracketed_lane_prefix("[label [inner]](url)"), None);
+        assert_eq!(strip_bracketed_lane_prefix("[label [inner]][ref]"), None);
+        assert_eq!(
+            strip_bracketed_lane_prefix(&format!("[{}] text", "x".repeat(80))),
+            None
+        );
+    }
+
+    #[test]
+    fn lane_named_link_keeps_provenance_and_public_body() {
+        let link = "[tests](https://example.com) explains the failure";
+        let artifact = ensure_lane_prefix("tests", link);
+        assert_eq!(artifact, format!("[tests] {link}"));
+        assert_eq!(posted_inline_comment_text(&artifact), link);
+        assert_eq!(
+            ensure_lane_prefix("tests", "[tests] finding"),
+            "[tests] finding"
+        );
+    }
+
+    #[test]
+    fn summary_preserves_leading_markdown_links_and_strips_lane_metadata() {
+        let mut text = String::new();
+        render_pr_model_signal(
+            &mut text,
+            "[contract](https://example.com) contradicts this change",
+        );
+        render_pr_model_signal(&mut text, "[contract][spec] contradicts this change");
+        render_pr_model_signal(
+            &mut text,
+            "[contract [v2]](https://example.com) contradicts this change",
+        );
+        render_pr_model_signal(&mut text, "[contract [v2]][spec] contradicts this change");
+        render_pr_model_signal(&mut text, r"[contract \] v2][spec] contradicts this change");
+        render_pr_model_signal(&mut text, "[tests] The assertion misses the changed branch");
+        assert_eq!(
+            text,
+            "- [contract](https://example.com) contradicts this change.\n- [contract][spec] contradicts this change.\n- [contract [v2]](https://example.com) contradicts this change.\n- [contract [v2]][spec] contradicts this change.\n- [contract \\] v2][spec] contradicts this change.\n- The assertion misses the changed branch.\n"
+        );
+    }
+
+    #[test]
+    fn github_review_round_trip_preserves_unicode_path_and_stable_post_json() -> Result<()> {
+        let review = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: "## Verification questions\n\n- Confirm the behavior on this changed line."
+                .to_owned(),
+            comments: vec![GitHubReviewComment {
+                path: "src/naïve/模块.rs".to_owned(),
+                line: 7,
+                side: "RIGHT".to_owned(),
+                body: "[tests] The changed branch is not exercised at this boundary.".to_owned(),
+                suggestion: None,
+            }],
+        };
+
+        let artifact = serde_json::to_vec(&review)?;
+        let decoded: GitHubReview = serde_json::from_slice(&artifact)?;
+        ensure!(
+            serde_json::to_value(&decoded)? == serde_json::to_value(&review)?,
+            "review artifact round trip changed its fields"
+        );
+
+        let first = serde_json::to_vec(&github_review_post_payload(&decoded)?)?;
+        let second = serde_json::to_vec(&github_review_post_payload(&decoded)?)?;
+        ensure!(
+            first == second,
+            "repeated post payload generation changed bytes"
+        );
+        let post: serde_json::Value = serde_json::from_slice(&first)?;
+        ensure!(post["comments"][0]["path"] == "src/naïve/模块.rs");
+        ensure!(post["comments"][0].get("suggestion").is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn empty_review_round_trip_keeps_an_explicit_empty_comments_array() -> Result<()> {
+        let review = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: "## Verification questions\n\n- Confirm the reported behavior.".to_owned(),
+            comments: Vec::new(),
+        };
+
+        let artifact = serde_json::to_vec(&review)?;
+        let decoded: GitHubReview = serde_json::from_slice(&artifact)?;
+        let payload = github_review_post_payload(&decoded)?;
+        let json = serde_json::to_value(payload)?;
+        ensure!(json["comments"].is_array());
+        ensure!(json["comments"].as_array().is_some_and(Vec::is_empty));
+        Ok(())
+    }
+}
+
+#[cfg(test)]
 mod output_degradation_tests {
     use super::*;
+
+    #[test]
+    fn degradation_preserves_distinct_operator_claims_in_post_json() -> anyhow::Result<()> {
+        for (left, right) in [
+            (
+                "At src/模块.rs:7, reject count < limit.",
+                "At src/模块.rs:7, reject count > limit.",
+            ),
+            (
+                "Return -1 for the missing index.",
+                "Return 1 for the missing index.",
+            ),
+            (
+                "Preserve `Key` in the lookup.",
+                "Preserve `key` in the lookup.",
+            ),
+            (
+                "Preserve `a  b` in the literal.",
+                "Preserve `a b` in the literal.",
+            ),
+        ] {
+            let input = format!("## Confirmed findings\n\n- {left}\n- {right}\n- {left}\n");
+            let (full, _) = degrade_review_body(input.clone(), 6000, 12, "head-operators");
+            assert_eq!(full, input);
+            let (body, receipt) = degrade_review_body(input, 6000, 2, "head-operators");
+            let review = GitHubReview {
+                event: "COMMENT".to_owned(),
+                body,
+                comments: Vec::new(),
+            };
+            let bytes = serde_json::to_vec(&review)?;
+            let restored: GitHubReview = serde_json::from_slice(&bytes)?;
+            let post = serde_json::to_value(github_review_post_payload(&restored)?)?;
+            eprintln!("post={post}; receipt={}", serde_json::to_string(&receipt)?);
+            let posted_body = post["body"].as_str().context("post body missing")?;
+            assert!(
+                posted_body.contains(left),
+                "lost first claim {left}: {post}"
+            );
+            assert!(
+                posted_body.contains(right),
+                "lost second claim {right}: {post}"
+            );
+            assert_eq!(receipt.final_item_count, 2);
+            assert_eq!(receipt.dropped_topics.len(), 1);
+            assert!(
+                receipt.dropped_topics[0]
+                    .reason
+                    .starts_with("duplicate_evidence_")
+            );
+            assert_eq!(post["comments"], serde_json::json!([]));
+        }
+        Ok(())
+    }
 
     #[test]
     fn full_output_receipt_preserves_exact_input() {

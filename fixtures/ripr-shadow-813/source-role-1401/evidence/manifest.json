@@ -1,0 +1,14 @@
+{
+  "schema": "ub-review.ripr_frozen_receipt.v1",
+  "authority": "shadow-only",
+  "decision": "comparison_only_no_promotion",
+  "qualified": false,
+  "promotion_approved": false,
+  "required_gate_passed": false,
+  "source": "75ecb7fdade48665aa48d01235fd9f7dfc0a3898",
+  "binary_sha256": "79ad5381ee8973228cfa2651c172c7d9ebc94ca74ec8cab73d303bc25cfcce73",
+  "binary_kind": "new separately identified workspace shadow-control build; no package/install/public provenance",
+  "owner": "ub-review/tests; #813",
+  "reused_real_patch_receipt": "https://github.com/EffortlessMetrics/ripr-swarm/issues/3213#issuecomment-6115227671",
+  "case_approver": null
+}

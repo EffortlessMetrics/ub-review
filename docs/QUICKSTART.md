@@ -118,10 +118,21 @@ PR workflow. See the [GitHub security guidance](#security-references).
 | Symptom | Evidence to inspect | Safe response |
 | --- | --- | --- |
 | No review appears | Skip receipt, prepared payload, post result/error and delivery transaction, all bound to the current head | Expected quiet, artifact-only, and failed delivery are different states. Do not infer posting from preparation. |
-| Tool or proof unavailable | Sensor status, proof receipt, argv, exit/timeout, platform/tool version | Report missing evidence; retain existing CI. Do not create a code defect or PASS from absence. |
+| Sensor failed or is unavailable | `<RUN_DIR>/sensors/<id>/ub-review-sensor-status.json`, `<RUN_DIR>/sensors/<id>/stdout.txt`, `<RUN_DIR>/sensors/<id>/stderr.txt`; for a configured threshold, `<RUN_DIR>/review/tool-gate-outcomes.json#<tool>` | Re-render with `ub-review summary --run-dir <RUN_DIR>`. A failed command is an execution result, not by itself a code defect; missing/unavailable evidence stays missing. For core tool installation/version checks, run `ub-review doctor --require-core-tools` in the same environment. |
+| Gate-required proof is unresolved or unavailable | `<RUN_DIR>/review/gate_outcome.json` and any receipt reference to `<RUN_DIR>/review/proof_receipts.json#<receipt-id>`; use `<RUN_DIR>/review/proof_requests.json` to identify the request | Follow the gate artifact's own conclusion and receipt. An applicable Required obligation without a satisfying receipt remains unproven; a missing receipt does not establish success or a source defect by itself. |
 | Analyzer flags apparently tested behavior | Exact analyzer version, canonical diff and digest, finding ID, source path, reproducer and discriminating assertion | Investigate upstream and keep genuine gaps separate. Do not blanket-suppress findings to qualify a release. |
 | Large or stalled artifact upload | Compressed and expanded size, dominant member, output limits and task deadline | Stop expansion/rollout and retain bounded diagnostics. A timeout is not a byte limit. |
 | Archive cannot execute | Binary version, OS/architecture/libc, asset ID and digest, install receipt | Restore the verified prior pin. Do not silently compile from source under release-only policy. |
+
+The sensor status receipt is authoritative for the outcome and diagnostic.
+`stdout.txt` and `stderr.txt` may be empty placeholders when a command is
+missing; their presence does not establish that the command ran.
+
+The summary's `Required planner proofs` count is a separate planner/broker
+denominator, not the configured `[[proof.required]]` gate denominator. Use
+`review/gate_outcome.json` and its exact receipt references to understand the
+gate result; do not treat an artifact-only run or an unproven planner task as a
+successful proof.
 
 For a support report include the exact Action/tool SHA, reviewed candidate and
 merge identities, run ID and attempt, artifact ID/digest, sanitized effective
