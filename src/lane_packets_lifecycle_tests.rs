@@ -22,6 +22,10 @@ fn timed_out_live_child_cannot_become_successful_proof() -> Result<()> {
 }
 
 fn stopped_child_receipt(stop: Stop) -> Result<()> {
+    stopped_child_receipt_after_start_delay(stop, 0)
+}
+
+fn stopped_child_receipt_after_start_delay(stop: Stop, start_delay_ms: u64) -> Result<()> {
     let temp = tempfile::tempdir()?;
     let started = temp.path().join("started");
     let delayed = temp.path().join("delayed");
@@ -48,10 +52,14 @@ fn stopped_child_receipt(stop: Stop) -> Result<()> {
         argv: vec![
             std::env::current_exe()?.display().to_string(),
             "--exact".to_owned(),
-            "lane_packets::tests::fake_delayed_marker_child".to_owned(),
+            "lane_packets::lifecycle_receipt_tests::startup_marker_child".to_owned(),
             "--nocapture".to_owned(),
         ],
         env: BTreeMap::from([
+            (
+                "UB_LIFECYCLE_START_DELAY_MS".to_owned(),
+                start_delay_ms.to_string(),
+            ),
             (
                 "UB_REVIEW_WAIT_ERROR_STARTED".to_owned(),
                 started.display().to_string(),
@@ -115,32 +123,26 @@ fn stopped_child_receipt(stop: Stop) -> Result<()> {
                     observe_process,
                 },
                 &mut |child, timeout| {
-                    for _ in 0..100 {
-                        if started.is_file() {
-                            child_was_running = child.try_wait()?.is_none();
-                            #[cfg(target_os = "linux")]
-                            {
-                                if !Path::new("/proc").join(child.id().to_string()).is_dir() {
-                                    return Err(io::Error::other(
-                                        "live child is not visible in procfs",
-                                    ));
-                                }
-                                child_pid = Some(child.id());
+                    wait_for_start_marker(&started, Duration::from_secs(5))?;
+                    {
+                        child_was_running = child.try_wait()?.is_none();
+                        #[cfg(target_os = "linux")]
+                        {
+                            if !Path::new("/proc").join(child.id().to_string()).is_dir() {
+                                return Err(io::Error::other(
+                                    "live child is not visible in procfs",
+                                ));
                             }
-                            return match stop {
-                                Stop::Interrupted => Err(io::Error::new(
-                                    io::ErrorKind::Interrupted,
-                                    "injected execution interruption",
-                                )),
-                                Stop::TimedOut => child.wait_timeout(timeout),
-                            };
+                            child_pid = Some(child.id());
                         }
-                        thread::sleep(Duration::from_millis(10));
+                        match stop {
+                            Stop::Interrupted => Err(io::Error::new(
+                                io::ErrorKind::Interrupted,
+                                "injected execution interruption",
+                            )),
+                            Stop::TimedOut => child.wait_timeout(timeout),
+                        }
                     }
-                    Err(io::Error::new(
-                        io::ErrorKind::TimedOut,
-                        "child start marker missing",
-                    ))
                 },
             )
         },
@@ -221,5 +223,54 @@ fn stopped_child_receipt(stop: Stop) -> Result<()> {
         !delayed.exists(),
         "cancelled child survived long enough to publish proof"
     );
+    Ok(())
+}
+
+fn wait_for_start_marker(started: &Path, budget: Duration) -> io::Result<()> {
+    let deadline = Instant::now() + budget;
+    loop {
+        if started.is_file() {
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "child start marker missing",
+            ));
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn delayed_start_still_checks_live_child_cleanup_and_receipt() -> Result<()> {
+    stopped_child_receipt_after_start_delay(Stop::Interrupted, 1500)
+}
+
+#[test]
+fn missing_start_marker_is_bounded() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let before = Instant::now();
+    let error = wait_for_start_marker(&temp.path().join("missing"), Duration::from_millis(50))
+        .err()
+        .context("missing marker must time out")?;
+    ensure!(error.kind() == io::ErrorKind::TimedOut);
+    ensure!(before.elapsed() >= Duration::from_millis(50));
+    ensure!(before.elapsed() < Duration::from_secs(2));
+    Ok(())
+}
+
+#[test]
+fn startup_marker_child() -> Result<()> {
+    let Some(started) = std::env::var_os("UB_REVIEW_WAIT_ERROR_STARTED") else {
+        return Ok(());
+    };
+    let delayed =
+        std::env::var_os("UB_REVIEW_WAIT_ERROR_DELAYED").context("delayed marker missing")?;
+    let delay: u64 = std::env::var("UB_LIFECYCLE_START_DELAY_MS")?.parse()?;
+    thread::sleep(Duration::from_millis(delay));
+    fs::write(started, b"started")?;
+    thread::sleep(Duration::from_secs(2));
+    fs::write(delayed, b"still running")?;
     Ok(())
 }
