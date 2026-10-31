@@ -42701,3 +42701,413 @@ kind = "exposure_gap"
 finding_id = "probe:xtask_tests_release_notes.rs:return_value:67cf6ccb"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1380; probe OUTPUT_NAME.to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, preserves_literal_dollar_currency. Re-verify after any edit to xtask/tests/release_notes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:return_value:3fa7e988"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_matrix_releases_early_commands_before_required_build, actionlint_sensor_scopes_to_changed_workflow_files, actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:return_value:75048809"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_recommendation_is_explicit_and_compatibility_defaults_are_preserved, active_graph_does_not_reuse_stale_proof_receipts, active_graph_keeps_inline_delivery_and_proof_receipt_links. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:predicate:558d9d79"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe actual.get(key) == Some(value),: Strong oracle found: exact value or pattern assertion. Reached by accounting_settles_actual_duration_with_conservative_rounding, actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, body_budget_drops_topics_and_preserves_inline_fallback_receipt. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:a9980e09"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe Ok(()): No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:return_value:fa97e59f"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe Ok(()): No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:84efa756"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe Ok(()): No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:return_value:418565b9"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe Ok(()): No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:predicate:b1b6c143"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe !verified && output.trim() == RECONCILIATION_REJECTION,: Strong oracle found: exact value or pattern assertion. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, child_output_file_wait_reports_timeout_and_cleans_temp_files, enable_regular_file_outputs_preserve_rendering_and_replay. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:5a9cdec3"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe Ok(()): No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:return_value:68c5089e"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe Ok(()): No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:142b350a"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe fs::create_dir(to)?;: No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:error_path:49d89be0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe let entry = entry?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, campaign_oracle_rejects_wrong_result_and_delivery_rewrite, comment_plan_identity_field_gaps_name_the_missing_entry_field. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:error_path:1e04bc27"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe entry.file_type()?.is_file(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, campaign_oracle_rejects_wrong_result_and_delivery_rewrite, comment_plan_identity_field_gaps_name_the_missing_entry_field. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:5aa0e887"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe Ok(()): No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:return_value:2b027547"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe Ok(()): No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:predicate:82489e72"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe before == after,: Strong oracle found: exact value or pattern assertion. Reached by accounting_matrix_releases_early_commands_before_required_build, audit_ci_tokenless_cli_writes_receipts_without_repo_side_effects, broker_replans_after_discriminating_test_receipt_before_build_wind_down. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:return_value:69a1ce76"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by audit_ci_tokenless_cli_writes_receipts_without_repo_side_effects, build_unsafe_review_inline_comments_skips_unchanged_line, campaign_oracle_rejects_wrong_result_and_delivery_rewrite. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:field_construction:babe931f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe bin: PathBuf,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, comment_plan_schema_routes_before_binding_versioned_comments, corrections_bind_each_supported_family_to_its_exact_action. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:field_construction:7a4a2b21"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe program: &Path,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cache_warm_keeps_failed_versions_unavailable, campaign_oracle_rejects_wrong_result_and_delivery_rewrite, changed_path_ordering_and_duplicates_cannot_move_the_digest. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:field_construction:a70ae5ac"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe cwd: &Path,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cache_warm_keeps_failed_versions_unavailable, campaign_oracle_rejects_wrong_result_and_delivery_rewrite, changed_path_ordering_and_duplicates_cannot_move_the_digest. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:error_path:71a65d71"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe fs::symlink_metadata(program)?.is_file(),: Only relational oracle found; it may not discriminate the changed value exactly. Reached by cache_warm_keeps_failed_versions_unavailable, campaign_oracle_rejects_wrong_result_and_delivery_rewrite, doctor_distinguishes_missing_and_spawn_failure. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:match_arm:b9e9b2b2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe let mut child = match cmd.spawn() {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained, artifact_contract_docs_match_ci_audit_verifier_coverage. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:match_arm:25fb4c55"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe Ok(child) => child,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cache_warm_keeps_failed_versions_unavailable, campaign_oracle_rejects_wrong_result_and_delivery_rewrite, child_cleanup_bounds_persistent_interrupted_reaps. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:match_arm:4462ba94"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe Err(error) => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cache_warm_keeps_failed_versions_unavailable, campaign_oracle_rejects_wrong_result_and_delivery_rewrite, child_cleanup_waits_for_confirmed_exit_even_when_kill_reports_an_error. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:match_arm:65574290"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe let status = match child.wait_timeout(Duration::from_secs(30))? {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_settles_actual_duration_with_conservative_rounding, adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:match_arm:d9a7cc42"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe Some(status) => status,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cache_warm_keeps_failed_versions_unavailable, campaign_oracle_rejects_wrong_result_and_delivery_rewrite, candidate_plan_artifacts_preserve_identity_and_budget_status. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:match_arm:ff117952"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe None => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cache_warm_keeps_failed_versions_unavailable, campaign_oracle_rejects_wrong_result_and_delivery_rewrite, doctor_distinguishes_missing_and_spawn_failure. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:return_value:54c712db"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe Ok((: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cache_warm_keeps_failed_versions_unavailable, campaign_oracle_rejects_wrong_result_and_delivery_rewrite, doctor_distinguishes_missing_and_spawn_failure. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:return_value:4c65cd7b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe \"{}{}\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cache_warm_keeps_failed_versions_unavailable, campaign_oracle_rejects_wrong_result_and_delivery_rewrite, doctor_distinguishes_missing_and_spawn_failure. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:field_construction:5d4da536"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe for i,v in enumerate(a):: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_matrix_releases_early_commands_before_required_build, action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:field_construction:3fdc5493"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe if v=='-X': method=a[i+1]: No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:field_construction:efdf5131"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe else:: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, discriminating_and_head_failed_are_published_whatever_else_the_receipt_says, fixture_identity_and_diff_fail_closed_on_real_git_errors. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:c8b44d2e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe (ASSET, \"archive_sha256\"),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:error_path:72075178"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe fs::symlink_metadata(&bin)?.is_file(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, campaign_oracle_rejects_wrong_result_and_delivery_rewrite, comment_plan_schema_routes_before_binding_versioned_comments. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:error_path:42b5bc60"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe )?;: No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:error_path:42b5bc60.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe )?;: No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:402a12e0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe &transport,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:eb778100"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe serde_json::to_vec(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:c53b5b16"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe )?,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:71dc88bd"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:6609babd"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe } else {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, discriminating_and_head_failed_are_published_whatever_else_the_receipt_says, fixture_identity_and_diff_fail_closed_on_real_git_errors. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:892e64e8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:d59735d3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe \"false\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:6609babd.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe } else {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, discriminating_and_head_failed_are_published_whatever_else_the_receipt_says, fixture_identity_and_diff_fail_closed_on_real_git_errors. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:892e64e8.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:36797713"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe \"1\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:36797713.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe \"1\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:f13ccbb5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe \"0\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:f2d9d9a5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe \"5\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:ea9ecbdc"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe \"--posting\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:6609babd.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe } else {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, discriminating_and_head_failed_are_published_whatever_else_the_receipt_says, fixture_identity_and_diff_fail_closed_on_real_git_errors. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:892e64e8.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:0cd74c1c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe \"123\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:50ad9fb0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe ]));: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:78b40394"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe \"UB_REVIEW_MINIMAX_API_KEY\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:side_effect:838e6d20"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe \"UB_REVIEW_MINIMAX_API_KEY\",: No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:c03a6f66"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe ));: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:side_effect:17a50e5b"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe ));: No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:87e6723a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe let (verified, verification) = c.invoke(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, env_scrub_driver_invokes_isolated_plan, fixture_identity_and_diff_fail_closed_on_real_git_errors. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:c8272436"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe &[: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:3b0ebc2b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe ],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:105c0c1e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe &[],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:error_path:42b5bc60.3"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe )?;: No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:79e343a5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe packet_verdict(id, verified, &verification)?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:e48d03c4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe \"-c\".to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:6a64a499"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe UNAFFECTED_CONTRACTS.to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:match_arm:f23c9115"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe let expected = match *id {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained, artifact_contract_docs_match_ci_audit_verifier_coverage. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:match_arm:ecb2f011"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe \"required-gap\" => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_tree_without_a_cargo_workspace_records_no_lockfile_gap, accounting_matrix_releases_early_commands_before_required_build, baseline_gate_sensor_argvs_match_required_matrix. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:match_arm:b33192ea"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe \"provider-finding\" => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by anchoring_failure_keeps_the_model_finding_out_of_the_diagnostic, cache_artifacts_use_follow_up_result_provider, cache_events_include_provider_preflight_usage. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:match_arm:e180cb47"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe \"provider-text\" => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_pr_thread_context_omits_reuse_rules, build_unsafe_review_inline_comments_surfaces_repair_queue_context, cache_artifacts_use_follow_up_result_provider. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:match_arm:92031c40"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe \"off\" => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, candidate_gate_job_is_model_off_artifact_only_and_without_privileged_inputs, cmd_enable_with_resolver_writes_release_workflow_offline. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:match_arm:3a28822c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe _ => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:f0c933c0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe .as_array(): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:471de8e3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe .as_object(): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:call_deletion:baefee79"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:return_value:680052c4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:error_path:7af15df0"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe )?;: No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:error_path:5c38aa43"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe }))?;: No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:error_path:7af15df0.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe )?;: No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:error_path:7af15df0.3"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe )?;: No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:predicate:89af2e2f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1391; probe && r[\"status\"] == 204),: Strong oracle found: exact value or pattern assertion. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, candidate_plan_artifacts_preserve_identity_and_budget_status, cmd_status_prints_notable_events. Re-verify after any edit to tests/archive_advisory_run.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_advisory_run.rs:error_path:7af15df0.4"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1391; probe )?;: No assertion found on related tests. Reached by campaign_oracle_rejects_wrong_result_and_delivery_rewrite, fixture_identity_and_diff_fail_closed_on_real_git_errors, frozen_archive_advisory_campaign. Re-verify after any edit to tests/archive_advisory_run.rs."
