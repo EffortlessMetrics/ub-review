@@ -39877,3 +39877,678 @@ kind = "exposure_gap"
 finding_id = "probe:tests_cli.rs:error_path:c35b1201"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1366; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:2c6e179b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe semantics: \"candidate_head\".to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_internal_audit_retains_no_evidence_semantics, interrupted_live_child_cannot_become_successful_proof, launch_errors_keep_io_semantics_and_child_lifetime_is_unlocked. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:be6d37c7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe command_specs: None,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by interrupted_live_child_cannot_become_successful_proof, proof_task_plan_command_formats_default_bun_and_explicit_command_specs, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:aa9c52a1"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe timeout_sec: Some(1),: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:2504077a"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe timeout_sec: Some(1),: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:2db85b69"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe timeout_sec: Some(1),: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:629e715c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe requested_by: vec![\"lifecycle-regression\".to_owned()],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by contract_round_trips_each_serialized_shape_and_lifecycle_state, failure_stage_tracks_each_delivery_lifecycle_boundary, interrupted_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:1c313ef0"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe \"--nocapture\".to_owned(),: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:b6bfdf5b"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe ],: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:395b0c15"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe (: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:43dc97aa"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe (: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:e1a5f437"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe \"UB_REVIEW_WAIT_ERROR_STARTED\".to_owned(),: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:491e0ccb"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe \"UB_REVIEW_WAIT_ERROR_STARTED\".to_owned(),: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:4274236e"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe ),: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:fcd196a4"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe ),: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:395b0c15.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe (: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:43dc97aa.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe (: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:605140fb"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe \"UB_REVIEW_WAIT_ERROR_DELAYED\".to_owned(),: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:e34d6635"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe \"UB_REVIEW_WAIT_ERROR_DELAYED\".to_owned(),: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:4274236e.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe ),: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:fcd196a4.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe ),: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:b7c87e4b"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe ]),: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:06c3b21c"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe ]),: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:6bc69f21"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe cpu: 1,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:dd224ba1"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe memory_mb: 512,: No assertion found on related tests. Reached by inspected_enable_detects_unsafe_native_in_admitted_file_512, inspected_enable_preserves_512_file_admission_cap, interrupted_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:238695cf"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe disk_mb: 64,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:29b53800"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe timeout_sec: 1,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:e4123f15"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe network: false,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, native_admission_helper_contract_is_exercised_without_network_or_product_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:31893d2c"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe scratch: false,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:ffe17293"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe let mut child_pid = None;: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:bb77be90"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe ensure!(started.is_file());: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by failure_and_cleanup_guards_reject_terminal_or_unstarted_states, interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:6a5e2737"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe ensure!(!delayed.exists());: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by degradation_uses_artifact_only_when_no_public_topic_exists, fake_delayed_marker_child, interrupted_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:3045bab1"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe Ok(()): No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:6adeba89"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe Ok(()): No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:4fe7f8cd"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe &out,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_tree_without_a_cargo_workspace_records_no_lockfile_gap, a_workspace_without_a_lockfile_selects_no_cargo_candidate, accounting_timeout_spends_allowance_and_aggregates_red_green_once. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:ae6dcf61"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe &out,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_tree_without_a_cargo_workspace_records_no_lockfile_gap, a_workspace_without_a_lockfile_selects_no_cargo_candidate, accounting_timeout_spends_allowance_and_aggregates_red_green_once. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:1dca2c55"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe 1,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:d706207a"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe 1,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:231ff192"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe 1,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:cee51635"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe ProofExecutionPhase::ModelRequest,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:9143c7e6"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe ProofExecutionPhase::ModelRequest,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:2bf1f1a7"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe ProofExecutionPhase::ModelRequest,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:de05d232"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe run_command_to_files_inner_with_wait(: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:e81ede29"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe run_command_to_files_inner_with_wait(: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:514e56f1"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe run_command_to_files_inner_with_wait(: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:18631372"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe CommandRun {: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:49c4f1a9"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe CommandRun {: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:c1271841"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe CommandRun {: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:013d9842"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe env,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by ci_repair_invalid_envelopes_are_not_complete_empty_arrays, cli_environment_preserves_coverage_and_platform_keys_only, comment_plan_envelope_accepts_additive_fields_and_retains_opaque_identity. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:c0c2e9da"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe env,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by ci_repair_invalid_envelopes_are_not_complete_empty_arrays, cli_environment_preserves_coverage_and_platform_keys_only, comment_plan_envelope_accepts_additive_fields_and_retains_opaque_identity. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:923f46f7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe env,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by ci_repair_invalid_envelopes_are_not_complete_empty_arrays, cli_environment_preserves_coverage_and_platform_keys_only, comment_plan_envelope_accepts_additive_fields_and_retains_opaque_identity. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:777b016f"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe timeout_sec,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:98147cb6"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe timeout_sec,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:251e69b7"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe timeout_sec,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:4bfbe7bc"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe timeout_sec,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:87ec2e90"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe stdout_path,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:624f2dac"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe stdout_path,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:2216a097"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe stdout_path,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:05a31b20"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe stdout_path,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:1da9c70b"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe stderr_path,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:bfe20a48"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe stderr_path,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:5e040b34"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe stderr_path,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:ad7871f1"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe stderr_path,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:1e774d4d"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe quarantine_environment: false,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:3f97a5a4"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe quarantine_environment: false,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:9f7e0e3c"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe quarantine_environment: false,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:3abf59e9"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe quarantine_environment: false,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:495fd5ce"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe observe_process,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:0c9868fc"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe observe_process,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:5c4413cd"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe observe_process,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:e68dd9e7"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe observe_process,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:b2eaa246"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe },: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:5173f64f"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe },: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:2b36170b"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe },: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:a3d62996"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe for _ in 0..100 {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_matrix_releases_early_commands_before_required_build, action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:6bb2d994"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe for _ in 0..100 {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_matrix_releases_early_commands_before_required_build, action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:78b7a016"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe if started.is_file() {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by failure_and_cleanup_guards_reject_terminal_or_unstarted_states, interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:17aa07a8"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe if started.is_file() {: No assertion found on related tests. Reached by failure_and_cleanup_guards_reject_terminal_or_unstarted_states, interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:68c307f6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe if started.is_file() {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by failure_and_cleanup_guards_reject_terminal_or_unstarted_states, interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:a78a6cde"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe {: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:21401942"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe {: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:2e309a8b"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe {: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:9c741c3f"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe ));: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:00fe880f"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe ));: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:dbb5cdb0"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe ));: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:dd4fd9ef"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe }: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:26eb31aa"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe }: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:18e16bb3"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe }: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:dd4fd9ef.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe }: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:26eb31aa.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe }: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:18e16bb3.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe }: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:match_arm:3d0f9c62"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe return match stop {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained, artifact_contract_docs_match_ci_audit_verifier_coverage. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:be1643e4"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe io::ErrorKind::Interrupted,: No assertion found on related tests. Reached by child_cleanup_bounds_persistent_interrupted_reaps, child_cleanup_retries_interrupted_reaps_until_exit_is_confirmed, interrupted_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:e3353f83"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe io::ErrorKind::Interrupted,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by child_cleanup_bounds_persistent_interrupted_reaps, child_cleanup_retries_interrupted_reaps_until_exit_is_confirmed, interrupted_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:6f7c6ed0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe \"injected execution interruption\",: Only relational oracle found; it may not discriminate the changed value exactly. Reached by broker_satisfies_new_request_from_existing_receipt_without_execution, execution_requirements_are_part_of_request_identity, fake_clock_keeps_all_execution_phases_distinct. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:f072f31a"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe )),: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:774d8440"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe )),: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:8b507b36"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe )),: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:match_arm:0080523d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe Stop::TimedOut => child.wait_timeout(timeout),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_timeout_spends_allowance_and_aggregates_red_green_once, child_cleanup_bounds_persistent_interrupted_reaps, child_cleanup_marks_release_unconfirmed_when_reaping_fails. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:a1eb3932"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe };: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:a0f84a88"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe };: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:a516e8ac"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe };: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:dd4fd9ef.3"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe }: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:26eb31aa.3"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe }: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:18e16bb3.3"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe }: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:dd4fd9ef.4"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe }: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:26eb31aa.4"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe }: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:18e16bb3.4"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe }: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:ea418254"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe io::ErrorKind::TimedOut,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:02b8a2b9"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe io::ErrorKind::TimedOut,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:535c93e6"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe io::ErrorKind::TimedOut,: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:1982be68"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe )): No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:d2677afb"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe )): No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:a06ba25d"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe )): No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:b2eaa246.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe },: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:5173f64f.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe },: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:2b36170b.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe },: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:ce421699"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe ): No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:054791e6"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe ): No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:085242ff"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe ): No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:b2eaa246.3"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe },: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:5173f64f.3"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe },: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:2b36170b.3"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe },: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:94cf06d2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe )?;: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:e63b2d70"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe )?;: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:43f8a162"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe )?;: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:c2024c4f"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe ensure!(cleanup_called);: No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:match_arm:e2d6d5c6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe let (status, disposition, timed_out) = match stop {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained, artifact_contract_docs_match_ci_audit_verifier_coverage. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:match_arm:f1e26a73"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe Stop::Interrupted => (\"skipped\", TaskTerminalDisposition::Cancelled, false),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by calibration_reporter_skipped, cancelled_exact_head_without_replacement_is_inconclusive, cancelled_with_in_progress_replacement_before_deadline_stays_pending. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:match_arm:cb8b568b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe Stop::TimedOut => (\"timed_out\", TaskTerminalDisposition::TimedOut, true),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by classify_passes_through_passed_timed_out_skipped, completion_unconfirmed_stops_before_terminal_receipt_and_release, convergence_stops_at_max_rounds. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:fcff0510"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe .into_iter(): No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:ce421699.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe ): No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:22c6d08e"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe }): No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:57584c21"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1368; probe !delayed.exists(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by degradation_uses_artifact_only_when_no_public_topic_exists, fake_delayed_marker_child, interrupted_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:3045bab1.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe Ok(()): No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:6adeba89.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1368; probe Ok(()): No assertion found on related tests. Reached by interrupted_live_child_cannot_become_successful_proof, timed_out_live_child_cannot_become_successful_proof. Re-verify after any edit to src/lane_packets_lifecycle_tests.rs."
