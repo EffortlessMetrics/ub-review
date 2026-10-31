@@ -8355,12 +8355,51 @@ diff_classes = ["docs-only"]
             .map(|(_, section)| section)
             .unwrap_or_default();
         let checkout_index = publish_section.find("uses: actions/checkout@v5");
-        let notes_index = publish_section.find("--notes-file .github/release-notes.md");
+        let notes_index = publish_section.find("--notes-file dist/release-notes.md");
         assert!(
             checkout_index
                 .zip(notes_index)
                 .is_some_and(|(checkout, notes)| checkout < notes),
             "the publish job must check out the tagged repository before reading release notes"
+        );
+        assert!(
+            !publish_section.contains("--notes-file .github/release-notes.md"),
+            "the publish job must publish rendered notes, not the raw template"
+        );
+        let candidate_index =
+            publish_section.find("name: Validate immutable release candidate receipt");
+        let render_index = publish_section.find("render-release-notes");
+        let release_index = publish_section.find("gh release");
+        assert!(
+            candidate_index
+                .zip(render_index)
+                .zip(release_index)
+                .zip(notes_index)
+                .is_some_and(|(((candidate, render), release), notes)| {
+                    candidate < render && render < release && render < notes
+                }),
+            "the publish job must render release notes after candidate validation and before any gh release command"
+        );
+        assert!(
+            !publish_section.contains("dtolnay/rust-toolchain@master")
+                && !publish_section.contains("rustup default"),
+            "the publish job must not add a mutable toolchain action or persistent host state"
+        );
+        assert!(
+            publish_section.contains("rustup toolchain install 1.95.0 --profile minimal")
+                && publish_section
+                    .contains("cargo +1.95.0 run --locked --package xtask -- render-release-notes")
+                && publish_section.contains("--tag \"$TAG\" --output dist/release-notes.md")
+                && publish_section.contains("TAG: ${{ steps.tag.outputs.tag }}"),
+            "the publish job must render notes offline with the pinned toolchain and validated tag"
+        );
+        let install_index =
+            publish_section.find("rustup toolchain install 1.95.0 --profile minimal");
+        assert!(
+            install_index
+                .zip(render_index)
+                .is_some_and(|(install, render)| install < render),
+            "the publish job must install the pinned toolchain before rendering release notes"
         );
     }
 
