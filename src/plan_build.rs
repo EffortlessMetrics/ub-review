@@ -333,6 +333,407 @@ pub(crate) fn git_text_owned(root: &Path, args: &[String]) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+/// Byte-preserving, bounded Git observation. Diagnostics are fixed labels:
+/// stderr, environment and file contents never enter the evidence receipt.
+pub(crate) fn git_bytes_bounded(
+    root: &Path,
+    args: &[&str],
+    max_bytes: usize,
+    timeout: std::time::Duration,
+) -> Result<Vec<u8>> {
+    let mut command = ProcessCommand::new("git");
+    configure_git_observation(&mut command, root, args)?;
+    capture_git_bytes(&mut command, max_bytes, timeout)
+}
+
+/// One shared selector rule for refusal and stripping. Presence matters:
+/// Git can interpret an empty setting (for example GIT_NO_REPLACE_OBJECTS).
+pub(crate) fn git_environment_key(key: &std::ffi::OsStr) -> bool {
+    key.to_string_lossy()
+        .to_ascii_uppercase()
+        .starts_with("GIT_")
+}
+
+/// Pin metadata reads to the supplied checkout, independently of inherited
+/// Git selectors and global/system configuration. Local config remains active
+/// except where the observation contract explicitly overrides it.
+pub(crate) fn configure_git_observation(
+    command: &mut ProcessCommand,
+    root: &Path,
+    args: &[&str],
+) -> Result<()> {
+    let root = root
+        .canonicalize()
+        .map_err(|_| anyhow::anyhow!("root_unavailable"))?;
+    // A nested directory or bare repository is not a checkout root. Linked
+    // worktrees use a .git file and remain supported by Git discovery.
+    if !root.join(".git").exists() {
+        bail!("checkout_root_required");
+    }
+    let git_keys: Vec<_> = std::env::vars_os()
+        .map(|(key, _)| key)
+        .chain(command.get_envs().map(|(key, _)| key.to_owned()))
+        .filter(|key| git_environment_key(key))
+        .collect();
+    for key in git_keys {
+        command.env_remove(key);
+    }
+    command.env("GIT_CONFIG_NOSYSTEM", "1").env(
+        "GIT_CONFIG_GLOBAL",
+        if cfg!(windows) { "NUL" } else { "/dev/null" },
+    );
+    command
+        .arg("--no-optional-locks")
+        .arg("-C")
+        .arg(&root)
+        .arg("--work-tree")
+        .arg(&root)
+        .args([
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.untrackedCache=false",
+        ])
+        .args(args);
+    Ok(())
+}
+
+fn capture_git_bytes(
+    command: &mut ProcessCommand,
+    max_bytes: usize,
+    timeout: std::time::Duration,
+) -> Result<Vec<u8>> {
+    use std::io::Read;
+    use std::process::Stdio;
+    use wait_timeout::ChildExt;
+    let deadline = std::time::Instant::now() + timeout;
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| anyhow::anyhow!("spawn_failed"))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("stdout_unavailable"))?;
+    let (send, receive) = std::sync::mpsc::sync_channel(1);
+    // Never join a pipe reader: an unexpected descendant can retain stdout.
+    // Its buffer is capped even when the observation times out.
+    let reader = std::thread::Builder::new().spawn(move || {
+        let mut bytes = Vec::new();
+        let result = stdout
+            .take(max_bytes.saturating_add(1) as u64)
+            .read_to_end(&mut bytes)
+            .map(|_| bytes);
+        let _ = send.send(result);
+    });
+    if reader.is_err() {
+        let _ = child.kill();
+        let _ = child.wait_timeout(std::time::Duration::from_millis(100));
+        bail!("reader_spawn_failed");
+    }
+    let observed =
+        receive.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()));
+    let bytes = match observed {
+        Ok(Ok(bytes)) if bytes.len() <= max_bytes => bytes,
+        other => {
+            let _ = child.kill();
+            let _ = child.wait_timeout(std::time::Duration::from_millis(100));
+            bail!(match other {
+                Ok(Ok(_)) => "byte_limit",
+                Ok(Err(_)) => "read_failed",
+                Err(_) => "timeout",
+            });
+        }
+    };
+    match child.wait_timeout(deadline.saturating_duration_since(std::time::Instant::now())) {
+        Ok(Some(status)) if status.success() => Ok(bytes),
+        Ok(Some(_)) => bail!("git_failed"),
+        other => {
+            let _ = child.kill();
+            let _ = child.wait_timeout(std::time::Duration::from_millis(100));
+            bail!(if other.is_err() {
+                "wait_failed"
+            } else {
+                "timeout"
+            });
+        }
+    }
+}
+
+#[cfg(test)]
+mod bounded_git_tests {
+    use super::{capture_git_bytes, configure_git_observation, git_environment_key, git_text};
+    use anyhow::Result;
+    use std::process::Command;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn selector_rule_covers_replacements_and_future_git_settings() {
+        for key in [
+            "GIT_DIR",
+            "GIT_INDEX_FILE",
+            "GIT_NO_REPLACE_OBJECTS",
+            "GIT_REPLACE_REF_BASE",
+            "GIT_CONFIG_COUNT",
+            "GIT_FUTURE_SELECTOR",
+            "git_trace",
+        ] {
+            assert!(git_environment_key(std::ffi::OsStr::new(key)), "{key}");
+        }
+        for key in ["GITHUB_ACTIONS", "XGIT_DIR", "PATH", "GIT"] {
+            assert!(!git_environment_key(std::ffi::OsStr::new(key)), "{key}");
+        }
+    }
+
+    #[test]
+    fn git_observation_ignores_external_selectors_and_configuration() -> Result<()> {
+        let fixture = tempfile::tempdir()?;
+        let root = fixture.path().join("root");
+        let foreign = fixture.path().join("foreign");
+        for (path, name) in [(&root, "local.rs"), (&foreign, "foreign.rs")] {
+            std::fs::create_dir(path)?;
+            git_text(path, &["init", "-q", "-b", "main"])?;
+            git_text(path, &["config", "user.name", "observation test"])?;
+            git_text(
+                path,
+                &["config", "user.email", "observation@example.invalid"],
+            )?;
+            std::fs::write(path.join(name), "base\n")?;
+            git_text(path, &["add", "."])?;
+            git_text(path, &["commit", "-qm", "base"])?;
+        }
+        let external_index = fixture.path().join("external.index");
+        let mut alternate = Command::new("git");
+        alternate
+            .arg("-C")
+            .arg(&root)
+            .args(["read-tree", "HEAD"])
+            .env("GIT_INDEX_FILE", &external_index);
+        capture_git_bytes(&mut alternate, 1024, Duration::from_secs(1))?;
+        std::fs::write(root.join("local.rs"), "staged\n")?;
+        git_text(&root, &["add", "local.rs"])?;
+        let diff_args = [
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z",
+            "--no-renames",
+            "--no-ext-diff",
+            "--no-textconv",
+            "HEAD",
+            "--",
+        ];
+        let mut before = Command::new("git");
+        before
+            .arg("-C")
+            .arg(&root)
+            .args(diff_args)
+            .env("GIT_INDEX_FILE", &external_index);
+        assert!(capture_git_bytes(&mut before, 1024, Duration::from_secs(1))?.is_empty());
+        let expected_head = git_text(&root, &["rev-parse", "HEAD"])?;
+        // Each selector is tested independently; tests never mutate the
+        // process-wide environment or alter the legacy admission helpers.
+        for (key, value) in [
+            ("GIT_INDEX_FILE", external_index.clone()),
+            ("GIT_DIR", foreign.join(".git")),
+            ("GIT_WORK_TREE", foreign.clone()),
+            ("GIT_COMMON_DIR", foreign.join(".git")),
+            ("GIT_OBJECT_DIRECTORY", foreign.join(".git/objects")),
+            (
+                "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+                foreign.join(".git/objects"),
+            ),
+            ("GIT_CONFIG", foreign.join(".git/config")),
+            ("GIT_CONFIG_SYSTEM", foreign.join(".git/config")),
+        ] {
+            let mut command = Command::new("git");
+            command.env(key, &value);
+            configure_git_observation(&mut command, &root, &diff_args)?;
+            assert_eq!(
+                capture_git_bytes(&mut command, 1024, Duration::from_secs(1))?,
+                b"local.rs\0",
+                "{key}"
+            );
+        }
+        let global_config = fixture.path().join("global.config");
+        std::fs::write(
+            &global_config,
+            format!(
+                "[core]\nworktree = {}\n[diff]\nrenames = true\n",
+                foreign.display()
+            ),
+        )?;
+        let mut command = Command::new("git");
+        command
+            .env("GIT_DIR", foreign.join(".git"))
+            .env("GIT_INDEX_FILE", &external_index)
+            .env("GIT_CONFIG_GLOBAL", &global_config)
+            .env("GIT_CONFIG_COUNT", "1")
+            .env("GIT_CONFIG_KEY_0", "core.worktree")
+            .env("GIT_CONFIG_VALUE_0", &foreign)
+            .env("GIT_CONFIG_PARAMETERS", "'diff.renames=true'")
+            .env("GIT_LITERAL_PATHSPECS", "1")
+            .env("GIT_NO_REPLACE_OBJECTS", "")
+            .env("GIT_REPLACE_REF_BASE", "refs/custom-replace/")
+            .env("GIT_FUTURE_SELECTOR", "")
+            .env("OBSERVATION_TEST_MARKER", "retained");
+        configure_git_observation(&mut command, &root, &["rev-parse", "HEAD"])?;
+        assert_eq!(
+            capture_git_bytes(&mut command, 1024, Duration::from_secs(1))?,
+            expected_head.as_bytes()
+        );
+        for (key, value) in command.get_envs() {
+            if key.to_string_lossy().starts_with("GIT_")
+                && key != "GIT_CONFIG_GLOBAL"
+                && key != "GIT_CONFIG_NOSYSTEM"
+            {
+                assert!(value.is_none(), "Git selector must be removed");
+            }
+        }
+        assert!(
+            command
+                .get_envs()
+                .any(|(key, value)| key == "OBSERVATION_TEST_MARKER" && value.is_some())
+        );
+        // Repository-local worktree redirection is also overridden without
+        // disabling unrelated local ignore/config semantics.
+        git_text(
+            &root,
+            &["config", "core.worktree", &foreign.to_string_lossy()],
+        )?;
+        let mut command = Command::new("git");
+        configure_git_observation(&mut command, &root, &diff_args)?;
+        assert_eq!(
+            capture_git_bytes(&mut command, 1024, Duration::from_secs(1))?,
+            b"local.rs\0"
+        );
+        let mut command = Command::new("git");
+        configure_git_observation(
+            &mut command,
+            &root,
+            &["status", "--porcelain=v1", "-z", "--no-renames"],
+        )?;
+        assert_eq!(
+            capture_git_bytes(&mut command, 1024, Duration::from_secs(1))?,
+            b"M  local.rs\0"
+        );
+        std::fs::create_dir(root.join("nested"))?;
+        assert_eq!(
+            configure_git_observation(&mut Command::new("git"), &root.join("nested"), &diff_args)
+                .err()
+                .map(|e| e.to_string())
+                .as_deref(),
+            Some("checkout_root_required")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn missing_executable_is_fixed_label() {
+        let result = capture_git_bytes(
+            &mut Command::new("/nonexistent-ub-review-git-observation"),
+            8,
+            Duration::from_millis(50),
+        );
+        assert_eq!(
+            result.err().map(|e| e.to_string()).as_deref(),
+            Some("spawn_failed")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn subprocess_exit_caps_and_deadlines_are_bounded() -> Result<()> {
+        let mut normal = Command::new("sh");
+        normal.args(["-c", "printf 12345678"]);
+        assert_eq!(
+            capture_git_bytes(&mut normal, 8, Duration::from_secs(1))?,
+            b"12345678"
+        );
+        let mut capped = Command::new("sh");
+        capped.args(["-c", "printf 123456789"]);
+        assert_eq!(
+            capture_git_bytes(&mut capped, 8, Duration::from_secs(1))
+                .err()
+                .map(|e| e.to_string())
+                .as_deref(),
+            Some("byte_limit")
+        );
+        let mut failing = Command::new("sh");
+        failing.args(["-c", "printf private-diagnostic >&2; exit 7"]);
+        assert_eq!(
+            capture_git_bytes(&mut failing, 8, Duration::from_secs(1))
+                .err()
+                .map(|e| e.to_string())
+                .as_deref(),
+            Some("git_failed")
+        );
+        let mut sleeping = Command::new("sh");
+        sleeping.args(["-c", "exec sleep 2"]);
+        let start = Instant::now();
+        assert_eq!(
+            capture_git_bytes(&mut sleeping, 8, Duration::from_millis(25))
+                .err()
+                .map(|e| e.to_string())
+                .as_deref(),
+            Some("timeout")
+        );
+        assert!(start.elapsed() < Duration::from_secs(1));
+        // The owned shell exits while a short-lived descendant retains stdout.
+        // The caller must return without joining the pipe reader.
+        let mut inherited = Command::new("sh");
+        inherited.args(["-c", "sleep 0.2 & exit 0"]);
+        let start = Instant::now();
+        assert_eq!(
+            capture_git_bytes(&mut inherited, 8, Duration::from_millis(25))
+                .err()
+                .map(|e| e.to_string())
+                .as_deref(),
+            Some("timeout")
+        );
+        assert!(start.elapsed() < Duration::from_millis(180));
+        Ok(())
+    }
+
+    /// EOF before timeout exercises owned-child waiting rather than the pipe
+    /// deadline. A vanished /proc entry excludes a surviving child or zombie.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn timeout_after_stdout_closes_kills_and_reaps_owned_child() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let pid_file = temp.path().join("owned.pid");
+        let mut sleeping = Command::new("sh");
+        sleeping
+            .args([
+                "-c",
+                "printf '%s' \"$$\" > \"$1\"; exec 1>&-; exec sleep 10",
+                "owned-observation-child",
+            ])
+            .arg(&pid_file);
+        let start = Instant::now();
+        let result = capture_git_bytes(&mut sleeping, 8, Duration::from_millis(500));
+        let pid = std::fs::read_to_string(&pid_file)?.parse::<u32>()?;
+        let alive = std::path::Path::new("/proc").join(pid.to_string()).exists();
+        // Keep test-owned cleanup bounded if a future cleanup regression (or
+        // an isolated mutant) leaves the process alive. Assert the pre-cleanup
+        // observation so the regression cannot be hidden by this fixture.
+        if alive {
+            let mut cleanup = Command::new("kill");
+            cleanup.arg(pid.to_string());
+            let _ = capture_git_bytes(&mut cleanup, 0, Duration::from_millis(100));
+        }
+        assert_eq!(
+            result.err().map(|error| error.to_string()).as_deref(),
+            Some("timeout")
+        );
+        assert!(start.elapsed() < Duration::from_secs(2));
+        assert!(!alive, "owned child must be killed and reaped");
+        Ok(())
+    }
+}
+
 pub(crate) fn build_plan(
     config: &Config,
     profile: &Profile,

@@ -894,6 +894,7 @@ mod tests {
             reviewed_commit_oid: "3".repeat(40),
             pr_head_commit: None,
             worktree_dirty: false,
+            worktree_evidence: None,
         };
         fs::create_dir_all(out.join("input"))?;
         fs::write(
