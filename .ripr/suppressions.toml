@@ -39857,3 +39857,8 @@ kind = "exposure_gap"
 finding_id = "probe:xtask_src_main.rs:return_value:ea6526e8"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1359; probe .collect(): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:field_construction:3064df08"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1363; probe ),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by default_sensor_phase_classifies_by_class_and_lease, impact_resolved_mode_defaults_to_shadow_and_clamps_invalid, impact_section_parses_and_is_known_top_level. Re-verify after any edit to src/config.rs."
