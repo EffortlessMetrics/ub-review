@@ -41037,3 +41037,13 @@ kind = "exposure_gap"
 finding_id = "probe:tests_archive_onboarding.rs:return_value:dbb42d8c"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1382; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, enable_inspect_requires_a_repository_root, enable_workflows_render_primary_with_optional_opencode_fallback. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_public_metadata_contract.rs:return_value:4a0ec1e0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1383; probe .split_once(\"\\n --\"): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_recommendation_is_explicit_and_compatibility_defaults_are_preserved, adoption_docs_match_setup_ci_current_surface, built_run_and_enable_help_preserve_options_and_distinguish_recommendation. Re-verify after any edit to tests/public_metadata_contract.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_public_metadata_contract.rs:return_value:238e2879"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1383; probe .split_whitespace(): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_recommendation_is_explicit_and_compatibility_defaults_are_preserved, adoption_docs_match_setup_ci_current_surface, built_run_and_enable_help_preserve_options_and_distinguish_recommendation. Re-verify after any edit to tests/public_metadata_contract.rs."
