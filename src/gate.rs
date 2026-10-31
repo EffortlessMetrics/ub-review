@@ -393,6 +393,95 @@ pub(crate) struct DeferredPlannerProof {
     pub(crate) request_ids: Vec<String>,
     pub(crate) receipt_ids: Vec<String>,
     pub(crate) receipts_present: bool,
+    pub(crate) receipt_diagnostics: Vec<PlannerReceiptDiagnostic>,
+}
+
+/// Fixed diagnostics only: command text, output and receipt reasons remain private.
+/// These explain rejection; they never confer proof or enforcement authority.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum PlannerReceiptDiagnostic {
+    Missing,
+    WrongSubject,
+    CurrentRevisionUnavailable,
+    ReceiptRevisionUnavailable,
+    StaleRevision,
+    HeadOnly,
+    Failed,
+    NotPassing,
+}
+
+impl PlannerReceiptDiagnostic {
+    pub(crate) fn summary(self) -> &'static str {
+        match self {
+            Self::Missing => "no run receipts; execute the required task for the admitted revision",
+            Self::WrongSubject => {
+                "run receipts share no task request id; execute this task's requests"
+            }
+            Self::CurrentRevisionUnavailable => {
+                "current revision unavailable; restore admission before retrying"
+            }
+            Self::ReceiptRevisionUnavailable => {
+                "receipt revision unavailable; obtain a revision-bound receipt"
+            }
+            Self::StaleRevision => "stale receipt revision; rerun for the admitted revision",
+            Self::HeadOnly => "head-only receipt; obtain the required base-plus-tests proof",
+            Self::Failed => {
+                "failed or timed-out receipt; inspect private proof results before retrying"
+            }
+            Self::NotPassing => {
+                "non-passing receipt; inspect private proof results and complete the obligation"
+            }
+        }
+    }
+}
+
+fn planner_receipt_diagnostics(
+    task: &PlannerPortfolioTask,
+    receipts: &[ProofReceipt],
+    revision_digest: Option<&str>,
+) -> Vec<PlannerReceiptDiagnostic> {
+    use PlannerReceiptDiagnostic as Diagnostic;
+    if receipts.is_empty() {
+        return vec![Diagnostic::Missing];
+    }
+    let matching = receipts
+        .iter()
+        .filter(|receipt| {
+            crate::proof::broker::receipt_shares_proof_request(receipt, &task.request_ids)
+        })
+        .collect::<Vec<_>>();
+    if matching.is_empty() {
+        return vec![Diagnostic::WrongSubject];
+    }
+    let mut diagnostics = Vec::new();
+    for receipt in matching {
+        let revision_issue = match (revision_digest, receipt.revision.as_ref()) {
+            (None, _) => Some(Diagnostic::CurrentRevisionUnavailable),
+            (_, None) => Some(Diagnostic::ReceiptRevisionUnavailable),
+            (Some(digest), Some(revision)) if revision.digest != digest => {
+                Some(Diagnostic::StaleRevision)
+            }
+            _ => None,
+        };
+        for issue in [
+            revision_issue,
+            (receipt.test_patch_mode == "head-only").then_some(Diagnostic::HeadOnly),
+            match required_proof_receipt_class(receipt) {
+                RequiredProofClass::Failed => Some(Diagnostic::Failed),
+                RequiredProofClass::Skipped => Some(Diagnostic::NotPassing),
+                RequiredProofClass::Passed => None,
+            },
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if !diagnostics.contains(&issue) {
+                diagnostics.push(issue);
+            }
+        }
+    }
+    diagnostics
 }
 
 /// Retained accounting over the planner-required portfolio-task denominator
@@ -473,6 +562,11 @@ pub(crate) fn build_planner_required_proof_accounting(
                 request_ids: task.request_ids.clone(),
                 receipt_ids: task.receipt_ids.clone(),
                 receipts_present: false,
+                receipt_diagnostics: planner_receipt_diagnostics(
+                    task,
+                    proof_receipts,
+                    revision_digest,
+                ),
             });
         }
     }
@@ -3067,6 +3161,130 @@ mod tests {
         PlannerPortfolioSnapshot {
             decisions: vec![deferred_required_portfolio_task(true)],
         }
+    }
+
+    /// Real gate accounting -> serialized artifact -> summary: receipt presence is
+    /// not proof. Each fixture changes one eligibility leg from the passing control.
+    #[test]
+    fn planner_receipt_diagnostics_distinguish_missing_stale_wrong_subject_and_failed() -> Result<()>
+    {
+        use super::PlannerReceiptDiagnostic as Diagnostic;
+        let mut passing = planner_task_receipt("head_passed", "passed");
+        passing.revision = Some(planner_revision(PLANNER_TEST_DIGEST));
+        passing.test_patch_mode = "base-plus-tests".to_owned();
+        passing.reason = "PRIVATE_RECEIPT_REASON".to_owned();
+        passing.commands[0].stdout = "PRIVATE_COMMAND_OUTPUT".to_owned();
+        let mut stale = passing.clone();
+        stale.revision = Some(planner_revision(PLANNER_STALE_DIGEST));
+        let mut unrelated = passing.clone();
+        unrelated.request_ids = vec!["another-task".to_owned()];
+        let mut failed = passing.clone();
+        failed.result = "head_failed".to_owned();
+        let mut timed_out = passing.clone();
+        timed_out.result = "timed_out".to_owned();
+        let mut skipped = passing.clone();
+        skipped.result = "skipped_budget".to_owned();
+        let mut head_only = passing.clone();
+        head_only.test_patch_mode = "head-only".to_owned();
+        let mut unbound = passing.clone();
+        unbound.revision = None;
+        for (receipts, revision, expected) in [
+            (vec![], Some(PLANNER_TEST_DIGEST), vec![Diagnostic::Missing]),
+            (
+                vec![unrelated.clone()],
+                Some(PLANNER_TEST_DIGEST),
+                vec![Diagnostic::WrongSubject],
+            ),
+            (
+                vec![stale.clone()],
+                Some(PLANNER_TEST_DIGEST),
+                vec![Diagnostic::StaleRevision],
+            ),
+            (
+                vec![failed.clone()],
+                Some(PLANNER_TEST_DIGEST),
+                vec![Diagnostic::Failed],
+            ),
+            (
+                vec![timed_out],
+                Some(PLANNER_TEST_DIGEST),
+                vec![Diagnostic::Failed],
+            ),
+            (
+                vec![skipped],
+                Some(PLANNER_TEST_DIGEST),
+                vec![Diagnostic::NotPassing],
+            ),
+            (
+                vec![head_only],
+                Some(PLANNER_TEST_DIGEST),
+                vec![Diagnostic::HeadOnly],
+            ),
+            (
+                vec![unbound],
+                Some(PLANNER_TEST_DIGEST),
+                vec![Diagnostic::ReceiptRevisionUnavailable],
+            ),
+            (
+                vec![passing.clone()],
+                None,
+                vec![Diagnostic::CurrentRevisionUnavailable],
+            ),
+            (
+                vec![unrelated, stale, failed.clone(), failed],
+                Some(PLANNER_TEST_DIGEST),
+                vec![Diagnostic::StaleRevision, Diagnostic::Failed],
+            ),
+        ] {
+            let gate = planner_gate(Some(required_portfolio()), &receipts, revision);
+            let serialized = serde_json::to_value(&gate)?;
+            let accounting = gate
+                .planner_required_proofs
+                .as_ref()
+                .context("accounting")?;
+            assert_eq!(
+                (accounting.total, accounting.proven, accounting.unproven),
+                (1, 0, 1)
+            );
+            assert_eq!(accounting.unproven_tasks[0].receipt_diagnostics, expected);
+            assert_eq!(
+                serialized["planner_required_proofs"]["unproven_tasks"][0]["receipt_diagnostics"],
+                serde_json::to_value(&expected)?
+            );
+            assert!(!accounting.unproven_tasks[0].receipts_present);
+            assert_eq!(gate.conclusion, "pass");
+            assert_eq!(gate.analysis_result, "not_proven");
+            assert_eq!(gate.gate_result, "not_proven");
+            assert!(gate.reasons.is_empty());
+            let temp = tempfile::tempdir()?;
+            std::fs::create_dir_all(temp.path().join("review"))?;
+            std::fs::write(temp.path().join("review/metrics.json"), "{}")?;
+            std::fs::write(
+                temp.path().join("review/gate_outcome.json"),
+                serde_json::to_vec(&gate)?,
+            )?;
+            let mut summary = String::new();
+            crate::render_review_efficiency_section(&mut summary, temp.path());
+            assert!(summary.contains("receipts: none satisfying"), "{summary}");
+            assert!(summary.contains("review/proof_receipts.json"), "{summary}");
+            for diagnostic in expected {
+                assert!(summary.contains(diagnostic.summary()), "{summary}");
+            }
+            assert!(!summary.contains("PRIVATE_"), "{summary}");
+            assert!(!summary.contains("receipts: none;"), "{summary}");
+        }
+        let gate = planner_gate(
+            Some(required_portfolio()),
+            &[passing],
+            Some(PLANNER_TEST_DIGEST),
+        );
+        let accounting = gate
+            .planner_required_proofs
+            .as_ref()
+            .context("passing accounting")?;
+        assert_eq!((accounting.proven, accounting.unproven), (1, 0));
+        assert!(accounting.unproven_tasks.is_empty());
+        Ok(())
     }
 
     /// F1 required-over-budget: the deferred required obligation is
