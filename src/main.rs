@@ -11623,6 +11623,13 @@ index 3333333..4444444 100644
 
         assert_eq!(proof_result.proof_receipts.len(), 1);
         assert_eq!(proof_result.proof_receipts[0].result, "skipped_profile");
+        assert!(super::proof_receipt_is_missing_evidence(
+            &proof_result.proof_receipts[0]
+        ));
+        assert_eq!(
+            super::routed_status_for_proof_receipt(&proof_result.proof_receipts[0]),
+            "missing-evidence"
+        );
         assert_eq!(proof_result.resource_leases.len(), 1);
         assert_eq!(proof_result.resource_leases[0].status, "absent");
         assert_eq!(
@@ -17089,7 +17096,7 @@ required_proof_unprooven = true
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
         let plan = test_plan(Vec::new());
         let findings = vec![non_substantive_summary_finding()];
-        let proof_receipts = vec![test_proof_receipt("discriminating", "ok")];
+        let proof_receipts = vec![test_proof_receipt("discriminating", "passed")];
         let model_lanes = vec![model_lane_receipt("tests-oracle", "ok")];
         let state = build_review_terminal_state(TerminalStateInput {
             args: &args,
