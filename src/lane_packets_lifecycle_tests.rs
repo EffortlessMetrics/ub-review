@@ -9,6 +9,7 @@ use std::{thread, time::Duration};
 enum Stop {
     Interrupted,
     TimedOut,
+    MissingMarker,
 }
 
 #[test]
@@ -21,6 +22,11 @@ fn timed_out_live_child_cannot_become_successful_proof() -> Result<()> {
     stopped_child_receipt(Stop::TimedOut)
 }
 
+#[test]
+fn missing_start_marker_cleans_up_live_child_and_cannot_publish_proof() -> Result<()> {
+    stopped_child_receipt(Stop::MissingMarker)
+}
+
 fn stopped_child_receipt(stop: Stop) -> Result<()> {
     stopped_child_receipt_after_start_delay(stop, 0)
 }
@@ -28,6 +34,7 @@ fn stopped_child_receipt(stop: Stop) -> Result<()> {
 fn stopped_child_receipt_after_start_delay(stop: Stop, start_delay_ms: u64) -> Result<()> {
     let temp = tempfile::tempdir()?;
     let started = temp.path().join("started");
+    let missing = temp.path().join("never-created");
     let delayed = temp.path().join("delayed");
     let out = temp.path().join("out");
     let revision = RevisionRef {
@@ -91,6 +98,7 @@ fn stopped_child_receipt_after_start_delay(stop: Stop, start_delay_ms: u64) -> R
     #[cfg(target_os = "linux")]
     let mut child_pid = None;
     let mut cleanup_called = false;
+    let mut stop_action_called = false;
     let mut cleanup = || {
         cleanup_called = true;
         // Proof-root cleanup must occur only after termination and reaping.
@@ -123,7 +131,21 @@ fn stopped_child_receipt_after_start_delay(stop: Stop, start_delay_ms: u64) -> R
                     observe_process,
                 },
                 &mut |child, timeout| {
-                    wait_for_start_marker(&started, Duration::from_secs(5))?;
+                    if matches!(stop, Stop::MissingMarker) {
+                        // Observe a real running child before testing the separate missing marker.
+                        wait_for_start_marker(&started, Duration::from_secs(5))?;
+                        child_was_running = child.try_wait()?.is_none();
+                        #[cfg(target_os = "linux")]
+                        {
+                            child_pid = Some(child.id());
+                        }
+                    }
+                    let (marker, budget) = if matches!(stop, Stop::MissingMarker) {
+                        (&missing, Duration::from_millis(50))
+                    } else {
+                        (&started, Duration::from_secs(5))
+                    };
+                    wait_for_start_marker(marker, budget)?;
                     {
                         child_was_running = child.try_wait()?.is_none();
                         #[cfg(target_os = "linux")]
@@ -135,12 +157,14 @@ fn stopped_child_receipt_after_start_delay(stop: Stop, start_delay_ms: u64) -> R
                             }
                             child_pid = Some(child.id());
                         }
+                        stop_action_called = true;
                         match stop {
                             Stop::Interrupted => Err(io::Error::new(
                                 io::ErrorKind::Interrupted,
                                 "injected execution interruption",
                             )),
                             Stop::TimedOut => child.wait_timeout(timeout),
+                            Stop::MissingMarker => Err(io::Error::other("unexpected stop action")),
                         }
                     }
                 },
@@ -152,6 +176,7 @@ fn stopped_child_receipt_after_start_delay(stop: Stop, start_delay_ms: u64) -> R
         "the regression must interrupt a live physical child"
     );
     ensure!(cleanup_called);
+    ensure!(stop_action_called == !matches!(stop, Stop::MissingMarker));
     // A killed child can remain a zombie if the runner omits its reap. Marker
     // absence alone cannot detect that bug. Linux procfs retains the PID until
     // the parent collects its exit status; check before creating other children.
@@ -166,12 +191,16 @@ fn stopped_child_receipt_after_start_delay(stop: Stop, start_delay_ms: u64) -> R
     let (status, disposition, timed_out) = match stop {
         Stop::Interrupted => ("skipped", TaskTerminalDisposition::Cancelled, false),
         Stop::TimedOut => ("timed_out", TaskTerminalDisposition::TimedOut, true),
+        Stop::MissingMarker => ("skipped", TaskTerminalDisposition::Cancelled, false),
     };
     ensure!(receipt.status == status);
     ensure!(receipt.exit_code.is_none());
     ensure!(receipt.timed_out == timed_out);
     if matches!(stop, Stop::Interrupted) {
         ensure!(receipt.reason.contains("injected execution interruption"));
+    }
+    if matches!(stop, Stop::MissingMarker) {
+        ensure!(receipt.reason.contains("child start marker missing"));
     }
     // Check the public worker projection as well as the retained command row.
     ensure!(classify_worker_proof_result(&ProofKind::SanitizerWitness, &receipt) == status);
