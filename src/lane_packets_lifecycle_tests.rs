@@ -311,6 +311,50 @@ fn missing_start_marker_is_bounded() -> Result<()> {
     Ok(())
 }
 
+fn publish_start_observation(
+    started: &Path,
+    observation: &str,
+    before_rename: impl FnOnce(&Path) -> io::Result<()>,
+) -> io::Result<()> {
+    let staged = started.with_extension("pending");
+    fs::write(&staged, observation)?;
+    before_rename(&staged)?;
+    fs::rename(staged, started)
+}
+
+#[test]
+fn start_observation_is_complete_before_marker_is_published() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let started = temp.path().join("started");
+    let observation = "1500 1502";
+    let mut checked_staged = false;
+    publish_start_observation(&started, observation, |staged| {
+        if started.exists() {
+            return Err(io::Error::other(
+                "marker published before observation completed",
+            ));
+        }
+        if fs::read_to_string(staged)? != observation {
+            return Err(io::Error::other("staged observation incomplete"));
+        }
+        checked_staged = true;
+        Ok(())
+    })?;
+    ensure!(checked_staged);
+    ensure!(fs::read_to_string(&started)? == observation);
+    ensure!(!started.with_extension("pending").exists());
+
+    let rejected = temp.path().join("rejected");
+    let error = publish_start_observation(&rejected, observation, |_| {
+        Err(io::Error::other("injected publication failure"))
+    })
+    .err()
+    .context("publication failure must propagate")?;
+    ensure!(error.to_string() == "injected publication failure");
+    ensure!(!rejected.exists());
+    Ok(())
+}
+
 #[test]
 fn startup_marker_child() -> Result<()> {
     let Some(started) = std::env::var_os("UB_REVIEW_WAIT_ERROR_STARTED") else {
@@ -321,9 +365,10 @@ fn startup_marker_child() -> Result<()> {
     let delay: u64 = std::env::var("UB_LIFECYCLE_START_DELAY_MS")?.parse()?;
     let delay_started = Instant::now();
     thread::sleep(Duration::from_millis(delay));
-    fs::write(
-        started,
-        format!("{delay} {}", delay_started.elapsed().as_millis()),
+    publish_start_observation(
+        Path::new(&started),
+        &format!("{delay} {}", delay_started.elapsed().as_millis()),
+        |_| Ok(()),
     )?;
     thread::sleep(Duration::from_secs(2));
     fs::write(delayed, b"still running")?;
