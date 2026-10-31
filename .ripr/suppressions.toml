@@ -41709,3 +41709,8 @@ kind = "exposure_gap"
 finding_id = "probe:src_receipt_builders.rs:error_path:726afc11"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1414; probe })?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_pr_thread_context_omits_reuse_rules, accounting_matrix_releases_early_commands_before_required_build, action_forwards_complete_trusted_diff_admission_inputs. Re-verify after any edit to src/receipt_builders.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_promotion.rs:error_path:f5864c67"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1416; probe })?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by aggregate_computes_rates, cmd_status_prints_notable_events, collect_calibrations_finds_nested_artifacts. Re-verify after any edit to src/promotion.rs."
