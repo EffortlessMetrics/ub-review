@@ -744,7 +744,14 @@ mod tests {
             .ok_or_else(|| anyhow::anyhow!("library template refused by broker"))?;
         assert_eq!(
             spec.argv,
-            ["cargo", "check", "--locked", "--package", "ub-review", "--lib"]
+            [
+                "cargo",
+                "check",
+                "--locked",
+                "--package",
+                "ub-review",
+                "--lib"
+            ]
         );
         assert!(
             focused_build_command_spec("cargo check --locked --package ub-review --lib library")
