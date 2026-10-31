@@ -40732,3 +40732,308 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_topics.rs:call_deletion:2a2d46cd"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1378; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by active_graph_does_not_reuse_stale_proof_receipts, active_graph_keeps_inline_delivery_and_proof_receipt_links, active_graph_keeps_unresolved_conflict_when_another_lane_lacks_evidence. Re-verify after any edit to src/review_topics.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:09c99ab7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_matrix_releases_early_commands_before_required_build, actionlint_sensor_scopes_to_changed_workflow_files, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:05c26a45"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by artifact_contract_docs_match_ci_audit_verifier_coverage, cargo_allow_present_and_absent_preserve_real_cargo_and_custody, command_receipts_retain_spawn_failure_and_nonzero_exit. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:deb54c91"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by audit_ci_tokenless_cli_writes_receipts_without_repo_side_effects, ci_audit_artifacts_carry_schema_fields_and_receipts, ci_audit_artifacts_flag_missing_permissions_as_human_review. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:688ed1a7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe Ok(out): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_tree_without_a_cargo_workspace_records_no_lockfile_gap, a_workspace_without_a_lockfile_selects_no_cargo_candidate, accounting_timeout_spends_allowance_and_aggregates_red_green_once. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:call_deletion:5edf1879"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe .1: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, frozen_archive_onboarding, inventories_detect_directory_mode_and_identity_rejects_substitutes. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:cb6fb896"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe .lines(): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by ci_audit_report_lines_carry_receipts_without_boilerplate, command_receipts_retain_spawn_failure_and_nonzero_exit, frozen_archive_onboarding. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:cda8e34d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe Ok(String::new()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by badge_requires_an_explicit_string_schema_version, broker_satisfies_new_request_from_existing_receipt_without_execution, command_receipts_retain_spawn_failure_and_nonzero_exit. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:call_deletion:bc415390"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe } else {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, discriminating_and_head_failed_are_published_whatever_else_the_receipt_says, frozen_archive_onboarding. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:a34f8547"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe } else {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, discriminating_and_head_failed_are_published_whatever_else_the_receipt_says, frozen_archive_onboarding. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:call_deletion:6b225ac7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe .strip_prefix(\" \"): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, frozen_archive_onboarding, inventories_detect_directory_mode_and_identity_rejects_substitutes. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:e4c5228d"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1382; probe .strip_prefix(\" \"): No assertion found on related tests. Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, frozen_archive_onboarding, inventories_detect_directory_mode_and_identity_rejects_substitutes. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:call_deletion:ad8ec95b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, frozen_archive_onboarding, inventories_detect_directory_mode_and_identity_rejects_substitutes. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:call_deletion:2719c597"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe }): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, frozen_archive_onboarding, inventories_detect_directory_mode_and_identity_rejects_substitutes. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:field_construction:ed86c54d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe frozen: PathBuf,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, frozen_archive_onboarding, inventories_detect_directory_mode_and_identity_rejects_substitutes. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:field_construction:fe6027a2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe cwd: &Path,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_ambiguous_or_unbound_receipts_keep_reservation, accounting_matrix_releases_early_commands_before_required_build, accounting_settles_actual_duration_with_conservative_rounding. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:field_construction:aae9b346"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe program: &Path,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_ambiguous_or_unbound_receipts_keep_reservation, accounting_matrix_releases_early_commands_before_required_build, accounting_settles_actual_duration_with_conservative_rounding. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:field_construction:43f7a4c0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe env: &[(&str, &str)],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_ambiguous_or_unbound_receipts_keep_reservation, accounting_matrix_releases_early_commands_before_required_build, accounting_settles_actual_duration_with_conservative_rounding. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:4000f8e7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_ambiguous_or_unbound_receipts_keep_reservation, accounting_matrix_releases_early_commands_before_required_build, accounting_settles_actual_duration_with_conservative_rounding. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:field_construction:fd3aca6d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe cwd: &Path,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by changed_path_ordering_and_duplicates_cannot_move_the_digest, ci_workflow_scan_extracts_triggers_paths_timeouts_and_uses, clippy_findings_match_absolute_diagnostic_paths. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:field_construction:0a5e479f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe program: &Path,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by changed_path_ordering_and_duplicates_cannot_move_the_digest, ci_workflow_scan_extracts_triggers_paths_timeouts_and_uses, clippy_findings_match_absolute_diagnostic_paths. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:field_construction:8fb17099"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe env: &[(&str, &str)],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by badge_requires_an_explicit_string_schema_version, ci_repair_invalid_envelopes_are_not_complete_empty_arrays, cleanup_failure_remains_primary_when_stream_bounding_also_fails. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:call_deletion:5e721a9f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe fs::create_dir_all(&logs)?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, execute_reports_missing_executable_and_removes_logs, frozen_archive_onboarding. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:call_deletion:0ffa6376"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe .current_dir(cwd): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, frozen_archive_onboarding, inventories_detect_directory_mode_and_identity_rejects_substitutes. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:call_deletion:ed3963aa"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe .env_clear(): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, frozen_archive_onboarding, inventories_detect_directory_mode_and_identity_rejects_substitutes. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:call_deletion:e2031d40"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe .stdin(Stdio::null()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, frozen_archive_onboarding, inventories_detect_directory_mode_and_identity_rejects_substitutes. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:call_deletion:adeae4ab"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe .stdout(stdout): Only broad error oracle found; it may not discriminate the changed behavior exactly. Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, frozen_archive_onboarding, inventories_detect_directory_mode_and_identity_rejects_substitutes. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:match_arm:b922d510"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe let mut child = match cmd.spawn() {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained, artifact_contract_docs_match_ci_audit_verifier_coverage. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:match_arm:b9a97fa7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe Ok(child) => child,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by child_cleanup_bounds_persistent_interrupted_reaps, child_cleanup_marks_release_unconfirmed_when_reaping_fails, child_cleanup_retries_interrupted_reaps_until_exit_is_confirmed. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:match_arm:0357b25d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe Err(error) => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by child_cleanup_waits_for_confirmed_exit_even_when_kill_reports_an_error, command_receipts_retain_spawn_failure_and_nonzero_exit, doctor_reports_every_retained_error_with_source_and_correction. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:match_arm:b561d379"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe let status = match child.wait_timeout(timeout)? {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_timeout_spends_allowance_and_aggregates_red_green_once, adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:match_arm:ec84613c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe Some(status) => status,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by candidate_plan_artifacts_preserve_identity_and_budget_status, cmd_status_prints_notable_events, command_receipts_retain_spawn_failure_and_nonzero_exit. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:match_arm:3ee5a328"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1382; probe None => {: No assertion found on related tests. Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, frozen_archive_onboarding, inventories_detect_directory_mode_and_identity_rejects_substitutes. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:b0634ec1"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe (\"GITHUB_ACTION_PATH\", SOURCE),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, action_release_install_mode_fails_closed_instead_of_source_fallback. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:fe3d4018"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe (\"UB_REVIEW_RELEASE_VERSION\", &tag),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, action_smoke_workflow_is_a_manual_debug_lane. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:93cc3ca2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe (\"TAG\", &tag),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, action_smoke_workflow_is_a_manual_debug_lane. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:edb08664"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, action_smoke_workflow_is_a_manual_debug_lane. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:123646d7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe \"ADAPTER_LOG\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, action_smoke_workflow_is_a_manual_debug_lane. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:edb08664.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, action_smoke_workflow_is_a_manual_debug_lane. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:5129df07"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe \"POISON_LOG\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, action_smoke_workflow_is_a_manual_debug_lane. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:1577fa52"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cache_warm_keeps_failed_versions_unavailable, calibration_reporter_skipped, candidate_plan_artifacts_preserve_identity_and_budget_status. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:4b673770"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe (\"TAG\", &tag),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_workspace_without_a_lockfile_selects_no_cargo_candidate, advisory_result_planes_cannot_override_legacy_gate_enforcement, audit_ci_tokenless_cli_writes_receipts_without_repo_side_effects. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:751ee61f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_matrix_releases_early_commands_before_required_build, action_forwards_prior_resolved_candidates_input, advisory_result_planes_cannot_override_legacy_gate_enforcement. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:87697481"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, consumers_keep_independent_metadata_across_terminal_result, enable_refuses_existing_ub_review_workflow_by_name. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:call_deletion:16a96457"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe executable(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, concurrent_children_cannot_inherit_executable_fixture_writers, execute_reports_missing_executable_and_removes_logs. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:error_path:6f9ddb35"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, frozen_archive_onboarding, inventories_detect_directory_mode_and_identity_rejects_substitutes. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:call_deletion:259b47f1"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, frozen_archive_onboarding, inventories_detect_directory_mode_and_identity_rejects_substitutes. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:bb9a452c"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1382; probe Ok(()): No assertion found on related tests. Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, frozen_archive_onboarding, inventories_detect_directory_mode_and_identity_rejects_substitutes. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:call_deletion:dcb0dc32"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, frozen_archive_onboarding, inventories_detect_directory_mode_and_identity_rejects_substitutes. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:398a364c"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1382; probe Ok(()): No assertion found on related tests. Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, frozen_archive_onboarding, inventories_detect_directory_mode_and_identity_rejects_substitutes. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:error_path:d96c683a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, enable_inspect_requires_a_repository_root, enable_workflows_render_primary_with_optional_opencode_fallback. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:error_path:d96c683a.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, enable_inspect_requires_a_repository_root, enable_workflows_render_primary_with_optional_opencode_fallback. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:error_path:d96c683a.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, enable_inspect_requires_a_repository_root, enable_workflows_render_primary_with_optional_opencode_fallback. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:error_path:d96c683a.4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, enable_inspect_requires_a_repository_root, enable_workflows_render_primary_with_optional_opencode_fallback. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:error_path:d96c683a.5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, enable_inspect_requires_a_repository_root, enable_workflows_render_primary_with_optional_opencode_fallback. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:error_path:d96c683a.6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, enable_inspect_requires_a_repository_root, enable_workflows_render_primary_with_optional_opencode_fallback. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:error_path:8c664545"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe )?)?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, enable_inspect_requires_a_repository_root, enable_workflows_render_primary_with_optional_opencode_fallback. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:error_path:d96c683a.7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, enable_inspect_requires_a_repository_root, enable_workflows_render_primary_with_optional_opencode_fallback. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:error_path:8c664545.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe )?)?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, enable_inspect_requires_a_repository_root, enable_workflows_render_primary_with_optional_opencode_fallback. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:error_path:dab03426"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe ))?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, enable_inspect_requires_a_repository_root, enable_workflows_render_primary_with_optional_opencode_fallback. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:error_path:d96c683a.8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, enable_inspect_requires_a_repository_root, enable_workflows_render_primary_with_optional_opencode_fallback. Re-verify after any edit to tests/archive_onboarding.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_archive_onboarding.rs:return_value:dbb42d8c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1382; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by command_receipts_retain_spawn_failure_and_nonzero_exit, enable_inspect_requires_a_repository_root, enable_workflows_render_primary_with_optional_opencode_fallback. Re-verify after any edit to tests/archive_onboarding.rs."
