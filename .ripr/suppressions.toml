@@ -41694,3 +41694,18 @@ last_seen = "2026-10-31"
 review_by = "2026-11-21"
 expires = "2026-12-22"
 reason = "PR #1619 gate 41175497432 artifact 13033280508 SHA256 f6421c4ccba0ee7460dc9bcdc05457282cd77f3cb635447351831713bad36323, reviewed merge bc2bae59e74afa7fafb2abaafe31c9851d493cbb, head c47e24169f129408c07a4eb9beb28eb02df740ed; packet records worktree_dirty=true. RIPR 0.10.0 reports weakly_exposed observation_unverified with fixture_opaque; preserve that raw classification. Inside cfg(test) bind_gate_fixture, worktree_dirty=false is required admission provenance whose value is not compared by this summary join. RevisionAdmission::validate and RevisionRef construction do not use that field for this summary join; it is not an oracle that a hosted packet was clean. In particular the hosted packet records worktree_dirty=true and remains so. Source/test evidence: reviewed test successor 05394f1ae14cba403f9d694d1d31928f0a2ffdfd and PR #1619; attribution limits ripr-swarm#3213 and ripr#1453. Owner ub-review/core. Reverify after summary, fixture, revision contract or analyzer changes; this is not hosted qualification or a Required-proof waiver."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:field_construction:6157bb03"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1414; probe regular_file: bool,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by bounded_file_empty_does_not_reserve_the_capture_ceiling, bounded_file_missing_remains_an_error, bounded_file_preserves_exact_excerpts_and_truncation_truth. Re-verify after any edit to src/receipt_builders.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:error_path:aceafa5e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1414; probe ): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_pr_thread_context_omits_reuse_rules, accounting_matrix_releases_early_commands_before_required_build, action_forwards_complete_trusted_diff_admission_inputs. Re-verify after any edit to src/receipt_builders.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:error_path:726afc11"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1414; probe })?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_pr_thread_context_omits_reuse_rules, accounting_matrix_releases_early_commands_before_required_build, action_forwards_complete_trusted_diff_admission_inputs. Re-verify after any edit to src/receipt_builders.rs."
