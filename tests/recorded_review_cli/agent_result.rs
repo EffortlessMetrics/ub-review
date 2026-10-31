@@ -576,3 +576,40 @@ fn real_cli_schema_only_watermark_change_keeps_generic_private_safe_rejection() 
 }
 #[path = "authority.rs"]
 mod authority;
+
+#[test]
+fn real_cli_watermark_hint_respects_observation_byte_boundary() -> Result<()> {
+    let mut h = History::new()?;
+    h.admit(4)?;
+    let original = h.f.invoke("agent-export", &[])?;
+    assert!(original.status.success());
+    let mut view: Value = serde_json::from_slice(&original.stdout)?;
+    let mut observed = decode_bytes(&view["observation_view_json"])?;
+    observed["watermark"]["name"] = json!("other-prefix");
+    let base = serde_json::to_vec(&observed)?;
+    for (size, hint) in [(1024 * 1024, true), (1024 * 1024 + 1, false)] {
+        let mut bytes = base.clone();
+        bytes.resize(size, b' ');
+        view["observation_view_json"] = json!(bytes);
+        let recorded = serde_json::to_vec(&view)?;
+        fs::write(h.f.root.path().join("boundary-view.json"), &recorded)?;
+        let output = h.f.invoke(
+            "agent-replay",
+            &[
+                "--view",
+                "boundary-view.json",
+                "--view-sha256",
+                &hash(&recorded),
+            ],
+        )?;
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
+        let diagnostic = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(
+            diagnostic.contains("watermark association mismatch"),
+            hint,
+            "size {size}: {diagnostic}"
+        );
+    }
+    Ok(())
+}
