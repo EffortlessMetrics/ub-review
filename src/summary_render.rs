@@ -674,6 +674,36 @@ pub(crate) fn read_gate_outcome(
     ) {
         return Err("has a missing or unsupported gate conclusion");
     }
+    #[derive(Deserialize)]
+    struct GateRevision {
+        revision: crate::RevisionRef,
+    }
+    // Deserialize from the original bytes so duplicate revision fields cannot
+    // be hidden by the Value parser. A well-shaped gate is not current until
+    // its revision joins the packet's validated admission.
+    let gate_revision: GateRevision =
+        serde_json::from_slice(&bytes).map_err(|_| "has a missing or invalid revision")?;
+    gate_revision
+        .revision
+        .validate()
+        .map_err(|_| "has a missing or invalid revision")?;
+    let admission_bytes = read_summary_bytes(&out.join("input/revision-admission.json"))
+        .map_err(|_| "has no readable packet revision admission")?;
+    let admission: crate::revision_admission::RevisionAdmission =
+        serde_json::from_slice(&admission_bytes)
+            .map_err(|_| "has an invalid packet revision admission")?;
+    admission
+        .validate()
+        .map_err(|_| "has an invalid packet revision admission")?;
+    let identity =
+        crate::revision_identity::RevisionIdentity::from_canonical(&admission.identity_canonical)
+            .map_err(|_| "has an invalid packet revision admission")?;
+    let expected = identity.revision_ref();
+    if crate::RevisionRef::from_admission(&admission) != expected
+        || gate_revision.revision != expected
+    {
+        return Err("does not match the packet revision admission");
+    }
     Ok((value, admitted))
 }
 
@@ -840,6 +870,40 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
 mod tests {
     use super::*;
 
+    fn bind_gate_fixture(out: &Path) -> Result<String> {
+        use crate::revision_identity::{CommitTree, ReviewSemantics, RevisionIdentity};
+        let base = CommitTree::new("base", &"1".repeat(40), &"2".repeat(40))?;
+        let head = CommitTree::new("head", &"3".repeat(40), &"4".repeat(40))?;
+        let identity = RevisionIdentity::new(
+            base,
+            head.clone(),
+            head,
+            None,
+            ReviewSemantics::CandidateHead,
+            &RevisionIdentity::changed_paths_digest(["src/lib.rs"]),
+            &RevisionIdentity::diff_digest(b"fixture"),
+        )?;
+        let admission = crate::revision_admission::RevisionAdmission {
+            schema: crate::revision_admission::REVISION_ADMISSION_SCHEMA.to_owned(),
+            identity_canonical: identity.canonical_form(),
+            identity_digest: identity.identity_digest(),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit_oid: "3".repeat(40),
+            pr_head_commit: None,
+            worktree_dirty: false,
+        };
+        fs::create_dir_all(out.join("input"))?;
+        fs::write(
+            out.join("input/revision-admission.json"),
+            serde_json::to_vec(&admission)?,
+        )?;
+        let path = out.join("review/gate_outcome.json");
+        let mut gate: serde_json::Value = serde_json::from_slice(&fs::read(&path)?)?;
+        gate["revision"] = serde_json::to_value(crate::RevisionRef::from_admission(&admission))?;
+        fs::write(path, serde_json::to_vec(&gate)?)?;
+        Ok(admission.identity_digest)
+    }
+
     #[test]
     fn review_metrics_summary_rejects_unsupported_schema_versions() -> Result<()> {
         let temp = tempfile::tempdir()?;
@@ -856,6 +920,7 @@ mod tests {
             "github_review_comments": 7
         });
         fs::write(&path, serde_json::to_vec(&metrics)?)?;
+        bind_gate_fixture(out)?;
         let mut valid = String::new();
         render_review_efficiency_section(&mut valid, out);
         assert!(!valid.contains("Review metrics: unavailable"), "{valid}");
@@ -993,6 +1058,7 @@ mod tests {
                 out.join("review/gate_outcome.json"),
                 serde_json::to_vec(&gate)?,
             )?;
+            bind_gate_fixture(out)?;
             let mut summary = String::new();
             render_review_efficiency_section(&mut summary, out);
             assert!(
@@ -1211,6 +1277,7 @@ mod tests {
             out.join("review/gate_outcome.json"),
             serde_json::to_vec_pretty(&gate)?,
         )?;
+        let digest = bind_gate_fixture(out)?;
         let mut summary = String::new();
         render_review_efficiency_section(&mut summary, out);
         for needle in [
@@ -1219,7 +1286,7 @@ mod tests {
             "proof-intent-48940c2f9ea4a58c",
             "required floor could not fit inside the remaining safe proof budget",
             "receipts: none",
-            digest,
+            digest.as_str(),
         ] {
             assert!(summary.contains(needle), "missing {needle}:\n{summary}");
         }
@@ -1262,6 +1329,7 @@ mod tests {
             out.join("review/gate_outcome.json"),
             serde_json::to_vec_pretty(&gate)?,
         )?;
+        bind_gate_fixture(out)?;
         let mut summary = String::new();
         render_review_efficiency_section(&mut summary, out);
         // Inline-code fields: backticks become quotes, pipes stay literal
@@ -1315,6 +1383,7 @@ mod tests {
             out.join("review/gate_outcome.json"),
             serde_json::to_vec_pretty(&gate)?,
         )?;
+        bind_gate_fixture(out)?;
         let mut summary = String::new();
         render_review_efficiency_section(&mut summary, out);
         assert!(summary.contains("`0/0` proven (`0` unproven"), "{summary}");

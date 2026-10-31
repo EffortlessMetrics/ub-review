@@ -134,6 +134,11 @@ denominator, not the configured `[[proof.required]]` gate denominator. Use
 gate result; do not treat an artifact-only run or an unproven planner task as a
 successful proof.
 
+The summary displays a gate result only when its revision matches the validated
+`input/revision-admission.json` identity. A missing, invalid or mismatched
+admission makes that result unavailable; retain the matching packet when
+inspecting older or copied artifacts.
+
 For a support report include the exact Action/tool SHA, reviewed candidate and
 merge identities, run ID and attempt, artifact ID/digest, sanitized effective
 config, expected/observed behavior, and smallest reproducer. Do not publish

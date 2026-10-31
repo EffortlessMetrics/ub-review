@@ -712,3 +712,81 @@ fn fresh_and_reused_runs_keep_terminal_evidence_out_of_preliminary_model_context
     fixture.gate_check(&regenerated, true)?;
     Ok(())
 }
+
+#[test]
+fn summary_rejects_gate_receipt_from_another_revision() -> Result<()> {
+    let _guard = cli_subprocess_test_lock()?;
+    let fixture = Fixture::new()?;
+    let first = fixture.packet("revision-a", "", false)?;
+    assert_gate(&fixture.summary(&first)?, "pass", 0);
+    let first_admission = read_json(&first.join("input/revision-admission.json"))?;
+    write_file(&fixture.repo.join("docs/second.md"), "# Second revision\n")?;
+    run(&fixture.repo, "git", &["add", "."])?;
+    run(&fixture.repo, "git", &["commit", "-m", "second revision"])?;
+    let second = fixture.packet("revision-b", "", false)?;
+    let second_admission = read_json(&second.join("input/revision-admission.json"))?;
+    assert_ne!(
+        first_admission["identity_digest"],
+        second_admission["identity_digest"]
+    );
+    assert_gate(&fixture.summary(&second)?, "pass", 0);
+    fs::copy(
+        first.join("review/gate_outcome.json"),
+        second.join("review/gate_outcome.json"),
+    )?;
+    let summary = fixture.summary(&second)?;
+    assert!(
+        summary.contains("Gate: unavailable"),
+        "a valid gate receipt from another revision must not be shown as current: {summary}"
+    );
+    assert!(!summary.contains("Gate: `pass`"), "{summary}");
+
+    // A missing or tampered admission cannot authenticate even the original
+    // same-revision gate. Restore it and verify the positive control again.
+    let gate_path = second.join("review/gate_outcome.json");
+    let admission_path = second.join("input/revision-admission.json");
+    let original_admission = fs::read(&admission_path)?;
+    let original_gate = fs::read(first.join("review/gate_outcome.json"))?;
+    // Restore B's gate from a fresh B packet, not A's stale receipt.
+    let fresh = fixture.packet("revision-b-fresh", "", false)?;
+    fs::copy(fresh.join("review/gate_outcome.json"), &gate_path)?;
+    fs::remove_file(&admission_path)?;
+    assert!(fixture.summary(&second)?.contains("Gate: unavailable"));
+    let mut tampered: Value = serde_json::from_slice(&original_admission)?;
+    tampered["identity_digest"] = Value::String("0".repeat(64));
+    fs::write(&admission_path, serde_json::to_vec(&tampered)?)?;
+    assert!(fixture.summary(&second)?.contains("Gate: unavailable"));
+    fs::write(&admission_path, original_admission)?;
+    assert_gate(&fixture.summary(&second)?, "pass", 0);
+    assert_ne!(fs::read(&gate_path)?, original_gate);
+
+    let valid_admission = fs::read(&admission_path)?;
+    let valid_gate = fs::read(&gate_path)?;
+    for (admission_field, gate_field, bad_value) in [
+        ("semantics", "semantics", "merge_result".to_owned()),
+        ("reviewed_commit_oid", "reviewed_commit", "f".repeat(40)),
+    ] {
+        for (mutate_admission, mutate_gate) in [(true, false), (false, true), (true, true)] {
+            let mut admission: Value = serde_json::from_slice(&valid_admission)?;
+            let mut gate: Value = serde_json::from_slice(&valid_gate)?;
+            if mutate_admission {
+                admission[admission_field] = Value::String(bad_value.clone());
+            }
+            if mutate_gate {
+                gate["revision"][gate_field] = Value::String(bad_value.clone());
+            }
+            fs::write(&admission_path, serde_json::to_vec(&admission)?)?;
+            fs::write(&gate_path, serde_json::to_vec(&gate)?)?;
+            let summary = fixture.summary(&second)?;
+            assert!(
+                summary.contains("Gate: unavailable"),
+                "{admission_field}: admission={mutate_admission} gate={mutate_gate}: {summary}"
+            );
+            assert!(!summary.contains("Gate: `pass`"), "{summary}");
+        }
+    }
+    fs::write(&admission_path, valid_admission)?;
+    fs::write(&gate_path, valid_gate)?;
+    assert_gate(&fixture.summary(&second)?, "pass", 0);
+    Ok(())
+}
