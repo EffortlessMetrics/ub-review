@@ -43331,3 +43331,603 @@ kind = "exposure_gap"
 finding_id = "probe:tests_ci_efficiency_baseline.rs:predicate:2c8de36c"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1460; probe .find(|row| row.get(\"id\").and_then(Value::as_str) == Some(id)): Strong oracle found: exact value or pattern assertion. Reached by anchoring_failure_keeps_the_model_finding_out_of_the_diagnostic, body_budget_drops_topics_and_preserves_inline_fallback_receipt, budget_rejection_does_not_block_a_later_cheaper_candidate. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:field_construction:c6c16682"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe evidence_bytes: Vec<u8>,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:field_construction:251f31f2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ci: Vec<u8>,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:return_value:44b1aa53"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe None,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:return_value:fa4245a4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ReviewSemantics::CandidateHead,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:return_value:6cfc9beb"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe &RevisionIdentity::changed_paths_digest([\"src/lib.rs\"]),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:return_value:35a27c1e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:field_construction:c71bc5e3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe }],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:field_construction:efcd8d76"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe contradicting_evidence: vec![],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:field_construction:ae540187"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:return_value:fc4865a4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe Ok(Self {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:field_construction:0a4f810e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe subject: JudgmentSubject {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:field_construction:ae540187.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:field_construction:3f0d0a7e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe evidence_bytes,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:field_construction:5c804555"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ci,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:return_value:e403fbf9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe RecordedJudgmentSource {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:field_construction:d3de3641"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe review_complete: true,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:return_value:044badae"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe review_complete: true,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:field_construction:98685e57"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe imported_ci: Some(ImportedCi {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:return_value:8a1bf14b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe imported_ci: Some(ImportedCi {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment_tests.rs:field_construction:366d4c24"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe }),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to src/review_judgment/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:field_construction:4633f01c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe subject: JudgmentSubject,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, incomplete_run_receipts_preserve_subject_and_recovery_contract, merge_result_inline_delivery_preserves_analysis_and_rejects_stale_subjects. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:field_construction:2b603528"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe current_revision: &RevisionIdentity,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:field_construction:4e006ee9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe expected_source_digest: &str,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by badge_requires_an_explicit_string_schema_version, bounded_file_stream_returns_one_chunk_without_requiring_eof, byte_tamper_source_staleness_and_ci_missingness_fail_before_lead. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:match_arm:b0900f2a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe match (&source.imported_ci, observed_ci) {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_release_install_mode_fails_closed_instead_of_source_fallback, adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:match_arm:154823f9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe (None, None) => {}: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:match_arm:fc3226cd"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe (Some(ci), Some(observed)) => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, ci_repair_mixed_and_inverted_durations_keep_observed_runtime_only, overlapping_evidence_phases_never_exceed_observed_span. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:match_arm:cb265ebb"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe _ => anyhow::bail!(\"imported CI observation missing or unexpected\"),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, agreeing_duplicate_observations_preserve_terminal_results, artifact_bound_to_other_run_is_missing_artifact. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:eb111fe3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:636bee67"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:d58863a6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:51736dd7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:081654be"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:46dda35b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:eb111fe3.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:636bee67.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:d58863a6.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:52ef080d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe && fields: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, ci_audit_artifacts_carry_schema_fields_and_receipts, collect_calibrations_keeps_legacy_optional_fields_and_stable_order. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:0e301751"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe && fields: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, ci_audit_artifacts_carry_schema_fields_and_receipts, collect_calibrations_keeps_legacy_optional_fields_and_stable_order. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:51736dd7.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:081654be.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:46dda35b.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:eb111fe3.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:636bee67.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:d58863a6.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:51736dd7.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:081654be.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:46dda35b.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:eb111fe3.4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:636bee67.4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:d58863a6.4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:2720ebb9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ClaimState::Refuted | ClaimState::Dropped: Only broad error oracle found; is_err() does not discriminate exact error variants. Reached by box_from_allocation_false_premise_candidate_is_refuted_not_inline, box_from_allocation_false_premise_observation_is_forced_refuted, byte_tamper_source_staleness_and_ci_missingness_fail_before_lead. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:ad431cd1"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ))),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:716f013c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ))),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:d725d531"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ))),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:51736dd7.4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:081654be.4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:46dda35b.4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:eb111fe3.5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:636bee67.5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:d58863a6.5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:51736dd7.5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:081654be.5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:46dda35b.5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:eb111fe3.6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:636bee67.6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:d58863a6.6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:51736dd7.6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:081654be.6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:46dda35b.6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:eb111fe3.7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:636bee67.7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:d58863a6.7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:51736dd7.7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:081654be.7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:46dda35b.7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:eb111fe3.8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:636bee67.8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:d58863a6.8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:51736dd7.8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:081654be.8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:46dda35b.8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:eb111fe3.9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:636bee67.9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:d58863a6.9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:51736dd7.9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:081654be.9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:46dda35b.9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:9a71741b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe let mut edges = BTreeSet::new();: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by broker_satisfies_new_request_from_existing_receipt_without_execution, byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, final_budget_accounts_for_existing_and_new_leases. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:0920c2fc"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe let mut edges = BTreeSet::new();: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by broker_satisfies_new_request_from_existing_receipt_without_execution, byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, final_budget_accounts_for_existing_and_new_leases. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:eb111fe3.10"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:636bee67.10"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:d58863a6.10"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:51736dd7.10"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:081654be.10"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:46dda35b.10"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:eb111fe3.11"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:636bee67.11"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:d58863a6.11"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe ensure!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:5dceb59b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe .supporting_evidence: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:7daf94f4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe .supporting_evidence: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:f759a8af"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe .supporting_evidence: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:51736dd7.11"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:081654be.11"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:46dda35b.11"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:1284fb1f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:85f2a4ba"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:f558db5a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:1284fb1f.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:85f2a4ba.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:f558db5a.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:38424586"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe })();: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:caaf5a0f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe })();: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:c544c5de"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe })();: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:match_arm:82a5e723"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe Ok(match validation {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained, artifact_contract_docs_match_ci_audit_verifier_coverage. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:8a6e0bba"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:69dadcfe"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:return_value:a3314231"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:8a6e0bba.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:error_path:69dadcfe.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_judgment.rs:call_deletion:08e9d613"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1387; probe }): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, recorded_entrypoint_distinguishes_findings_clean_limited_absent_invalid, resealed_sources_still_require_current_identity_and_unambiguous_references. Re-verify after any edit to src/review_judgment.rs."
