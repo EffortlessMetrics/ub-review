@@ -41709,3 +41709,795 @@ kind = "exposure_gap"
 finding_id = "probe:src_receipt_builders.rs:error_path:726afc11"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1414; probe })?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_pr_thread_context_omits_reuse_rules, accounting_matrix_releases_early_commands_before_required_build, action_forwards_complete_trusted_diff_admission_inputs. Re-verify after any edit to src/receipt_builders.rs."
+
+# PR #1617: current test-source and diff-attribution receipts.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:b27b8837"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-only wrapper and argument declarations; ordinary cases use zero delay, while delayed test separately pins 1500 ms and observed elapsed time. No declaration mutant is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:d7fb0400"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-only wrapper and argument declarations; ordinary cases use zero delay, while delayed test separately pins 1500 ms and observed elapsed time. No declaration mutant is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:95a18c4a"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-only wrapper and argument declarations; ordinary cases use zero delay, while delayed test separately pins 1500 ms and observed elapsed time. No declaration mutant is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:9dfa6446"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test fixture selects the child test by name; real-child cases require its marker and a running child. No separate name mutant is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:fcfbd1df"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test child delay environment tuple and syntax; child parses the supplied delay and the delayed test pins 1500 ms and observed elapsed >=1200 ms. The compiled zero-delay mutant failed the fixed expectation; tuple punctuation is not an independent operation. No individual key/value mutant is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:de919322"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test child delay environment tuple and syntax; child parses the supplied delay and the delayed test pins 1500 ms and observed elapsed >=1200 ms. The compiled zero-delay mutant failed the fixed expectation; tuple punctuation is not an independent operation. No individual key/value mutant is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:b6f2f7ff"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test child delay environment tuple and syntax; child parses the supplied delay and the delayed test pins 1500 ms and observed elapsed >=1200 ms. The compiled zero-delay mutant failed the fixed expectation; tuple punctuation is not an independent operation. No individual key/value mutant is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:b1de7554"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test child delay environment tuple and syntax; child parses the supplied delay and the delayed test pins 1500 ms and observed elapsed >=1200 ms. The compiled zero-delay mutant failed the fixed expectation; tuple punctuation is not an independent operation. No individual key/value mutant is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:c5e06585"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test child delay environment tuple and syntax; child parses the supplied delay and the delayed test pins 1500 ms and observed elapsed >=1200 ms. The compiled zero-delay mutant failed the fixed expectation; tuple punctuation is not an independent operation. No individual key/value mutant is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:e663b749"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test child delay environment tuple and syntax; child parses the supplied delay and the delayed test pins 1500 ms and observed elapsed >=1200 ms. The compiled zero-delay mutant failed the fixed expectation; tuple punctuation is not an independent operation. No individual key/value mutant is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:45fdf530"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test child delay environment tuple and syntax; child parses the supplied delay and the delayed test pins 1500 ms and observed elapsed >=1200 ms. The compiled zero-delay mutant failed the fixed expectation; tuple punctuation is not an independent operation. No individual key/value mutant is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:d0faab3b"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test child delay environment tuple and syntax; child parses the supplied delay and the delayed test pins 1500 ms and observed elapsed >=1200 ms. The compiled zero-delay mutant failed the fixed expectation; tuple punctuation is not an independent operation. No individual key/value mutant is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:ab399e9c"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Reported if started.is_file() is removed diff text attributed to a new-side cursor; current source at that location enters the missing-marker branch. This is a location attribution limit, not a current predicate there. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:01f196de"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Brace fragment in the test missing-marker and Linux PID-capture region; PID capture feeds cleanup and reaping assertions. Overlapping syntax attribution does not establish a distinct executable mutation for this fragment. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:bd36d39b"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Brace fragment in the test missing-marker and Linux PID-capture region; PID capture feeds cleanup and reaping assertions. Overlapping syntax attribution does not establish a distinct executable mutation for this fragment. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:9ad467a8"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Brace fragment in the test missing-marker and Linux PID-capture region; PID capture feeds cleanup and reaping assertions. Overlapping syntax attribution does not establish a distinct executable mutation for this fragment. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:a7d71b19"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Brace fragment in the test missing-marker and Linux PID-capture region; PID capture feeds cleanup and reaping assertions. Overlapping syntax attribution does not establish a distinct executable mutation for this fragment. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:f554b95a"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Brace fragment in the test missing-marker and Linux PID-capture region; PID capture feeds cleanup and reaping assertions. Overlapping syntax attribution does not establish a distinct executable mutation for this fragment. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:bf58f7cd"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Brace fragment in the test missing-marker and Linux PID-capture region; PID capture feeds cleanup and reaping assertions. Overlapping syntax attribution does not establish a distinct executable mutation for this fragment. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:a7d71b19.2"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Brace fragment in the test missing-marker and Linux PID-capture region; PID capture feeds cleanup and reaping assertions. Overlapping syntax attribution does not establish a distinct executable mutation for this fragment. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:f554b95a.2"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Brace fragment in the test missing-marker and Linux PID-capture region; PID capture feeds cleanup and reaping assertions. Overlapping syntax attribution does not establish a distinct executable mutation for this fragment. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:bf58f7cd.2"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Brace fragment in the test missing-marker and Linux PID-capture region; PID capture feeds cleanup and reaping assertions. Overlapping syntax attribution does not establish a distinct executable mutation for this fragment. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:dbe3becc"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Else-branch syntax separates test paths for an ordinary marker and an absent marker; both paths are exercised. The syntax fragment is not a separate operation. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:b1d889ee"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Else-branch syntax separates test paths for an ordinary marker and an absent marker; both paths are exercised. The syntax fragment is not a separate operation. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:d66bc336"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Else-branch syntax separates test paths for an ordinary marker and an absent marker; both paths are exercised. The syntax fragment is not a separate operation. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:2991958b"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test fixture selects the real start marker and five-second budget for ordinary stop paths, which assert a live child. No distinct tuple or error-path mutation is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:b9bfab2d"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test fixture selects the real start marker and five-second budget for ordinary stop paths, which assert a live child. No distinct tuple or error-path mutation is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:9258ea1f"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test fixture selects the real start marker and five-second budget for ordinary stop paths, which assert a live child. No distinct tuple or error-path mutation is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:03cc80cb"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Closing syntax of the test marker/budget selection; this fragment does not identify an independent executable operation. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:0eb4184a"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Closing syntax of the test marker/budget selection; this fragment does not identify an independent executable operation. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:b0a78720"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Closing syntax of the test marker/budget selection; this fragment does not identify an independent executable operation. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:01f196de.2"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Brace or closing syntax around test live-child and Linux procfs observation; the live-child and reaping assertions exercise the surrounding behavior. A syntax fragment is not a separate demonstrated mutant. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:bd36d39b.2"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Brace or closing syntax around test live-child and Linux procfs observation; the live-child and reaping assertions exercise the surrounding behavior. A syntax fragment is not a separate demonstrated mutant. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:9ad467a8.2"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Brace or closing syntax around test live-child and Linux procfs observation; the live-child and reaping assertions exercise the surrounding behavior. A syntax fragment is not a separate demonstrated mutant. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:01f196de.3"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Brace or closing syntax around test live-child and Linux procfs observation; the live-child and reaping assertions exercise the surrounding behavior. A syntax fragment is not a separate demonstrated mutant. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:bd36d39b.3"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Brace or closing syntax around test live-child and Linux procfs observation; the live-child and reaping assertions exercise the surrounding behavior. A syntax fragment is not a separate demonstrated mutant. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:9ad467a8.3"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Brace or closing syntax around test live-child and Linux procfs observation; the live-child and reaping assertions exercise the surrounding behavior. A syntax fragment is not a separate demonstrated mutant. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:bedd7983"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Brace or closing syntax around test live-child and Linux procfs observation; the live-child and reaping assertions exercise the surrounding behavior. A syntax fragment is not a separate demonstrated mutant. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:425aeaf1"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Brace or closing syntax around test live-child and Linux procfs observation; the live-child and reaping assertions exercise the surrounding behavior. A syntax fragment is not a separate demonstrated mutant. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:1ea1425a"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Brace or closing syntax around test live-child and Linux procfs observation; the live-child and reaping assertions exercise the surrounding behavior. A syntax fragment is not a separate demonstrated mutant. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:match_arm:e8be62f3.2"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Timeout-arm text is removed diff text attributed to a new-side cursor; the current location sets the PID. It is not a second current timeout arm or independent mutation kill. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:a7d71b19.3"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Closing brace of Linux-specific test observation; this is fragment attribution, not an independent operation. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:f554b95a.3"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Closing brace of Linux-specific test observation; this is fragment attribution, not an independent operation. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:bf58f7cd.3"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Closing brace of Linux-specific test observation; this is fragment attribution, not an independent operation. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:b2410047"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-only stop-action flag assignment is checked for interruption and timeout and checked absent for missing marker. No exact assignment mutant is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:7af335f4"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-only stop-action flag assignment is checked for interruption and timeout and checked absent for missing marker. No exact assignment mutant is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:138124d1"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-only stop-action flag assignment is checked for interruption and timeout and checked absent for missing marker. No exact assignment mutant is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:match_arm:828f79d7"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test stop selection and injected interruption kind/message support the cancellation, skipped-status and reason checks. The compiled interruption-arm control is bounded to its tested replacement; separate kind/message mutations are not claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:9d49b9ed"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test stop selection and injected interruption kind/message support the cancellation, skipped-status and reason checks. The compiled interruption-arm control is bounded to its tested replacement; separate kind/message mutations are not claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:157c5d2d"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test stop selection and injected interruption kind/message support the cancellation, skipped-status and reason checks. The compiled interruption-arm control is bounded to its tested replacement; separate kind/message mutations are not claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:0b7da02f"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test stop selection and injected interruption kind/message support the cancellation, skipped-status and reason checks. The compiled interruption-arm control is bounded to its tested replacement; separate kind/message mutations are not claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:3e8aca4b"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Closing punctuation of the injected test error; overlapping syntax attribution is not a separate executable operation. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:28239dba"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Closing punctuation of the injected test error; overlapping syntax attribution is not a separate executable operation. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:22b2007b"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Closing punctuation of the injected test error; overlapping syntax attribution is not a separate executable operation. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:match_arm:e8be62f3"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test timeout arm invokes child.wait_timeout. On reviewed source 1916960967b16bc402433f20493f6bf2a6e6607d, a compiled replacement with interrupted I/O failed the receipt assertion skipped versus timed_out; restored source passed. The arm is unchanged in current source. This is one bounded control, not universal timeout mutation coverage. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:7c80f9ff"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-side split of published delay observation; delayed test parses both values and checks independently fixed configured delay and minimum elapsed time. No separate split deletion mutant is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:match_arm:c5539e54"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Expected missing-marker tuple is test-oracle construction; receipt status, timeout flag, ledger disposition, reason and cleanup are checked against it. It is not a production match arm. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:919378bc"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Timeout error kind in test wait helper; missing_start_marker_is_bounded checks TimedOut and elapsed bounds, and real-child missing-marker test checks cancellation and reason. No distinct error-kind mutant is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:f240939d"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Timeout error kind in test wait helper; missing_start_marker_is_bounded checks TimedOut and elapsed bounds, and real-child missing-marker test checks cancellation and reason. No distinct error-kind mutant is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:dea82419"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Closing punctuation of the test helper timeout error; source fragment attribution does not establish an independent operation. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:2f05f089"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Closing punctuation of the test helper timeout error; source fragment attribution does not establish an independent operation. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:b85daa6e"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-only marker existence condition. Ordinary real-child paths require the real marker; MissingMarker deliberately omits it. On unchanged helper at source 5d811593, forcing the condition true compiled and failed missing_start_marker_is_bounded; restored seven passed. This is not a literal deletion or arbitrary filesystem-failure proof. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:predicate:32d4c13e"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-only monotonic deadline predicate. On unchanged helper at source 5d811593, forcing this true compiled and failed the minimum elapsed assertion; restored seven passed. This tests premature timeout, not nontermination or all predicate mutations. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:f90ced77"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-only staging callback before rename. On unchanged helper at source 5d811593, removing the callback compiled and failed the checked_staged assertion; restored seven passed. An early-publication mutant also failed. These are bounded controls, not arbitrary filesystem-failure coverage. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:fcfbd1df.2"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-fixture ready-marker environment tuple. The child writes the separate readiness marker; the MissingMarker path waits for it before observing the live child and then waits on the absent actual startup marker. The retained source and eight focused tests support this role. Parentheses are syntax fragments; no exact key or tuple mutation is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:de919322.2"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-fixture ready-marker environment tuple. The child writes the separate readiness marker; the MissingMarker path waits for it before observing the live child and then waits on the absent actual startup marker. The retained source and eight focused tests support this role. Parentheses are syntax fragments; no exact key or tuple mutation is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:f2ab7a75"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-fixture ready-marker environment tuple. The child writes the separate readiness marker; the MissingMarker path waits for it before observing the live child and then waits on the absent actual startup marker. The retained source and eight focused tests support this role. Parentheses are syntax fragments; no exact key or tuple mutation is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:8b733d3c"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-fixture ready-marker environment tuple. The child writes the separate readiness marker; the MissingMarker path waits for it before observing the live child and then waits on the absent actual startup marker. The retained source and eight focused tests support this role. Parentheses are syntax fragments; no exact key or tuple mutation is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:45fdf530.2"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-fixture ready-marker environment tuple. The child writes the separate readiness marker; the MissingMarker path waits for it before observing the live child and then waits on the absent actual startup marker. The retained source and eight focused tests support this role. Parentheses are syntax fragments; no exact key or tuple mutation is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:d0faab3b.2"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-fixture ready-marker environment tuple. The child writes the separate readiness marker; the MissingMarker path waits for it before observing the live child and then waits on the absent actual startup marker. The retained source and eight focused tests support this role. Parentheses are syntax fragments; no exact key or tuple mutation is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:fcfbd1df.3"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-fixture skip-start-marker environment tuple. The child reads this flag; the MissingMarker path omits the actual startup marker and cleanup checks its absence, while ordinary paths require it. Eight focused lifecycle tests passed. Parentheses are syntax fragments; no exact key or tuple mutation is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:de919322.3"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-fixture skip-start-marker environment tuple. The child reads this flag; the MissingMarker path omits the actual startup marker and cleanup checks its absence, while ordinary paths require it. Eight focused lifecycle tests passed. Parentheses are syntax fragments; no exact key or tuple mutation is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:d3d50f15"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-fixture skip-start-marker environment tuple. The child reads this flag; the MissingMarker path omits the actual startup marker and cleanup checks its absence, while ordinary paths require it. Eight focused lifecycle tests passed. Parentheses are syntax fragments; no exact key or tuple mutation is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:f57b80f3"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-fixture skip-start-marker environment tuple. The child reads this flag; the MissingMarker path omits the actual startup marker and cleanup checks its absence, while ordinary paths require it. Eight focused lifecycle tests passed. Parentheses are syntax fragments; no exact key or tuple mutation is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:45fdf530.3"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-fixture skip-start-marker environment tuple. The child reads this flag; the MissingMarker path omits the actual startup marker and cleanup checks its absence, while ordinary paths require it. Eight focused lifecycle tests passed. Parentheses are syntax fragments; no exact key or tuple mutation is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:field_construction:d0faab3b.3"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-fixture skip-start-marker environment tuple. The child reads this flag; the MissingMarker path omits the actual startup marker and cleanup checks its absence, while ordinary paths require it. Eight focused lifecycle tests passed. Parentheses are syntax fragments; no exact key or tuple mutation is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:call_deletion:4660d1e5"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-only marker/budget selection uses the actual startup path with a 50 ms budget in the MissingMarker case. The real-child case checks cancellation, diagnostic, cleanup and ledger, and the helper separately checks bounded timeout. The tuple itself does not return Result; no distinct tuple, budget or error-path mutation is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:error_path:625fd380"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-only marker/budget selection uses the actual startup path with a 50 ms budget in the MissingMarker case. The real-child case checks cancellation, diagnostic, cleanup and ledger, and the helper separately checks bounded timeout. The tuple itself does not return Result; no distinct tuple, budget or error-path mutation is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lane_packets_lifecycle_tests.rs:return_value:cd32c904"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1617 gate 41184350210 artifact 13036211966 SHA256 03caf4dbea061bb095b60141c56c7c9780b67ba7cf4630c14e565cfa92b04342, head 1bfb437037d93125e29ba9ec95fd10d060d2f2f6, reviewed merge 724cb1f716687f10b5d34af69067e745a42e8cbc. Admission records worktree_dirty=true; preserve raw finding and classification. Test-only marker/budget selection uses the actual startup path with a 50 ms budget in the MissingMarker case. The real-child case checks cancellation, diagnostic, cleanup and ledger, and the helper separately checks bounded timeout. The tuple itself does not return Result; no distinct tuple, budget or error-path mutation is claimed. Independent review of lifecycle test source 81548bdd and eight focused lifecycle passes are recorded in PR #1617. This is a bounded test-source or attribution disposition, not a per-ID badge match, full mutation proof, or completion of proof/model evidence. Reverify after lifecycle fixture, runner contract, diff attribution or analyzer changes; strict-zero policy remains unchanged."
