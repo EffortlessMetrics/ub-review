@@ -187,15 +187,6 @@ impl RevisionIdentity {
         Self::diff_digest(bytes) == self.diff
     }
 
-    /// Derive a reference from the validated full identity, never a producer's
-    /// claimed digest. Pure recorded judgment validation uses this exact join.
-    pub(crate) fn revision_ref(&self) -> RevisionRef {
-        RevisionRef {
-            digest: self.identity_digest(),
-            semantics: self.semantics.as_str().to_owned(),
-            reviewed_commit: self.reviewed.commit_oid().to_owned(),
-        }
-    }
 
     /// Validates and constructs an identity from resolved object ids.
     ///
