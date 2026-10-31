@@ -177,6 +177,7 @@ const CHANGED_PATHS_DOMAIN: &str = "ub-review.revision-identity.changed-paths.v1
 const DIFF_DIGEST_DOMAIN: &str = "ub-review.revision-identity.diff.v1";
 
 impl RevisionIdentity {
+
     /// Validates and constructs an identity from resolved object ids.
     ///
     /// All object ids must share one width (all sha1 or all sha256): mixing
