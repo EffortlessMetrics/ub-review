@@ -28,7 +28,7 @@ fn init_rejects_directory_guide_before_replacing_config() -> Result<()> {
                 path_str(&guide)?,
                 "--force",
             ])
-            .output()?;
+            .fixture_output()?;
         let stderr = String::from_utf8_lossy(&output.stderr);
         let config_preserved = fs::read(&config)? == b"existing config sentinel\n";
         let directory_preserved =
@@ -93,7 +93,7 @@ fn init_fresh_and_forced_file_outputs_preserve_rendered_content() -> Result<()> 
         if forced {
             command.arg("--force");
         }
-        let output = command.output()?;
+        let output = command.fixture_output()?;
         assert!(
             output.status.success(),
             "init file output failed: {}",
@@ -156,7 +156,7 @@ fn init_no_guide_ignores_directory_destination_and_missing_root() -> Result<()> 
                 "--no-guide",
                 "--force",
             ])
-            .output()?;
+            .fixture_output()?;
         assert!(
             output.status.success(),
             "no-guide init failed: {}",
@@ -225,7 +225,7 @@ fn init_rejects_unusable_guide_parents_before_replacing_config() -> Result<()> {
                     path_str(&guide)?,
                     "--force",
                 ])
-                .output()?;
+                .fixture_output()?;
             let stderr = String::from_utf8_lossy(&output.stderr);
             let config_preserved = fs::read(&config)? == b"existing config sentinel\n";
             let parent_preserved = if parent_is_file {
@@ -310,7 +310,7 @@ fn init_rejects_unwritable_existing_guide_before_replacing_config() -> Result<()
                 path_str(&guide)?,
                 "--force",
             ])
-            .output()?;
+            .fixture_output()?;
         let stderr = String::from_utf8_lossy(&output.stderr);
         let config_preserved = fs::read(&config)? == b"existing config sentinel\n";
         let link_preserved = fs::symlink_metadata(&guide)?.file_type().is_symlink()
@@ -371,7 +371,7 @@ fn init_relative_guide_filename_preserves_successful_output_and_replay() -> Resu
         if forced {
             command.arg("--force");
         }
-        let output = command.output()?;
+        let output = command.fixture_output()?;
         assert!(
             output.status.success(),
             "relative guide failed: {}",
@@ -428,7 +428,7 @@ fn init_guide_preflight_preserves_writable_guide_when_config_write_fails() -> Re
                 path_str(&guide)?,
                 "--force",
             ])
-            .output()?;
+            .fixture_output()?;
         assert!(!output.status.success());
         assert!(output.stdout.is_empty());
         assert!(config.is_dir());
@@ -488,7 +488,7 @@ fn init_preserves_root_error_precedence_over_unusable_guide() -> Result<()> {
                     path_str(&guide)?,
                     "--force",
                 ])
-                .output()?;
+                .fixture_output()?;
             let stderr = String::from_utf8_lossy(&output.stderr);
             assert!(!output.status.success());
             assert!(output.stdout.is_empty());
@@ -576,7 +576,7 @@ fn init_rejects_guide_metadata_errors_before_replacing_config() -> Result<()> {
                 path_str(&guide)?,
                 "--force",
             ])
-            .output()?;
+            .fixture_output()?;
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(!output.status.success());
         assert!(output.stdout.is_empty());
@@ -641,7 +641,7 @@ fn init_rejects_existing_guide_symlink_to_config_before_output() -> Result<()> {
                 path_str(&guide)?,
                 "--force",
             ])
-            .output()?;
+            .fixture_output()?;
         let stderr = String::from_utf8_lossy(&output.stderr);
         let config_bytes = fs::read(&config)?;
         let config_preserved = config_bytes == b"profile = \"retained-existing-config\"\n";
@@ -713,7 +713,7 @@ fn init_no_guide_ignores_existing_guide_symlink_to_config() -> Result<()> {
                 "--no-guide",
                 "--force",
             ])
-            .output()?;
+            .fixture_output()?;
         assert!(
             output.status.success(),
             "unused guide alias failed: {}",
