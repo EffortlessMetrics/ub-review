@@ -358,9 +358,19 @@ fn render_available_review_metrics(text: &mut String, metrics: &serde_json::Valu
         "- Loop detail: model `{model_wall}`, local proof `{proof_wall}`, compiler `{compiler_wall}`\n"
     ));
     text.push_str(&format!("- Terminal state: `{terminal_state}`\n"));
-    text.push_str(&format!(
-        "- Model lanes: `{usable_lanes}/{total_lanes}` usable (`{ok_lanes}` ok, `{degraded_lanes}` degraded)\n"
-    ));
+    if metrics
+        .get("model_mode")
+        .and_then(serde_json::Value::as_str)
+        == Some("off")
+    {
+        text.push_str(&format!(
+            "- Model review: `off` (not performed); `{total_lanes}` configured lanes retained as skipped diagnostics\n"
+        ));
+    } else {
+        text.push_str(&format!(
+            "- Model lanes: `{usable_lanes}/{total_lanes}` usable (`{ok_lanes}` ok, `{degraded_lanes}` degraded)\n"
+        ));
+    }
     text.push_str(&format!(
         "- Inline comments: `{inline_comments}/{max_inline_comments}`\n"
     ));
