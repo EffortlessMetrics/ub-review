@@ -42731,3 +42731,33 @@ kind = "exposure_gap"
 finding_id = "probe:src_sensors_coverage.rs:return_value:4beb1cbb.2"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1437; probe None: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by coverage_summary_accepts_representable_count_limits, coverage_summary_checks_each_source_record_boundary, coverage_summary_gap_preserves_sensor_process_status. Re-verify after any edit to src/sensors/coverage.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:match_arm:54abf3ce"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1439; probe let gate_path = match fs::canonicalize(&gate_path) {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained, artifact_contract_docs_match_ci_audit_verifier_coverage. Re-verify after any edit to src/sensors/unsafe_review.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:match_arm:7df7456d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1439; probe Ok(path) => path,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, changed_path_ordering_and_duplicates_cannot_move_the_digest, ci_workflow_scan_extracts_triggers_paths_timeouts_and_uses. Re-verify after any edit to src/sensors/unsafe_review.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:error_path:c7c288ff"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1439; probe ));: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by comment_plan_absolute_pointer_is_rejected, comment_plan_empty_operation_family_is_explicit_invalid_gap, comment_plan_empty_pointer_is_rejected. Re-verify after any edit to src/sensors/unsafe_review.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:return_value:721d9355"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1439; probe ));: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by comment_plan_absolute_pointer_is_rejected, comment_plan_empty_operation_family_is_explicit_invalid_gap, comment_plan_empty_pointer_is_rejected. Re-verify after any edit to src/sensors/unsafe_review.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:error_path:c7c288ff.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1439; probe ));: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by comment_plan_absolute_pointer_is_rejected, comment_plan_empty_operation_family_is_explicit_invalid_gap, comment_plan_empty_pointer_is_rejected. Re-verify after any edit to src/sensors/unsafe_review.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:return_value:721d9355.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1439; probe ));: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by comment_plan_absolute_pointer_is_rejected, comment_plan_empty_operation_family_is_explicit_invalid_gap, comment_plan_empty_pointer_is_rejected. Re-verify after any edit to src/sensors/unsafe_review.rs."
