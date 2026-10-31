@@ -40,6 +40,7 @@ pub(crate) fn run_proof_planner_model_lane(
         http_status: None,
         response_shape: None,
         fallback_from: None,
+        attempt_count: Some(0),
         cache_usage: ModelCacheUsage::default(),
         cohort_id: String::new(),
         shared_prefix_hash: String::new(),
@@ -110,6 +111,7 @@ pub(crate) fn run_proof_planner_model_lane(
     let model_dir = context.review_dir.join("model");
     let lane_dir = prepare_proof_planner_lane_artifacts(&model_dir, &lane.id)?;
     receipt.status = "running".to_owned();
+    receipt.attempt_count = Some(1);
     match call_model_proof_planner(
         context.root,
         &lane_dir,
@@ -254,6 +256,7 @@ mod tests {
             http_status: None,
             response_shape: None,
             fallback_from: None,
+            attempt_count: None,
             cache_usage: ModelCacheUsage::default(),
             cohort_id: String::new(),
             shared_prefix_hash: String::new(),

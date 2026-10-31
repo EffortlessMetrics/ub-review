@@ -284,7 +284,9 @@ pub(crate) fn run_sensor_command_to_files_with_spawn_observer(
     stderr_path: &Path,
     observe_process: &mut dyn FnMut(CommandProcessObservation),
 ) -> Result<CommandStatus> {
-    let ambient = std::env::vars().collect();
+    let ambient = std::env::vars_os()
+        .filter_map(|(key, value)| key.into_string().ok().map(|key| (key, value)))
+        .collect();
     run_command_to_files_inner(CommandRun {
         root,
         argv,
@@ -302,7 +304,7 @@ struct CommandRun<'a> {
     root: &'a Path,
     argv: &'a [String],
     env: &'a BTreeMap<String, String>,
-    ambient: &'a BTreeMap<String, String>,
+    ambient: &'a BTreeMap<String, std::ffi::OsString>,
     timeout_sec: u64,
     stdout_path: &'a Path,
     stderr_path: &'a Path,
@@ -362,14 +364,7 @@ fn run_command_to_files_inner_with_wait(
     let status = match wait_for_child(&mut child, Duration::from_secs(timeout_sec)) {
         Ok(Some(status)) => status,
         Ok(None) => {
-            terminate_and_reap_child(&mut child, observe_process)?;
-            return Ok(CommandStatus {
-                exit_code: None,
-                timed_out: true,
-                success: false,
-                reason: format!("timed out after {timeout_sec}s"),
-                duration_ms: started.elapsed().as_millis(),
-            });
+            return reconcile_command_timeout(&mut child, observe_process, timeout_sec, started);
         }
         Err(wait_error) => {
             return reconcile_wait_failure(&mut child, observe_process, wait_error);
@@ -381,8 +376,31 @@ fn run_command_to_files_inner_with_wait(
         success: status.success(),
         reason: if status.success() {
             "completed".to_owned()
+        } else if status.code().is_none() {
+            format!("process terminated without an exit code: {status}")
         } else {
             format!("exit code {:?}", status.code())
+        },
+        duration_ms: started.elapsed().as_millis(),
+    })
+}
+
+fn reconcile_command_timeout(
+    child: &mut impl TerminateAndReap,
+    observe_process: &mut dyn FnMut(CommandProcessObservation),
+    timeout_sec: u64,
+    started: Instant,
+) -> Result<CommandStatus> {
+    let reason = format!("timed out after {timeout_sec}s");
+    let kill_error =
+        terminate_and_reap_child(child, observe_process).with_context(|| reason.clone())?;
+    Ok(CommandStatus {
+        exit_code: None,
+        timed_out: true,
+        success: false,
+        reason: match kill_error {
+            Some(error) => format!("{reason}; kill request failed: {error}; child reap confirmed"),
+            None => reason,
         },
         duration_ms: started.elapsed().as_millis(),
     })
@@ -394,7 +412,10 @@ fn reconcile_wait_failure(
     wait_error: io::Error,
 ) -> Result<CommandStatus> {
     match terminate_and_reap_child(child, observe_process) {
-        Ok(()) => Err(wait_error).context("wait for child process"),
+        Ok(None) => Err(wait_error).context("wait for child process"),
+        Ok(Some(kill_error)) => Err(wait_error).context(format!(
+            "wait for child process; kill request failed: {kill_error}; child reap confirmed"
+        )),
         Err(cleanup_error) => Err(cleanup_error).context(format!(
             "terminate child after wait-timeout failure; original wait error: {wait_error}"
         )),
@@ -416,16 +437,18 @@ impl TerminateAndReap for std::process::Child {
     }
 }
 
+// A confirmed reap permits physical cleanup even when the kill request failed.
+// Return that failure separately so natural exit cannot erase its diagnostic.
 fn terminate_and_reap_child(
     child: &mut impl TerminateAndReap,
     observe_process: &mut dyn FnMut(CommandProcessObservation),
-) -> Result<()> {
+) -> Result<Option<io::Error>> {
     const MAX_INTERRUPTED_REAP_ATTEMPTS: usize = 16;
     let kill_error = child.kill_process().err();
     let mut interrupted_attempts = 0_usize;
     while interrupted_attempts < MAX_INTERRUPTED_REAP_ATTEMPTS {
         match child.reap_process() {
-            Ok(()) => return Ok(()),
+            Ok(()) => return Ok(kill_error),
             Err(error) if error.kind() == io::ErrorKind::Interrupted => {
                 interrupted_attempts += 1;
             }
@@ -453,9 +476,9 @@ fn terminate_and_reap_child(
 
 /// Keep only the non-secret execution metadata needed by sensor tools.
 fn sensor_child_environment_from(
-    ambient: &BTreeMap<String, String>,
+    ambient: &BTreeMap<String, std::ffi::OsString>,
     overrides: &BTreeMap<String, String>,
-) -> BTreeMap<String, String> {
+) -> BTreeMap<String, std::ffi::OsString> {
     const ALLOWED: [&str; 10] = [
         "PATH",
         "TEMP",
@@ -480,7 +503,7 @@ fn sensor_child_environment_from(
         .collect::<BTreeMap<_, _>>();
     for (key, value) in overrides {
         if is_allowed(key) {
-            result.insert(key.clone(), value.clone());
+            result.insert(key.clone(), value.into());
         }
     }
     result
@@ -664,10 +687,14 @@ pub(crate) fn render_claim_prompt(diff: &DiffContext) -> String {
 }
 
 #[cfg(test)]
+#[path = "lane_packets_lifecycle_tests.rs"]
+mod lifecycle_receipt_tests;
+
+#[cfg(test)]
 mod tests {
     use super::{
-        CommandProcessObservation, CommandRun, TerminateAndReap, reconcile_wait_failure,
-        run_command_to_files_inner_with_wait, run_sensor_command_to_files,
+        CommandProcessObservation, CommandRun, TerminateAndReap, reconcile_command_timeout,
+        reconcile_wait_failure, run_command_to_files_inner_with_wait, run_sensor_command_to_files,
         terminate_and_reap_child,
     };
     use anyhow::{Context, Result, ensure};
@@ -697,6 +724,31 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn command_failure_reason_retains_signal_and_numeric_exit() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        for (script, expected_code, expected_reason) in [
+            ("kill -TERM $$", None, "signal: 15"),
+            ("exit 7", Some(7), "exit code Some(7)"),
+        ] {
+            let argv = vec!["sh".to_owned(), "-c".to_owned(), script.to_owned()];
+            let status = super::run_command_to_files_with_spawn_observer(
+                temp.path(),
+                &argv,
+                &BTreeMap::new(),
+                5,
+                &temp.path().join("stdout"),
+                &temp.path().join("stderr"),
+                &mut |_| {},
+            )?;
+            ensure!(!status.success && !status.timed_out);
+            ensure!(status.exit_code == expected_code);
+            ensure!(status.reason.contains(expected_reason), "{}", status.reason);
+        }
+        Ok(())
+    }
+
     #[test]
     fn child_cleanup_waits_for_confirmed_exit_even_when_kill_reports_an_error() -> Result<()> {
         let mut child = FakeChild {
@@ -710,6 +762,126 @@ mod tests {
 
         ensure!(child.calls == ["kill", "wait"]);
         ensure!(observations.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn failed_kill_diagnostic_survives_confirmed_reap() -> Result<()> {
+        let mut child = FakeChild {
+            kill_fails: true,
+            reap_errors: VecDeque::new(),
+            calls: Vec::new(),
+        };
+        let mut observations = Vec::new();
+        let result = terminate_and_reap_child(&mut child, &mut |event| observations.push(event));
+        let kill_error = result?.context("failed kill must be returned after confirmed reap")?;
+        ensure!(kill_error.to_string() == "injected kill failure");
+        ensure!(child.calls == ["kill", "wait"]);
+        ensure!(observations.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn timeout_retains_kill_and_reap_outcomes() -> Result<()> {
+        for kill_fails in [false, true] {
+            for reap_fails in [false, true] {
+                let mut child = FakeChild {
+                    kill_fails,
+                    reap_errors: if reap_fails {
+                        VecDeque::from([io::ErrorKind::Other])
+                    } else {
+                        VecDeque::new()
+                    },
+                    calls: Vec::new(),
+                };
+                let mut observations = Vec::new();
+                let started = std::time::Instant::now()
+                    .checked_sub(Duration::from_secs(2))
+                    .context("construct elapsed timeout interval")?;
+                let minimum_duration_ms = started.elapsed().as_millis();
+                let result = reconcile_command_timeout(
+                    &mut child,
+                    &mut |event| observations.push(event),
+                    7,
+                    started,
+                );
+                let message = if reap_fails {
+                    let error = result.err().context("failed reap must fail closed")?;
+                    ensure!(observations == [CommandProcessObservation::CompletionUnconfirmed]);
+                    format!("{error:#}")
+                } else {
+                    let status = result?;
+                    ensure!(status.timed_out && !status.success && status.exit_code.is_none());
+                    ensure!(status.duration_ms >= minimum_duration_ms);
+                    ensure!(status.duration_ms <= started.elapsed().as_millis());
+                    ensure!(observations.is_empty());
+                    status.reason
+                };
+                let expected = match (kill_fails, reap_fails) {
+                    (false, false) => "timed out after 7s",
+                    (true, false) => {
+                        "timed out after 7s; kill request failed: injected kill failure; child reap confirmed"
+                    }
+                    (false, true) => {
+                        "timed out after 7s: child completion remains unconfirmed (kill request succeeded; wait failed: injected wait failure)"
+                    }
+                    (true, true) => {
+                        "timed out after 7s: child completion remains unconfirmed (kill request failed: injected kill failure; wait failed: injected wait failure)"
+                    }
+                };
+                ensure!(message == expected);
+                ensure!(child.calls == ["kill", "wait"]);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn wait_failure_retains_kill_and_reap_outcomes() -> Result<()> {
+        for kill_fails in [false, true] {
+            for reap_fails in [false, true] {
+                let mut child = FakeChild {
+                    kill_fails,
+                    reap_errors: if reap_fails {
+                        VecDeque::from([io::ErrorKind::Other])
+                    } else {
+                        VecDeque::new()
+                    },
+                    calls: Vec::new(),
+                };
+                let mut observations = Vec::new();
+                let error = reconcile_wait_failure(
+                    &mut child,
+                    &mut |event| observations.push(event),
+                    io::Error::other("original wait failure"),
+                )
+                .err()
+                .context("original wait failure must propagate")?;
+                let message = format!("{error:#}");
+                let expected = match (kill_fails, reap_fails) {
+                    (false, false) => "wait for child process: original wait failure",
+                    (true, false) => {
+                        "wait for child process; kill request failed: injected kill failure; child reap confirmed: original wait failure"
+                    }
+                    (false, true) => {
+                        "terminate child after wait-timeout failure; original wait error: original wait failure: child completion remains unconfirmed (kill request succeeded; wait failed: injected wait failure)"
+                    }
+                    (true, true) => {
+                        "terminate child after wait-timeout failure; original wait error: original wait failure: child completion remains unconfirmed (kill request failed: injected kill failure; wait failed: injected wait failure)"
+                    }
+                };
+                ensure!(message == expected);
+                ensure!(
+                    observations
+                        == if reap_fails {
+                            vec![CommandProcessObservation::CompletionUnconfirmed]
+                        } else {
+                            Vec::new()
+                        }
+                );
+                ensure!(child.calls == ["kill", "wait"]);
+            }
+        }
         Ok(())
     }
 
@@ -739,8 +911,10 @@ mod tests {
         };
         let mut observations = Vec::new();
 
-        terminate_and_reap_child(&mut child, &mut |event| observations.push(event))?;
+        let kill_error =
+            terminate_and_reap_child(&mut child, &mut |event| observations.push(event))?;
 
+        ensure!(kill_error.is_none());
         ensure!(child.calls == ["kill", "wait", "wait", "wait"]);
         ensure!(observations.is_empty());
         Ok(())
@@ -865,6 +1039,92 @@ mod tests {
         fs::write(started, b"started")?;
         thread::sleep(Duration::from_secs(2));
         fs::write(delayed, b"still running")?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sensor_environment_preserves_native_bytes_without_panicking() -> Result<()> {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        for (label, key, value, lang) in [
+            (
+                "unicode",
+                OsString::from("INERT_SECRET"),
+                OsString::from("inert"),
+                OsString::from("C"),
+            ),
+            (
+                "native-value",
+                OsString::from("INERT_SECRET"),
+                OsString::from_vec(vec![0xff]),
+                OsString::from("C"),
+            ),
+            (
+                "native-key",
+                OsString::from_vec(vec![b'X', 0xff]),
+                OsString::from("inert"),
+                OsString::from("C"),
+            ),
+            (
+                "native-allowed-value",
+                OsString::from("INERT_SECRET"),
+                OsString::from("inert"),
+                OsString::from_vec(vec![b'C', 0xff]),
+            ),
+        ] {
+            let output = std::process::Command::new(std::env::current_exe()?)
+                .args([
+                    "--exact",
+                    "lane_packets::tests::fake_sensor_native_environment_child",
+                    "--nocapture",
+                ])
+                .env_clear()
+                .env("UB_REVIEW_NATIVE_ENV_CHILD", "1")
+                .env("LANG", lang)
+                .env(key, value)
+                .output()?;
+            ensure!(
+                output.status.success(),
+                "{label} failed: {} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fake_sensor_native_environment_child() -> Result<()> {
+        use std::os::unix::ffi::OsStrExt;
+
+        if std::env::var_os("UB_REVIEW_NATIVE_ENV_CHILD").is_none() {
+            return Ok(());
+        }
+        let expected = std::env::var_os("LANG").context("native LANG fixture missing")?;
+        let temp = tempfile::tempdir()?;
+        let stdout = temp.path().join("stdout");
+        let stderr = temp.path().join("stderr");
+        let argv = vec!["/usr/bin/env".to_owned()];
+        let mut observations = Vec::new();
+        let status = super::run_sensor_command_to_files_with_spawn_observer(
+            temp.path(),
+            &argv,
+            &BTreeMap::new(),
+            5,
+            &stdout,
+            &stderr,
+            &mut |event| observations.push(event),
+        )?;
+        ensure!(status.success && !status.timed_out && status.exit_code == Some(0));
+        ensure!(observations == [CommandProcessObservation::Spawned]);
+        let mut expected_output = b"LANG=".to_vec();
+        expected_output.extend_from_slice(expected.as_os_str().as_bytes());
+        expected_output.push(b'\n');
+        ensure!(fs::read(stdout)? == expected_output);
+        ensure!(fs::read(stderr)?.is_empty());
         Ok(())
     }
 

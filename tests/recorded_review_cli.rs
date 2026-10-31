@@ -32,13 +32,17 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Result<Self> {
+        Self::with_patch(PATCH)
+    }
+
+    fn with_patch(patch: &[u8]) -> Result<Self> {
         let root = tempfile::tempdir()?;
         let write = |name: &str, bytes: &[u8]| -> Result<Value> {
             fs::write(root.path().join(name), bytes)?;
             Ok(json!({"path":name,"sha256":hash(bytes)}))
         };
         let head = "a".repeat(40);
-        let diff_digest = domain_hash("ub-review.revision-identity.diff.v1", PATCH);
+        let diff_digest = domain_hash("ub-review.revision-identity.diff.v1", patch);
         let paths_digest = domain_hash(
             "ub-review.revision-identity.changed-paths.v1",
             b"src/lib.rs\0",
@@ -98,7 +102,7 @@ impl Fixture {
             "evidence":[{"reference":"fact#1","file":write("evidence.bin",evidence)?}],
             "imported_ci":write("ci.bin",ci)?,
             "delivery_subject":serde_json::from_str::<Value>(&delivery)?,
-            "diff":write("diff.patch",PATCH)?,"public_source_digest":public_digest,
+            "diff":write("diff.patch",patch)?,"public_source_digest":public_digest,
             "materials":[{"claim_id":"A","body_ref":"public#A","class":"public","file":write("body.txt",body)?}],
             "anchors":[],"answer":write("answer.json",answer.as_bytes())?,"plan":write("plan.json",plan.as_bytes())?
         });
@@ -155,6 +159,9 @@ fn rejected(output: Output, message: &str) {
 
 #[path = "recorded_review_cli/agent_result.rs"]
 mod agent_result;
+
+#[path = "recorded_review_cli/diff_identity.rs"]
+mod diff_identity;
 
 #[test]
 fn real_command_exports_exact_sources_and_replays_without_remote_confirmation() -> Result<()> {
