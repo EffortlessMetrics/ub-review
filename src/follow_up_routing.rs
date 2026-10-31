@@ -257,6 +257,25 @@ pub(crate) fn routed_evidence_for_group(
 pub(crate) const ROUTED_RECEIPT_STDERR_TAIL_BYTES: usize = 1200;
 pub(crate) const ROUTED_RECEIPT_STDOUT_TAIL_BYTES: usize = 600;
 
+/// Read only the tail from the opened regular-file snapshot. A short read
+/// (for example, concurrent truncation) stays unavailable rather than being
+/// presented with the original length. Appended bytes belong to a later read.
+fn routed_stream_tail(path: &Path, cap: usize) -> std::io::Result<(Vec<u8>, u64)> {
+    use std::io::{Read, Seek, SeekFrom};
+
+    let mut file = fs::File::open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() {
+        return Err(std::io::Error::other("proof output is not a regular file"));
+    }
+    let total = metadata.len();
+    let count = total.min(cap as u64) as usize;
+    file.seek(SeekFrom::Start(total - count as u64))?;
+    let mut bytes = vec![0; count];
+    file.read_exact(&mut bytes)?;
+    Ok((bytes, total))
+}
+
 /// Bounded content excerpt for a routed proof receipt, or `None` for
 /// non-receipt evidence kinds and unknown receipt ids. Each command
 /// contributes its status line plus lossy-decoded byte tails of stderr and
@@ -286,13 +305,13 @@ pub(crate) fn routed_proof_receipt_excerpt(
             if relative.is_empty() {
                 continue;
             }
-            match fs::read(out.join(relative)) {
-                Ok(bytes) if bytes.is_empty() => {
+            match routed_stream_tail(&out.join(relative), cap) {
+                Ok((bytes, _)) if bytes.is_empty() => {
                     excerpt.push_str(&format!("    {label}: (empty)\n"));
                 }
-                Ok(bytes) => {
-                    let truncated = bytes.len() > cap;
-                    let mut start = bytes.len().saturating_sub(cap);
+                Ok((bytes, total)) => {
+                    let truncated = total > cap as u64;
+                    let mut start = 0;
                     // Trim forward to a UTF-8 boundary so a mid-character
                     // byte cut cannot produce lossy-decode drift against the
                     // verifier's Python mirror of this excerpt.
@@ -301,10 +320,7 @@ pub(crate) fn routed_proof_receipt_excerpt(
                     }
                     let tail = String::from_utf8_lossy(&bytes[start..]);
                     if truncated {
-                        excerpt.push_str(&format!(
-                            "    {label} (last {cap} bytes of {total}):\n",
-                            total = bytes.len()
-                        ));
+                        excerpt.push_str(&format!("    {label} (last {cap} bytes of {total}):\n"));
                     } else {
                         excerpt.push_str(&format!("    {label}:\n"));
                     }
@@ -325,17 +341,24 @@ pub(crate) fn routed_proof_receipt_excerpt(
     (!excerpt.is_empty()).then_some(excerpt)
 }
 
-/// Per-evidence-id excerpts for one follow-up task.
+/// Per-evidence-id excerpts for one follow-up task. The caller owns a fresh
+/// cache for one immutable packet-writing batch; it must not cross writes,
+/// receipt updates, output directories, or revision boundaries.
 pub(crate) fn routed_receipt_excerpts_for_task(
     out: &Path,
     task: &FollowUpQuestionTask,
     proof_receipts: &[ProofReceipt],
+    excerpts: &mut BTreeMap<String, Option<String>>,
 ) -> BTreeMap<String, String> {
     task.routed_evidence
         .iter()
+        .filter(|evidence| evidence.kind == "proof-receipt")
         .filter_map(|evidence| {
-            routed_proof_receipt_excerpt(out, evidence, proof_receipts)
-                .map(|excerpt| (evidence.id.clone(), excerpt))
+            excerpts
+                .entry(evidence.id.clone())
+                .or_insert_with(|| routed_proof_receipt_excerpt(out, evidence, proof_receipts))
+                .as_ref()
+                .map(|excerpt| (evidence.id.clone(), excerpt.clone()))
         })
         .collect()
 }

@@ -42,7 +42,7 @@ where
     let mut leases = Vec::new();
     let mut executed_tasks = 0_usize;
     let mut executed_files = BTreeSet::new();
-    let mut estimated_seconds = 0_u64;
+    let mut spent_seconds = 0_u64;
     let lease_budget = proof_lease_budget(profile)?;
     for task in tasks {
         let task_timeout_sec = focused_test_task_command_timeout(&task, budget);
@@ -108,7 +108,7 @@ where
             executed_tasks,
             &executed_files,
             &task.file,
-            estimated_seconds,
+            spent_seconds,
             task_timeout_sec,
             task.mode.command_count(),
             budget,
@@ -186,11 +186,12 @@ where
                 &mut prepare_base_plus_tests,
             )?,
         };
+        spent_seconds = spent_seconds.saturating_add(
+            focused_proof_receipt_spent_seconds(&receipt).unwrap_or(lease.timeout_sec),
+        );
         leases.push(lease);
         receipts.push(receipt);
         executed_tasks += 1;
-        estimated_seconds = estimated_seconds
-            .saturating_add(task_timeout_sec.saturating_mul(task.mode.command_count()));
     }
     Ok(ProofBrokerResult {
         proof_receipts: receipts,
@@ -381,7 +382,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::task_ledger::TaskEvent;
+    use crate::task_ledger::{TaskEvent, TaskTerminalDisposition};
     use crate::tests::{run_test_command, test_diff, test_run_args};
     use anyhow::ensure;
     use std::fs;
@@ -529,6 +530,229 @@ mod tests {
         let patch = fs::read_to_string(out.join("proof/base-plus-tests.patch"))?;
         assert!(patch.contains("fn classifies_boundary"), "{patch}");
         assert!(!patch.contains("value >= 10"), "{patch}");
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn real_timeout_cannot_be_relabelled_as_decisive_proof() -> Result<()> {
+        let repo = tempfile::tempdir()?;
+        let diff = same_file_fix_and_test_repo(repo.path())?;
+        let out = repo.path().join("out");
+        let mut task = cargo_test_task();
+        task.mode = FocusedProofMode::HeadOnly;
+        task.timeout_sec = Some(1);
+        task.command_specs = Some(FocusedTestCommandSpecs {
+            head: ProofCommandSpec {
+                argv: vec!["sleep".to_owned(), "2".to_owned()],
+                env: BTreeMap::new(),
+            },
+            base_plus_tests: ProofCommandSpec {
+                argv: vec!["sleep".to_owned(), "2".to_owned()],
+                env: BTreeMap::new(),
+            },
+        });
+        let revision = RevisionRef {
+            digest: "a".repeat(64),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit: diff.head.clone(),
+        };
+        let recorder = TaskLedgerRecorder::new(&revision, &Instant::now())?;
+        let ledger = ProofTaskLedger::new(recorder.clone());
+        let result = run_focused_red_green_proof_tasks_with_runner(
+            repo.path(),
+            &out,
+            &diff,
+            &Profile::default(),
+            &test_run_args(out.clone()),
+            ProofBudget {
+                max_focused_test_files: 2,
+                max_focused_tests: 2,
+                per_command_timeout_sec: 1,
+                max_total_seconds: 10,
+            },
+            vec![task],
+            Some(&ledger),
+            ProofExecutionPhase::ModelRequest,
+            run_command_to_files_with_spawn_observer,
+            prepare_base_plus_tests_worktree,
+        )?;
+        let receipt = result
+            .proof_receipts
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("missing native timeout receipt"))?;
+        assert_eq!(receipt.result, "timed_out");
+        assert_eq!(receipt.commands.len(), 1);
+        assert_eq!(receipt.commands[0].status, "timed_out");
+        assert!(receipt.commands[0].timed_out);
+        assert_eq!(
+            required_proof_receipt_class(receipt),
+            RequiredProofClass::Failed
+        );
+        fs::create_dir_all(out.join("review"))?;
+        let mut published = receipt.clone();
+        published.revision = Some(revision);
+        for label in [
+            "head_failed",
+            "head_passed",
+            "discriminating",
+            "non_discriminating",
+        ] {
+            let mut contradictory = receipt.clone();
+            contradictory.result = label.to_owned();
+            assert_eq!(
+                required_proof_receipt_class(&contradictory),
+                RequiredProofClass::Failed
+            );
+            let mut invalid_publication = published.clone();
+            invalid_publication.result = label.to_owned();
+            fs::write(
+                out.join("review/proof_receipts.json"),
+                serde_json::to_vec(&vec![invalid_publication])?,
+            )?;
+            let error = ledger
+                .reconcile_published_receipts(&out)
+                .err()
+                .ok_or_else(|| anyhow::anyhow!("contradictory ledger publication was accepted"))?;
+            assert!(
+                error
+                    .to_string()
+                    .contains("contradictory completion metadata")
+            );
+
+            assert!(
+                !proof_receipt_is_test_proof_result(&contradictory),
+                "{label}"
+            );
+            assert!(
+                !proof_receipt_is_public_test_proof_result(&contradictory),
+                "{label}"
+            );
+            assert!(proof_receipt_is_missing_evidence(&contradictory), "{label}");
+            assert_eq!(
+                witness_status_for_proof_receipt(&contradictory),
+                "needs-witness"
+            );
+            let mut summary = String::new();
+            render_proof_receipt_summary(&mut summary, &contradictory);
+            assert!(
+                summary.contains("Focused proof has contradictory completion metadata; evidence remains incomplete."),
+                "{label}: {summary}"
+            );
+            assert!(!summary.contains("current failure"), "{summary}");
+            assert!(!summary.contains("discriminates the patch"), "{summary}");
+            let body = render_review_body(
+                "controlled-timeout",
+                &crate::tests::test_plan(Vec::new()),
+                &diff,
+                &[],
+                &[] as &[SensorEvidenceIssue],
+                &[] as &[ModelEvidenceIssue],
+                &[] as &[ReviewInlineComment],
+                &[] as &[SummaryOnlyFinding],
+                &[] as &[Observation],
+                std::slice::from_ref(&contradictory),
+                60_000,
+                ReviewBodyAudience::PullRequest,
+            );
+            assert!(
+                !body.contains("Needs focused proof failure resolved"),
+                "{body}"
+            );
+            assert!(!body.contains("current failure"), "{body}");
+            assert!(!body.contains("discriminates the patch"), "{body}");
+        }
+        for side in ["head", "base-plus-tests"] {
+            for (status, timed_out) in [
+                ("timed_out", false),
+                ("passed", true),
+                ("skipped", false),
+                ("unknown", false),
+            ] {
+                let mut invalid = receipt.clone();
+                invalid.result = "discriminating".to_owned();
+                invalid.commands[0].side = side.to_owned();
+                invalid.commands[0].status = status.to_owned();
+                invalid.commands[0].timed_out = timed_out;
+                assert_eq!(
+                    required_proof_receipt_class(&invalid),
+                    RequiredProofClass::Failed
+                );
+                assert!(!proof_receipt_is_test_proof_result(&invalid));
+                assert!(!proof_receipt_is_public_test_proof_result(&invalid));
+                assert_eq!(witness_status_for_proof_receipt(&invalid), "needs-witness");
+            }
+        }
+        fs::write(
+            out.join("review/proof_receipts.json"),
+            serde_json::to_vec(&vec![published])?,
+        )?;
+        ledger.reconcile_published_receipts(&out)?;
+        let inputs = recorder.inputs()?;
+        assert!(inputs.iter().any(|input| matches!(
+            input.event,
+            TaskEvent::ProcessFinished {
+                disposition: TaskTerminalDisposition::TimedOut,
+                ..
+            }
+        )));
+        assert!(
+            inputs
+                .iter()
+                .any(|input| matches!(input.event, TaskEvent::ResourcesReleased { .. }))
+        );
+        assert!(!inputs.iter().any(|input| matches!(
+            input.event,
+            TaskEvent::ProcessFinished {
+                disposition: TaskTerminalDisposition::DeterministicFailure,
+                ..
+            }
+        )));
+        // Actual completed nonzero execution remains code failure, and a
+        // completed zero exit remains a passing HEAD, unlike the killed child.
+        for (argv, expected) in [
+            (
+                vec!["sh".to_owned(), "-c".to_owned(), "exit 7".to_owned()],
+                "head_failed",
+            ),
+            (vec!["true".to_owned()], "head_passed"),
+        ] {
+            let mut completed_task = cargo_test_task();
+            completed_task.mode = FocusedProofMode::HeadOnly;
+            let spec = ProofCommandSpec {
+                argv,
+                env: BTreeMap::new(),
+            };
+            completed_task.command_specs = Some(FocusedTestCommandSpecs {
+                head: spec.clone(),
+                base_plus_tests: spec,
+            });
+            let completed = run_focused_red_green_proof_tasks_with_runner(
+                repo.path(),
+                &out,
+                &diff,
+                &Profile::default(),
+                &test_run_args(out.clone()),
+                ProofBudget {
+                    max_focused_test_files: 2,
+                    max_focused_tests: 2,
+                    per_command_timeout_sec: 1,
+                    max_total_seconds: 10,
+                },
+                vec![completed_task],
+                None,
+                ProofExecutionPhase::ModelRequest,
+                run_command_to_files_with_spawn_observer,
+                prepare_base_plus_tests_worktree,
+            )?;
+            let proof = completed
+                .proof_receipts
+                .first()
+                .ok_or_else(|| anyhow::anyhow!("missing completed proof"))?;
+            assert_eq!(proof.result, expected);
+            assert!(proof_receipt_is_test_proof_result(proof));
+            assert_eq!(witness_status_for_proof_receipt(proof), "tool-confirmed");
+        }
         Ok(())
     }
 

@@ -574,3 +574,5 @@ fn real_cli_schema_only_watermark_change_keeps_generic_private_safe_rejection() 
     assert!(!diagnostic.contains("not_proven"));
     Ok(())
 }
+#[path = "authority.rs"]
+mod authority;

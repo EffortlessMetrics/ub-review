@@ -83,16 +83,30 @@ pub(crate) fn run_initial_diff_proof_broker_v0(
         run_command_to_files_with_spawn_observer,
         prepare_base_plus_tests_worktree,
     )?;
+    let final_budget = settled_focused_proof_budget(
+        budget,
+        &result.resource_leases,
+        &result.proof_receipts,
+        &diff.head,
+    );
     let final_selection = select_proof_portfolio(ProofPortfolioInput {
         test_tasks: &tasks,
         build_tasks: &[],
         proof_requests: &[],
         proof_receipts: &result.proof_receipts,
         head: &diff.head,
-        budget,
+        budget: final_budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
-    write_proof_portfolio_selection_artifact(out, diff, budget, &tasks, &[], &[], final_selection)?;
+    write_proof_portfolio_selection_artifact(
+        out,
+        diff,
+        final_budget,
+        &tasks,
+        &[],
+        &[],
+        final_selection,
+    )?;
     Ok(result)
 }
 
@@ -232,10 +246,12 @@ fn remaining_focused_proof_budget_after(
     total_budget: ProofBudget,
     existing_leases: &[ResourceLease],
     new_leases: &[ResourceLease],
+    receipts: &[ProofReceipt],
+    head: &str,
 ) -> ProofBudget {
     let mut all_leases = existing_leases.to_vec();
     all_leases.extend(new_leases.iter().cloned());
-    remaining_focused_proof_budget(total_budget, &all_leases)
+    settled_focused_proof_budget(total_budget, &all_leases, receipts, head)
 }
 
 #[derive(Clone, Copy)]
@@ -783,7 +799,8 @@ where
     // string, so the security boundary is preserved byte-for-byte.
     let v2_requests: Vec<ProofRequestV2> = proof_requests.iter().map(proof_request_to_v2).collect();
     let total_budget = proof_budget(profile)?;
-    let budget = remaining_focused_proof_budget(total_budget, existing_leases);
+    let budget =
+        settled_focused_proof_budget(total_budget, existing_leases, existing_receipts, &diff.head);
     // Diff-derived Cargo candidates are owned by the initial diff broker and
     // already carry receipts by the time a request phase runs; this phase
     // re-plans requested work only.
@@ -817,12 +834,17 @@ where
     )?;
     let mut consumed_leases = existing_leases.to_vec();
     consumed_leases.extend(result.resource_leases.clone());
-    let remaining_budget = remaining_focused_proof_budget(total_budget, &consumed_leases);
     let existing_and_new_receipts = existing_receipts
         .iter()
         .chain(result.proof_receipts.iter())
         .cloned()
         .collect::<Vec<_>>();
+    let remaining_budget = settled_focused_proof_budget(
+        total_budget,
+        &consumed_leases,
+        &existing_and_new_receipts,
+        &diff.head,
+    );
     let replan = select_proof_portfolio(ProofPortfolioInput {
         test_tasks: &test_candidates,
         build_tasks: &build_candidates,
@@ -846,16 +868,18 @@ where
     )?;
     result.proof_receipts.extend(build_result.proof_receipts);
     result.resource_leases.extend(build_result.resource_leases);
-    let final_budget = remaining_focused_proof_budget_after(
-        total_budget,
-        existing_leases,
-        &result.resource_leases,
-    );
     let final_receipts = existing_receipts
         .iter()
         .chain(result.proof_receipts.iter())
         .cloned()
         .collect::<Vec<_>>();
+    let final_budget = remaining_focused_proof_budget_after(
+        total_budget,
+        existing_leases,
+        &result.resource_leases,
+        &final_receipts,
+        &diff.head,
+    );
     let final_selection = select_proof_portfolio(ProofPortfolioInput {
         test_tasks: &test_candidates,
         build_tasks: &build_candidates,
@@ -895,7 +919,8 @@ pub(crate) fn run_follow_up_proof_broker_v0(
     task_ledger: Option<&ProofTaskLedger>,
 ) -> Result<ProofBrokerResult> {
     let total_budget = proof_budget(profile)?;
-    let budget = remaining_focused_proof_budget(total_budget, existing_leases);
+    let budget =
+        settled_focused_proof_budget(total_budget, existing_leases, existing_receipts, &diff.head);
     // As in the request phase: diff-derived Cargo candidates belong to the
     // initial diff broker; follow-up re-plans requested work only.
     let mut test_candidates = focused_test_candidates_from_diff(diff, &[], None);
@@ -928,12 +953,17 @@ pub(crate) fn run_follow_up_proof_broker_v0(
     )?;
     let mut consumed_leases = existing_leases.to_vec();
     consumed_leases.extend(result.resource_leases.clone());
-    let remaining_budget = remaining_focused_proof_budget(total_budget, &consumed_leases);
     let existing_and_new_receipts = existing_receipts
         .iter()
         .chain(result.proof_receipts.iter())
         .cloned()
         .collect::<Vec<_>>();
+    let remaining_budget = settled_focused_proof_budget(
+        total_budget,
+        &consumed_leases,
+        &existing_and_new_receipts,
+        &diff.head,
+    );
     let replan = select_proof_portfolio(ProofPortfolioInput {
         test_tasks: &test_candidates,
         build_tasks: &build_candidates,
@@ -957,16 +987,18 @@ pub(crate) fn run_follow_up_proof_broker_v0(
     )?;
     result.proof_receipts.extend(build_result.proof_receipts);
     result.resource_leases.extend(build_result.resource_leases);
-    let final_budget = remaining_focused_proof_budget_after(
-        total_budget,
-        existing_leases,
-        &result.resource_leases,
-    );
     let final_receipts = existing_receipts
         .iter()
         .chain(result.proof_receipts.iter())
         .cloned()
         .collect::<Vec<_>>();
+    let final_budget = remaining_focused_proof_budget_after(
+        total_budget,
+        existing_leases,
+        &result.resource_leases,
+        &final_receipts,
+        &diff.head,
+    );
     let final_selection = select_proof_portfolio(ProofPortfolioInput {
         test_tasks: &test_candidates,
         build_tasks: &build_candidates,
@@ -1585,9 +1617,563 @@ mod tests {
     use anyhow::{Result, ensure};
 
     use super::*;
+    use crate::task_ledger_artifact::build_task_ledger_artifacts;
     use crate::test_parse::command_display_with_env;
     use crate::tests::test_run_args;
     use crate::{CommandStatus, DiffContext, DiffFlags};
+
+    #[test]
+    fn request_attribution_reuses_only_the_executed_bun_target() -> Result<()> {
+        let different_file = ["bun", "bd", "test", "test/parser.test.tsx"];
+        let named = [
+            "bun",
+            "bd",
+            "test",
+            "test/parser.test.ts",
+            "-t",
+            "parser regression",
+        ];
+        let whole_file = ["bun", "bd", "test", "test/parser.test.ts"];
+        let cargo_filter = [
+            "cargo",
+            "test",
+            "--locked",
+            "--test",
+            "config_tests",
+            "test/parser.test.ts",
+        ];
+        for (file, name, command, expected_command) in [
+            (
+                "test/parser.test.ts",
+                None,
+                "bun test test/parser.test.ts",
+                None,
+            ),
+            (
+                "test/parser.test.ts",
+                None,
+                "bun bd test test/parser.test.ts",
+                None,
+            ),
+            (
+                "test/parser.test.ts",
+                None,
+                "bun test test/parser.test.tsx",
+                Some(different_file.as_slice()),
+            ),
+            (
+                "test/parser.test.ts",
+                Some("parser"),
+                "bun test test/parser.test.ts -t 'parser regression'",
+                Some(named.as_slice()),
+            ),
+            (
+                "test/parser.test.ts",
+                Some("parser regression"),
+                "bun test test/parser.test.ts -t 'parser regression'",
+                None,
+            ),
+            (
+                "test/parser.test.ts",
+                Some("parser"),
+                "bun test test/parser.test.ts",
+                Some(whole_file.as_slice()),
+            ),
+            (
+                "test/parser.test.ts",
+                None,
+                "bun test test/parser.test.ts -t 'parser regression'",
+                Some(named.as_slice()),
+            ),
+            (
+                "test/parser.test.ts",
+                None,
+                "cargo test --locked --test config_tests test/parser.test.ts",
+                Some(cargo_filter.as_slice()),
+            ),
+            (
+                "b/test/parser.test.ts",
+                None,
+                "bun test test/parser.test.ts",
+                Some(whole_file.as_slice()),
+            ),
+        ] {
+            let reuse = expected_command.is_none();
+            let temp = tempfile::tempdir()?;
+            let out = temp.path().join("out");
+            let base_root = temp.path().join("base-plus-tests");
+            fs::create_dir_all(&base_root)?;
+            let mut diff = test_diff();
+            diff.changed_files = vec![file.to_owned()];
+            diff.patch = format!(
+                "diff --git a/{file} b/{file}\n\
+                 --- a/{file}\n+++ b/{file}\n\
+                 @@ -0,0 +1 @@\n+{}\n",
+                name.map_or_else(
+                    || "// changed test setup".to_owned(),
+                    |name| { format!("test(\"{name}\", () => {{}});") }
+                )
+            );
+            let mut profile = Profile::default();
+            profile.limits.tests = 2;
+            profile.budgets.proof_max_focused_test_files = 2;
+            profile.budgets.proof_max_focused_tests = 2;
+            profile.budgets.proof_command_timeout_sec = 2;
+            profile.budgets.proof_total_timeout_sec = 20;
+            let args = test_run_args(out.clone());
+            let tasks = focused_test_candidates_from_diff(&diff, &[], None);
+            ensure!(tasks.len() == 1);
+            let mut initial_commands = Vec::new();
+            let mut initial = run_focused_red_green_proof_tasks_with_runner(
+                temp.path(),
+                &out,
+                &diff,
+                &profile,
+                &args,
+                proof_budget(&profile)?,
+                tasks,
+                None,
+                ProofExecutionPhase::InitialImpact,
+                |_root, argv, _env, _timeout, stdout, stderr, _observe| {
+                    initial_commands.push(argv.to_vec());
+                    fs::write(stdout, b"initial target result\n")?;
+                    fs::write(stderr, b"")?;
+                    let success = !stdout.to_string_lossy().contains("base-plus-tests");
+                    Ok(CommandStatus {
+                        exit_code: Some(if success { 0 } else { 1 }),
+                        timed_out: false,
+                        success,
+                        reason: "initial target fixture".to_owned(),
+                        duration_ms: 1,
+                    })
+                },
+                |_root, _out, _diff| Ok(base_root.clone()),
+            )?;
+            ensure!(initial_commands.len() == 2);
+            let mut initial_head = vec!["bun", "bd", "test", file];
+            let mut initial_base = vec!["bun", "test", file];
+            if let Some(name) = name {
+                initial_head.extend(["-t", name]);
+                initial_base.extend(["-t", name]);
+            }
+            assert_eq!(initial_commands, vec![initial_head, initial_base]);
+            ensure!(initial.proof_receipts.len() == 1);
+            ensure!(initial.proof_receipts[0].result == "discriminating");
+            let request = ProofRequest {
+                schema: PROOF_REQUEST_SCHEMA.to_owned(),
+                id: "required-target".to_owned(),
+                lane: REQUIRED_PROOF_POLICY_LANE.to_owned(),
+                requested_by: vec!["proof-policy:required-target".to_owned()],
+                command: command.to_owned(),
+                reason: "Run the requested target, not a similarly named target.".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 2,
+                required: true,
+                status: "requested".to_owned(),
+            };
+            attach_request_metadata_to_focused_receipts(
+                &diff,
+                std::slice::from_ref(&request),
+                &mut initial.proof_receipts,
+            );
+            let mut requested_commands = Vec::new();
+            let result = run_request_proof_broker_v0_with_runners(
+                temp.path(),
+                &out,
+                &diff,
+                &profile,
+                std::slice::from_ref(&request),
+                &initial.proof_receipts,
+                &initial.resource_leases,
+                &args,
+                &BoxState {
+                    cpus: 4,
+                    free_mem_mb: Some(8_192),
+                    free_disk_mb: Some(20_000),
+                    load_1m: Some(0.25),
+                    github_actions: false,
+                },
+                &Instant::now(),
+                None,
+                |_root, argv, _env, _timeout, stdout, stderr, _observe| {
+                    requested_commands.push(argv.to_vec());
+                    fs::write(stdout, b"requested target fails\n")?;
+                    fs::write(stderr, b"")?;
+                    Ok(CommandStatus {
+                        exit_code: Some(1),
+                        timed_out: false,
+                        success: false,
+                        reason: "requested target fixture".to_owned(),
+                        duration_ms: 1,
+                    })
+                },
+                |_root, _out, _diff| Ok(base_root.clone()),
+                |_root, _argv, _env, _timeout, _stdout, _stderr, _observe| {
+                    anyhow::bail!("test requests must not run a build")
+                },
+            )?;
+            initial.proof_receipts.extend(result.proof_receipts);
+            let receipts: Vec<ProofReceipt> =
+                serde_json::from_slice(&serde_json::to_vec(&initial.proof_receipts)?)?;
+            let terminal =
+                terminalize_proof_requests(&diff.head, std::slice::from_ref(&request), &receipts);
+            let gate = build_gate_outcome(GateOutcomeInput {
+                args: &args,
+                config: &Config::default(),
+                plan: &crate::tests::test_plan(Vec::new()),
+                terminal_state: &crate::tests::test_terminal_state("sufficient"),
+                proof_requests: &terminal,
+                proof_receipts: &receipts,
+                tool_gate_outcomes: &[],
+                missing_or_failed_sensor_evidence: &[],
+                missing_or_failed_model_evidence: &[],
+                reporter_gate: ReporterGateInput::Absent,
+                planner_portfolio: None,
+                revision_digest: None,
+            });
+            let gate = serde_json::to_value(&gate)?;
+            assert_eq!(gate["required_proof"]["matched"], 1);
+            assert_eq!(
+                gate["required_proof"]["passed"],
+                usize::from(reuse),
+                "{command}"
+            );
+            assert_eq!(
+                gate["required_proof"]["failed"],
+                usize::from(!reuse),
+                "{command}"
+            );
+            assert_eq!(
+                terminal[0].status,
+                if reuse { "satisfied" } else { "failed" },
+                "requested {command} after initial filter {name:?}; commands: {requested_commands:?}"
+            );
+            if reuse {
+                assert!(requested_commands.is_empty(), "{command}");
+                assert_eq!(receipts.len(), 1);
+            } else if let Some(expected_command) = expected_command {
+                assert_eq!(requested_commands.len(), 1, "{command}");
+                assert_eq!(requested_commands[0], expected_command);
+                assert!(receipts[0].request_ids.is_empty(), "{command}");
+                assert_eq!(receipts.len(), 2);
+                assert_eq!(receipts[1].result, "head_failed");
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn accounting_matrix_releases_early_commands_before_required_build() -> Result<()> {
+        let mut failures = Vec::new();
+        for case in [
+            "success",
+            "failure",
+            "timeout",
+            "setup_failure",
+            "cancellation",
+        ] {
+            let temp = tempfile::tempdir()?;
+            let out = temp.path().join("out");
+            let mut diff = test_diff();
+            diff.head = "155e27501db0693432c143d4110ef5d0cbcf981e".to_owned();
+            let mut test = proof_request("accounting-test", true);
+            test.command = "cargo test --locked --test config_tests".to_owned();
+            test.timeout_sec = 3;
+            let mut build = proof_request("accounting-build", true);
+            build.command = "cargo check --workspace --all-targets --locked".to_owned();
+            build.cost = "focused-build".to_owned();
+            build.timeout_sec = 4;
+            let requests = vec![test, build];
+            let mut profile = Profile::default();
+            profile.limits.tests = 1;
+            profile.limits.builds = 1;
+            profile.budgets.proof_max_focused_test_files = 3;
+            profile.budgets.proof_max_focused_tests = 3;
+            profile.budgets.proof_command_timeout_sec = 4;
+            profile.budgets.proof_total_timeout_sec = 6;
+            profile.budgets.hard_timeout_sec = 30;
+            let args = test_run_args(out.clone());
+            let box_state = BoxState::detect()?;
+            let started = Instant::now();
+            let revision = RevisionRef {
+                digest: "a".repeat(64),
+                semantics: "candidate_head".to_owned(),
+                reviewed_commit: diff.head.clone(),
+            };
+            let recorder = TaskLedgerRecorder::new(&revision, &started)?;
+            let ledger = ProofTaskLedger::new(recorder.clone());
+            let mut actual = Vec::new();
+            let mut builds = 0;
+            let mut build_started_ns = None;
+            let result = run_request_proof_broker_v0_with_runners(
+                temp.path(),
+                &out,
+                &diff,
+                &profile,
+                &requests,
+                &[],
+                &[],
+                &args,
+                &box_state,
+                &started,
+                Some(&ledger),
+                |root, argv, env, timeout, stdout, stderr, observer| {
+                    ensure!(argv.first().is_some_and(|arg| arg == "cargo"));
+                    ensure!(timeout == 3);
+                    let base = stdout.to_string_lossy().contains("base-plus-tests");
+                    let clock = Instant::now();
+                    // The real subprocess runner executes these deterministic fixtures;
+                    // the injected seam does not change the broker command allowlist.
+                    let fixture = match (case, base) {
+                        ("timeout", _) => vec!["/bin/sleep".to_owned(), "10".to_owned()],
+                        ("setup_failure", _) => {
+                            std::thread::sleep(std::time::Duration::from_millis(20));
+                            vec![
+                                root.join("missing-accounting-program")
+                                    .display()
+                                    .to_string(),
+                            ]
+                        }
+                        ("cancellation", _) => vec!["/bin/sleep".to_owned(), "0.05".to_owned()],
+                        ("failure", _) | (_, true) => {
+                            vec!["/bin/sh".to_owned(), "-c".to_owned(), "exit 7".to_owned()]
+                        }
+                        _ => vec!["/bin/sh".to_owned(), "-c".to_owned(), "exit 0".to_owned()],
+                    };
+                    let status = run_command_to_files_with_spawn_observer(
+                        root, &fixture, env, timeout, stdout, stderr, observer,
+                    );
+                    actual.push(serde_json::json!({
+                        "argv": fixture, "timeout_sec": timeout,
+                        "monotonic_duration_ns": clock.elapsed().as_nanos(),
+                    }));
+                    if case == "cancellation" {
+                        status?;
+                        return Err(anyhow::anyhow!(
+                            "fixture cancellation after confirmed completion"
+                        ));
+                    }
+                    status
+                },
+                |_root, _out, _diff| {
+                    let base = temp.path().join("base-plus-tests");
+                    fs::create_dir_all(&base)?;
+                    Ok(base)
+                },
+                |root, _argv, env, timeout, stdout, stderr, observer| {
+                    ensure!(timeout == 4);
+                    builds += 1;
+                    build_started_ns = Some(started.elapsed().as_nanos());
+                    run_command_to_files_with_spawn_observer(
+                        root,
+                        &["/bin/sh".to_owned(), "-c".to_owned(), "exit 0".to_owned()],
+                        env,
+                        timeout,
+                        stdout,
+                        stderr,
+                        observer,
+                    )
+                },
+            )?;
+            let artifact: serde_json::Value =
+                serde_json::from_slice(&fs::read(out.join("review/proof_portfolio.json"))?)?;
+            write_proof_receipt_artifacts(&out, &result.proof_receipts, Some(&revision))?;
+            ledger.reconcile_published_receipts(&out)?;
+            let ledger_bytes = build_task_ledger_artifacts(&revision, &recorder.inputs()?)?;
+            let ledger_snapshot: serde_json::Value =
+                serde_json::from_slice(&ledger_bytes.snapshot_json)?;
+            let row = serde_json::json!({
+                "case": case, "actual_commands": actual, "proof_receipts": result.proof_receipts,
+                "leases": result.resource_leases, "portfolio": artifact,
+                "ledger": ledger_snapshot, "required_build_executions": builds,
+                "required_build_started_ns": build_started_ns, "box_state": box_state,
+                "hard_deadline_sec": profile.budgets.hard_timeout_sec,
+                "total_budget_sec": profile.budgets.proof_total_timeout_sec,
+                "elapsed_ns": started.elapsed().as_nanos(),
+            });
+            eprintln!("ACCOUNTING_MATRIX {row}");
+            if builds != usize::from(case != "timeout") {
+                failures.push(format!("{case}: required build executions={builds}"));
+            }
+            if matches!(case, "cancellation" | "setup_failure")
+                && row["proof_receipts"][0]["commands"][0]["duration_ms"] == 0
+            {
+                failures.push(format!("{case}: elapsed setup/cancellation was erased"));
+            }
+            let first_receipt = &result.proof_receipts[0];
+            let measured_ms: u128 = first_receipt
+                .commands
+                .iter()
+                .map(|command| {
+                    command.duration_ms.max(if command.timed_out {
+                        u128::from(command.timeout_sec) * 1_000
+                    } else {
+                        1
+                    })
+                })
+                .sum();
+            let first_charge = u64::try_from(measured_ms.div_ceil(1_000))?;
+            let expected_remaining = 6_u64
+                .saturating_sub(first_charge)
+                .saturating_sub(builds as u64);
+            if artifact["budget_seconds"].as_u64() != Some(expected_remaining) {
+                failures.push(format!("{case}: settlement does not reconcile"));
+            }
+            ensure!(result.resource_leases[0].timeout_sec == 6);
+            if let Some(at) = build_started_ns {
+                ensure!(at < 30_000_000_000);
+                ensure!(result.resource_leases[1].timeout_sec == 4);
+            }
+            if matches!(
+                case,
+                "failure" | "setup_failure" | "cancellation" | "timeout"
+            ) {
+                ensure!(
+                    first_receipt.result != "head_passed"
+                        && first_receipt.result != "discriminating"
+                );
+            }
+            ensure!(
+                artifact["runtime"]["deadline_remaining_seconds"]
+                    .as_u64()
+                    .is_some_and(|n| n > 0)
+            );
+        }
+        ensure!(failures.is_empty(), "{}", failures.join("; "));
+        Ok(())
+    }
+
+    #[test]
+    fn composed_semantic_intents_preserve_refusal_and_release_early_budget() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        fs::write(
+            temp.path().join("Cargo.toml"),
+            "[package]\nname=\"fixture\"\nversion=\"0.0.0\"\nedition=\"2024\"\n[workspace]\n[[bin]]\nname=\"app\"\npath=\"app.rs\"\n[[test]]\nname=\"probe\"\npath=\"probe.rs\"\n",
+        )?;
+        for name in ["app.rs", "probe.rs"] {
+            fs::write(temp.path().join(name), "fn main() {}\n")?;
+        }
+        let mut diff = test_diff();
+        diff.changed_files.clear();
+        let semantic = |kind, target: &str, timeout| ProofIntent {
+            id: target.to_owned(),
+            claim_id: "composition".to_owned(),
+            question: "Does the declared proof answer the claim?".to_owned(),
+            expected_answer_shape: "terminal receipt".to_owned(),
+            proof_kind: kind,
+            target: target.to_owned(),
+            estimated_value: "high".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned()],
+            status: "requested".to_owned(),
+            timeout_sec: Some(timeout),
+            resolved_request_ids: vec!["stale".to_owned()],
+            resolution_reason: String::new(),
+        };
+        let mut profile = Profile::default();
+        profile.limits.tests = 1;
+        profile.limits.builds = 1;
+        profile.budgets.proof_max_focused_test_files = 3;
+        profile.budgets.proof_max_focused_tests = 3;
+        profile.budgets.proof_command_timeout_sec = 4;
+        profile.budgets.proof_total_timeout_sec = 6;
+        profile.budgets.hard_timeout_sec = 30;
+        let resolved = resolve_model_proof_intents(
+            temp.path(),
+            &diff,
+            &[
+                semantic(ProofKind::FocusedBuild, "cargo-target:fixture::app", 4),
+                semantic(ProofKind::FocusedTest, "cargo-test:fixture::probe", 3),
+                semantic(ProofKind::FocusedBuild, "cargo-package:fixture", 4),
+            ],
+            &[],
+            proof_budget(&profile)?,
+        )?;
+        ensure!(resolved.intents[0].status == "unsupported_target");
+        ensure!(resolved.intents[0].resolved_request_ids.is_empty());
+        ensure!(resolved.proof_requests.len() == 2);
+        let out = temp.path().join("out");
+        let args = test_run_args(out.clone());
+        let mut executed = Vec::new();
+        let mut builds = 0;
+        let result = run_request_proof_broker_v0_with_runners(
+            temp.path(),
+            &out,
+            &diff,
+            &profile,
+            &resolved.proof_requests,
+            &[],
+            &[],
+            &args,
+            &BoxState::detect()?,
+            &Instant::now(),
+            None,
+            |_root, argv, _env, timeout, stdout, stderr, _observer| {
+                ensure!(argv.join(" ") == "cargo test --locked --package fixture --test probe");
+                ensure!(timeout == 3);
+                let base = stdout.to_string_lossy().contains("base-plus-tests");
+                executed.push(if base { "base-plus-tests" } else { "head" });
+                fs::write(stdout, b"controlled semantic test")?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    success: !base,
+                    exit_code: Some(if base { 7 } else { 0 }),
+                    timed_out: false,
+                    duration_ms: 200,
+                    reason: "fixture".to_owned(),
+                })
+            },
+            |_root, _out, _diff| {
+                let base = temp.path().join("base-plus-tests");
+                fs::create_dir_all(&base)?;
+                Ok(base)
+            },
+            |_root, argv, _env, timeout, stdout, stderr, _observer| {
+                ensure!(argv.join(" ") == "cargo check --locked --package fixture");
+                ensure!(timeout == 4);
+                builds += 1;
+                fs::write(stdout, b"controlled semantic build")?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    success: true,
+                    exit_code: Some(0),
+                    timed_out: false,
+                    duration_ms: 200,
+                    reason: "fixture".to_owned(),
+                })
+            },
+        )?;
+        ensure!(executed == ["head", "base-plus-tests"]);
+        ensure!(
+            builds == 1,
+            "early completion must admit the approved package build"
+        );
+        ensure!(result.proof_receipts.len() == 2);
+        ensure!(result.resource_leases.len() == 2);
+        ensure!(result.resource_leases[0].timeout_sec == 6);
+        ensure!(result.resource_leases[1].timeout_sec == 4);
+        ensure!(result.proof_receipts[0].result == "discriminating");
+        ensure!(result.proof_receipts[1].result == "head_passed");
+        for request in &resolved.proof_requests {
+            ensure!(
+                result
+                    .proof_receipts
+                    .iter()
+                    .any(|receipt| receipt.request_ids.contains(&request.id))
+            );
+        }
+        let portfolio: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/proof_portfolio.json"))?)?;
+        ensure!(portfolio["budget_seconds"] == 4);
+        eprintln!(
+            "COMPOSED_INTENT_ACCOUNTING {}",
+            serde_json::json!({
+                "intents": resolved.intents, "requests": resolved.proof_requests,
+                "receipts": result.proof_receipts, "leases": result.resource_leases,
+                "portfolio": portfolio,
+            })
+        );
+        Ok(())
+    }
 
     fn test_diff() -> DiffContext {
         DiffContext {
@@ -1716,6 +2302,8 @@ mod tests {
             proof_budget_for_test(2, 120),
             std::slice::from_ref(&existing),
             std::slice::from_ref(&new),
+            &[],
+            "head",
         );
 
         assert_eq!(remaining.max_focused_tests, 0);
@@ -2685,6 +3273,7 @@ mod tests {
             out.join("review/gate_outcome.json"),
             serde_json::to_vec_pretty(&gate)?,
         )?;
+        let digest = crate::summary_render::bind_gate_fixture(&out)?;
         let mut summary = String::new();
         crate::render_review_efficiency_section(&mut summary, &out);
         ensure!(summary.contains("task-a"), "{summary}");
@@ -2694,7 +3283,7 @@ mod tests {
             "{summary}"
         );
         ensure!(summary.contains("receipts: none"), "{summary}");
-        ensure!(summary.contains("merge-test-digest"), "{summary}");
+        ensure!(summary.contains(&digest), "{summary}");
         Ok(())
     }
 
@@ -2785,6 +3374,7 @@ mod tests {
             out.join("review/gate_outcome.json"),
             serde_json::to_vec_pretty(&gate)?,
         )?;
+        crate::summary_render::bind_gate_fixture(&out)?;
         let mut summary = String::new();
         crate::render_review_efficiency_section(&mut summary, &out);
         ensure!(summary.contains("task-same"), "{summary}");
@@ -3062,9 +3652,13 @@ mod tests {
                     fs::write(
                         out.join("review/gate_outcome.json"),
                         serde_json::to_vec(&serde_json::json!({
+                            "schema": "ub-review.gate_outcome.v1",
+                            "conclusion": "inconclusive",
+                            "reasons": [],
                             "planner_required_proofs": accounting,
                         }))?,
                     )?;
+                    crate::summary_render::bind_gate_fixture(&out)?;
                     let mut summary = String::new();
                     crate::render_review_efficiency_section(&mut summary, &out);
                     ensure!(summary.contains(expected_reason), "{summary}");
