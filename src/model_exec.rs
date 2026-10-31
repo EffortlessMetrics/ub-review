@@ -1932,13 +1932,15 @@ pub(crate) fn call_model_prompt_content(
     let response_path = lane_dir.join("response.json");
     let stderr_path = lane_dir.join("stderr.txt");
     fs::write(&request_path, serde_json::to_vec_pretty(&payload)?)?;
+    let headers = model_request_headers(spec, lane_dir)?;
+    let header_refs: Vec<&str> = headers.iter().map(String::as_str).collect();
     let started = Instant::now();
     let process_output = run_curl_json_post(
         root,
         &url,
         &auth_header,
         &request_path,
-        &["Accept: application/json", "Content-Type: application/json"],
+        &header_refs,
         args.model_timeout_sec,
     )
     .with_context(|| "run model curl")?;

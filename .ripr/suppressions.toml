@@ -39862,3 +39862,18 @@ kind = "exposure_gap"
 finding_id = "probe:src_config.rs:field_construction:3064df08"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1363; probe ),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by default_sensor_phase_classifies_by_class_and_lease, impact_resolved_mode_defaults_to_shadow_and_clamps_invalid, impact_section_parses_and_is_known_top_level. Re-verify after any edit to src/config.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_api.rs:predicate:9ba81bec"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1366; probe if spec.provider == ModelProvider::OpenCodeGo {: Strong oracle found: exact value or pattern assertion. Reached by build_unsafe_review_inline_comments_respects_budget_cap, cache_artifacts_use_follow_up_result_provider, cache_events_include_provider_preflight_usage. Re-verify after any edit to src/model_api.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:5c4d42f9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1366; probe let (fallback_url, fallback_provider) = spawn_fake_openai_provider(2)?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:c35b1201"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1366; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to tests/cli.rs."
