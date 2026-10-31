@@ -108,6 +108,31 @@ pub(crate) fn model_status_evidence_issues(review: &ReviewSummaryReceipt) -> Vec
             ));
         }
     }
+    for receipt in &review.missing_or_failed_model_evidence {
+        let issue = if receipt.lane == "provider-preflight" {
+            format!(
+                "Provider preflight `{}` model `{}` endpoint `{}`: `{}` - {}",
+                receipt.provider,
+                receipt.model,
+                receipt.endpoint_kind,
+                receipt.status,
+                receipt.reason
+            )
+        } else {
+            format!(
+                "Lane `{}` via `{}` model `{}` endpoint `{}`: `{}` - {}",
+                receipt.lane,
+                receipt.provider,
+                receipt.model,
+                receipt.endpoint_kind,
+                receipt.status,
+                receipt.reason
+            )
+        };
+        if !issues.contains(&issue) {
+            issues.push(issue);
+        }
+    }
     issues
 }
 
