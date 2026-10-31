@@ -767,5 +767,4 @@ mod provider_session_tests {
         );
         Ok(())
     }
-
 }
