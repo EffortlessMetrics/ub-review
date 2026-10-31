@@ -692,14 +692,14 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
     let mut evidence_gaps_advisory = input.missing_or_failed_model_evidence.len();
     for issue in input.missing_or_failed_sensor_evidence {
         if enforce_required_sensors && sensor_issue_is_required(input.plan, issue) {
-            // A required sensor that RAN and DEMONSTRATED a failure (status
-            // `failed`, e.g. cargo-clippy exiting 101 with a real lint) is a
+            // A required sensor that RAN and DEMONSTRATED a failure (e.g.
+            // cargo-clippy exiting 101 with a real lint) is a
             // demonstrated defect, not missing evidence. It gets a
             // `sensor-finding` reason that contributes to a `fail` conclusion.
             // Only statuses that mean "we could not check" (missing,
             // receipt-absent, artifact-gap, timed_out, detail_unavailable,
             // ...) stay evidence-unavailable -> inconclusive.
-            if sensor_status_is_demonstrated_finding(&issue.status) {
+            if sensor_issue_is_demonstrated_finding(issue) {
                 reasons.push(sensor_finding_reason(issue));
                 continue;
             }
@@ -964,12 +964,16 @@ pub(crate) fn required_sensor_gap_reason(issue: &SensorEvidenceIssue) -> GateRea
             issue.status, issue.reason
         ),
         receipt: required_sensor_gap_receipt(issue),
-        next_action: None,
+        next_action: (issue.status == "failed").then(|| format!(
+            "inspect sensors/{}/ub-review-sensor-status.json and sensors/{}/stderr.txt; \
+             resolve the analysis or execution failure, then re-run; no passing verdict was produced",
+            issue.sensor, issue.sensor
+        )),
     }
 }
 
-/// A required sensor ran and demonstrated a failure (status `failed`, e.g.
-/// cargo-clippy exiting 101 with a real lint). This is a demonstrated defect,
+/// A required sensor ran and demonstrated a failure (e.g. cargo-clippy exiting
+/// 101 with a real lint). This is a demonstrated defect,
 /// not missing evidence: the gate should `fail`, not stay `inconclusive`. The
 /// reason kind `sensor-finding` is deliberately not in the evidence-unavailable
 /// set, so it contributes to a `fail` conclusion.
@@ -989,14 +993,16 @@ pub(crate) fn sensor_finding_reason(issue: &SensorEvidenceIssue) -> GateReason {
     }
 }
 
-/// A sensor status represents a *demonstrated failure* — the sensor ran,
-/// evaluated the change, and exited with a failure (e.g. a lint, a build
-/// break, a tool-gate-style nonzero exit). Such a status is a defect finding,
-/// distinct from evidence-unavailable statuses (`missing`, `receipt-absent`,
-/// `artifact-gap`, `detail_unavailable`, `timed_out`) where the sensor could
-/// not produce a verdict.
-pub(crate) fn sensor_status_is_demonstrated_finding(status: &str) -> bool {
-    matches!(status, "failed")
+/// A failed process is not necessarily a demonstrated finding: a spawn error,
+/// signal, timeout or legacy receipt without native completion cannot establish
+/// one. RIPR's badge invocation does not enable fail-on-nonzero; its findings
+/// come from successful badge receipts evaluated by the configured tool gate.
+/// A nonzero RIPR exit (including scope refusal) supplies unavailable analysis.
+pub(crate) fn sensor_issue_is_demonstrated_finding(issue: &SensorEvidenceIssue) -> bool {
+    issue.status == "failed"
+        && !issue.timed_out
+        && issue.exit_code.is_some_and(|code| code != 0)
+        && issue.sensor != "ripr"
 }
 
 pub(crate) fn tool_gate_failure_next_action(entry: &ToolGateOutcomeEntry) -> String {
@@ -1660,6 +1666,8 @@ mod tests {
             sensor: "actionlint".to_owned(),
             status: "skipped".to_owned(),
             reason: "disabled by config".to_owned(),
+            exit_code: None,
+            timed_out: false,
         }];
         let terminal_state = test_terminal_state("failed-to-review");
 
@@ -1726,6 +1734,8 @@ mod tests {
             sensor: "tokmd".to_owned(),
             status: "timed_out".to_owned(),
             reason: "sensor timed out".to_owned(),
+            exit_code: None,
+            timed_out: false,
         }];
         let terminal_state = test_terminal_state("failed-to-review");
         let gate = build_gate_outcome(GateOutcomeInput {
@@ -1759,6 +1769,8 @@ mod tests {
             sensor: "actionlint".to_owned(),
             status: "receipt-absent".to_owned(),
             reason: "sensor wrote no status receipt".to_owned(),
+            exit_code: None,
+            timed_out: false,
         }];
         let terminal_state = test_terminal_state("failed-to-review");
 
@@ -1800,6 +1812,8 @@ mod tests {
             sensor: "ripr".to_owned(),
             status: "timed_out".to_owned(),
             reason: "sensor timed out".to_owned(),
+            exit_code: None,
+            timed_out: false,
         }];
         let terminal_state = test_terminal_state("needs-reviewer-attention");
 
@@ -1849,6 +1863,8 @@ mod tests {
             sensor: "actionlint".to_owned(),
             status: "timed_out".to_owned(),
             reason: "sensor timed out".to_owned(),
+            exit_code: None,
+            timed_out: false,
         }];
         let terminal_state = test_terminal_state("needs-reviewer-attention");
 
@@ -1895,6 +1911,8 @@ mod tests {
             sensor: "actionlint".to_owned(),
             status: "missing".to_owned(),
             reason: "exit 1".to_owned(),
+            exit_code: None,
+            timed_out: false,
         }];
         let terminal_state = test_terminal_state("failed-to-review");
 
@@ -1952,6 +1970,8 @@ mod tests {
             sensor: "cargo-clippy".to_owned(),
             status: "failed".to_owned(),
             reason: "clippy::expect_used (exit 101)".to_owned(),
+            exit_code: Some(101),
+            timed_out: false,
         }];
         let terminal_state = test_terminal_state("needs-reviewer-attention");
 
@@ -1984,6 +2004,155 @@ mod tests {
         assert!(reason.next_action.is_some());
     }
 
+    #[test]
+    fn native_sensor_receipts_distinguish_unavailable_analysis_from_findings() -> Result<()> {
+        let cases = [
+            ("ripr", "failed", Some(2), false, false),
+            ("ripr", "failed", Some(1), false, false),
+            ("cargo-clippy", "failed", None, false, false),
+            ("cargo-clippy", "failed", Some(0), false, false),
+            ("cargo-clippy", "failed", Some(101), true, false),
+            ("cargo-clippy", "failed", Some(101), false, true),
+            ("zizmor", "missing", None, false, false),
+            ("cargo-test", "timed_out", None, true, false),
+        ];
+        for (id, status, exit_code, timed_out, finding) in cases {
+            for legacy in [false, true] {
+                if legacy && (exit_code.is_some() || timed_out) {
+                    continue;
+                }
+                for required in [true, false] {
+                    for mode in [RunMode::IntelligentCi, RunMode::ReviewByok] {
+                        let temp = tempfile::tempdir()?;
+                        let mut sensor = sensor_plan(id, id, true);
+                        sensor.required = required;
+                        write_sensor_status(
+                            temp.path(),
+                            &sensor,
+                            SensorStatusWrite {
+                                status,
+                                argv: &[id.to_owned()],
+                                duration_ms: 12,
+                                reason: "native completion fixture; inspect retained stderr",
+                                exit_code,
+                                timed_out,
+                            },
+                        )?;
+                        let receipt_path = temp
+                            .path()
+                            .join(format!("sensors/{id}/ub-review-sensor-status.json"));
+                        if legacy {
+                            let mut value: serde_json::Value =
+                                serde_json::from_slice(&fs::read(&receipt_path)?)?;
+                            let object = value.as_object_mut().context("sensor receipt object")?;
+                            object.remove("exit_code");
+                            object.remove("timed_out");
+                            fs::write(&receipt_path, serde_json::to_vec(&value)?)?;
+                        }
+                        let original_receipt = fs::read(&receipt_path)?;
+                        let tool_gate_outcomes = if id == "ripr" {
+                            let policy = crate::ToolGatePolicy {
+                                scope: Some("on-diff".to_owned()),
+                                max_new_unsuppressed: Some(0),
+                            };
+                            sensor.gate = Some(policy.clone());
+                            let tool = crate::ToolPolicy {
+                                id: id.to_owned(),
+                                ..crate::ToolPolicy::default()
+                            };
+                            vec![crate::tool_gate_outcome_entry(
+                                temp.path(),
+                                &tool,
+                                policy,
+                                Some(&gated_tool_status_entry(id, required, status)),
+                            )]
+                        } else {
+                            Vec::new()
+                        };
+                        // One real successful receipt prevents whole-instrument
+                        // blackout from masking lost Required evidence.
+                        let healthy = sensor_plan("healthy", "healthy", true);
+                        write_sensor_status(
+                            temp.path(),
+                            &healthy,
+                            SensorStatusWrite {
+                                status: "ok",
+                                argv: &["healthy".to_owned()],
+                                duration_ms: 1,
+                                reason: "completed control",
+                                exit_code: Some(0),
+                                timed_out: false,
+                            },
+                        )?;
+                        let plan = test_plan(vec![sensor, healthy]);
+                        let issues = collect_sensor_evidence_issues(temp.path(), &plan);
+                        assert_eq!(issues.len(), 1);
+                        assert_eq!(issues[0].status, status, "preserve raw process status");
+                        assert_eq!(issues[0].exit_code, exit_code);
+                        assert_eq!(issues[0].timed_out, timed_out);
+                        assert_eq!(fs::read(&receipt_path)?, original_receipt);
+                        let mut args = test_run_args(temp.path().to_path_buf());
+                        args.mode = mode;
+                        let terminal_state = test_terminal_state("sufficient");
+                        let gate = build_gate_outcome(GateOutcomeInput {
+                            args: &args,
+                            config: &Config::default(),
+                            plan: &plan,
+                            terminal_state: &terminal_state,
+                            proof_requests: &[],
+                            proof_receipts: &[],
+                            tool_gate_outcomes: &tool_gate_outcomes,
+                            missing_or_failed_sensor_evidence: &issues,
+                            missing_or_failed_model_evidence: &[],
+                            reporter_gate: crate::ReporterGateInput::Absent,
+                            planner_portfolio: None,
+                            revision_digest: None,
+                        });
+                        let blocking = required && matches!(mode, RunMode::IntelligentCi);
+                        let expected = if !blocking {
+                            "pass"
+                        } else if finding {
+                            "fail"
+                        } else {
+                            "inconclusive"
+                        };
+                        assert_eq!(
+                            gate.conclusion, expected,
+                            "{id}/{status}/{exit_code:?}/{timed_out}/{required}/{mode:?}"
+                        );
+                        assert_eq!(
+                            gate.reasons.iter().any(|r| r.kind == "sensor-finding"),
+                            blocking && finding
+                        );
+                        assert_eq!(gate.analysis_result == "findings", required && finding);
+                        if required && !finding {
+                            assert_eq!(gate.analysis_result, "not_proven");
+                            assert_eq!(gate.gate_result, "not_proven");
+                            assert!(
+                                gate.not_proven_reasons
+                                    .iter()
+                                    .any(|reason| reason.starts_with("required-sensor-coverage:"))
+                            );
+                            if blocking && status == "failed" {
+                                let artifact = serde_json::to_value(&gate)?;
+                                assert_eq!(
+                                    artifact["reasons"][0]["next_action"],
+                                    format!(
+                                        "inspect sensors/{id}/ub-review-sensor-status.json and sensors/{id}/stderr.txt; \
+                                         resolve the analysis or execution failure, then re-run; no passing verdict was produced"
+                                    )
+                                );
+                            }
+                        } else if !required {
+                            assert_eq!(gate.analysis_result, "limited");
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Mixed: one demonstrated sensor finding + one evidence gap. The finding
     /// makes the gate `fail` (not all reasons are evidence-unavailable).
     #[test]
@@ -2000,11 +2169,15 @@ mod tests {
                 sensor: "cargo-audit".to_owned(),
                 status: "missing".to_owned(),
                 reason: "sensor not installed".to_owned(),
+                exit_code: None,
+                timed_out: false,
             },
             SensorEvidenceIssue {
                 sensor: "cargo-clippy".to_owned(),
                 status: "failed".to_owned(),
                 reason: "clippy lint (exit 101)".to_owned(),
+                exit_code: Some(101),
+                timed_out: false,
             },
         ];
         let terminal_state = test_terminal_state("needs-reviewer-attention");
@@ -2051,6 +2224,8 @@ mod tests {
             sensor: "ripr".to_owned(),
             status: "missing".to_owned(),
             reason: "command not found".to_owned(),
+            exit_code: None,
+            timed_out: false,
         }];
         let model_issues = vec![ModelEvidenceIssue {
             lane: "tests-oracle".to_owned(),
@@ -2097,6 +2272,8 @@ mod tests {
             sensor: "actionlint".to_owned(),
             status: "failed".to_owned(),
             reason: "exit 1".to_owned(),
+            exit_code: None,
+            timed_out: false,
         }];
         let terminal_state = test_terminal_state("failed-to-review");
 
