@@ -867,10 +867,13 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
 }
 
 #[cfg(test)]
+pub(crate) use tests::bind_gate_fixture;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
-    fn bind_gate_fixture(out: &Path) -> Result<String> {
+    pub(crate) fn bind_gate_fixture(out: &Path) -> Result<String> {
         use crate::revision_identity::{CommitTree, ReviewSemantics, RevisionIdentity};
         let base = CommitTree::new("base", &"1".repeat(40), &"2".repeat(40))?;
         let head = CommitTree::new("head", &"3".repeat(40), &"4".repeat(40))?;
