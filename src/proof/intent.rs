@@ -336,7 +336,10 @@ fn build_command(package: &CargoPackageInfo, target: Option<&CargoTargetInfo>) -
             "bench" => "--bench",
             _ => return command,
         };
-        command.push_str(&format!(" {flag} {}", target.name));
+        command.push_str(&format!(" {flag}"));
+        if target.kind != "lib" {
+            command.push_str(&format!(" {}", target.name));
+        }
     }
     command
 }
@@ -727,6 +730,70 @@ mod tests {
     }
 
     #[test]
+    fn library_build_template_preserves_named_target_refusal() -> Result<()> {
+        let mut workspace = graph();
+        let library = CargoTargetInfo {
+            name: "library".to_owned(),
+            kind: "lib".to_owned(),
+            src_path: "src/lib.rs".to_owned(),
+        };
+        workspace.packages[0].targets.push(library.clone());
+        let command = build_command(&workspace.packages[0], Some(&library));
+        assert_eq!(command, "cargo check --locked --package ub-review --lib");
+        let spec = focused_build_command_spec(&command)
+            .ok_or_else(|| anyhow::anyhow!("library template refused by broker"))?;
+        assert_eq!(
+            spec.argv,
+            [
+                "cargo",
+                "check",
+                "--locked",
+                "--package",
+                "ub-review",
+                "--lib"
+            ]
+        );
+        assert!(
+            focused_build_command_spec("cargo check --locked --package ub-review --lib library")
+                .is_none()
+        );
+
+        // Valid Cargo syntax does not authorize a named model intent.
+        for separator in ["::", "/"] {
+            let label = format!("cargo-target:ub-review{separator}library");
+            assert_eq!(
+                expected_error(resolve_build_target(&workspace, &diff(&[]), &label))?,
+                format!(
+                    "named focused build target `{label}` of kind `lib` is unsupported by the proof broker; choose `cargo-package:ub-review` only if package-level checking answers the proof question; otherwise leave the proof unresolved"
+                )
+            );
+        }
+        let package = resolve_build_target(&workspace, &diff(&[]), "cargo-package:ub-review")
+            .map_err(anyhow::Error::msg)?;
+        assert!(package.target.is_none());
+        assert_eq!(package.command, "cargo check --locked --package ub-review");
+        assert!(focused_build_command_spec(&package.command).is_some());
+
+        for (kind, flag) in [
+            ("bin", "--bin"),
+            ("test", "--test"),
+            ("example", "--example"),
+            ("bench", "--bench"),
+        ] {
+            let target = CargoTargetInfo {
+                name: "named".to_owned(),
+                kind: kind.to_owned(),
+                src_path: "fixture.rs".to_owned(),
+            };
+            assert_eq!(
+                build_command(&workspace.packages[0], Some(&target)),
+                format!("cargo check --locked --package ub-review {flag} named")
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn build_resolution_and_command_templates_are_exact() -> Result<()> {
         let workspace = graph();
         let workspace_target = resolve_build_target(&workspace, &diff(&[]), "workspace")
@@ -759,7 +826,7 @@ mod tests {
         };
         assert_eq!(
             build_command(package, Some(&lib)),
-            "cargo check --locked --package ub-review --lib library"
+            "cargo check --locked --package ub-review --lib"
         );
         let example = CargoTargetInfo {
             name: "demo".to_owned(),
