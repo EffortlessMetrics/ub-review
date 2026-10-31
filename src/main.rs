@@ -59,6 +59,7 @@ mod promotion;
 pub(crate) use promotion::*;
 mod claim_graph;
 pub(crate) use claim_graph::*;
+mod review_judgment;
 mod revision_identity;
 pub(crate) use revision_identity::RevisionRef;
 mod revision_admission;
