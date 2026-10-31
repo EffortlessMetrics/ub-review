@@ -43331,3 +43331,73 @@ kind = "exposure_gap"
 finding_id = "probe:tests_ci_efficiency_baseline.rs:predicate:2c8de36c"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1460; probe .find(|row| row.get(\"id\").and_then(Value::as_str) == Some(id)): Strong oracle found: exact value or pattern assertion. Reached by anchoring_failure_keeps_the_model_finding_out_of_the_diagnostic, body_budget_drops_topics_and_preserves_inline_fallback_receipt, budget_rejection_does_not_block_a_later_cheaper_candidate. Re-verify after any edit to tests/ci_efficiency_baseline.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_diff_posture.rs:match_arm:7429cb6e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1466; probe let mut lanes = match diff_class {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by adoption_docs_match_setup_ci_current_surface, advisory_result_planes_cannot_override_legacy_gate_enforcement, ambiguous_cross_surface_match_is_not_explained. Re-verify after any edit to src/diff_posture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_diff_posture.rs:match_arm:ceb61985"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1466; probe match diff_class {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained, artifact_contract_docs_match_ci_audit_verifier_coverage. Re-verify after any edit to src/diff_posture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:match_arm:e1d9a7af"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1466; probe let (role, focus) = match lane.id.as_str() {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_smoke_workflow_is_a_manual_debug_lane, active_graph_keeps_unresolved_conflict_when_another_lane_lacks_evidence, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to src/lanes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:match_arm:df835724"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1466; probe \"ub\" => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by advisory_result_planes_cannot_override_legacy_gate_enforcement, bun_mixed_and_unknown_languages_keep_existing_focus, ordinary_rust_keeps_source_general_coverage. Re-verify after any edit to src/lanes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:match_arm:33650c48"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1466; probe \"ub-active-view\" => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by active_graph_does_not_reuse_stale_proof_receipts, active_graph_keeps_inline_delivery_and_proof_receipt_links, active_graph_keeps_unresolved_conflict_when_another_lane_lacks_evidence. Re-verify after any edit to src/lanes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:match_arm:be99b93c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1466; probe \"ub-backing-store\" => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by advisory_result_planes_cannot_override_legacy_gate_enforcement, bun_mixed_and_unknown_languages_keep_existing_focus, ordinary_rust_keeps_source_general_coverage. Re-verify after any edit to src/lanes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:match_arm:77c496ef"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1466; probe \"ub-worker-handoff\" => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by advisory_result_planes_cannot_override_legacy_gate_enforcement, bun_mixed_and_unknown_languages_keep_existing_focus, handoff_docs_cover_current_product_gate_surfaces. Re-verify after any edit to src/lanes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:match_arm:2692d13e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1466; probe \"ub-gc-detach-transfer\" => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by advisory_result_planes_cannot_override_legacy_gate_enforcement, bun_mixed_and_unknown_languages_keep_existing_focus, loader_rejects_private_transfers_payloads_and_missing_explicit_unknowns. Re-verify after any edit to src/lanes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:match_arm:892d50e2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1466; probe \"sibling-paths\" => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by advisory_result_planes_cannot_override_legacy_gate_enforcement, bun_mixed_and_unknown_languages_keep_existing_focus, ci_survivorship_caps_confidence_without_proven_sibling_signal. Re-verify after any edit to src/lanes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:match_arm:da447d60"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1466; probe \"sibling-paths-crypto\" => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by advisory_result_planes_cannot_override_legacy_gate_enforcement, bun_mixed_and_unknown_languages_keep_existing_focus, ci_survivorship_caps_confidence_without_proven_sibling_signal. Re-verify after any edit to src/lanes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:match_arm:7919a3d3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1466; probe \"sibling-paths-compression\" => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by advisory_result_planes_cannot_override_legacy_gate_enforcement, bun_mixed_and_unknown_languages_keep_existing_focus, ci_survivorship_caps_confidence_without_proven_sibling_signal. Re-verify after any edit to src/lanes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:match_arm:1ad84038"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1466; probe \"sibling-paths-runtime\" => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by advisory_result_planes_cannot_override_legacy_gate_enforcement, builtin_runtime_profiles_encode_trusted_repo_gate_defaults, builtin_runtime_profiles_match_runtime_files. Re-verify after any edit to src/lanes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:match_arm:5f66e7ab"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1466; probe _ => continue,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by advisory_result_planes_cannot_override_legacy_gate_enforcement, bun_mixed_and_unknown_languages_keep_existing_focus, convergence_continues_with_unresolved_and_transitions. Re-verify after any edit to src/lanes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:field_construction:0f891405"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1466; probe \"{} retains unrelated {unrelated} axis: {}\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_internal_audit_retains_no_evidence_semantics, advisory_result_planes_cannot_override_legacy_gate_enforcement, bun_mixed_and_unknown_languages_keep_existing_focus. Re-verify after any edit to src/lanes.rs."
