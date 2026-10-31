@@ -42701,3 +42701,13 @@ kind = "exposure_gap"
 finding_id = "probe:xtask_tests_release_notes.rs:return_value:67cf6ccb"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1380; probe OUTPUT_NAME.to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, preserves_literal_dollar_currency. Re-verify after any edit to xtask/tests/release_notes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_analyzer_selection_blocked.rs:call_deletion:fb3c5309"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1385; probe Ok(()): No assertion found on related tests. Reached by generation_only_tamper_is_rejected, inventory_order_and_checkout_root_do_not_change_generation, packet_is_blocked_and_sealed_against_frozen_mirrors. Re-verify after any edit to tests/analyzer_selection_blocked.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_analyzer_selection_blocked.rs:return_value:94c952c9"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1385; probe Ok(()): No assertion found on related tests. Reached by generation_only_tamper_is_rejected, inventory_order_and_checkout_root_do_not_change_generation, packet_is_blocked_and_sealed_against_frozen_mirrors. Re-verify after any edit to tests/analyzer_selection_blocked.rs."
