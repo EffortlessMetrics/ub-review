@@ -41612,3 +41612,85 @@ kind = "exposure_gap"
 finding_id = "probe:tests_analyzer_bundle_cli.rs:predicate:d1bcf0fb"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1389; probe receipt[\"intake_sha256\"] == hash(&fs::read(self.dir.path().join(\"intake.json\"))?),: Strong oracle found: exact value or pattern assertion. Reached by a_workspace_without_a_lockfile_selects_no_cargo_candidate, absent_pr_thread_context_omits_reuse_rules, accounting_ambiguous_or_unbound_receipts_keep_reservation. Re-verify after any edit to tests/analyzer_bundle_cli.rs."
+
+# PR #1619: exact revision-summary and test-fixture dispositions for review.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:field_construction:245dd003"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1619 gate 41175497432 artifact 13033280508 SHA256 f6421c4ccba0ee7460dc9bcdc05457282cd77f3cb635447351831713bad36323, reviewed merge bc2bae59e74afa7fafb2abaafe31c9851d493cbb, head c47e24169f129408c07a4eb9beb28eb02df740ed; packet records worktree_dirty=true. RIPR 0.10.0 reports weakly_exposed observation_unverified with fixture_opaque; preserve that raw classification. Production read_gate_outcome deserializes GateRevision from raw bytes. The CLI regression rejects missing, null, malformed and duplicate revision fields, stale packets and inconsistent admission/reference fields; an isolated compiled mutant that accepted malformed revision failed that regression, and restored test passed. This is a bounded deserialization control, not proof of every possible corruption. Source/test evidence: reviewed test successor 05394f1ae14cba403f9d694d1d31928f0a2ffdfd and PR #1619; attribution limits ripr-swarm#3213 and ripr#1453. Owner ub-review/core. Reverify after summary, fixture, revision contract or analyzer changes; this is not hosted qualification or a Required-proof waiver."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:return_value:34a951da"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1619 gate 41175497432 artifact 13033280508 SHA256 f6421c4ccba0ee7460dc9bcdc05457282cd77f3cb635447351831713bad36323, reviewed merge bc2bae59e74afa7fafb2abaafe31c9851d493cbb, head c47e24169f129408c07a4eb9beb28eb02df740ed; packet records worktree_dirty=true. RIPR 0.10.0 reports weakly_exposed observation_unverified with fixture_opaque; preserve that raw classification. Inside cfg(test) bind_gate_fixture, None is the absent synthetic merge for its CandidateHead identity, not a production return. bound_gate_fixture_joins_canonical_admission asserts canonical merge=- and matching reference. The null-revision and admission-write mutants test separate helper behaviors; no mutation of this None is claimed. Source/test evidence: reviewed test successor 05394f1ae14cba403f9d694d1d31928f0a2ffdfd and PR #1619; attribution limits ripr-swarm#3213 and ripr#1453. Owner ub-review/core. Reverify after summary, fixture, revision contract or analyzer changes; this is not hosted qualification or a Required-proof waiver."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:return_value:6e2e3152"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1619 gate 41175497432 artifact 13033280508 SHA256 f6421c4ccba0ee7460dc9bcdc05457282cd77f3cb635447351831713bad36323, reviewed merge bc2bae59e74afa7fafb2abaafe31c9851d493cbb, head c47e24169f129408c07a4eb9beb28eb02df740ed; packet records worktree_dirty=true. RIPR 0.10.0 reports weakly_exposed observation_unverified with fixture_opaque; preserve that raw classification. Inside cfg(test) bind_gate_fixture, CandidateHead is an input to fixture identity construction, not a production return. bound_gate_fixture_joins_canonical_admission checks candidate_head semantics and canonical/reference equality. No mutation of this enum value is claimed. Source/test evidence: reviewed test successor 05394f1ae14cba403f9d694d1d31928f0a2ffdfd and PR #1619; attribution limits ripr-swarm#3213 and ripr#1453. Owner ub-review/core. Reverify after summary, fixture, revision contract or analyzer changes; this is not hosted qualification or a Required-proof waiver."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:return_value:5d7b4e2d"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1619 gate 41175497432 artifact 13033280508 SHA256 f6421c4ccba0ee7460dc9bcdc05457282cd77f3cb635447351831713bad36323, reviewed merge bc2bae59e74afa7fafb2abaafe31c9851d493cbb, head c47e24169f129408c07a4eb9beb28eb02df740ed; packet records worktree_dirty=true. RIPR 0.10.0 reports weakly_exposed observation_unverified with fixture_opaque; preserve that raw classification. Inside cfg(test) bind_gate_fixture, the changed-path digest derives from synthetic src/lib.rs, not a production return. bound_gate_fixture_joins_canonical_admission checks that the canonical identity contains the digest of that chosen fixture input; it does not establish arbitrary path-digest behavior or a mutation kill. Source/test evidence: reviewed test successor 05394f1ae14cba403f9d694d1d31928f0a2ffdfd and PR #1619; attribution limits ripr-swarm#3213 and ripr#1453. Owner ub-review/core. Reverify after summary, fixture, revision contract or analyzer changes; this is not hosted qualification or a Required-proof waiver."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:error_path:ad3b86ce"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1619 gate 41175497432 artifact 13033280508 SHA256 f6421c4ccba0ee7460dc9bcdc05457282cd77f3cb635447351831713bad36323, reviewed merge bc2bae59e74afa7fafb2abaafe31c9851d493cbb, head c47e24169f129408c07a4eb9beb28eb02df740ed; packet records worktree_dirty=true. RIPR 0.10.0 reports weakly_exposed observation_unverified with fixture_opaque; preserve that raw classification. Inside cfg(test) bind_gate_fixture, this question-mark propagates failure from RevisionIdentity::new on fixed valid inputs. The fixture contract test validates the resulting canonical identity. A separately compiled swallowed admission-file-write error was rejected by the helper test, but that is a different I/O error path and is not evidence of a constructor-error mutation kill. Source/test evidence: reviewed test successor 05394f1ae14cba403f9d694d1d31928f0a2ffdfd and PR #1619; attribution limits ripr-swarm#3213 and ripr#1453. Owner ub-review/core. Reverify after summary, fixture, revision contract or analyzer changes; this is not hosted qualification or a Required-proof waiver."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:field_construction:74803b59"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1619 gate 41175497432 artifact 13033280508 SHA256 f6421c4ccba0ee7460dc9bcdc05457282cd77f3cb635447351831713bad36323, reviewed merge bc2bae59e74afa7fafb2abaafe31c9851d493cbb, head c47e24169f129408c07a4eb9beb28eb02df740ed; packet records worktree_dirty=true. RIPR 0.10.0 reports weakly_exposed observation_unverified with fixture_opaque; preserve that raw classification. Inside cfg(test) bind_gate_fixture, the admission semantics mirrors its CandidateHead canonical identity. bound_gate_fixture_joins_canonical_admission checks literal candidate_head semantics and canonical/reference equality; no specific mutation of this field is claimed. Source/test evidence: reviewed test successor 05394f1ae14cba403f9d694d1d31928f0a2ffdfd and PR #1619; attribution limits ripr-swarm#3213 and ripr#1453. Owner ub-review/core. Reverify after summary, fixture, revision contract or analyzer changes; this is not hosted qualification or a Required-proof waiver."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:field_construction:70d55168"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1619 gate 41175497432 artifact 13033280508 SHA256 f6421c4ccba0ee7460dc9bcdc05457282cd77f3cb635447351831713bad36323, reviewed merge bc2bae59e74afa7fafb2abaafe31c9851d493cbb, head c47e24169f129408c07a4eb9beb28eb02df740ed; packet records worktree_dirty=true. RIPR 0.10.0 reports weakly_exposed observation_unverified with fixture_opaque; preserve that raw classification. Inside cfg(test) bind_gate_fixture, pr_head_commit=None is optional admission metadata. RevisionAdmission::validate and RevisionRef construction do not use that field for this summary join; changing its fixture value alone is not a distinct summary-currentness oracle. This disposition does not claim validation of delivery provenance. Source/test evidence: reviewed test successor 05394f1ae14cba403f9d694d1d31928f0a2ffdfd and PR #1619; attribution limits ripr-swarm#3213 and ripr#1453. Owner ub-review/core. Reverify after summary, fixture, revision contract or analyzer changes; this is not hosted qualification or a Required-proof waiver."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_summary_render.rs:field_construction:f408babd"
+owner = "ub-review/core"
+created_at = "2026-10-31"
+last_seen = "2026-10-31"
+review_by = "2026-11-21"
+expires = "2026-12-22"
+reason = "PR #1619 gate 41175497432 artifact 13033280508 SHA256 f6421c4ccba0ee7460dc9bcdc05457282cd77f3cb635447351831713bad36323, reviewed merge bc2bae59e74afa7fafb2abaafe31c9851d493cbb, head c47e24169f129408c07a4eb9beb28eb02df740ed; packet records worktree_dirty=true. RIPR 0.10.0 reports weakly_exposed observation_unverified with fixture_opaque; preserve that raw classification. Inside cfg(test) bind_gate_fixture, worktree_dirty=false is required admission provenance whose value is not compared by this summary join. RevisionAdmission::validate and RevisionRef construction do not use that field for this summary join; it is not an oracle that a hosted packet was clean. In particular the hosted packet records worktree_dirty=true and remains so. Source/test evidence: reviewed test successor 05394f1ae14cba403f9d694d1d31928f0a2ffdfd and PR #1619; attribution limits ripr-swarm#3213 and ripr#1453. Owner ub-review/core. Reverify after summary, fixture, revision contract or analyzer changes; this is not hosted qualification or a Required-proof waiver."

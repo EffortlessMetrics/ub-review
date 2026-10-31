@@ -16281,10 +16281,7 @@ required_proof_unprooven = true
         assert!(events.contains("\"kind\":\"gate_outcome\""));
         assert!(events.contains("\"conclusion\":\"pass\""));
         let summary = render_summary(&out, &plan, &diff)?;
-        assert!(
-            summary
-                .contains("- Gate: `pass` with `0` blocking reasons (`review/gate_outcome.json`)")
-        );
+        assert!(summary.contains("Gate: unavailable"), "{summary}");
         Ok(())
     }
 

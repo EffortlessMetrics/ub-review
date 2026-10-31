@@ -3273,6 +3273,7 @@ mod tests {
             out.join("review/gate_outcome.json"),
             serde_json::to_vec_pretty(&gate)?,
         )?;
+        let digest = crate::summary_render::bind_gate_fixture(&out)?;
         let mut summary = String::new();
         crate::render_review_efficiency_section(&mut summary, &out);
         ensure!(summary.contains("task-a"), "{summary}");
@@ -3282,7 +3283,7 @@ mod tests {
             "{summary}"
         );
         ensure!(summary.contains("receipts: none"), "{summary}");
-        ensure!(summary.contains("merge-test-digest"), "{summary}");
+        ensure!(summary.contains(&digest), "{summary}");
         Ok(())
     }
 
@@ -3373,6 +3374,7 @@ mod tests {
             out.join("review/gate_outcome.json"),
             serde_json::to_vec_pretty(&gate)?,
         )?;
+        crate::summary_render::bind_gate_fixture(&out)?;
         let mut summary = String::new();
         crate::render_review_efficiency_section(&mut summary, &out);
         ensure!(summary.contains("task-same"), "{summary}");
@@ -3656,6 +3658,7 @@ mod tests {
                             "planner_required_proofs": accounting,
                         }))?,
                     )?;
+                    crate::summary_render::bind_gate_fixture(&out)?;
                     let mut summary = String::new();
                     crate::render_review_efficiency_section(&mut summary, &out);
                     ensure!(summary.contains(expected_reason), "{summary}");

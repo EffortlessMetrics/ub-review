@@ -256,6 +256,15 @@ impl RevisionIdentity {
         })
     }
 
+    /// Reference derived from the digest-bound canonical identity.
+    pub(crate) fn revision_ref(&self) -> RevisionRef {
+        RevisionRef {
+            digest: self.identity_digest(),
+            semantics: self.semantics.as_str().to_owned(),
+            reviewed_commit: self.reviewed.commit_oid().to_owned(),
+        }
+    }
+
     /// Exact object pairs for a merge-result publication binding. Analysis
     /// continues to refer to reviewed; delivery targets head.
     pub(crate) fn merge_delivery_sides(&self) -> Result<(&CommitTree, &CommitTree, &CommitTree)> {
