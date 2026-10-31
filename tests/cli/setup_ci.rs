@@ -634,7 +634,7 @@ fn setup_ci_print_pr_rejects_invalid_action_sha_before_outputs() -> Result<()> {
             .args(["--accept", "unit=cargo test --lib --locked"])
             .arg("--action-sha")
             .arg(action_sha)
-            .output()?;
+            .fixture_output()?;
         let stderr = String::from_utf8_lossy(&output.stderr);
         let after_paths = collect_relative_file_paths(temp.path())?;
         let after_bytes = after_paths
@@ -704,7 +704,7 @@ fn setup_ci_print_pr_preserves_full_action_sha_and_replay() -> Result<()> {
             .args(["--accept", "unit=cargo test --lib --locked"])
             .arg("--action-sha")
             .arg(action_sha);
-        let first = command.output()?;
+        let first = command.fixture_output()?;
         assert!(
             first.status.success(),
             "supported full SHA failed: {}",
@@ -787,7 +787,7 @@ fn setup_ci_print_pr_preserves_full_action_sha_and_replay() -> Result<()> {
             .iter()
             .map(|relative| fs::read(temp.path().join(relative)))
             .collect::<std::io::Result<Vec<_>>>()?;
-        let second = command.output()?;
+        let second = command.fixture_output()?;
         assert!(second.status.success());
         assert_eq!(first.stdout, second.stdout);
         assert_eq!(first.stderr, second.stderr);
@@ -826,7 +826,7 @@ fn setup_ci_print_pr_preserves_plan_only_sha_semantics() -> Result<()> {
         } else {
             command.args(["--action-sha", "main"]);
         }
-        let first = command.output()?;
+        let first = command.fixture_output()?;
         assert!(first.status.success());
         let plan = fs::read(audit.join("migration-plan.md"))?;
         assert_eq!(first.stdout, plan);
@@ -862,7 +862,7 @@ fn setup_ci_print_pr_preserves_plan_only_sha_semantics() -> Result<()> {
             .iter()
             .map(|relative| fs::read(temp.path().join(relative)))
             .collect::<std::io::Result<Vec<_>>>()?;
-        let second = command.output()?;
+        let second = command.fixture_output()?;
         assert!(second.status.success());
         assert_eq!(first.stdout, second.stdout);
         assert_eq!(first.stderr, second.stderr);
