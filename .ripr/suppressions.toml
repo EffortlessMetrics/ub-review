@@ -42712,3 +42712,193 @@ finding_id = "probe:src_gate.rs:field_construction:ec72394e"
 owner = "ub-review/core"
 reason = "Line-keyed cross-module gap (ripr-swarm#1053): tested end-to-end; Classification: weakly_exposed. The probe targets the `admitted_revision: revision_digest.map(planner_revision)` construction in the gate.rs test helper `planner_gate` (src/gate.rs:2853): all five call sites (src/gate.rs:2869, 2934, 2953, 2986, 3021) pass Some(PLANNER_TEST_DIGEST), and their planner_required_proofs proven/unproven assertions (e.g. required_planner_proof_with_matching_receipt_is_proven) fail on any mutation of this value routed through build_planner_required_proof_accounting; the assertions address accounting outcomes rather than the construction text, which ripr's assertion linker cannot connect. Re-verify after any edit to the planner_gate helper in src/gate.rs."
 
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:return_value:8481ab2a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe admitted_revision: revision_digest.map(planner_revision),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by agreeing_duplicate_observations_preserve_terminal_results, artifact_bound_to_other_run_is_missing_artifact, artifact_only_run_with_no_usable_lane_is_not_proven. Re-verify after any edit to src/gate.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:field_construction:2b15c640"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe mut map: M,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by auto_run_pass_maps_pull_request_actions, classify_proof_kind_maps_focused_test, classify_proof_kind_maps_heavy_witnesses. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:error_path:b0932770"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe )));: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by currentness_1067_agreed_typed_counts_require_retained_row_denominator, currentness_1067_deleted_and_moved_gaps_are_audit_only, currentness_1067_duplicate_ids_and_keys_reject. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:return_value:2c6b2caa"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe )));: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by currentness_1067_agreed_typed_counts_require_retained_row_denominator, currentness_1067_deleted_and_moved_gaps_are_audit_only, currentness_1067_duplicate_ids_and_keys_reject. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:field_construction:fed755bd"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe mut seq: S,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by concurrent_message_log_appends_preserve_sequence_order, currentness_1067_agreed_typed_counts_require_retained_row_denominator, currentness_1067_deleted_and_moved_gaps_are_audit_only. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:return_value:5a4159d0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe decoder.deserialize_any(UniqueVisitor): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by currentness_1067_agreed_typed_counts_require_retained_row_denominator, currentness_1067_deleted_and_moved_gaps_are_audit_only, currentness_1067_duplicate_ids_and_keys_reject. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:return_value:19ad27d8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe .get(key): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accounting_ambiguous_or_unbound_receipts_keep_reservation, accounting_duplicate_reservations_and_overflow_never_create_credit, accounting_matrix_releases_early_commands_before_required_build. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:5b3c1a19"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe raw[\"schema_version\"] == \"0.2\" && raw[\"tool\"] == \"ripr\" && raw[\"mode\"] == \"ready\",: Strong oracle found: exact value or pattern assertion. Reached by action_release_download_verifies_sha256_receipt, action_release_install_mode_fails_closed_instead_of_source_fallback, adjudicate_proof_beats_model_interpretation. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:match_arm:aa0434a7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe let schema = match admission {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_release_download_verifies_sha256_receipt, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:e000eb2f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe ensure!(source == \"registry:0.10.0\", \"legacy source admission\");: Strong oracle found: exact value or pattern assertion. Reached by action_forwards_complete_trusted_diff_admission_inputs, action_release_download_verifies_sha256_receipt, action_release_install_mode_fails_closed_instead_of_source_fallback. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:c114e7f9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe ensure!(source == CANDIDATE_SOURCE, \"candidate source admission\");: Strong oracle found: exact value or pattern assertion. Reached by a_workspace_without_a_lockfile_selects_no_cargo_candidate, action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:d3b5205f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe badge[\"schema_version\"] == schema: Strong oracle found: exact value or pattern assertion. Reached by action_release_download_verifies_sha256_receipt, artifact_contract_docs_match_ci_audit_verifier_coverage, artifact_contract_docs_pin_receipt_route_source_anchors. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:48888d47"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe && badge[\"kind\"] == \"ripr\": Strong oracle found: exact value or pattern assertion. Reached by action_release_download_verifies_sha256_receipt, artifact_contract_docs_match_ci_audit_verifier_coverage, artifact_contract_docs_pin_receipt_route_source_anchors. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:4dc2bef6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe && badge[\"scope\"] == \"diff\": Strong oracle found: whole-object equality assertion. Reached by action_forwards_complete_trusted_diff_admission_inputs, action_release_download_verifies_sha256_receipt, actionlint_sensor_scopes_to_changed_workflow_files. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:2b782a05"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe && badge[\"basis\"] == \"finding_exposure\",: Strong oracle found: exact value or pattern assertion. Reached by action_release_download_verifies_sha256_receipt, artifact_contract_docs_match_ci_audit_verifier_coverage, artifact_contract_docs_pin_receipt_route_source_anchors. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:0ceb8bff"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe count(&raw[\"summary\"], \"findings\")? == rows.len() as u64,: Strong oracle found: exact value or pattern assertion. Reached by accounting_ambiguous_or_unbound_receipts_keep_reservation, accounting_duplicate_reservations_and_overflow_never_create_credit, accounting_matrix_releases_early_commands_before_required_build. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:271664d9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe count(&raw[\"summary\"], \"probes\")? == rows.len() as u64,: Strong oracle found: exact value or pattern assertion. Reached by accounting_ambiguous_or_unbound_receipts_keep_reservation, accounting_duplicate_reservations_and_overflow_never_create_credit, accounting_matrix_releases_early_commands_before_required_build. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:e7b4ed10"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe count(&badge[\"counts\"], \"analyzed_findings\")? == rows.len() as u64,: Strong oracle found: exact value or pattern assertion. Reached by accounting_ambiguous_or_unbound_receipts_keep_reservation, accounting_duplicate_reservations_and_overflow_never_create_credit, accounting_matrix_releases_early_commands_before_required_build. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:bbe26f1f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe raw[\"analysis_complete\"] == true: Strong oracle found: exact value or pattern assertion. Reached by action_release_download_verifies_sha256_receipt, artifact_contract_docs_match_ci_audit_verifier_coverage, artifact_contract_docs_pin_receipt_route_source_anchors. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:71b81610"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe && badge[\"analysis_complete\"] == true: Strong oracle found: exact value or pattern assertion. Reached by action_release_download_verifies_sha256_receipt, artifact_contract_docs_match_ci_audit_verifier_coverage, artifact_contract_docs_pin_receipt_route_source_anchors. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:018a1dc1"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe && raw[\"downstream_consumable\"] == true,: Strong oracle found: exact value or pattern assertion. Reached by action_release_download_verifies_sha256_receipt, artifact_contract_docs_match_ci_audit_verifier_coverage, artifact_contract_docs_pin_receipt_route_source_anchors. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:5daff1f6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe raw[\"analysis_outcome\"][\"outcome\"] == *outcome,: Strong oracle found: exact value or pattern assertion. Reached by action_release_download_verifies_sha256_receipt, artifact_contract_docs_match_ci_audit_verifier_coverage, artifact_contract_docs_pin_receipt_route_source_anchors. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:24235f9c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe ensure!(outcome[\"schema_version\"] == \"0.1\", \"typed schema admission\");: Strong oracle found: exact value or pattern assertion. Reached by action_forwards_complete_trusted_diff_admission_inputs, action_release_download_verifies_sha256_receipt, artifact_contract_docs_match_ci_audit_verifier_coverage. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:return_value:27cdf236"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe Some(\"complete_with_findings\" | \"no_behavioral_candidates\"): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_release_download_verifies_sha256_receipt, artifact_contract_docs_match_ci_audit_verifier_coverage, artifact_contract_docs_pin_receipt_route_source_anchors. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:83448b95"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe (outcome[\"kind\"] == \"no_behavioral_candidates\") == rows.is_empty(),: Strong oracle found: exact value or pattern assertion. Reached by action_release_download_verifies_sha256_receipt, artifact_contract_docs_match_ci_audit_verifier_coverage, artifact_contract_docs_pin_receipt_route_source_anchors. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:4e6e9f39"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe count(&outcome[\"counts\"], \"finding_count\")? == rows.len() as u64: Strong oracle found: exact value or pattern assertion. Reached by accounting_ambiguous_or_unbound_receipts_keep_reservation, accounting_duplicate_reservations_and_overflow_never_create_credit, accounting_matrix_releases_early_commands_before_required_build. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:ff577c88"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe && count(&outcome[\"counts\"], \"probe_count\")? == rows.len() as u64,: Strong oracle found: exact value or pattern assertion. Reached by accounting_ambiguous_or_unbound_receipts_keep_reservation, accounting_duplicate_reservations_and_overflow_never_create_credit, accounting_matrix_releases_early_commands_before_required_build. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:29b56127"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe GAPS.contains(&class) || UNKNOWNS.contains(&class) || class == \"exposed\",: Strong oracle found: exact value or pattern assertion. Reached by action_release_download_verifies_sha256_receipt, artifact_contract_docs_match_ci_audit_verifier_coverage, artifact_contract_docs_pin_receipt_route_source_anchors. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:match_arm:0c3f70d3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe let current = match row.get(\"source_currentness\") {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_release_download_verifies_sha256_receipt, active_graph_links_current_threads_and_separates_stale_threads, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:match_arm:e1308246"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe Some(Value::String(value)) if value == \"candidate_current\" => true,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_release_download_verifies_sha256_receipt, artifact_contract_docs_match_ci_audit_verifier_coverage, artifact_contract_docs_pin_receipt_route_source_anchors. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:9af69d17"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe Some(Value::String(value)) if value == \"candidate_current\" => true,: Strong oracle found: exact value or pattern assertion. Reached by action_release_download_verifies_sha256_receipt, artifact_contract_docs_match_ci_audit_verifier_coverage, artifact_contract_docs_pin_receipt_route_source_anchors. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:match_arm:e9f07530"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe if matches!(value.as_str(), \"base_deleted\" | \"moved_or_renamed\") =>: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_release_download_verifies_sha256_receipt, artifact_contract_docs_match_ci_audit_verifier_coverage, artifact_contract_docs_pin_receipt_route_source_anchors. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:match_arm:8e5cc77e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe _ => bail!(\"unresolved currentness for {id}\"),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, accounting_matrix_releases_early_commands_before_required_build, action_forwards_complete_trusted_diff_admission_inputs. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:1d26ad5f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe count(&raw[\"summary\"], class)? == classes.get(class).copied().unwrap_or_default(),: Strong oracle found: exact value or pattern assertion. Reached by accounting_ambiguous_or_unbound_receipts_keep_reservation, accounting_duplicate_reservations_and_overflow_never_create_credit, accounting_matrix_releases_early_commands_before_required_build. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:2c0ccdbc"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe result.current_unknowns == count(&badge[\"counts\"], \"unknowns\")?,: Strong oracle found: exact value or pattern assertion. Reached by accounting_ambiguous_or_unbound_receipts_keep_reservation, accounting_duplicate_reservations_and_overflow_never_create_credit, accounting_matrix_releases_early_commands_before_required_build. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:0c634826"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe let class = if index < 33 { UNKNOWNS[index % 3] } else if index < 35 { GAPS[index % 3] } else { \"exposed\" };: Strong oracle found: exact value or pattern assertion. Reached by absent_internal_audit_retains_no_evidence_semantics, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:match_arm:44fa44bc"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe let currentness = match index { 0 | 1 => \"base_deleted\", 2 => \"moved_or_renamed\", _ => \"candidate_current\" };: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_internal_audit_retains_no_evidence_semantics, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:ac751076"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe .filter(|row| row[\"classification\"] == *class): Strong oracle found: exact value or pattern assertion. Reached by absent_internal_audit_retains_no_evidence_semantics, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to tests/common/currentness_1067.rs."
