@@ -1408,6 +1408,9 @@ mod tests {
 
     const HEAD: &str = "0123456789abcdef0123456789abcdef01234567";
 
+    #[path = "main_http_status_tests.rs"]
+    mod main_http_status_tests;
+
     fn planned() -> Result<PlannedDelivery> {
         let body = "exact body";
         PlannedDelivery::new(

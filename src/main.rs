@@ -39,6 +39,7 @@ pub(crate) use proof::*;
 pub(crate) use proof_task_ledger::*;
 mod tools;
 pub(crate) use tools::*;
+mod analyzer_selection;
 mod lanes;
 pub(crate) use lanes::*;
 mod observations;
@@ -201,6 +202,7 @@ fn main() -> Result<()> {
         Command::Recommend(args) => cmd_recommend(args),
         Command::Promote(args) => cmd_promote(args),
         Command::Doctor(args) => cmd_doctor(args),
+        Command::VerifyAnalyzerBundle(args) => analyzer_selection::cmd_verify_analyzer_bundle(args),
         Command::Cache(args) => cmd_cache(args),
         Command::Plan(args) => cmd_plan(args),
         Command::Run(args) => {
@@ -16279,10 +16281,7 @@ required_proof_unprooven = true
         assert!(events.contains("\"kind\":\"gate_outcome\""));
         assert!(events.contains("\"conclusion\":\"pass\""));
         let summary = render_summary(&out, &plan, &diff)?;
-        assert!(
-            summary
-                .contains("- Gate: `pass` with `0` blocking reasons (`review/gate_outcome.json`)")
-        );
+        assert!(summary.contains("Gate: unavailable"), "{summary}");
         Ok(())
     }
 

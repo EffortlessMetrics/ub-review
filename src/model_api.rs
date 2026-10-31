@@ -12,6 +12,10 @@ use wait_timeout::ChildExt;
 
 use crate::*;
 
+#[cfg(test)]
+#[path = "model_http_status_tests.rs"]
+mod http_status_tests;
+
 pub(crate) fn model_api_key_env(provider: ModelProvider) -> &'static str {
     match provider {
         ModelProvider::MiniMaxDirect => "UB_REVIEW_MINIMAX_API_KEY",
@@ -501,8 +505,8 @@ pub(crate) fn split_curl_http_status(stdout: Vec<u8>) -> (Vec<u8>, Option<u16>) 
 }
 
 pub(crate) fn http_status_from_error(err: &anyhow::Error) -> Option<u16> {
-    let text = model_error_chain_text(err);
-    let needle = "http status Some(";
+    let text = model_error_chain_text(err).to_ascii_lowercase();
+    let needle = "http status some(";
     let start = text.find(needle)? + needle.len();
     let end = text[start..].find(')')? + start;
     text[start..end].parse::<u16>().ok()
