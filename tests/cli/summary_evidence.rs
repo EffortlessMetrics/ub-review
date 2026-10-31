@@ -788,5 +788,32 @@ fn summary_rejects_gate_receipt_from_another_revision() -> Result<()> {
     fs::write(&admission_path, valid_admission)?;
     fs::write(&gate_path, valid_gate)?;
     assert_gate(&fixture.summary(&second)?, "pass", 0);
+
+    let original = fs::read(&gate_path)?;
+    let valid: Value = serde_json::from_slice(&original)?;
+    for replacement in [None, Some(Value::Null), Some(serde_json::json!("invalid"))] {
+        let mut gate = valid.clone();
+        let fields = gate.as_object_mut().context("gate object")?;
+        match replacement {
+            Some(value) => {
+                fields.insert("revision".to_owned(), value);
+            }
+            None => {
+                fields.remove("revision");
+            }
+        }
+        fs::write(&gate_path, serde_json::to_vec(&gate)?)?;
+        let summary = fixture.summary(&second)?;
+        assert!(summary.contains("Gate: unavailable"), "{summary}");
+        assert!(!summary.contains("Gate: `pass`"), "{summary}");
+    }
+    let original_text = std::str::from_utf8(&original)?;
+    let duplicate = original_text.replacen('{', "{\"revision\":null,", 1);
+    fs::write(&gate_path, duplicate)?;
+    let summary = fixture.summary(&second)?;
+    assert!(summary.contains("Gate: unavailable"), "{summary}");
+    assert!(!summary.contains("Gate: `pass`"), "{summary}");
+    fs::write(&gate_path, original)?;
+    assert_gate(&fixture.summary(&second)?, "pass", 0);
     Ok(())
 }
