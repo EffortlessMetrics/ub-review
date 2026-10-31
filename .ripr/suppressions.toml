@@ -42701,3 +42701,988 @@ kind = "exposure_gap"
 finding_id = "probe:xtask_tests_release_notes.rs:return_value:67cf6ccb"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1380; probe OUTPUT_NAME.to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, preserves_literal_dollar_currency. Re-verify after any edit to xtask/tests/release_notes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:6b78083a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe run_selection_checked_command(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_pr_thread_context_omits_reuse_rules, action_config_input_overrides_bundled_preset_selection, action_release_download_verifies_sha256_receipt. Re-verify after any edit to src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:error_path:2cb217ea"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:error_path:2cb217ea.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:return_value:1366d8fe"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:error_path:affa0a21"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:error_path:affa0a21.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:return_value:92ad1e81"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:error_path:bb9f969e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_internal_audit_retains_no_evidence_semantics, absent_or_malformed_status_is_not_invented. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:error_path:bb9f969e.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_internal_audit_retains_no_evidence_semantics, absent_or_malformed_status_is_not_invented. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:error_path:bb9f969e.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_internal_audit_retains_no_evidence_semantics, absent_or_malformed_status_is_not_invented. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:error_path:bb9f969e.4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_internal_audit_retains_no_evidence_semantics, absent_or_malformed_status_is_not_invented. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:error_path:bb9f969e.5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_internal_audit_retains_no_evidence_semantics, absent_or_malformed_status_is_not_invented. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:error_path:bb9f969e.6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_internal_audit_retains_no_evidence_semantics, absent_or_malformed_status_is_not_invented. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:error_path:bb9f969e.7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_internal_audit_retains_no_evidence_semantics, absent_or_malformed_status_is_not_invented. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:return_value:24be905f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_internal_audit_retains_no_evidence_semantics, absent_or_malformed_status_is_not_invented. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:return_value:cbd83a53"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe ResourceLease {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:field_construction:422df671"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe cpu: 1,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:return_value:706f1f8a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe cpu: 1,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:field_construction:662d0b76"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe ]: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:field_construction:751ab74d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe .concat(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:return_value:eddd81f2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe .concat(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:field_construction:e22510e8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )]),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:return_value:ca53b037"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe ProofCommandInvocation {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:field_construction:9eea3667"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe out: &out,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_tree_without_a_cargo_workspace_records_no_lockfile_gap, a_workspace_without_a_lockfile_selects_no_cargo_candidate, absent_base_target_cleans_before_decline_and_head_release_waits_for_publication. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:return_value:211cbb2a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe out: &out,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_tree_without_a_cargo_workspace_records_no_lockfile_gap, a_workspace_without_a_lockfile_selects_no_cargo_candidate, absent_base_target_cleans_before_decline_and_head_release_waits_for_publication. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:field_construction:be53f5ee"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe task_ledger: None,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:return_value:71bf4f97"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe task_ledger: None,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:return_value:4356812b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:return_value:717e1d43"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe run_command_to_files_with_spawn_observer(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:return_value:4d81a33e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe ): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:return_value:4356812b.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:error_path:4596ae10"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:error_path:76e1d44f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:error_path:76e1d44f.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:error_path:76e1d44f.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection_tests.rs:return_value:c402d725"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, accepts_flag_like_output_path. Re-verify after any edit to src/proof/cargo_selection/tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:650f83df"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe match self {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:7fdffc52"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe Self::OutsideScope | Self::PackagePresent { .. } | Self::TargetPresent { .. } => None,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, budget_rejection_does_not_block_a_later_cheaper_candidate. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:8012d295"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe Self::TargetAbsent { package_id, target } => Some((: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, budget_rejection_does_not_block_a_later_cheaper_candidate. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:09dd0df2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe TaskNonExecutionDisposition::Unsupported,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, adjudicate_citation_beats_unsupported. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:818d51ea"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe ),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, budget_rejection_does_not_block_a_later_cheaper_candidate. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:5457867a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence, budget_rejection_does_not_block_a_later_cheaper_candidate. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:fa29ad4c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe Self::Unresolved { reason } => Some((: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, active_graph_keeps_unresolved_conflict_when_another_lane_lacks_evidence, actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:2392fe6a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe match arg.as_str() {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_tree_without_a_cargo_workspace_records_no_lockfile_gap, a_workspace_without_a_lockfile_selects_no_cargo_candidate, absent_base_target_cleans_before_decline_and_head_release_waits_for_publication. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:62dc7858"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"--locked\" | \"--frozen\" => locked = true,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, frozen_archive_onboarding, incomplete_and_ambiguous_metadata_never_prove_absence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:27d557bf"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"-p\" | \"--package\" | \"--test\" => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:d90ef3e2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"--features\" | \"--target\" => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:1de2668a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"--all-features\" | \"--no-default-features\" => context_sensitive = true,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, accounting_timeout_spends_allowance_and_aggregates_red_green_once, action_recommendation_is_explicit_and_compatibility_defaults_are_preserved. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:841db944"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"--workspace\" => context_sensitive = true,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_tree_without_a_cargo_workspace_records_no_lockfile_gap, a_workspace_without_a_lockfile_selects_no_cargo_candidate, absent_base_target_cleans_before_decline_and_head_release_waits_for_publication. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:4263f77d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"--all-targets\" | \"--tests\" | \"--lib\" | \"--bins\" | \"--examples\" | \"--doc\" => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, accounting_timeout_spends_allowance_and_aggregates_red_green_once, action_release_install_mode_fails_closed_instead_of_source_fallback. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:89461eb9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"--bin\" | \"--example\" => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, bun_gate_pin_policy_rejects_example_pin_drift, comment_plan_schema_routes_before_binding_versioned_comments. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:364c2ca4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe _ if arg.starts_with(\"--package=\") => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_tree_without_a_cargo_workspace_records_no_lockfile_gap, a_workspace_without_a_lockfile_selects_no_cargo_candidate, absent_base_target_cleans_before_decline_and_head_release_waits_for_publication. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:5c0dcab6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe _ if arg.starts_with(\"--test=\") => tests.push(arg[\"--test=\".len()..].to_owned()),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_tree_without_a_cargo_workspace_records_no_lockfile_gap, a_workspace_without_a_lockfile_selects_no_cargo_candidate, absent_base_target_cleans_before_decline_and_head_release_waits_for_publication. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:b83e9861"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe _ if arg.starts_with(\"--features=\") || arg.starts_with(\"--target=\") => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_tree_without_a_cargo_workspace_records_no_lockfile_gap, a_workspace_without_a_lockfile_selects_no_cargo_candidate, absent_base_target_cleans_before_decline_and_head_release_waits_for_publication. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:81cdccdc"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe _ if arg.starts_with(\"--bin=\") || arg.starts_with(\"--example=\") => mixed = true,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_tree_without_a_cargo_workspace_records_no_lockfile_gap, a_workspace_without_a_lockfile_selects_no_cargo_candidate, absent_base_target_cleans_before_decline_and_head_release_waits_for_publication. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:c67d3731"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"--offline\" => {}: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, cmd_enable_with_resolver_writes_release_workflow_offline, incomplete_and_ambiguous_metadata_never_prove_absence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:366694de"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe _ if arg.starts_with('-') => unknown_option = true,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_tree_without_a_cargo_workspace_records_no_lockfile_gap, a_workspace_without_a_lockfile_selects_no_cargo_candidate, absent_base_target_cleans_before_decline_and_head_release_waits_for_publication. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:c3d87a8b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe _ => {}: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:4ce3945f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:4ce3945f.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:108a4b07"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe SelectionRequest::Exact(ExactSelection {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, bounded_file_preserves_exact_excerpts_and_truncation_truth, build_resolution_and_command_templates_are_exact. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:field_construction:e3976d7a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe nodes: Vec<MetadataNode>,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:97700106"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe };: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:field_construction:d5302f93"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe .to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:592b7b02"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe .to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:97700106.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe };: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:field_construction:dd204f08"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe ),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:f1a1de85"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe ),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:97700106.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe };: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:97700106.4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe };: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:97700106.5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe };: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:field_construction:45eb6f4d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe invocation: ProofCommandInvocation<'_, '_>,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:field_construction:d8269fd3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe F: FnMut(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:5ff74e1e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe SelectionCheckedCommand {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:4caa1e2e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:66de7357"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:76743a31"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe invocation.out,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_tree_without_a_cargo_workspace_records_no_lockfile_gap, a_workspace_without_a_lockfile_selects_no_cargo_candidate, absent_base_target_cleans_before_decline_and_head_release_waits_for_publication. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:02c8c3c3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe invocation.out,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by a_tree_without_a_cargo_workspace_records_no_lockfile_gap, a_workspace_without_a_lockfile_selects_no_cargo_candidate, absent_base_target_cleans_before_decline_and_head_release_waits_for_publication. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:4eccb890"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe invocation.receipt_id,: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, current_head_receipt_ids_drive_both_unreceipted_task_filters, incomplete_and_ambiguous_metadata_never_prove_absence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:29a5ff26"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe invocation.receipt_id,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, current_head_receipt_ids_drive_both_unreceipted_task_filters, incomplete_and_ambiguous_metadata_never_prove_absence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:ce93ce0a"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe )?;: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:c0e14dda"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:406c3bc0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe let provenance = match selection_request(&invocation.spec.argv) {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:571db2e4"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe SelectionRequest::OutsideScope => CargoSelectionProvenance::OutsideScope,: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:aa2db252"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe SelectionRequest::OutsideScope => CargoSelectionProvenance::OutsideScope,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:3064384f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe SelectionRequest::OutsideScope => CargoSelectionProvenance::OutsideScope,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:b186e9e7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe SelectionRequest::Unresolved(reason) => CargoSelectionProvenance::Unresolved {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, active_graph_keeps_unresolved_conflict_when_another_lane_lacks_evidence, cargo_allow_foreign_dialect_reason_wins_before_box_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:784297f7"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe },: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:15d3031a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:c34b0309"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe SelectionRequest::Exact(_) if invocation.timeout_sec == 0 => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, bounded_file_preserves_exact_excerpts_and_truncation_truth, build_resolution_and_command_templates_are_exact. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:5617d981"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe CargoSelectionProvenance::Unresolved {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, active_graph_keeps_unresolved_conflict_when_another_lane_lacks_evidence, conflict_composition_preserves_losses_and_unresolved_evidence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:a1f78937"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe CargoSelectionProvenance::Unresolved {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, active_graph_keeps_unresolved_conflict_when_another_lane_lacks_evidence, conflict_composition_preserves_losses_and_unresolved_evidence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:825f52d6"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe }: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:4caa1e2e.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:825f52d6.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe }: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:4caa1e2e.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:c1e35341"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe SelectionRequest::Exact(selection) => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, action_config_input_overrides_bundled_preset_selection, bounded_file_preserves_exact_excerpts_and_truncation_truth. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:50cdfbc7"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe \"--offline\",: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, cmd_enable_with_resolver_writes_release_workflow_offline, incomplete_and_ambiguous_metadata_never_prove_absence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:04d4f095"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"--offline\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, cmd_enable_with_resolver_writes_release_workflow_offline, incomplete_and_ambiguous_metadata_never_prove_absence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:bc72e8ce"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe \"1\",: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:65d19774"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"1\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:e4619b57"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe ]: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:6ed2d376"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe ]: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:ba6abaf6"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe invocation.command_root,: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:2a51f980"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe invocation.command_root,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:b6938250"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe CommandProcessObservation::CompletionUnconfirmed: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:8c78e349"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe CommandProcessObservation::CompletionUnconfirmed: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:e2181850"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe ) {: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:04901b1f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe ) {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:a0183789"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe completion_unconfirmed = true;: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, completion_unconfirmed_stops_before_terminal_receipt_and_release, incomplete_and_ambiguous_metadata_never_prove_absence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:1b2ed8d4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe completion_unconfirmed = true;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, completion_unconfirmed_stops_before_terminal_receipt_and_release, incomplete_and_ambiguous_metadata_never_prove_absence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:825f52d6.3"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe }: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:4caa1e2e.4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:784297f7.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe },: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:15d3031a.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:a8baf5f6"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe );: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:1cac5a89"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:e6d600d9"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe if completion_unconfirmed {: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, completion_unconfirmed_stops_before_terminal_receipt_and_release, incomplete_and_ambiguous_metadata_never_prove_absence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:d162fcdb"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe if completion_unconfirmed {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, completion_unconfirmed_stops_before_terminal_receipt_and_release, incomplete_and_ambiguous_metadata_never_prove_absence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:0a5cce68"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe ));: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:dcb08aac"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe ));: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:825f52d6.4"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe }: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:4caa1e2e.5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:ce93ce0a.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe )?;: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:c0e14dda.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:825f52d6.5"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe }: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:4caa1e2e.6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:46224b99"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe if stdout_overflow {: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:87b905d0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe if stdout_overflow {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:ce93ce0a.3"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe )?;: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:c0e14dda.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:825f52d6.6"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe }: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:4caa1e2e.7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:f6d9a075"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe match result {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, adoption_docs_match_setup_ci_current_surface, advisory_result_planes_cannot_override_legacy_gate_enforcement. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:2cd6a1d5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe Ok(status) if status.success && !status.timed_out => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, both_status_marker_cases_survive_wrapped_errors. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:46224b99.2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe if stdout_overflow {: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:87b905d0.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe if stdout_overflow {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:ce93ce0a.4"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe )?;: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:c0e14dda.4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:5617d981.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe CargoSelectionProvenance::Unresolved {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, active_graph_keeps_unresolved_conflict_when_another_lane_lacks_evidence, conflict_composition_preserves_losses_and_unresolved_evidence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:a1f78937.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe CargoSelectionProvenance::Unresolved {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, active_graph_keeps_unresolved_conflict_when_another_lane_lacks_evidence, conflict_composition_preserves_losses_and_unresolved_evidence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:825f52d6.7"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe }: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:4caa1e2e.8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:b7bb2652"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe } else {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, discriminating_and_head_failed_are_published_whatever_else_the_receipt_says, incomplete_and_ambiguous_metadata_never_prove_absence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:0be2fac6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe } else {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, discriminating_and_head_failed_are_published_whatever_else_the_receipt_says, incomplete_and_ambiguous_metadata_never_prove_absence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:825f52d6.8"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe }: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:4caa1e2e.9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:825f52d6.9"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe }: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:4caa1e2e.10"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:409171a5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe _ => CargoSelectionProvenance::Unresolved {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, active_graph_keeps_unresolved_conflict_when_another_lane_lacks_evidence, conflict_composition_preserves_losses_and_unresolved_evidence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:5e1de9e6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe _ => CargoSelectionProvenance::Unresolved {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, active_graph_keeps_unresolved_conflict_when_another_lane_lacks_evidence, conflict_composition_preserves_losses_and_unresolved_evidence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:b559b2b7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe _ => CargoSelectionProvenance::Unresolved {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, active_graph_keeps_unresolved_conflict_when_another_lane_lacks_evidence, conflict_composition_preserves_losses_and_unresolved_evidence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:784297f7.3"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe },: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:15d3031a.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:825f52d6.10"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe }: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:4caa1e2e.11"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:825f52d6.11"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe }: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:4caa1e2e.12"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:3b67fedb"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe };: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:7300a6e0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe };: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:f062df85"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe serde_json::to_vec_pretty(&provenance)?,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, command_sources_preserve_impact_required_and_model_provenance, incomplete_and_ambiguous_metadata_never_prove_absence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:61c6cbea"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe serde_json::to_vec_pretty(&provenance)?,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, command_sources_preserve_impact_required_and_model_provenance, incomplete_and_ambiguous_metadata_never_prove_absence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:ce93ce0a.5"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe )?;: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:c0e14dda.5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:9bb54ea5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe Ok(provenance): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, command_sources_preserve_impact_required_and_model_provenance, incomplete_and_ambiguous_metadata_never_prove_absence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:f991b5e8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe Ok(provenance): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, command_sources_preserve_impact_required_and_model_provenance, incomplete_and_ambiguous_metadata_never_prove_absence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:a9f41fea"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe })();: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:2a1abde5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe })();: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:329654a1"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe let provenance = match preparation {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:d2f013f5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe Ok(provenance) => provenance,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, command_sources_preserve_impact_required_and_model_provenance, incomplete_and_ambiguous_metadata_never_prove_absence. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:match_arm:26d4b225"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe Err(error) => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, both_status_marker_cases_survive_wrapped_errors, bounded_file_missing_remains_an_error. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:a2685e4d"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe )));: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:return_value:6d5ac1bc"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe )));: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:error_path:ce93ce0a.6"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1417; probe )?;: No assertion found on related tests. Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_cargo_selection.rs:field_construction:82dc8547"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe observer: &mut dyn FnMut(CommandProcessObservation)| {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, incomplete_and_ambiguous_metadata_never_prove_absence, independently_supplied_fourteen_selector_inputs_exercise_actual_guard. Re-verify after any edit to src/proof/cargo_selection.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_command.rs:field_construction:051ce0ab"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe receipt_id: &str,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by badge_requires_an_explicit_string_schema_version, bounded_file_stream_returns_one_chunk_without_requiring_eof, cleanup_failure_remains_primary_when_stream_bounding_also_fails. Re-verify after any edit to src/proof/command.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:118e3320.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"passed\" => \"head_passed\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by base_worktree_cleanup_precedes_ledger_cleanup_completion, classify_passes_through_passed_timed_out_skipped, gate_outcome_counts_passed_and_skipped_required_proof_without_failing. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:66aa0b7b.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"failed\" => \"head_failed\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by base_worktree_cleanup_precedes_ledger_cleanup_completion, cache_warm_keeps_failed_versions_unavailable, discriminating_and_head_failed_are_published_whatever_else_the_receipt_says. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:7da14678.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"timed_out\" => \"timed_out\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by base_worktree_cleanup_precedes_ledger_cleanup_completion, classify_passes_through_passed_timed_out_skipped, gate_outcome_timed_out_required_tool_gets_structured_timeout_reason. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:708718f6.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe _ => \"skipped_profile\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by base_worktree_cleanup_precedes_ledger_cleanup_completion, proof_broker_v0_does_not_execute_when_focused_test_budget_is_zero, proof_broker_v0_does_not_execute_without_focused_test_lease. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:31ffb4ef"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe match head.status.as_str() {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:915b35e3.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"timed_out\" => \"timed_out\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, base_worktree_cleanup_precedes_ledger_cleanup_completion, classify_passes_through_passed_timed_out_skipped. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:15f6674a.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"failed\" => \"head_failed\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, base_worktree_cleanup_precedes_ledger_cleanup_completion, cache_warm_keeps_failed_versions_unavailable. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:16af0d88.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe _ => \"skipped_profile\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, base_worktree_cleanup_precedes_ledger_cleanup_completion, same_file_rust_unit_test_discriminates_against_its_own_fix. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:c9712e32"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe match head_status.as_str() {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:915b35e3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"timed_out\" => \"timed_out\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, base_worktree_cleanup_precedes_ledger_cleanup_completion, classify_passes_through_passed_timed_out_skipped. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:15f6674a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"failed\" => \"head_failed\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, base_worktree_cleanup_precedes_ledger_cleanup_completion, cache_warm_keeps_failed_versions_unavailable. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:16af0d88"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe _ => \"skipped_profile\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, base_worktree_cleanup_precedes_ledger_cleanup_completion, same_file_rust_unit_test_discriminates_against_its_own_fix. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:2d7dbbfd.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"failed\" => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, base_worktree_cleanup_precedes_ledger_cleanup_completion, cache_warm_keeps_failed_versions_unavailable. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:3677464f.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"passed\" => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, base_worktree_cleanup_precedes_ledger_cleanup_completion, classify_passes_through_passed_timed_out_skipped. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:c7e73544.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"timed_out\" => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, base_worktree_cleanup_precedes_ledger_cleanup_completion, classify_passes_through_passed_timed_out_skipped. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:2b0b124a.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe _ => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, base_worktree_cleanup_precedes_ledger_cleanup_completion, same_file_rust_unit_test_discriminates_against_its_own_fix. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:a185c115"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe match base.status.as_str() {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, absent_or_malformed_status_is_not_invented, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:2d7dbbfd"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"failed\" => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, base_worktree_cleanup_precedes_ledger_cleanup_completion, cache_warm_keeps_failed_versions_unavailable. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:3677464f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"passed\" => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, base_worktree_cleanup_precedes_ledger_cleanup_completion, classify_passes_through_passed_timed_out_skipped. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:c7e73544"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe \"timed_out\" => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, base_worktree_cleanup_precedes_ledger_cleanup_completion, classify_passes_through_passed_timed_out_skipped. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:2b0b124a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe _ => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, base_worktree_cleanup_precedes_ledger_cleanup_completion, same_file_rust_unit_test_discriminates_against_its_own_fix. Re-verify after any edit to src/proof/red_green.rs."
